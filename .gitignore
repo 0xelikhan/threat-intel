@@ -1,23 +1,9 @@
-# Secrets
+# Never commit API keys
 .env
 *.key
-*.pem
-secrets.yml
-credentials.json
-vault.yml
-
-# Ansible
-infrastructure/ansible/inventory/hosts.yml
-infrastructure/ansible/group_vars/all/vault.yml
-
-# Terraform
-terraform/*.tfstate
-terraform/*.tfstate.backup
-terraform/.terraform/
+config.local.py
 
 # OS noise
 .DS_Store
-Thumbs.db
 __pycache__/
 *.pyc
-*.log
