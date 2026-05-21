@@ -8,7 +8,6 @@ https://github.com/user-attachments/assets/0ef38a66-2d6e-4db1-9720-cedf2d4e11a4
 
 Pulls from 160 security RSS feeds covering threat research, vulnerability advisories, malware analysis, offensive security, and news. Every incoming article is automatically classified into CTI categories using Azure OpenAI. Articles can be summarized on demand using the AI Summary extension with a prompt tuned for SOC daily briefs.
 
-I also built a custom FreshRSS extension ([xExtension-CTISummarizer](./xExtension-CTISummarizer)) that scores articles 1-10 on fetch using Azure OpenAI, auto-hides low-relevance content, and injects severity cards directly into article content.
 
 ## Architecture
 
@@ -110,7 +109,7 @@ sudo docker run -d \
 
 ### Install extensions
 
-**LLM Classification** ships with FreshRSS 1.29 but may need to be installed manually:
+**LLM Classification**:
 
 ```bash
 cd /tmp
@@ -196,7 +195,7 @@ Focus only on:
 - What happened (the specific threat, attack, vulnerability, or campaign)
 - Who is affected or targeted
 - What TTPs, IOCs, CVEs, or malware families are involved
-- What action the team should be aware of
+- What action should the team be aware of
 
 Do not include background context, vendor history, or general advice. Write in plain technical language. If the article contains no specific threat intelligence value, state that in one sentence.
 
@@ -208,7 +207,7 @@ Content: {content}
 
 Import `cti-feed.opml` via Subscription management > Import/Export. 
 
-Click the **AI Summarize** button inside any article to get an on-demand summary.
+Click the **AI Summarize** button inside any article to get a summary.
 
 ### User queries
 
@@ -226,9 +225,7 @@ Pre-configured filters in the left sidebar, each scoped to unread articles sorte
 | Identity | `intitle:OAuth OR intext:"credential stuffing" OR intext:"password spray" OR intext:"MFA bypass" OR intext:"golden ticket" OR intext:kerberoasting OR intext:"pass the hash" OR intext:DCSync OR intext:"active directory"` |
 | ICS/OT | `intitle:ICS OR intitle:SCADA OR intitle:OT OR intitle:PLC OR intext:"operational technology" OR intext:"industrial control" OR intext:"critical infrastructure" OR intext:TRITON` |
 
-CTI Summarizer
 
-`xExtension-CTISummarizer` is a custom extension I built that scores articles 1-10 using Azure OpenAI on fetch rather than on demand. Articles below the threshold are silently marked as read before they surface. Articles above get a severity card (CRITICAL/HIGH/MEDIUM/LOW) with a two-sentence summary injected at the top of the content. See the `xExtension-CTISummarizer` folder for setup and configuration.
 
 
 
