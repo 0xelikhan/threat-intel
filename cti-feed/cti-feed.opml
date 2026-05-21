@@ -1,0 +1,167 @@
+<opml version="2.0" xmlns:frss="https://freshrss.org/opml">
+  <head>
+    <title>176 Security Blogs - securityblogs.xyz</title>
+  </head>
+  <body>
+    <outline text="CrowdStrike" type="rss" xmlUrl="https://www.crowdstrike.com/blog/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Krebs on Security" type="rss" xmlUrl="https://krebsonsecurity.com/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Troy Hunt" type="rss" xmlUrl="https://feeds.feedburner.com/TroyHunt" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Microsoft Security" type="rss" xmlUrl="https://www.microsoft.com/en-us/security/blog/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Google Safety &amp; Security" type="rss" xmlUrl="https://blog.google/technology/safety-security/rss" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Meta Security" type="rss" xmlUrl="https://code.facebook.com/posts/rss" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Amazon Security" type="rss" xmlUrl="https://aws.amazon.com/blogs/security/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="SentinelOne" type="rss" xmlUrl="https://www.sentinelone.com/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Snyk" type="rss" xmlUrl="https://snyk.io/blog/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Veracode" type="rss" xmlUrl="https://www.veracode.com/blog/feed" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="PortSwigger" type="rss" xmlUrl="https://portswigger.net/research/rss" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Cloudflare" type="rss" xmlUrl="https://blog.cloudflare.com/rss" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Fastly" type="rss" xmlUrl="https://www.fastly.com/blog_rss.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Schneier on Security" type="rss" xmlUrl="https://www.schneier.com/feed/atom" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Dark Reading" type="rss" xmlUrl="https://www.darkreading.com/rss.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Ars Technica Security" type="rss" xmlUrl="https://arstechnica.com/security/rss" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Malwarebytes" type="rss" xmlUrl="https://www.malwarebytes.com/blog/feed/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Google Security Blog" type="rss" xmlUrl="https://googleonlinesecurity.blogspot.com/atom.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Trail of Bits" type="rss" xmlUrl="https://blog.trailofbits.com/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="OWASP" type="rss" xmlUrl="https://owasp.org/rss.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Bad Privacy" type="rss" xmlUrl="https://medium.com/feed/@badprivacy" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Bad Security" type="rss" xmlUrl="https://badsecurity.ca/rss" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Auth0" type="rss" xmlUrl="https://auth0.com/blog/rss.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Okta Security" type="rss" xmlUrl="https://sec.okta.com/rss.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Palo Alto Networks" type="rss" xmlUrl="https://www.paloaltonetworks.com/blog/feed" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Mozilla Security" type="rss" xmlUrl="https://blog.mozilla.org/security/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Rapid7" type="rss" xmlUrl="https://blog.rapid7.com/rss/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Offensive Security" type="rss" xmlUrl="https://www.offsec.com/feed" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Mend" type="rss" xmlUrl="https://www.mend.io/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Lutra Security" type="rss" xmlUrl="https://lutrasecurity.com/en/articles/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="CrankySec" type="rss" xmlUrl="https://crankysec.com/feed/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="The Citizen Lab" type="rss" xmlUrl="https://citizenlab.ca/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Leviathan Security" type="rss" xmlUrl="https://www.leviathansecurity.com/blog?format=rss" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Security Cafe" type="rss" xmlUrl="https://securitycafe.ro/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="RAM - Security Insights" type="rss" xmlUrl="https://rss.beehiiv.com/feeds/DQvkmu1aWQ.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Sicuranext Blog" type="rss" xmlUrl="https://blog.sicuranext.com/rss/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Bishop Fox Security" type="rss" xmlUrl="https://bishopfox.com/feeds/blog.rss/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Datadog HQ" type="rss" xmlUrl="https://www.datadoghq.com/blog/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Hunt and Hackett" type="rss" xmlUrl="https://www.huntandhackett.com/blog/rss.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Sam Curry" type="rss" xmlUrl="https://samcurry.net/feed.rss" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Semantically Secure" type="rss" xmlUrl="https://scottarc.blog/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Rezonate" type="rss" xmlUrl="https://www.rezonate.io/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Sansec Threat Research" type="rss" xmlUrl="https://sansec.io/atom.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Kevin Patel Blog" type="rss" xmlUrl="https://kevinpatel.xyz/posts/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Conduition" type="rss" xmlUrl="https://conduition.io/rss2.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Redteam-Pentesting.de" type="rss" xmlUrl="https://blog.redteam-pentesting.de/posts/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Wietze Beukema" type="rss" xmlUrl="https://www.wietzebeukema.nl/blog/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="itm4n's Blog" type="rss" xmlUrl="https://itm4n.github.io/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="White Knight Labs" type="rss" xmlUrl="https://whiteknightlabs.com/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Zavier's Blog" type="rss" xmlUrl="https://gatari.dev/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Matteo Malvica's Blog" type="rss" xmlUrl="https://www.matteomalvica.com/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Retooling_" type="rss" xmlUrl="https://retooling.io/blog?format=rss" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Embee Research" type="rss" xmlUrl="https://www.embeeresearch.io/rss/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Synacktiv" type="rss" xmlUrl="https://www.synacktiv.com/en/feed/lastblog.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Android Offensive Security Blog" type="rss" xmlUrl="https://androidoffsec.withgoogle.com/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Meta Red Team" type="rss" xmlUrl="https://rtx.meta.security/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Courk's Blog" type="rss" xmlUrl="https://courk.cc/feeds/all.atom.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="MalwareTech" type="rss" xmlUrl="https://malwaretech.com/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="watchTowr Labs" type="rss" xmlUrl="https://labs.watchtowr.com/rss/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Nettitude Labs" type="rss" xmlUrl="https://labs.nettitude.com/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="NVISO Labs" type="rss" xmlUrl="https://blog.nviso.eu/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Talos Intelligence" type="rss" xmlUrl="https://blog.talosintelligence.com/rss/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="IOActive Labs" type="rss" xmlUrl="https://labs.ioactive.com/feeds/posts/default" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="MaskRay's Blog" type="rss" xmlUrl="https://maskray.me/blog/atom.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Theori Vulnerability Research" type="rss" xmlUrl="https://medium.com/feed/@vr-blog" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Eclypsium" type="rss" xmlUrl="https://eclypsium.com/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Pwning Tech" type="rss" xmlUrl="https://pwning.tech/rss/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Github Security Blog" type="rss" xmlUrl="https://github.blog/security/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Protexity" type="rss" xmlUrl="https://www.protexity.com/blog-feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Exodus Blog" type="rss" xmlUrl="https://blog.exodusintel.com/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Red Siege InfoSec Blog" type="rss" xmlUrl="http://redsiege.com/blog/feed" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Satoshi's Blog" type="rss" xmlUrl="https://tandasat.github.io/blog/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Shielder Blog" type="rss" xmlUrl="https://www.shielder.com/blog/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Voidstar Security Research Blog" type="rss" xmlUrl="https://voidstarsec.com/blog/feeds/all.atom.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Daniel Plohmann's Blog" type="rss" xmlUrl="https://danielplohmann.github.io/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Compass Security Blog" type="rss" xmlUrl="https://blog.compass-security.com/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="5pider's Blog" type="rss" xmlUrl="https://5pider.net/blog/rss.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="clearbluejar's Blog" type="rss" xmlUrl="https://clearbluejar.github.io/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Arch Cloud Labs" type="rss" xmlUrl="https://www.archcloudlabs.com/projects/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="0ffset's Blog" type="rss" xmlUrl="https://www.0ffset.net/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Sami Alaoui's Blog" type="rss" xmlUrl="https://0x44.cc/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Arkadiy Tetelman's Blog" type="rss" xmlUrl="https://arkadiyt.com/atom.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Star Labs" type="rss" xmlUrl="https://starlabs.sg/blog/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Dark Navy" type="rss" xmlUrl="https://www.darknavy.org/blog/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Grsecurity Blog" type="rss" xmlUrl="https://grsecurity.net/blog.rss" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Boschko Security Blog" type="rss" xmlUrl="https://boschko.ca/rss/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Adepts of 0xCC" type="rss" xmlUrl="https://adepts.of0x.cc/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Timddg's Blog" type="rss" xmlUrl="https://www.timdbg.com/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Cyber Geeks" type="rss" xmlUrl="https://cybergeeks.tech/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Zero Day Initiative" type="rss" xmlUrl="https://www.zerodayinitiative.com/blog/?format=rss" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Atredis Partners" type="rss" xmlUrl="https://www.atredis.com/blog?format=rss" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Claroty" type="rss" xmlUrl="https://claroty.com/team82/disclosure-dashboard/feed" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Reversing Engineering for the Soul" type="rss" xmlUrl="https://ctf.re/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="EvilSocket" type="rss" xmlUrl="https://www.evilsocket.net/atom.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Embrace The Red" type="rss" xmlUrl="https://embracethered.com/blog/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Apple Security Research" type="rss" xmlUrl="https://security.apple.com/blog/feed.rss" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Moblig" type="rss" xmlUrl="https://medium.com/feed/@moblig" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="TrustedSec" type="rss" xmlUrl="https://trustedsec.com/feed.rss" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Kevin Beaumont" type="rss" xmlUrl="https://medium.com/feed/@networksecurity" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Infernux Blog" type="rss" xmlUrl="https://www.infernux.no/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Sabotage Sec Blog" type="rss" xmlUrl="https://sabotagesec.com/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Elastic Security Labs" type="rss" xmlUrl="https://www.elastic.co/security-labs/rss/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Katie Knowles" type="rss" xmlUrl="https://kknowl.es/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="PT Swarm" type="rss" xmlUrl="https://swarm.ptsecurity.com/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Moonlock" type="rss" xmlUrl="https://moonlock.com/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Binary Security" type="rss" xmlUrl="https://www.binarysecurity.no/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Pwner Blog" type="rss" xmlUrl="https://pwner.gg/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Flatt Security Research" type="rss" xmlUrl="https://flatt.tech/research/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Hay Mizrachi" type="rss" xmlUrl="https://haymiz.dev/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Maxwell Dulin" type="rss" xmlUrl="https://maxwelldulin.invades.space/blog-rss.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="DarkRelay" type="rss" xmlUrl="https://www.darkrelay.com/blog-feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="env.fail" type="rss" xmlUrl="https://env.fail/blog.rss" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Secret.Club" type="rss" xmlUrl="https://secret.club/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="s3cur3th1ssh1t's Blog" type="rss" xmlUrl="https://s3cur3th1ssh1t.github.io/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="XPN's Blog" type="rss" xmlUrl="https://blog.xpnsec.com/rss.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Searchlight Cyber" type="rss" xmlUrl="http://slcyber.io/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Milton Valencia" type="rss" xmlUrl="https://wetw0rk.github.io/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Evan Connelly" type="rss" xmlUrl="https://evanconnelly.github.io/post/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Project Black" type="rss" xmlUrl="https://projectblack.io/blog/rss/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Praetorian" type="rss" xmlUrl="https://www.praetorian.com/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Black Lantern Security" type="rss" xmlUrl="https://blog.blacklanternsecurity.com/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="es3n1n" type="rss" xmlUrl="https://blog.es3n1n.eu/posts/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Tim Blazytko" type="rss" xmlUrl="https://www.synthesis.to/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Binarly" type="rss" xmlUrl="http://www.binarly.io/blog/rss.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Searchlight Cyber Research" type="rss" xmlUrl="https://slcyber.io/assetnote-security-research-center/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Almond Offensive Security Blog" type="rss" xmlUrl="https://offsec.almond.consulting/feeds/all.rss.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Teleport Blog" type="rss" xmlUrl="https://goteleport.com/blog/rss.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Black Hills Info Sec" type="rss" xmlUrl="https://www.blackhillsinfosec.com/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Greynoise" type="rss" xmlUrl="https://www.greynoise.io/blog/rss.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="RME-DisCo Research Group" type="rss" xmlUrl="https://reversea.me/index.php/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Onyphe" type="rss" xmlUrl="https://blog.onyphe.io/en/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Héber Júlio" type="rss" xmlUrl="https://medium.com/feed/@heberjulio65" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Eye Security" type="rss" xmlUrl="https://www.eye.security/cybersecurity-learning-hub/rss.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Eye Security Research" type="rss" xmlUrl="https://research.eye.security/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Eye Security" type="rss" xmlUrl="https://www.eye.security/blog/rss.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Mateusz Lewczak Blog" type="rss" xmlUrl="https://leftarcode.com/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Hybrid Analysis Blog" type="rss" xmlUrl="https://hybrid-analysis.blogspot.com/feeds/posts/default?alt=rss" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="ISC SANS" type="rss" xmlUrl="https://isc.sans.edu/rssfeed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Cyata" type="rss" xmlUrl="https://cyata.ai/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Malwr Analysis" type="rss" xmlUrl="https://malwr-analysis.com/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Varonis" type="rss" xmlUrl="https://www.varonis.com/blog/rss.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Caesar Creek Software" type="rss" xmlUrl="https://cc-sw.com/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="dgl" type="rss" xmlUrl="https://dgl.cx/feed" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Doyensec" type="rss" xmlUrl="https://blog.doyensec.com/atom.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Himanshu Anand" type="rss" xmlUrl="https://blog.himanshuanand.com/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="HardenedVault" type="rss" xmlUrl="https://hardenedvault.net/blog/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Joe Dillon" type="rss" xmlUrl="https://outurnate.com/feeds/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="PacketSmith" type="rss" xmlUrl="https://packetsmith.ca/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Joshua Rogers" type="rss" xmlUrl="https://joshua.hu/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Escape DAST" type="rss" xmlUrl="https://escape.tech/blog/rss" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Alex Schapiro" type="rss" xmlUrl="https://alexschapiro.com/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Francesco Pompo" type="rss" xmlUrl="https://francesco.cc/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Rosecurify" type="rss" xmlUrl="https://rosecurify.com/feed/feed.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Zero Salarium" type="rss" xmlUrl="https://www.zerosalarium.com/feeds/posts/default?alt=rss" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Sean Heelan" type="rss" xmlUrl="https://sean.heelan.io/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Artem Golubin" type="rss" xmlUrl="https://rushter.com/blog/feed/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Aikido" type="rss" xmlUrl="https://www.aikido.dev/blog/rss.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Buchodi" type="rss" xmlUrl="https://www.buchodi.com/rss/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="Paultendo" type="rss" xmlUrl="https://paultendo.github.io/rss.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+    <outline text="kqx" type="rss" xmlUrl="https://kqx.io/post/index.xml" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"></outline>
+  </body>
+</opml>
