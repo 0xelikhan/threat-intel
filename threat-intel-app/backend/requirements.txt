@@ -1,0 +1,15 @@
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+langgraph==0.1.19
+langchain==0.2.6
+langchain-openai==0.1.14
+openai==1.35.7
+httpx==0.27.0
+aiohttp==3.9.5
+python-dotenv==1.0.1
+taxii2-client==2.3.0
+stix2==3.0.1
+pymisp==2.4.193
+pydantic==2.7.4
+python-multipart==0.0.9
+aiofiles==23.2.1
