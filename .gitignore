@@ -1,9 +1,24 @@
-# Never commit API keys
+# API keys — never commit
 .env
 *.key
 config.local.py
+backend/.env
+backend/data/config.json
 
-# OS noise
-.DS_Store
+# Python
 __pycache__/
 *.pyc
+backend/venv/
+backend/__pycache__/
+
+# Node
+frontend/node_modules/
+frontend/build/
+
+# Data
+backend/data/
+!backend/data/.gitkeep
+
+# OS
+.DS_Store
+.vscode/
