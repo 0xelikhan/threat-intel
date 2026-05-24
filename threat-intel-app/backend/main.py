@@ -1147,6 +1147,15 @@ async def scan_file_v2(file: UploadFile = File(...)):
     except Exception as e:
         analysis["ai_yara"] = {"error": str(e)}
 
+    # AI plain-English summary — what this file IS and what it does
+    try:
+        from intel.file_ai_summary import summarize_file
+        summary = await summarize_file(analysis, config)
+        if summary:
+            analysis["ai_summary"] = summary
+    except Exception:
+        pass
+
     # Drop the bytes blob before sending / persisting
     analysis.pop("_file_bytes", None)
 
@@ -1245,10 +1254,21 @@ async def scan_url_endpoint(req: dict):
     try:
         from intel.file_correlation import correlate, append_scan_history
         analysis["threat_intel"] = await correlate(analysis, config)
-        analysis.pop("_file_bytes", None)
+    except Exception:
+        pass
+    try:
+        from intel.file_ai_summary import summarize_file
+        s = await summarize_file(analysis, config)
+        if s:
+            analysis["ai_summary"] = s
+    except Exception:
+        pass
+    analysis.pop("_file_bytes", None)
+    try:
+        from intel.file_correlation import append_scan_history
         append_scan_history(analysis)
     except Exception:
-        analysis.pop("_file_bytes", None)
+        pass
     return analysis
 
 

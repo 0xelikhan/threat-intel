@@ -3225,7 +3225,7 @@ function Report({ result }) {
  * Uses MUI Drawer with the OpenCTI nav width/styling, hosting the input area
  * (drop zone + textarea + AgentPipeline) and the extracted-IOCs panel.
  */
-function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanHash, onScanUrl, scanState }) {
+function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanHash, onScanUrl, scanState, onHome }) {
   const [logText, setLogText] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const [hashInput, setHashInput] = useState('');
@@ -3289,12 +3289,19 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
         },
       }}
     >
-      {/* Logo header */}
-      <Box sx={{
-        p: '18px 14px 16px',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        borderBottom: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-      }}>
+      {/* Logo header — click to return to the main analysis view */}
+      <Box
+        onClick={() => onHome?.()}
+        title="Back to main"
+        sx={{
+          p: '18px 14px 16px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          borderBottom: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+          cursor: 'pointer',
+          transition: 'opacity .15s',
+          '&:hover': { opacity: 0.8 },
+        }}
+      >
         <Box component="img" src="/logo.png" alt="RECON"
           sx={{ width: '100%', maxWidth: 200, height: 'auto', display: 'block',
             filter: 'drop-shadow(0 0 18px rgba(15,188,255,0.35))' }}/>
@@ -3864,6 +3871,7 @@ export default function App() {
         onScanHash={scanHash}
         onScanUrl={scanUrl}
         scanState={scanState}
+        onHome={() => { clearScan(); setResult(null); }}
       />
 
       {/* Main view — file scanner takes over whenever there's scan activity,
