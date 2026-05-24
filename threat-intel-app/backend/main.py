@@ -77,6 +77,18 @@ async def _kick_prewarm():
         print("[recon] all intel pre-warm tasks complete")
 
     asyncio.create_task(_warm_all())
+
+    # Spec §8: kick off the unified TAXII + FreshRSS polling loop in the background
+    try:
+        from intel.feed_aggregator import run_polling_loop
+        asyncio.create_task(run_polling_loop(lambda: config.get_all() if hasattr(config, "get_all") else {
+            "FRESHRSS_URL":     config.get("FRESHRSS_URL", ""),
+            "FRESHRSS_API_KEY": config.get("FRESHRSS_API_KEY", ""),
+        }))
+        print("[recon] feed aggregator polling loop scheduled")
+    except Exception as e:
+        print(f"[recon] feed aggregator NOT started: {e}")
+
     print("[recon] startup: pre-warm scheduled in background, accepting requests now")
 
 _results: dict = {}
@@ -670,6 +682,39 @@ async def detection_existing(techniques: str = ""):
         "elastic": search_existing_elastic(tids),
         "queried": tids,
     }
+
+
+# ─── UNIFIED FEED INTEL (spec §8 — TAXII + FreshRSS) ────────────────────────────
+@app.get("/api/feeds")
+async def feeds_list(source: Optional[str] = None, type: Optional[str] = None,
+                     since_hours: Optional[int] = None, limit: int = 500):
+    """Unified IOC cache populated by TAXII + FreshRSS. Filterable by source/type/age."""
+    from intel.feed_aggregator import list_iocs, list_articles
+    return {
+        "iocs":     list_iocs(source=source, type_=type, since_hours=since_hours, limit=limit),
+        "articles": list_articles(limit=20),
+    }
+
+
+@app.get("/api/feeds/stats")
+async def feeds_stats():
+    """Cache stats — IOC counts per feed + last poll times."""
+    from intel.feed_aggregator import stats
+    return stats()
+
+
+@app.post("/api/feeds/refresh")
+async def feeds_refresh(source: str = "all"):
+    """Manual refresh — useful for the frontend 'Refresh' button."""
+    from intel.feed_aggregator import poll_taxii, poll_freshrss
+    out = {}
+    if source in ("all", "taxii"):
+        out["taxii"] = await poll_taxii()
+    if source in ("all", "freshrss"):
+        url = config.get("FRESHRSS_URL", "")
+        key = config.get("FRESHRSS_API_KEY", "")
+        out["freshrss"] = await poll_freshrss(url, key)
+    return out
 
 
 # ─── THREAT ACTOR INTELLIGENCE (spec §7) ─────────────────────────────────────────
