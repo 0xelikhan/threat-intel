@@ -7,7 +7,6 @@ import {
 
 import MapTab            from './components/MapTab';
 import PivotGraph        from './components/PivotGraph';
-import ExportBar         from './components/ExportBar';
 import AgentPipeline     from './components/AgentPipeline';
 import FileScannerView   from './components/FileScannerView';
 import EmailComposerView from './components/EmailComposerView';
@@ -1928,8 +1927,9 @@ function ChatWithRecon({ result }) {
         </Typography>
       )}
 
-      {/* Investigation-guidance question cards (teaching tool) */}
-      {questions.length > 0 && messages.length === 0 && (
+      {/* Investigation-guidance question cards — always visible so the analyst
+          can pick a new one mid-conversation. */}
+      {questions.length > 0 && (
         <Box sx={{ mb:1.75 }}>
           <Box sx={{ display:'flex', alignItems:'center', gap:0.75, mb:1 }}>
             <Box sx={{ width:4, height:4, borderRadius:99, backgroundColor:accent }}/>
@@ -4062,7 +4062,6 @@ export default function App() {
             <IOCPivot result={result}/>
             <BulkTable result={result}/>
             <Card title="Geographic distribution" accent="#0fbcff" noPad><MapTab result={result}/></Card>
-            <Box sx={{ mb: 2 }}><ExportBar result={result}/></Box>
           </>
         )}
 
@@ -4102,7 +4101,6 @@ export default function App() {
 
             <Enrichments enrichments={result.enrichments}/>
             <Report result={result}/>
-            <Box sx={{ mb: 2 }}><ExportBar result={result}/></Box>
           </>
         )}
       </Box>

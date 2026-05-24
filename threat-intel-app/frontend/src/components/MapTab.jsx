@@ -81,6 +81,20 @@ export default function MapTab({ result }) {
     };
   }, []);
 
+  // Leaflet renders blank if the container was zero-sized at init time —
+  // happens inside the MUI Collapse that wraps every Card. invalidateSize
+  // forces a tile redraw once the container actually has dimensions.
+  // Wrapped in try/catch and a few staggered timeouts to handle whatever
+  // animation duration the Collapse uses. Never let this throw.
+  useEffect(() => {
+    if (!leafletReady || !mapInstanceRef.current) return;
+    const ts = [50, 250, 600, 1200].map(ms => setTimeout(() => {
+      try { mapInstanceRef.current && mapInstanceRef.current.invalidateSize(); }
+      catch (_) {}
+    }, ms));
+    return () => ts.forEach(clearTimeout);
+  }, [leafletReady]);
+
   useEffect(() => {
     if (!leafletReady || !mapInstanceRef.current || !result) return;
     const L = window.L;
