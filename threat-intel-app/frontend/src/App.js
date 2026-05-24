@@ -294,6 +294,75 @@ function PreFlight({ result }) {
   );
 }
 
+/* ─── honeypot / deception intelligence (spec §5) ────────────────────────────
+ * Per-IP rollup of: GreyNoise RIOT (known-good infra), Shodan InternetDB,
+ * DShield SANS ISC, StopForumSpam, Emerging Threats blocklist, Project
+ * Honeypot HTTP:BL. Each source returns flagged + summary.
+ */
+function HoneypotActivity({ result }) {
+  const ips = result?.enrichments?.ips || {};
+  const rows = Object.entries(ips)
+    .map(([ip, payload]) => ({ ip, dec: payload?.deception }))
+    .filter(r => r.dec && (r.dec.flagged_count > 0 || r.dec.greynoise_riot?.is_known_good));
+  if (!rows.length) return null;
+
+  return (
+    <Card title="Honeypot activity · deception intel" accent="#EE3838"
+      badge={`${rows.length} IP${rows.length === 1 ? '' : 's'} with hits`}>
+      <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
+        Cross-checked against GreyNoise RIOT, Shodan InternetDB, DShield SANS ISC,
+        StopForumSpam, Emerging Threats compromised IPs, and Project Honeypot HTTP:BL.
+      </Typography>
+      {rows.map(({ ip, dec }) => {
+        const sources = [
+          dec.greynoise_riot?.is_known_good   && { name: 'GreyNoise RIOT — known-good',  good: true,  detail: dec.greynoise_riot.name },
+          dec.shodan_internetdb?.vuln_count   && { name: 'Shodan InternetDB',            good: false, detail: `${dec.shodan_internetdb.vuln_count} CVE${dec.shodan_internetdb.vuln_count === 1 ? '' : 's'} on ${dec.shodan_internetdb.ports?.length || 0} open ports` },
+          dec.dshield?.flagged                && { name: 'DShield · SANS ISC',           good: false, detail: dec.dshield.summary },
+          dec.stopforumspam?.flagged          && { name: 'StopForumSpam',                good: false, detail: dec.stopforumspam.summary },
+          dec.emerging_threats?.flagged       && { name: 'Emerging Threats blocklist',   good: false, detail: dec.emerging_threats.summary },
+          dec.project_honeypot?.flagged       && { name: 'Project Honeypot HTTP:BL',     good: false, detail: dec.project_honeypot.classification },
+        ].filter(Boolean);
+        return (
+          <MuiPaper key={ip} elevation={0} sx={{
+            backgroundColor: '#0C1524',
+            border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+            borderRadius: '4px', p: '10px 12px', mb: 0.75,
+          }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }} flexWrap="wrap">
+              <TypeTag type="ips"/>
+              <Box sx={{
+                fontFamily: '"IBM Plex Mono", monospace', fontSize: 12,
+                color: 'text.primary',
+              }}>{ip}</Box>
+              <Box component="span" sx={{
+                ml: 'auto !important', fontSize: 11, color: 'text.tertiary',
+              }}>
+                {dec.flagged_count} of {dec.sources_consulted} sources flagged
+              </Box>
+            </Stack>
+            {sources.map((s, i) => (
+              <Box key={i} sx={{
+                display: 'grid', gridTemplateColumns: 'auto 1fr',
+                gap: 1, py: 0.375, alignItems: 'baseline',
+                borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.04)}` : 'none',
+              }}>
+                <Box component="span" sx={{
+                  fontSize: 11, fontWeight: 600,
+                  color: s.good ? 'success.main' : 'error.main',
+                  whiteSpace: 'nowrap',
+                }}>{s.name}</Box>
+                <Box component="span" sx={{ fontSize: 11, color: 'text.tertiary' }}>
+                  {s.detail || ''}
+                </Box>
+              </Box>
+            ))}
+          </MuiPaper>
+        );
+      })}
+    </Card>
+  );
+}
+
 /* ─── log translation (spec §4) ──────────────────────────────────────────────
  * AI identifies the format and extracts every security-relevant field. Lets
  * analysts verify the parser caught everything before trusting the analysis.
@@ -3646,6 +3715,7 @@ export default function App() {
             <BehavioralIndicators result={result}/>
             <ConfidenceBreakdown result={result}/>
             <InfrastructureIntel result={result}/>
+            <HoneypotActivity result={result}/>
             <ClarifyingQuestions result={result} onResult={setResult}/>
             <IOCPivot result={result}/>
             <AnalystSummary rs={rs || {}}/>
