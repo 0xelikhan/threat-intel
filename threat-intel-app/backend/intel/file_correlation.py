@@ -54,7 +54,6 @@ async def correlate(analysis: Dict, config) -> Dict:
             "hybrid_analysis": _hybrid_analysis(session, sha256, keys["HYBRID_ANALYSIS_KEY"]) if sha256 else _noop(),
             "anyrun":          _anyrun(session, sha256, keys["ANYRUN_KEY"])       if sha256 else _noop(),
             "feed_cache":      _feed_cache_for_iocs(iocs),
-            "case_history":    _case_history_for(sha256, iocs),
         }
         # Domain extras run only when we have domains
         if iocs.get("domains"):
@@ -239,31 +238,6 @@ async def _feed_cache_for_iocs(iocs: Dict) -> Optional[Dict]:
     return {"hits": hits, "hit_count": len(hits)} if hits else {"hit_count": 0}
 
 
-# ─── case history search ──────────────────────────────────────────────────────
-async def _case_history_for(sha256: Optional[str], iocs: Dict) -> Optional[Dict]:
-    try:
-        from intel.case_store import search_cases
-    except Exception:
-        return None
-    related = []
-    if sha256:
-        related.extend(search_cases(sha256, limit=10))
-    for cat in ("ips", "domains", "urls"):
-        for v in (iocs.get(cat) or [])[:5]:
-            for c in search_cases(v, limit=5):
-                if c not in related:
-                    related.append(c)
-    if not related:
-        return {"related_cases": 0}
-    return {
-        "related_cases": len(related),
-        "cases": [
-            {"runId": c.get("runId"), "label": c.get("label"),
-             "threat_level": c.get("threat_level"), "timestamp": c.get("timestamp"),
-             "summary": (c.get("summary") or "")[:160]}
-            for c in related[:10]
-        ],
-    }
 
 
 # ─── prior scan history (file scanner's own index) ────────────────────────────

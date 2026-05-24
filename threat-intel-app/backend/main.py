@@ -1513,55 +1513,6 @@ async def scan_feedback_list(scan_id: Optional[str] = None):
     return {"feedback": for_scan(scan_id) if scan_id else list_all()}
 
 
-class ScanToCaseRequest(BaseModel):
-    scan_id: str            # SHA-256
-    label:   Optional[str] = ""
-
-
-@app.post("/api/scan/to-case")
-async def scan_to_case(req: ScanToCaseRequest):
-    """Spec §4: Add a file scan to the RECON case store so it appears in
-    case history alongside IOC investigations."""
-    from intel.file_correlation import load_scan
-    from intel.case_store import save_case
-    scan = load_scan(req.scan_id)
-    if not scan:
-        raise HTTPException(404, "no prior scan for that sha256")
-
-    # Compose a synthetic case payload from the scan so it indexes correctly
-    run_id = f"scan-{req.scan_id[:12]}"
-    deep = (scan.get("ai_analyst") or {}).get("deep") or {}
-    cap  = (scan.get("capabilities") or {})
-    case_payload = {
-        "label":         req.label or scan.get("filename") or req.scan_id[:12],
-        "timestamp":     scan.get("analyzed_at"),
-        "response_summary": {
-            "summary":             deep.get("executive_summary") or scan.get("ai_summary") or "",
-            "threat_level":        scan.get("verdict"),
-            "confidence":          (scan.get("confidence") or 0) / 100.0,
-            "malware_family":      deep.get("malware_family") or
-                                   ((scan.get("threat_intel") or {}).get("virustotal") or {}).get("malware_family"),
-            "key_findings":        [f.get("title") for f in (deep.get("key_findings") or [])
-                                    if isinstance(f, dict) and f.get("title")][:8],
-            "mitre_techniques":    [m.get("id") + " - " + m.get("name", "")
-                                    for m in (cap.get("mitre_techniques") or [])][:12],
-            "recommended_actions": deep.get("recommended_actions", []),
-        },
-        "threat_actor":   deep.get("threat_actor"),
-        "malware_family": deep.get("malware_family"),
-        "iocs":           scan.get("iocs") or {},
-        "source":         "file_scanner",
-        "source_scan":    {
-            "sha256":   req.scan_id,
-            "filename": scan.get("filename"),
-        },
-    }
-    out = save_case(run_id, case_payload, label=req.label or "")
-    if not out.get("saved"):
-        raise HTTPException(500, "case persist failed")
-    return {"saved": True, "runId": run_id, "label": case_payload["label"]}
-
-
 @app.get("/api/sandbox/{sha256}")
 async def sandbox_lookup(sha256: str):
     """Hash-only lookup against configured cloud sandboxes."""
@@ -1812,27 +1763,17 @@ def _build_report(run_id: str, state: dict) -> dict:
 @app.get("/api/report/{run_id}")
 async def report_full(run_id: str):
     """Spec §10: full structured report for the front-end + export buttons."""
-    if run_id in _results:
-        state = _results[run_id]
-    else:
-        from intel.case_store import load_case
-        state = load_case(run_id)
-        if not state:
-            raise HTTPException(404, "Run not found")
-    return _build_report(run_id, state)
+    if run_id not in _results:
+        raise HTTPException(404, "Run not found")
+    return _build_report(run_id, _results[run_id])
 
 
 @app.get("/api/report/{run_id}/markdown")
 async def report_markdown(run_id: str):
     """Spec §10: Markdown report for pasting into Jira / Confluence / Slack."""
-    if run_id in _results:
-        state = _results[run_id]
-    else:
-        from intel.case_store import load_case
-        state = load_case(run_id)
-        if not state:
-            raise HTTPException(404, "Run not found")
-    r = _build_report(run_id, state)
+    if run_id not in _results:
+        raise HTTPException(404, "Run not found")
+    r = _build_report(run_id, _results[run_id])
     lines = []
     m = r["metadata"]
     lines.append(f"# Threat intelligence report — {m['label'] or 'Untitled'}")
@@ -1887,58 +1828,9 @@ async def get_history():
 
 @app.get("/api/history/{run_id}")
 async def get_history_item(run_id: str):
-    """Look in memory first, fall back to the persistent case store on disk."""
-    if run_id in _results:
-        return {k: v for k, v in _results[run_id].items() if k != "stix_bundle"}
-    from intel.case_store import load_case
-    case = load_case(run_id)
-    if not case:
+    if run_id not in _results:
         raise HTTPException(404, "Run not found")
-    _results[run_id] = case
-    return case
-
-
-# ─── CASES (spec §9 persistent storage) ───────────────────────────────────────────
-@app.get("/api/cases")
-async def cases_list(threat_level: Optional[str] = None,
-                     malware_family: Optional[str] = None,
-                     since_days: Optional[int] = None,
-                     limit: int = 25):
-    from intel.case_store import list_cases
-    return {"cases": list_cases(threat_level=threat_level,
-                                malware_family=malware_family,
-                                since_days=since_days, limit=limit)}
-
-
-@app.get("/api/search")
-async def search_cases_endpoint(q: str = "", limit: int = 25):
-    from intel.case_store import search_cases
-    return {"results": search_cases(q, limit=limit), "query": q}
-
-
-class LabelUpdate(BaseModel):
-    label: str
-
-
-@app.put("/api/cases/{run_id}/label")
-async def update_case_label(run_id: str, body: LabelUpdate):
-    from intel.case_store import update_label
-    if not update_label(run_id, body.label):
-        raise HTTPException(404, "case not found")
-    return {"updated": True, "label": body.label}
-
-
-class NoteAppend(BaseModel):
-    note: str
-    analyst: Optional[str] = ""
-
-
-@app.post("/api/cases/{run_id}/notes")
-async def append_case_note(run_id: str, body: NoteAppend):
-    from intel.case_store import append_note
-    if not append_note(run_id, body.note, body.analyst or ""):
-        raise HTTPException(404, "case not found")
-    return {"appended": True}
+    return {k: v for k, v in _results[run_id].items() if k != "stix_bundle"}
 
 
 # ─── MISP INGESTION ───────────────────────────────────────────────────────────────
@@ -2016,12 +1908,6 @@ def _add_history(run_id: str, result: dict, label: str):
     })
     if len(_history) > 100:
         _history.pop(0)
-    # Spec §9 — persist the full case to disk so analyses survive a restart
-    try:
-        from intel.case_store import save_case
-        save_case(run_id, result, label or "")
-    except Exception as e:
-        print(f"[recon] case_store.save_case failed: {e}")
 
 def _ts():
     return datetime.now(timezone.utc).isoformat()

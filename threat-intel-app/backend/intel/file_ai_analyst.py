@@ -375,37 +375,9 @@ def gather_comparative_context(analysis: Dict) -> Dict:
     """Synchronous — pulls related cases, similar fuzzy hashes, MITRE actor
     profile if a family was identified. Best-effort. Used as additional
     grounding for the deep AI prompt."""
-    sha256  = (analysis.get("hashes") or {}).get("sha256")
-    iocs    = analysis.get("iocs") or {}
     family  = (((analysis.get("threat_intel") or {}).get("virustotal") or {}).get("malware_family")
                or ((analysis.get("threat_intel") or {}).get("malwarebazaar") or {}).get("malware_family"))
     actor   = (((analysis.get("threat_intel") or {}).get("hybrid_analysis") or {}).get("malware_family"))
-    related = []
-
-    try:
-        from intel.case_store import search_cases
-        if sha256:
-            for c in search_cases(sha256, limit=5):
-                related.append({
-                    "type":         "case_match_by_hash",
-                    "runId":        c.get("runId"),
-                    "label":        c.get("label"),
-                    "threat_level": c.get("threat_level"),
-                    "summary":      (c.get("summary") or "")[:160],
-                })
-        for cat in ("ips", "domains", "urls"):
-            for v in (iocs.get(cat) or [])[:3]:
-                for c in search_cases(v, limit=2):
-                    related.append({
-                        "type":         "case_match_by_ioc",
-                        "matched_ioc":  v,
-                        "runId":        c.get("runId"),
-                        "label":        c.get("label"),
-                        "threat_level": c.get("threat_level"),
-                        "summary":      (c.get("summary") or "")[:160],
-                    })
-    except Exception:
-        pass
 
     similar_files = []
     sh = ((analysis.get("threat_intel") or {}).get("scan_history") or {})
@@ -443,7 +415,6 @@ def gather_comparative_context(analysis: Dict) -> Dict:
             pass
 
     return {
-        "related_cases":     related,
         "similar_files":     similar_files,
         "actor_profile":     actor_profile,
         "family_hint":       family,
