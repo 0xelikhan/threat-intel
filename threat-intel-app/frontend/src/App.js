@@ -5,10 +5,11 @@ import {
   ArrowUpRight, AlertCircle, X, FileSearch,
 } from 'lucide-react';
 
-import MapTab        from './components/MapTab';
-import PivotGraph    from './components/PivotGraph';
-import ExportBar     from './components/ExportBar';
-import AgentPipeline from './components/AgentPipeline';
+import MapTab          from './components/MapTab';
+import PivotGraph      from './components/PivotGraph';
+import ExportBar       from './components/ExportBar';
+import AgentPipeline   from './components/AgentPipeline';
+import FileScannerView from './components/FileScannerView';
 
 // MUI-based primitives (adapted from OpenCTI's Tag.tsx + theme) — every chip,
 // card, code-block, copy button now renders through MUI components that inherit
@@ -3224,7 +3225,7 @@ function Report({ result }) {
  * Uses MUI Drawer with the OpenCTI nav width/styling, hosting the input area
  * (drop zone + textarea + AgentPipeline) and the extracted-IOCs panel.
  */
-function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, scanState }) {
+function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, scanState, page, onPageChange }) {
   const [logText, setLogText] = useState('');
   const [dragOver, setDragOver] = useState(false);
 
@@ -3295,6 +3296,29 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, scanSta
         <Box component="img" src="/logo.png" alt="RECON"
           sx={{ width: '100%', maxWidth: 200, height: 'auto', display: 'block',
             filter: 'drop-shadow(0 0 18px rgba(15,188,255,0.35))' }}/>
+      </Box>
+
+      {/* Page navigation */}
+      <Box sx={{ display: 'flex', borderBottom: `1px solid ${muiAlpha('#ffffff', 0.12)}` }}>
+        {[
+          { id: 'analysis', label: 'Analyze' },
+          { id: 'scanner',  label: 'File scanner' },
+        ].map(p => (
+          <Box key={p.id}
+            onClick={() => onPageChange?.(p.id)}
+            sx={{
+              flex: 1, textAlign: 'center', cursor: 'pointer',
+              fontSize: 12, fontWeight: 500,
+              py: 1.25,
+              color: page === p.id ? 'primary.main' : 'text.tertiary',
+              borderBottom: page === p.id ? '2px solid' : '2px solid transparent',
+              borderColor: page === p.id ? 'primary.main' : 'transparent',
+              transition: 'color .15s',
+              '&:hover': { color: 'text.primary' },
+            }}>
+            {p.label}
+          </Box>
+        ))}
       </Box>
 
       {/* Input area + pipeline */}
@@ -3891,6 +3915,9 @@ function FileScanner({ scanning, result, error, submission, onDetonate }) {
 export default function App() {
   const [result, setResult] = useState(null);
   const [view, setView] = useState('detail'); // 'detail' | 'table'
+  // Top-level page mode — 'analysis' (default RECON workflow) | 'scanner'
+  // (comprehensive file analyzer per spec §7 of the all-in-one scanner plan)
+  const [page, setPage] = useState('analysis');
   const [webhooks, setWebhooks] = useState({});
   const rs = result?.response_summary;
 
@@ -3983,7 +4010,13 @@ export default function App() {
         currentResult={result}
         onScanFile={scanFile}
         scanState={scanState}
+        page={page}
+        onPageChange={setPage}
       />
+
+      {/* Top-level page mode switch */}
+      {page === 'scanner' && <Box sx={{ flex: 1, minWidth: 0 }}><FileScannerView/></Box>}
+      {page === 'analysis' && (
 
       <Box component="main" sx={{
         flex: 1, p: '24px 28px 48px', overflowY: 'auto', minWidth: 0,
@@ -4078,6 +4111,7 @@ export default function App() {
           </Box>
         )}
       </Box>
+      )}
 
       {/* Global keyframes — MUI CssBaseline doesn't include @keyframes */}
       <style>{`
