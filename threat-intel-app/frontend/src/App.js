@@ -1107,19 +1107,27 @@ function IRPlaybook({ rs }) {
   if (!phases.length) return null;
 
   return (
-    <Card title="Incident response playbook" accent={t.cy}
+    <Card title="Incident response playbook" accent="#0fbcff"
       badge="NIST 800-61" defaultOpen={false}>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:10 }}>
+      <Box sx={{
+        display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(280px, 1fr))', gap:1.25,
+      }}>
         {phases.map(([label, steps, color]) => (
-          <div key={label} style={{ background:t.raised, border:`1px solid ${t.line}`,
-            borderLeft:`3px solid ${color}`, borderRadius:6, padding:'12px 14px' }}>
-            <div style={{ fontSize:12, fontWeight:600, color, marginBottom:8 }}>{label}</div>
-            <ol style={{ margin:0, paddingLeft:18, fontSize:12, color:t.fg, lineHeight:1.7 }}>
+          <MuiPaper key={label} elevation={0} sx={{
+            backgroundColor:'background.secondary',
+            border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+            borderLeft: `3px solid ${color}`,
+            borderRadius:'4px', p:'12px 14px',
+          }}>
+            <Typography sx={{ fontSize:12, fontWeight:600, color, mb:1,
+              textTransform:'uppercase', letterSpacing:'0.04em' }}>{label}</Typography>
+            <Box component="ol" sx={{ m:0, pl:2.25, fontSize:12,
+              color:'text.primary', lineHeight:1.7 }}>
               {steps.map((s, i) => <li key={i} style={{ marginBottom:5 }}>{s}</li>)}
-            </ol>
-          </div>
+            </Box>
+          </MuiPaper>
         ))}
-      </div>
+      </Box>
     </Card>
   );
 }
@@ -2179,19 +2187,25 @@ function IOCPivot({ result }) {
   const pivots = result?.ioc_pivot || [];
   if (!pivots.length) return null;
   return (
-    <Card title="Cross-investigation pivot" accent={t.orange}
-      badge={`${pivots.length} indicator${pivots.length===1?'':'s'} seen before`}>
-      <div style={{ fontSize:12, color:t.fgMute, marginBottom:10, lineHeight:1.6 }}>
+    <Card title="Cross-investigation pivot" accent="#E6700F"
+      badge={`${pivots.length} indicator${pivots.length === 1 ? '' : 's'} seen before`}>
+      <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.25, lineHeight: 1.6 }}>
         These indicators have appeared in previous investigations during this session. Consider whether the
         cases are related — same actor, same campaign, or rolling reinvestigation.
-      </div>
+      </Typography>
       {pivots.map((p, i) => (
-        <div key={i} style={{ padding:'10px 0', borderTop: i>0?`1px solid ${t.line}`:'none' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+        <Box key={i} sx={{
+          py: 1.25,
+          borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
             <TypeTag type={p.type}/>
-            <span style={{ fontFamily:'JetBrains Mono', fontSize:12, color:t.fg, wordBreak:'break-all' }}>{p.ioc}</span>
-          </div>
-          <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginLeft:24 }}>
+            <Box sx={{
+              fontFamily: '"IBM Plex Mono", monospace',
+              fontSize: 12, color: 'text.primary', wordBreak: 'break-all',
+            }}>{p.ioc}</Box>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', ml: 3 }}>
             {p.sightings.map((s, j) => {
               const c = (levelStyle[s.threat_level] || levelStyle.INFORMATIONAL).fg;
               const url = `${window.location.pathname}#run/${s.run_id}`;
@@ -2201,17 +2215,23 @@ function IOCPivot({ result }) {
                 return m < 60 ? `${m}m ago` : m < 1440 ? `${Math.round(m/60)}h ago` : `${Math.round(m/1440)}d ago`;
               })();
               return (
-                <a key={j} href={url} style={{ background:t.raised, border:`1px solid ${t.line}`,
-                  borderLeft:`2px solid ${c}`, borderRadius:4, padding:'4px 9px', fontSize:11, color:t.fg,
-                  textDecoration:'none', display:'inline-flex', gap:6, alignItems:'center' }}>
-                  <span style={{ color:c, fontWeight:600 }}>{s.threat_level}</span>
-                  <span style={{ color:t.fgDim }}>· {ago}</span>
-                  <span style={{ color:t.fgGhost, fontFamily:'JetBrains Mono' }}>{s.run_id.slice(0,8)}</span>
-                </a>
+                <Box key={j} component="a" href={url} sx={{
+                  backgroundColor: 'background.secondary',
+                  border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+                  borderLeft: `2px solid ${c}`,
+                  borderRadius: '4px', px: 1.125, py: 0.5,
+                  fontSize: 11, color: 'text.primary',
+                  textDecoration: 'none', display: 'inline-flex', gap: 0.75, alignItems: 'center',
+                }}>
+                  <Box component="span" sx={{ color: c, fontWeight: 600 }}>{s.threat_level}</Box>
+                  <Box component="span" sx={{ color: 'text.tertiary' }}>· {ago}</Box>
+                  <Box component="span" sx={{ color: 'text.disabled',
+                    fontFamily: '"IBM Plex Mono", monospace' }}>{s.run_id.slice(0, 8)}</Box>
+                </Box>
               );
             })}
-          </div>
-        </div>
+          </Box>
+        </Box>
       ))}
     </Card>
   );
