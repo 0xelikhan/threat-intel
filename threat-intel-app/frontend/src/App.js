@@ -2243,16 +2243,14 @@ function Report({ result }) {
  * Uses MUI Drawer with the OpenCTI nav width/styling, hosting the input area
  * (drop zone + textarea + AgentPipeline) and the extracted-IOCs panel.
  */
-function Sidebar({ onResult, onPartialResult, currentResult }) {
+function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, scanState }) {
   const [logText, setLogText] = useState('');
   const [dragOver, setDragOver] = useState(false);
 
   const handleFile = useCallback(file => {
     if (!file) return;
-    const r = new FileReader();
-    r.onload = e => setLogText(e.target.result);
-    r.readAsText(file);
-  }, []);
+    onScanFile?.(file);
+  }, [onScanFile]);
 
   // Cmd/Ctrl+Enter triggers analysis via the AgentPipeline's button
   useEffect(() => {
@@ -2297,43 +2295,55 @@ function Sidebar({ onResult, onPartialResult, currentResult }) {
 
       {/* Input area + pipeline */}
       <Box sx={{ p: '18px 16px 16px', flex: 1, overflowY: 'auto' }}>
-        <Typography variant="caption" sx={{
-          display: 'block', mb: 1.25, fontSize: 11, fontWeight: 500,
-          color: 'text.tertiary', textTransform: 'uppercase', letterSpacing: '0.06em',
-        }}>
-          New investigation
-        </Typography>
-
-        {/* Drop zone */}
+        {/* YARA file scanner drop zone — dropping a file runs /api/scan-file */}
         <Box
-          onDragOver={e=>{e.preventDefault();setDragOver(true);}}
-          onDragLeave={()=>setDragOver(false)}
-          onDrop={e=>{e.preventDefault();setDragOver(false);handleFile(e.dataTransfer.files[0]);}}
-          onClick={()=>document.getElementById('sidebarFile').click()}
+          onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={e => {
+            e.preventDefault(); setDragOver(false);
+            if (scanState?.scanning) return;
+            handleFile(e.dataTransfer.files[0]);
+          }}
+          onClick={() => !scanState?.scanning && document.getElementById('sidebarFile').click()}
           sx={{
-            border: theme => `1.5px dashed ${dragOver ? theme.palette.primary.main : muiAlpha('#ffffff', 0.12)}`,
+            display: 'flex', alignItems: 'center', gap: 1.25,
+            p: '12px 14px',
+            backgroundColor: dragOver ? muiAlpha('#B286FF', 0.08) : 'background.secondary',
+            border: `1.5px dashed ${dragOver ? '#B286FF' : muiAlpha('#ffffff', 0.12)}`,
             borderRadius: '4px',
-            p: '18px 12px',
-            textAlign: 'center', cursor: 'pointer',
-            backgroundColor: dragOver ? muiAlpha('#0fbcff', 0.08) : 'transparent',
+            cursor: scanState?.scanning ? 'wait' : 'pointer',
+            color: 'text.tertiary', fontSize: 13,
             mb: 1.25,
             transition: 'all .15s',
+            '&:hover': { borderColor: scanState?.scanning ? undefined : muiAlpha('#B286FF', 0.5) },
           }}
         >
-          <Upload size={18} color={dragOver ? '#0fbcff' : '#848592'}
-            style={{ margin: '0 auto 6px', display: 'block' }}/>
-          <Typography sx={{
-            color: dragOver ? 'primary.main' : 'text.secondary',
-            fontSize: 12, fontWeight: 500,
-          }}>
-            Drop a file
-          </Typography>
-          <Typography sx={{ color: 'text.tertiary', fontSize: 11, mt: 0.25 }}>
-            .log .txt .csv .json .eml
-          </Typography>
-          <input id="sidebarFile" type="file" accept=".log,.txt,.csv,.json,.eml"
-            style={{ display: 'none' }} onChange={e=>handleFile(e.target.files[0])}/>
+          <FileSearch size={16} color="#B286FF" style={{ flexShrink: 0 }}/>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{
+              color: dragOver ? '#B286FF' : 'text.primary',
+              fontSize: 12, fontWeight: 500,
+            }}>
+              {scanState?.scanning ? 'Scanning…' : 'Drop a file to scan with YARA'}
+            </Typography>
+            <Typography sx={{ color: 'text.tertiary', fontSize: 11, mt: 0.25 }}>
+              binary analysis · sandbox lookup · ≤ 50 MB
+            </Typography>
+          </Box>
+          <input id="sidebarFile" type="file"
+            style={{ display: 'none' }} disabled={scanState?.scanning}
+            onChange={e => handleFile(e.target.files[0])}/>
         </Box>
+        {scanState?.error && (
+          <Typography sx={{ color: 'error.main', fontSize: 11, mb: 1.25, mt: -0.5 }}>
+            {scanState.error}
+          </Typography>
+        )}
+        {scanState?.result && !scanState.scanning && (
+          <Typography sx={{ color: 'success.main', fontSize: 11, mb: 1.25, mt: -0.5 }}>
+            Scanned {scanState.result.filename} — see YARA file scanner panel below
+          </Typography>
+        )}
 
         {/* Textarea with clear button */}
         <Box sx={{ position: 'relative', mb: 1.25 }}>
@@ -2661,61 +2671,14 @@ function SendToWebhook({ result, available }) {
 }
 
 /* ─── YARA file scanner section ───────────────────────────────────────────────── */
-function FileScanner() {
-  const [scanning, setScanning] = useState(false);
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState(null);
-  const [file, setFile] = useState(null);                  // keep file ref for resubmit
-  const [submission, setSubmission] = useState(null);      // {job_id, state, summary, submitted_at}
-
-  const scan = async (uploaded) => {
-    if (!uploaded) return;
-    setScanning(true); setError(null); setResult(null); setSubmission(null); setFile(uploaded);
-    const form = new FormData();
-    form.append('file', uploaded);
-    try {
-      const resp = await fetch('/api/scan-file', { method:'POST', body: form });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
-      setResult(data);
-    } catch (e) {
-      setError(e.message);
-    } finally { setScanning(false); }
-  };
-
-  const detonate = async () => {
-    if (!file) return;
-    setError(null);
-    const form = new FormData();
-    form.append('file', file);
-    try {
-      const resp = await fetch('/api/sandbox/submit', { method:'POST', body: form });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
-      setSubmission({ job_id: data.job_id, state: 'IN_QUEUE', submitted_at: data.submitted_at });
-    } catch (e) { setError(e.message); }
-  };
-
-  // Poll submission status every 30s until terminal state
-  useEffect(() => {
-    if (!submission?.job_id) return;
-    if (['SUCCESS', 'ERROR'].includes(submission.state)) return;
-    const poll = async () => {
-      try {
-        const r = await fetch(`/api/sandbox/job/${submission.job_id}`);
-        const d = await r.json();
-        setSubmission(s => ({ ...s, ...d }));
-      } catch (e) {}
-    };
-    const t = setInterval(poll, 30000);
-    poll();
-    return () => clearInterval(t);
-  }, [submission?.job_id, submission?.state]);
+/* Scan state is lifted to App so the sidebar drop zone and this panel share it.  */
+function FileScanner({ scanning, result, error, file, submission, onScan, onDetonate }) {
+  const detonate = onDetonate;
 
   const hasReport = result?.sandbox && Object.keys(result.sandbox).length > 0;
 
   return (
-    <Card title="YARA file scanner" accent="#B286FF" defaultOpen={false}
+    <Card title="YARA file scanner" accent="#B286FF" defaultOpen={!!result}
       badge="binary analysis">
       <MuiPaper component="label" htmlFor="yaraFile" elevation={0} sx={{
         display: 'flex', alignItems: 'center', gap: 1.25, p: '12px 14px',
@@ -2729,7 +2692,7 @@ function FileScanner() {
         <FileSearch size={16} color="#B286FF"/>
         {scanning ? 'Scanning…' : 'Drop or click to scan a file (≤ 50 MB)'}
         <input id="yaraFile" type="file" style={{ display: 'none' }}
-          onChange={e => scan(e.target.files[0])} disabled={scanning}/>
+          onChange={e => onScan(e.target.files[0])} disabled={scanning}/>
       </MuiPaper>
       {error && (
         <Box sx={{ color: 'error.main', fontSize: 12, mb: 1.25, mt: 1.25 }}>{error}</Box>
@@ -2932,6 +2895,61 @@ export default function App() {
   const [webhooks, setWebhooks] = useState({});
   const rs = result?.response_summary;
 
+  // YARA file-scan state, lifted from FileScanner so the sidebar drop zone shares it.
+  const [scanState, setScanState] = useState({
+    scanning: false, result: null, error: null, file: null, submission: null,
+  });
+
+  const scanFile = useCallback(async (uploaded) => {
+    if (!uploaded) return;
+    setScanState({ scanning: true, result: null, error: null, file: uploaded, submission: null });
+    const form = new FormData();
+    form.append('file', uploaded);
+    try {
+      const resp = await fetch('/api/scan-file', { method: 'POST', body: form });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
+      setScanState(s => ({ ...s, scanning: false, result: data }));
+    } catch (e) {
+      setScanState(s => ({ ...s, scanning: false, error: e.message }));
+    }
+  }, []);
+
+  const detonateFile = useCallback(async () => {
+    if (!scanState.file) return;
+    setScanState(s => ({ ...s, error: null }));
+    const form = new FormData();
+    form.append('file', scanState.file);
+    try {
+      const resp = await fetch('/api/sandbox/submit', { method: 'POST', body: form });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
+      setScanState(s => ({
+        ...s,
+        submission: { job_id: data.job_id, state: 'IN_QUEUE', submitted_at: data.submitted_at },
+      }));
+    } catch (e) {
+      setScanState(s => ({ ...s, error: e.message }));
+    }
+  }, [scanState.file]);
+
+  // Poll sandbox submission until terminal state
+  useEffect(() => {
+    const sub = scanState.submission;
+    if (!sub?.job_id) return;
+    if (['SUCCESS', 'ERROR'].includes(sub.state)) return;
+    const poll = async () => {
+      try {
+        const r = await fetch(`/api/sandbox/job/${sub.job_id}`);
+        const d = await r.json();
+        setScanState(s => ({ ...s, submission: { ...s.submission, ...d } }));
+      } catch (_) {}
+    };
+    const t = setInterval(poll, 30000);
+    poll();
+    return () => clearInterval(t);
+  }, [scanState.submission?.job_id, scanState.submission?.state]);
+
   // Stream merge — each stage of the pipeline pushes a partial result;
   // we shallow-merge into the existing result so sections render as data arrives.
   const mergePartial = useCallback((partial) => {
@@ -2960,7 +2978,13 @@ export default function App() {
       backgroundColor: 'background.default',
       color: 'text.primary',
     }}>
-      <Sidebar onResult={setResult} onPartialResult={mergePartial} currentResult={result}/>
+      <Sidebar
+        onResult={setResult}
+        onPartialResult={mergePartial}
+        currentResult={result}
+        onScanFile={scanFile}
+        scanState={scanState}
+      />
 
       <Box component="main" sx={{
         flex: 1, p: '24px 28px 48px', overflowY: 'auto', minWidth: 0,
@@ -3032,7 +3056,7 @@ export default function App() {
 
             <Enrichments enrichments={result.enrichments}/>
             <Report result={result}/>
-            <FileScanner/>
+            <FileScanner {...scanState} onScan={scanFile} onDetonate={detonateFile}/>
             <Box sx={{ mb: 2 }}><ExportBar result={result}/></Box>
           </>
         )}
@@ -3040,7 +3064,7 @@ export default function App() {
         {/* Empty-state file scanner: lets analysts scan a file without running the pipeline first */}
         {!result && (
           <Box sx={{ mt: 4 }}>
-            <FileScanner/>
+            <FileScanner {...scanState} onScan={scanFile} onDetonate={detonateFile}/>
           </Box>
         )}
       </Box>
