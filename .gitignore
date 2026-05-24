@@ -31,6 +31,10 @@ vendor/
 **/backend/intel/sigma/
 **/backend/intel/warninglists/
 
+# Email composer templates — auto-seeded from _DEFAULT_TEMPLATES on first run.
+# Per-deployment cache that analysts can customize via the UI; not source.
+**/backend/intel/email_templates/
+
 # Scratch + local notes
 scratch/
 *.local.md

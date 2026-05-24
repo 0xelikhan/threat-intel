@@ -727,6 +727,111 @@ def _parse_additional_info(text):
 # ─── composer ─────────────────────────────────────────────────────────────────
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "email_templates"
 
+# Per-analyst drafts + rolling send history live under backend/data/.
+_DATA_DIR     = Path(__file__).resolve().parent.parent / "data"
+_DRAFTS_DIR   = _DATA_DIR / "email_drafts"
+_HISTORY_FILE = _DATA_DIR / "email_history.json"
+_HISTORY_CAP  = 200
+
+
+def _slugify(s: str) -> str:
+    return re.sub(r"[^a-z0-9_-]", "_", (s or "").lower())[:48]
+
+
+def _drafts_dir() -> Path:
+    _DRAFTS_DIR.mkdir(parents=True, exist_ok=True)
+    return _DRAFTS_DIR
+
+
+def save_draft(payload: Dict) -> Dict:
+    """Persist a composed email + its compose options. Returns the saved record."""
+    d = _drafts_dir()
+    now = datetime.utcnow()
+    alert = _slugify(payload.get("alert_type") or "generic")
+    draft_id = f"{now.strftime('%Y%m%dT%H%M%S')}_{alert}"
+    record = {
+        "id":          draft_id,
+        "saved_at":    now.isoformat(timespec="seconds") + "Z",
+        "alert_type":  payload.get("alert_type"),
+        "subject":     payload.get("subject", ""),
+        "text":        payload.get("text", ""),
+        "html":        payload.get("html", ""),
+        "to":          payload.get("to", ""),
+        "cc":          payload.get("cc", ""),
+        "parsed":      payload.get("parsed") or {},
+        "options":     payload.get("options") or {},
+    }
+    (d / f"{draft_id}.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
+    return record
+
+
+def list_drafts() -> List[Dict]:
+    d = _drafts_dir()
+    out = []
+    for p in sorted(d.glob("*.json"), reverse=True):
+        try:
+            rec = json.loads(p.read_text(encoding="utf-8"))
+            out.append({
+                "id":         rec.get("id", p.stem),
+                "saved_at":   rec.get("saved_at"),
+                "alert_type": rec.get("alert_type"),
+                "subject":    rec.get("subject", ""),
+                "to":         rec.get("to", ""),
+            })
+        except Exception:
+            continue
+    return out
+
+
+def load_draft(draft_id: str) -> Optional[Dict]:
+    safe = _slugify(draft_id)
+    p = _drafts_dir() / f"{safe}.json"
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def delete_draft(draft_id: str) -> bool:
+    safe = _slugify(draft_id)
+    p = _drafts_dir() / f"{safe}.json"
+    if not p.exists():
+        return False
+    p.unlink()
+    return True
+
+
+def read_history() -> List[Dict]:
+    if not _HISTORY_FILE.exists():
+        return []
+    try:
+        data = json.loads(_HISTORY_FILE.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            return data
+    except Exception:
+        return []
+    return []
+
+
+def append_history(entry: Dict) -> None:
+    """Append a send-attempt record. Capped at _HISTORY_CAP, newest-first."""
+    _DATA_DIR.mkdir(parents=True, exist_ok=True)
+    hist = read_history()
+    record = {
+        "ts":      datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "to":      entry.get("to", ""),
+        "cc":      entry.get("cc", ""),
+        "subject": entry.get("subject", ""),
+        "sent":    bool(entry.get("sent")),
+        "error":   entry.get("error"),
+    }
+    hist.insert(0, record)
+    if len(hist) > _HISTORY_CAP:
+        hist = hist[:_HISTORY_CAP]
+    _HISTORY_FILE.write_text(json.dumps(hist, indent=2), encoding="utf-8")
+
 
 def _value_or_na(v):
     return v if v and str(v).strip() else "N/A"
