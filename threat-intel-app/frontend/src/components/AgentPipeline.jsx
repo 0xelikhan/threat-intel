@@ -1,27 +1,49 @@
+/**
+ * Adapted from OpenCTI (AGPL-3.0) github.com/OpenCTI-Platform/opencti
+ * Pipeline visualisation: MUI Box + IconButton + Button, severity colours
+ * pulled from theme.palette so it inherits the OpenCTI dark theme.
+ */
 import React, { useState, useRef } from 'react';
+import {
+  Box, Stack, Typography, Button, IconButton,
+  alpha,
+} from '@mui/material';
+import {
+  Search, Database, Activity, Shield, Check, RotateCw, AlertCircle,
+  Trash2, Wrench, ArrowRight,
+} from 'lucide-react';
 
-const AGENT_META = {
-  triage:        { icon: '⚡', label: 'TRIAGE' },
-  enrichment:    { icon: '🔍', label: 'ENRICHMENT' },
-  investigation: { icon: '🧠', label: 'INVESTIGATION' },
-  response:      { icon: '⚔',  label: 'RESPONSE' },
-  dropped:       { icon: '🗑',  label: 'DROPPED' },
+const AGENTS = [
+  { id: 'triage',        icon: Search,   label: 'Triage'        },
+  { id: 'enrichment',    icon: Database, label: 'Enrichment'    },
+  { id: 'investigation', icon: Activity, label: 'Investigation' },
+  { id: 'response',      icon: Shield,   label: 'Response'      },
+];
+
+// Severity tier → theme palette key (mirrors theme.js palette.severity)
+const LEVEL_COLOR = {
+  CRITICAL:      'severity.critical',
+  HIGH:          'severity.high',
+  MEDIUM:        'severity.medium',
+  LOW:           'severity.low',
+  INFORMATIONAL: 'severity.default',
 };
 
-const LEVEL_C = { CRITICAL: '#ff2d2d', HIGH: '#ff8c00', MEDIUM: '#ffd700', LOW: '#00b4d8', INFORMATIONAL: '#4a5568' };
-const AGENT_ORDER = ['triage', 'enrichment', 'investigation', 'response'];
-
-export default function AgentPipeline({ logText, label, onComplete }) {
-  const [running, setRunning]     = useState(false);
-  const [trace, setTrace]         = useState([]);
-  const [error, setError]         = useState(null);
-  const [done, setDone]           = useState(false);
-  const [currentAgent, setCurrent] = useState(null);
+export default function AgentPipeline({ logText, label, onComplete, onStart, onPartial }) {
+  const [running, setRunning] = useState(false);
+  const [trace, setTrace]     = useState([]);
+  const [error, setError]     = useState(null);
+  const [done, setDone]       = useState(false);
+  const [current, setCurrent] = useState(null);
   const readerRef = useRef(null);
 
   const run = async () => {
     if (!logText?.trim()) return;
+    try { readerRef.current?.cancel(); } catch {}
+    readerRef.current = null;
+    onStart?.();
     setRunning(true); setTrace([]); setError(null); setDone(false); setCurrent('triage');
+    try { document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); } catch {}
 
     try {
       const resp = await fetch('/api/analyze', {
@@ -29,42 +51,38 @@ export default function AgentPipeline({ logText, label, onComplete }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ logText, inputType: 'log', label: label || '' }),
       });
-
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: 'Unknown error' }));
         throw new Error(err.error || `HTTP ${resp.status}`);
       }
-
       const reader = resp.body.getReader();
       readerRef.current = reader;
       const dec = new TextDecoder();
       let buf = '';
-
       while (true) {
         const { done: d, value } = await reader.read();
         if (d) break;
         buf += dec.decode(value, { stream: true });
         const lines = buf.split('\n');
         buf = lines.pop();
-
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           const raw = line.slice(6).trim();
           if (raw === '[DONE]') { setRunning(false); break; }
           try {
-            const event = JSON.parse(raw);
-            if (event.event === 'agent_update' && event.trace) {
-              setTrace(prev => [...prev, event.trace]);
-              const cur = event.trace.agent;
-              const next = AGENT_ORDER[AGENT_ORDER.indexOf(cur) + 1];
-              setCurrent(next || null);
+            const ev = JSON.parse(raw);
+            if (ev.event === 'agent_update' && ev.trace) {
+              setTrace(p => [...p, ev.trace]);
+              const idx = AGENTS.findIndex(a => a.id === ev.trace.agent);
+              setCurrent(AGENTS[idx + 1]?.id || null);
             }
-            if (event.event === 'complete') {
+            if (ev.event === 'partial_result' && ev.result) onPartial?.(ev.result);
+            if (ev.event === 'complete') {
               setDone(true); setRunning(false); setCurrent(null);
-              onComplete?.(event.result);
+              onComplete?.(ev.result);
             }
-            if (event.event === 'error') {
-              setError(event.error); setRunning(false); setCurrent(null);
+            if (ev.event === 'error') {
+              setError(ev.error); setRunning(false); setCurrent(null);
             }
           } catch {}
         }
@@ -75,114 +93,242 @@ export default function AgentPipeline({ logText, label, onComplete }) {
   };
 
   const reset = () => { setTrace([]); setError(null); setDone(false); setCurrent(null); };
-
-  const isDropped = trace.some(t => t.agent === 'triage' && t.status === 'dropped');
+  const canRun = !!logText?.trim() && !running;
+  const buttonLabel = error ? 'Retry analysis' : done ? 'Analyze again' : 'Analyze';
 
   return (
-    <div>
-      {/* Run button */}
-      {!running && !done && !error && (
-        <button onClick={run} disabled={!logText?.trim()} style={{
-          width: '100%', padding: '13px',
-          background: logText?.trim() ? 'linear-gradient(135deg, #1a3a6e, #0f2751)' : '#1a2744',
-          border: `1px solid ${logText?.trim() ? '#4a9eff' : '#2d3748'}`,
-          color: logText?.trim() ? '#74c0fc' : '#4a5568',
-          borderRadius: '6px', cursor: logText?.trim() ? 'pointer' : 'not-allowed',
-          fontSize: '12px', letterSpacing: '3px', fontFamily: 'Courier New',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-        }}>
-          ⚡ RUN AGENTIC PIPELINE
-        </button>
+    <Box>
+      {/* Primary action — visible whenever pipeline is not actively streaming */}
+      {!running && (
+        <Button
+          fullWidth
+          variant="contained"
+          onClick={run}
+          disabled={!canRun}
+          data-recon-analyze
+          sx={{
+            height: 36,
+            fontSize: 13,
+            fontWeight: 600,
+            textTransform: 'none',
+          }}
+        >
+          {buttonLabel}
+        </Button>
       )}
 
-      {/* Pipeline visualization */}
+      {/* Pipeline state */}
       {(running || trace.length > 0 || error) && (
-        <div style={{ background: '#0d1526', border: '1px solid #1e3a5f', borderRadius: '8px', padding: '16px', marginTop: '10px' }}>
-          {/* Agent nodes */}
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-            {AGENT_ORDER.map((agent, idx) => {
-              const t = trace.find(t => t.agent === agent);
-              const isActive = currentAgent === agent && running;
-              const isDone = !!t && t.status !== 'dropped';
-              const cfg = AGENT_META[agent];
-              const c = isDone ? '#51cf66' : isActive ? '#4a9eff' : '#1e3a5f';
+        <Box sx={{
+          backgroundColor: 'background.secondary',
+          border: theme => `1px solid ${alpha('#ffffff', 0.12)}`,
+          borderRadius: '4px',
+          p: 1.75,
+          mt: running || !done ? 1.25 : 1.75,
+        }}>
+
+          {/* Compact horizontal pipeline */}
+          <Box sx={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            mb: trace.length > 0 ? 1.75 : 0,
+          }}>
+            {AGENTS.map((agent, idx) => {
+              const tr      = trace.find(t => t.agent === agent.id);
+              const active  = current === agent.id && running;
+              const ok      = !!tr && tr.status !== 'dropped';
+              const dropped = tr?.status === 'dropped';
+              const color   = dropped ? '#F14337'
+                             : ok      ? '#17AB1F'
+                             : active  ? '#0fbcff'
+                             :           '#75829A';
+              const Icon    = agent.icon;
               return (
-                <React.Fragment key={agent}>
-                  <div style={{ flex: 1, textAlign: 'center' }}>
-                    <div style={{
-                      width: '44px', height: '44px', borderRadius: '50%', margin: '0 auto 4px',
-                      background: isDone ? '#0f2751' : isActive ? '#1a3a6e' : '#0d1526',
-                      border: `2px solid ${c}`,
+                <React.Fragment key={agent.id}>
+                  <Box sx={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', gap: 0.5 }}>
+                    <Box sx={{
+                      width: 30, height: 30, borderRadius: '50%',
+                      backgroundColor: ok      ? alpha(color, 0.1)
+                                      : active ? alpha(color, 0.08)
+                                      :          'background.default',
+                      border: `1.5px solid ${color}`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '16px', transition: 'all 0.3s',
-                      animation: isActive ? 'pulse 1.5s ease-in-out infinite' : 'none',
+                      animation: active ? 'pulse 1.5s ease-in-out infinite' : 'none',
+                      transition: 'all .3s',
                     }}>
-                      {isDone ? '✓' : isActive ? '⟳' : cfg.icon}
-                    </div>
-                    <div style={{ fontSize: '9px', color: isDone ? '#51cf66' : isActive ? '#74c0fc' : '#4a5568', letterSpacing: '1px' }}>
-                      {cfg.label}
-                    </div>
-                  </div>
-                  {idx < AGENT_ORDER.length - 1 && (
-                    <div style={{ width: '32px', height: '2px', background: isDone ? '#51cf66' : '#1e3a5f', flexShrink: 0, transition: 'background 0.3s' }} />
+                      {ok
+                        ? <Check size={14} color={color} strokeWidth={2.5}/>
+                        : active
+                          ? <RotateCw size={13} color={color} style={{ animation: 'spin 1s linear infinite' }}/>
+                          : <Icon size={13} color={color} strokeWidth={2}/>}
+                    </Box>
+                    <Typography sx={{
+                      fontSize: 10,
+                      color: ok || active ? 'text.primary' : 'text.disabled',
+                      fontWeight: ok || active ? 500 : 400,
+                    }}>{agent.label}</Typography>
+                  </Box>
+                  {idx < AGENTS.length - 1 && (
+                    <Box sx={{
+                      flex: 1, height: '1.5px', mx: 0.5, mb: '14px',
+                      backgroundColor: ok ? '#17AB1F' : alpha('#ffffff', 0.06),
+                      transition: 'background-color .3s',
+                    }}/>
                   )}
                 </React.Fragment>
               );
             })}
-          </div>
+          </Box>
 
           {/* Trace log */}
-          <div style={{ borderTop: '1px solid #1e3a5f', paddingTop: '12px' }}>
-            {trace.map((t, i) => {
-              const meta = AGENT_META[t.agent] || {};
-              return (
-                <div key={i} style={{ display: 'flex', gap: '8px', padding: '6px 0', borderBottom: '1px solid #0d1a30', alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: '14px', minWidth: '20px' }}>{meta.icon}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '2px', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '10px', color: t.status === 'dropped' ? '#fc8181' : '#51cf66', letterSpacing: '1px' }}>
-                        {meta.label}
-                      </span>
-                      {t.threat_level && (
-                        <span style={{ fontSize: '9px', color: LEVEL_C[t.threat_level] || '#4a5568', border: `1px solid ${LEVEL_C[t.threat_level] || '#4a5568'}44`, padding: '1px 5px', borderRadius: '3px' }}>
-                          {t.threat_level}
-                        </span>
+          {trace.length > 0 && (
+            <Box sx={{ borderTop: `1px solid ${alpha('#ffffff', 0.06)}`, pt: 1.5, mt: 0.25 }}>
+              {trace.map((tr, i) => {
+                if (tr.type === 'tool_call') {
+                  // Compact tool-call rendering inside an agent block
+                  return (
+                    <Box key={i} sx={{
+                      p: '5px 0 5px 22px', minWidth: 0,
+                      borderTop: i > 0 ? `1px solid ${alpha('#ffffff', 0.06)}` : 'none',
+                    }}>
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>
+                        <Wrench size={10} color="#0fbcff" style={{ flexShrink: 0, marginTop: 3 }}/>
+                        <Box sx={{
+                          fontFamily: '"IBM Plex Mono", monospace',
+                          color: 'primary.main',
+                          fontSize: 10.5,
+                          wordBreak: 'break-all', overflowWrap: 'anywhere',
+                          minWidth: 0, flex: 1, lineHeight: 1.45,
+                        }}>
+                          {tr.tool}({Object.entries(tr.args || {}).map(([k, v]) => String(v)).join(', ')})
+                        </Box>
+                      </Box>
+                      {tr.summary && (
+                        <Box sx={{
+                          fontSize: 11, color: 'text.primary',
+                          pl: 2, lineHeight: 1.5,
+                          wordBreak: 'break-word', overflowWrap: 'anywhere', mt: 0.25,
+                        }}>
+                          <ArrowRight size={9} color="#75829A"
+                            style={{ verticalAlign: 'middle', marginRight: 4 }}/>
+                          {tr.summary}
+                        </Box>
                       )}
-                      {t.confidence !== undefined && (
-                        <span style={{ fontSize: '9px', color: '#4a5568' }}>confidence: {Math.round(t.confidence * 100)}%</span>
+                    </Box>
+                  );
+                }
+                const A = AGENTS.find(a => a.id === tr.agent);
+                if (!A) return null;
+                const Icon = A.icon;
+                const dropped = tr.status === 'dropped';
+                return (
+                  <Box key={i} sx={{
+                    display: 'flex', gap: 1.25, py: 0.875,
+                    borderTop: i > 0 ? `1px solid ${alpha('#ffffff', 0.06)}` : 'none',
+                    alignItems: 'flex-start',
+                  }}>
+                    <Icon size={13} color={dropped ? '#F14337' : '#17AB1F'} strokeWidth={2}
+                      style={{ flexShrink: 0, marginTop: 2 }}/>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center',
+                        mb: 0.375, flexWrap: 'wrap' }}>
+                        <Typography sx={{ fontSize: 11, color: 'text.primary', fontWeight: 600 }}>
+                          {A.label}
+                        </Typography>
+                        {tr.tool_calls > 0 && (
+                          <Typography sx={{ fontSize: 10, color: 'primary.main' }}>
+                            · {tr.tool_calls} tool call{tr.tool_calls === 1 ? '' : 's'}
+                          </Typography>
+                        )}
+                        {tr.threat_level && (
+                          <Box sx={{
+                            fontSize: 10,
+                            color: theme => {
+                              const sevMap = {
+                                CRITICAL: theme.palette.severity.critical,
+                                HIGH:     theme.palette.severity.high,
+                                MEDIUM:   theme.palette.severity.medium,
+                                LOW:      theme.palette.severity.low,
+                                INFORMATIONAL: theme.palette.severity.default,
+                              };
+                              return sevMap[tr.threat_level] || theme.palette.text.tertiary;
+                            },
+                            border: theme => {
+                              const sevMap = {
+                                CRITICAL: theme.palette.severity.critical,
+                                HIGH:     theme.palette.severity.high,
+                                MEDIUM:   theme.palette.severity.medium,
+                                LOW:      theme.palette.severity.low,
+                                INFORMATIONAL: theme.palette.severity.default,
+                              };
+                              return `1px solid ${alpha(sevMap[tr.threat_level] || theme.palette.text.tertiary, 0.3)}`;
+                            },
+                            px: 0.625, py: '1px', borderRadius: '3px',
+                          }}>
+                            {tr.threat_level.toLowerCase()}
+                          </Box>
+                        )}
+                        {tr.confidence !== undefined && (
+                          <Typography sx={{ fontSize: 10, color: 'text.tertiary' }}>
+                            {Math.round(tr.confidence * 100)}% conf
+                          </Typography>
+                        )}
+                        {tr.score !== undefined && (
+                          <Typography sx={{ fontSize: 10, color: 'text.tertiary' }}>
+                            score {tr.score}
+                          </Typography>
+                        )}
+                        {tr.elapsed_ms !== undefined && (
+                          <Typography sx={{ fontSize: 10, color: 'text.tertiary', ml: 'auto' }}>
+                            {tr.elapsed_ms < 1000 ? `${tr.elapsed_ms}ms` : `${(tr.elapsed_ms/1000).toFixed(1)}s`}
+                            {tr.ai_skipped && (
+                              <Box component="span" sx={{ color: 'success.main', ml: 0.5 }}>· fast-path</Box>
+                            )}
+                          </Typography>
+                        )}
+                      </Box>
+                      <Typography sx={{ fontSize: 11, color: 'text.tertiary', lineHeight: 1.55 }}>
+                        {tr.summary}
+                      </Typography>
+                      {tr.needs_more && (
+                        <Typography sx={{ fontSize: 11, color: 'warning.main', mt: 0.375 }}>
+                          ↻ Looping back for additional enrichment
+                        </Typography>
                       )}
-                      {t.score !== undefined && (
-                        <span style={{ fontSize: '9px', color: '#4a5568' }}>score: {t.score}</span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: '11px', color: '#718096', lineHeight: '1.5' }}>{t.summary}</div>
-                    {t.needs_more && (
-                      <div style={{ fontSize: '10px', color: '#ffa94d', marginTop: '2px' }}>↻ Low confidence — looping back to enrichment</div>
-                    )}
-                  </div>
-                  <div style={{ fontSize: '10px', color: '#2d3748', whiteSpace: 'nowrap' }}>
-                    {t.timestamp ? new Date(t.timestamp).toLocaleTimeString() : ''}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Box>
+          )}
+        </Box>
       )}
 
-      {/* Error */}
+      {/* Error banner */}
       {error && (
-        <div style={{ background: '#2d0a0a', border: '1px solid #fc8181', borderRadius: '6px', padding: '10px 12px', color: '#fc8181', fontSize: '12px', marginTop: '8px' }}>
-          ⚠ {error}
-        </div>
+        <Box sx={{
+          backgroundColor: alpha('#F14337', 0.08),
+          border: `1px solid ${alpha('#F14337', 0.4)}`,
+          borderRadius: '4px', p: '10px 12px',
+          color: 'error.main', fontSize: 12,
+          mt: 1.25, display: 'flex', alignItems: 'center', gap: 1,
+        }}>
+          <AlertCircle size={14}/>{error}
+        </Box>
       )}
 
-      {/* Reset */}
-      {(done || error) && !running && (
-        <button onClick={reset} style={{ background: 'none', border: '1px solid #2d3748', color: '#718096', padding: '7px 16px', borderRadius: '4px', cursor: 'pointer', fontSize: '10px', letterSpacing: '2px', fontFamily: 'Courier New', marginTop: '8px' }}>
-          ← NEW ANALYSIS
-        </button>
+      {/* Clear-trace link */}
+      {(done || error) && !running && trace.length > 0 && (
+        <Button onClick={reset} fullWidth
+          startIcon={<Trash2 size={11}/>}
+          sx={{
+            color: 'text.disabled', fontSize: 11, mt: 0.75,
+            textTransform: 'none', height: 'auto', py: 0.75,
+            '&:hover': { color: 'text.tertiary', backgroundColor: 'transparent' },
+          }}>
+          Clear previous trace
+        </Button>
       )}
-    </div>
+    </Box>
   );
 }
