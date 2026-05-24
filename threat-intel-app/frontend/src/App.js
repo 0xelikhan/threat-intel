@@ -1672,21 +1672,6 @@ function Assessment({ rs }) {
         </Block>
       )}
 
-      {rs.recommended_actions?.length > 0 && (
-        <Block title="Recommended actions">
-          {rs.recommended_actions.map((a, i) => (
-            <Box component="li" key={i} sx={{
-              display: 'flex', gap: 1.25, py: 0.75,
-              borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
-              fontSize: 13, color: 'text.primary', lineHeight: 1.6,
-            }}>
-              <Box component="span" sx={{ color: 'success.main', minWidth: 18,
-                fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{i + 1}</Box>
-              <span>{a}</span>
-            </Box>
-          ))}
-        </Block>
-      )}
     </Card>
   );
 }
@@ -3209,29 +3194,6 @@ function Report({ result }) {
             </Box>
           </>
         )}
-
-        {rs.recommended_actions?.length > 0 && (
-          <>
-            <Typography variant="h3" sx={{
-              fontSize: 13, color: 'text.tertiary', fontWeight: 500, mb: 1,
-            }}>Recommended actions</Typography>
-            <Box component="ol" sx={{ pl: 2.5, mb: 2.5 }}>
-              {rs.recommended_actions.map((a, i) => (
-                <Box component="li" key={i} sx={{
-                  fontSize: 13, color: 'text.primary', lineHeight: 1.7, mb: 0.5,
-                }}>{a}</Box>
-              ))}
-            </Box>
-          </>
-        )}
-
-        <Typography variant="h3" sx={{
-          fontSize: 13, color: 'text.tertiary', fontWeight: 500, mb: 1,
-        }}>Analyst notes</Typography>
-        <MuiTextField value={notes} onChange={e => setNotes(e.target.value)}
-          placeholder="Add observations, context, or follow-up items..."
-          multiline minRows={4} fullWidth size="small"
-          sx={{ '& .MuiInputBase-input': { lineHeight: 1.7 } }}/>
 
         <Box sx={{
           borderTop: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
