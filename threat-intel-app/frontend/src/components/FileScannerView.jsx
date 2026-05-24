@@ -1230,7 +1230,6 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
               { id: 'hashes',   label: 'Hashes',            Comp: HashesTab },
               { id: 'details',  label: 'File Details',      Comp: FileDetailsTab },
               { id: 'strings',  label: 'Strings',           Comp: StringsTab },
-              { id: 'ti',       label: 'Threat Intel',      Comp: ThreatIntelTab },
               { id: 'mitre',    label: 'MITRE ATT&CK',      Comp: MitreTab },
               { id: 'yara',     label: 'YARA',              Comp: YaraTab },
               { id: 'detect',   label: 'Detection Content', Comp: DetectionTab },
