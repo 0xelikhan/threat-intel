@@ -1344,6 +1344,10 @@ function SignalBanners({ result }) {
 // call fails or no OpenAI key is configured. Used to suppress entire UI
 // sections that would otherwise just display these placeholder strings.
 const AI_FAILURE_TEXT = /(openai\s*key\s*not\s*configured|review\s*enrichment\s*data\s*manually|automated\s*ai\s*analysis\s*unavailable|configure\s*openai)/i;
+const isAIFailureText = (v) => {
+  try { return AI_FAILURE_TEXT.test(String(v ?? '')); }
+  catch { return false; }
+};
 
 
 function Overview({ result }) {
@@ -1569,7 +1573,7 @@ function Assessment({ rs }) {
       </MuiPaper>
 
       {(() => {
-        const chain = (rs.chain_of_thought || []).filter(s => !AI_FAILURE_TEXT.test(s));
+        const chain = (rs.chain_of_thought || []).filter(s => !isAIFailureText(s));
         if (!chain.length) return null;
         return (
           <Block title="Reasoning chain">
@@ -1589,7 +1593,7 @@ function Assessment({ rs }) {
       })()}
 
       {(() => {
-        const findings = (rs.key_findings || []).filter(f => !AI_FAILURE_TEXT.test(f));
+        const findings = (rs.key_findings || []).filter(f => !isAIFailureText(f));
         if (!findings.length) return null;
         return (
           <Block title="Key findings">
