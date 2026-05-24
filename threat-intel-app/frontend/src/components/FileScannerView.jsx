@@ -18,10 +18,9 @@ import {
 } from '@mui/material';
 import { alpha as muiAlpha, useTheme } from '@mui/material/styles';
 import {
-  Upload, FileSearch, Copy, Check, Search, Download, Trash2,
-  ArrowUpRight, AlertTriangle, AlertCircle, Shield, Play, Plus,
-  ThumbsUp, ThumbsDown, FileText, Hash as HashIcon, Globe,
-  Activity, Cpu, Lock, Eye, ChevronRight, RotateCcw, Printer,
+  FileSearch, Copy, Check, Search, Download,
+  ArrowUpRight, AlertTriangle, Shield, Play, Plus,
+  ThumbsUp, ThumbsDown, FileText, ChevronRight, RotateCcw,
 } from 'lucide-react';
 
 // ─── verdict / severity color helper (uses theme tokens) ──────────────────────
@@ -93,7 +92,6 @@ function downloadText(name, text) {
   a.href = url; a.download = name; a.click();
   URL.revokeObjectURL(url);
 }
-function downloadJson(name, obj) { downloadText(name, JSON.stringify(obj, null, 2)); }
 
 
 // ─── RECON-styled card wrapper ────────────────────────────────────────────────
@@ -388,57 +386,68 @@ function ThreatIntelSection({ result }) {
   const [openSource, setOpenSource] = useState(null);
 
   const sources = useMemo(() => {
+    // For each source: produce a summary string OR 'None' if there's nothing
+    // useful to display (no data / error / empty result). Empty/errored
+    // sources still appear in the list so the analyst sees coverage.
     const order = [
-      ['VirusTotal',     ti.virustotal,     (d) => d?.found ? `${d.detection_ratio}${d.malware_family ? ' · '+d.malware_family : ''}` : 'no entry'],
-      ['MalwareBazaar',  ti.malwarebazaar,  (d) => d?.found ? d.malware_family || 'match' : 'no entry'],
-      ['Hybrid Analysis',ti.hybrid_analysis,(d) => d?.found ? `${d.verdict} · score ${d.threat_score}` : 'no entry'],
-      ['ANY.RUN',        ti.anyrun,         (d) => d?.found ? d.verdict : 'no entry'],
-      ['Feed cache',     ti.feed_cache,     (d) => d?.hit_count ? `${d.hit_count} hits` : 'no hits'],
-      ['Case history',   ti.case_history,   (d) => d?.related_cases ? `${d.related_cases} related cases` : 'no related cases'],
-      ['Scan history',   ti.scan_history,   (d) => {
-        if (!d) return 'no priors';
-        const n = (d.exact?.length || 0) + (d.imphash?.length || 0) + (d.tlsh_similar?.length || 0) + (d.ssdeep_similar?.length || 0);
-        return n ? `${n} similar files` : 'no similar files';
-      }],
-      ['Domain pivots',  ti.domain_intel,   (d) => d?.domains?.length ? `${d.domains.length} domains` : 'no data'],
+      ['VirusTotal',      ti.virustotal,
+        (d) => d?.found ? `${d.detection_ratio}${d.malware_family ? ' · '+d.malware_family : ''}` : null],
+      ['MalwareBazaar',   ti.malwarebazaar,
+        (d) => d?.found ? d.malware_family || 'match' : null],
+      ['Hybrid Analysis', ti.hybrid_analysis,
+        (d) => d?.found ? `${d.verdict} · score ${d.threat_score}` : null],
+      ['ANY.RUN',         ti.anyrun,
+        (d) => d?.found ? d.verdict : null],
+      ['Feed cache',      ti.feed_cache,
+        (d) => d?.hit_count ? `${d.hit_count} hits` : null],
+      ['Scan history',    ti.scan_history,
+        (d) => {
+          if (!d) return null;
+          const n = (d.exact?.length || 0) + (d.imphash?.length || 0)
+                  + (d.tlsh_similar?.length || 0) + (d.ssdeep_similar?.length || 0);
+          return n ? `${n} similar files` : null;
+        }],
+      ['Domain pivots',   ti.domain_intel,
+        (d) => d?.domains?.length ? `${d.domains.length} domains` : null],
     ];
-    return order.filter(([, d]) => d);
+    return order;
   }, [ti]);
-
-  if (!sources.length) return null;
 
   return (
     <SectionCard id="ti" label="Threat Intelligence" defaultPad={false}>
       {sources.map(([name, data, summarize], i) => {
         const open = openSource === name;
+        const summary = data ? summarize(data) : null;
         const hasError = data?.error;
-        const verdict = !hasError && (data?.found || data?.hit_count > 0 || data?.related_cases > 0)
-          ? 'positive' : hasError ? 'error' : 'neutral';
-        const chipColor = { positive: 'error.main', error: 'text.disabled', neutral: 'text.tertiary' }[verdict];
+        const hasData  = !!summary && !hasError;
+        const chipColor = hasData ? 'error.main' : 'text.disabled';
         return (
           <Box key={name}
-            onClick={() => setOpenSource(open ? null : name)}
+            onClick={() => hasData && setOpenSource(open ? null : name)}
             sx={{
-              cursor: 'pointer',
+              cursor: hasData ? 'pointer' : 'default',
               borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
-              '&:hover': { backgroundColor: muiAlpha('#ffffff', 0.02) },
+              '&:hover': hasData ? { backgroundColor: muiAlpha('#ffffff', 0.02) } : undefined,
             }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, p: '12px 16px' }}>
               <Box sx={{ width: 6, height: 6, borderRadius: 99,
-                backgroundColor: verdict === 'positive' ? 'error.main'
-                  : verdict === 'error' ? 'text.disabled' : 'text.tertiary' }}/>
-              <Typography sx={{ fontSize: 13, color: 'text.primary', fontWeight: 500 }}>
+                backgroundColor: hasData ? 'error.main' : muiAlpha('#ffffff', 0.15) }}/>
+              <Typography sx={{ fontSize: 13, color: hasData ? 'text.primary' : 'text.tertiary',
+                fontWeight: 500 }}>
                 {name}
               </Typography>
-              <Typography sx={{ fontSize: 11, color: chipColor, ml: 'auto' }}>
-                {hasError ? data.error.slice(0, 60) : summarize(data)}
+              <Typography sx={{ fontSize: 11, color: chipColor, ml: 'auto',
+                fontStyle: hasData ? 'normal' : 'italic' }}>
+                {hasData ? summary : 'None'}
               </Typography>
-              <ChevronRight size={14} color="#848592" style={{
-                transition: 'transform .15s',
-                transform: open ? 'rotate(90deg)' : 'none',
-              }}/>
+              {hasData && (
+                <ChevronRight size={14} color="#848592" style={{
+                  transition: 'transform .15s',
+                  transform: open ? 'rotate(90deg)' : 'none',
+                }}/>
+              )}
             </Box>
-            {open && (
+            {open && hasData && (
               <Box sx={{ p: '0 16px 14px 28px',
                 backgroundColor: muiAlpha('#ffffff', 0.02) }}>
                 <Box component="pre" sx={{ ...monoSx, fontSize: 11,
@@ -1208,7 +1217,7 @@ function NotesAndRefinement({ result, onRefreshScan }) {
 
 
 // ─── Sticky header + section navigator ───────────────────────────────────────
-function StickyHeader({ result, scanning, onHome, onExportPdf, onExportJson, onAddToCase }) {
+function StickyHeader({ result, scanning }) {
   const theme = useTheme();
   const v = result?.verdict || 'UNKNOWN';
   const conf = result?.confidence || 0;
@@ -1253,14 +1262,6 @@ function StickyHeader({ result, scanning, onHome, onExportPdf, onExportJson, onA
             </Typography>
           </Stack>
         )}
-        <Box sx={{ ml: 'auto !important', display: 'flex', gap: 0.75 }}>
-          <MuiButton size="small" variant="outlined" startIcon={<Printer size={12}/>}
-            onClick={onExportPdf} disabled={!result}>Export PDF</MuiButton>
-          <MuiButton size="small" variant="outlined" startIcon={<Download size={12}/>}
-            onClick={onExportJson} disabled={!result}>JSON</MuiButton>
-          <MuiButton size="small" variant="outlined" startIcon={<Plus size={12}/>}
-            onClick={onAddToCase} disabled={!result}>Add to Case</MuiButton>
-        </Box>
       </Stack>
     </Box>
   );
@@ -1439,28 +1440,6 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const onExportPdf = () => window.print();
-  const onExportJson = () => result && downloadJson(
-    `recon_scan_${(result.hashes?.sha256 || 'result').slice(0, 8)}.json`, result,
-  );
-  const onAddToCase = async () => {
-    if (!result?.hashes?.sha256) return;
-    const label = window.prompt('Case label for this file scan?',
-      result.filename || result.hashes.sha256.slice(0, 12));
-    if (!label) return;
-    try {
-      const r = await fetch('/api/scan/to-case', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scan_id: result.hashes.sha256, label }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
-      alert(`Added to case "${d.label}" — runId ${d.runId}`);
-    } catch (e) {
-      alert(`Failed: ${e.message}`);
-    }
-  };
-
   const onRefreshScan = (updated) => {
     if (sidebarDriven) {
       // The parent owns state — we can't update directly, but the data we
@@ -1478,10 +1457,7 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
       minHeight: '100vh',
       display: 'flex', flexDirection: 'column',
     }}>
-      <StickyHeader
-        result={result} scanning={scanning}
-        onExportPdf={onExportPdf} onExportJson={onExportJson} onAddToCase={onAddToCase}
-      />
+      <StickyHeader result={result} scanning={scanning}/>
 
       <Box sx={{ display: 'flex', flex: 1, p: '20px 24px' }}>
         <Box sx={{ flex: 1, minWidth: 0, maxWidth: 980 }}>
@@ -1512,7 +1488,7 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
           )}
 
           {result && (
-            <Stack spacing={3} className="recon-print-content">
+            <Stack spacing={3}>
               <VerdictBanner result={result}/>
               <TechnicalAssessment result={result}/>
               <ExecutionNarrative result={result}/>
@@ -1541,20 +1517,6 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
         )}
       </Box>
 
-      {/* Print stylesheet — clean black-on-white PDF export */}
-      <style>{`
-        @media print {
-          body { background: #fff !important; color: #000 !important; }
-          .MuiDrawer-root, .recon-no-print { display: none !important; }
-          .recon-print-content * {
-            color: #000 !important; background: transparent !important;
-            border-color: #999 !important; box-shadow: none !important;
-          }
-          .recon-print-content pre {
-            background: #f4f4f4 !important; border: 1px solid #ccc !important;
-          }
-        }
-      `}</style>
     </Box>
   );
 }
