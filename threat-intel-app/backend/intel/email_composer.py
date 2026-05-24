@@ -1228,33 +1228,35 @@ def _render_html(template_text, replacements, signature_html, include_runbook):
 
 
 def _build_signature_html(config) -> str:
-    """Build the signature block from RECON settings (no ThreatLocker fallbacks)."""
-    name = config.get("EMAIL_FROM_NAME") or "MDR Analyst"
-    addr = config.get("EMAIL_FROM_ADDRESS") or ""
+    """Build the signature block from RECON settings.
+
+    If EMAIL_SIGNATURE is set: honor it verbatim (HTML or plain).
+    Otherwise: render a minimal block with just the configured name/address —
+    no hardcoded role title, no fallback name. If nothing is configured at
+    all, return an empty string so the email ends cleanly."""
+    name = (config.get("EMAIL_FROM_NAME") or "").strip()
+    addr = (config.get("EMAIL_FROM_ADDRESS") or "").strip()
     custom = config.get("EMAIL_SIGNATURE") or ""
     if custom.strip():
-        # If analyst pasted a full HTML signature, honor it verbatim
         if "<" in custom and ">" in custom:
             return custom
-        # Otherwise plain text — wrap each line in a div
         lines = [html_escape(l) for l in custom.split("\n")]
         return ('<div style="font-family:\'IBM Plex Sans\', Arial, sans-serif; '
                 'font-size:13px; line-height:1.4; margin-top:20px;">' +
                 "".join(f'<div style="margin:0;">{l}</div>' for l in lines) +
                 "</div>")
-    addr_line = ""
+    if not name and not addr:
+        return ""
+    parts = ['<div style="font-family:\'IBM Plex Sans\', Arial, sans-serif; '
+             'font-size:13px; line-height:1.4; margin-top:20px;">']
+    if name:
+        parts.append('<div style="margin:0;">Best regards,</div>')
+        parts.append(f'<div style="font-weight:700; font-size:14px; margin:0;">{html_escape(name)}</div>')
     if addr:
-        addr_line = (f'<div style="margin:0;"><a href="mailto:{html_escape(addr)}" '
+        parts.append(f'<div style="margin:0;"><a href="mailto:{html_escape(addr)}" '
                      f'style="color:#0fbcff; text-decoration:none;">{html_escape(addr)}</a></div>')
-    return ('<div style="font-family:\'IBM Plex Sans\', Arial, sans-serif; '
-            'font-size:13px; line-height:1.4; margin-top:20px;">'
-            '<div style="margin:0;">Best regards,</div>'
-            f'<div style="font-weight:700; font-size:14px; margin:0;">{html_escape(name)}</div>'
-            '<div style="margin:0;">MDR Security Analyst</div>'
-            f'{addr_line}'
-            '<div style="margin-top:8px; color:#848592; font-size:12px; max-width:500px;">'
-            'This message may contain confidential security information intended for authorized recipients.'
-            '</div></div>')
+    parts.append("</div>")
+    return "".join(parts)
 
 
 # ─── template store ──────────────────────────────────────────────────────────
@@ -1307,7 +1309,6 @@ def compose(alert_type: str, parsed: Dict, options: Dict, config,
     text = template
     for k, v in replacements.items():
         if k == "{{Signature}}":
-            # Plain-text version uses a text signature
             text = text.replace(k, _signature_plain(config))
         else:
             text = text.replace(k, v if v is not None else "")
@@ -1315,18 +1316,194 @@ def compose(alert_type: str, parsed: Dict, options: Dict, config,
     html = _render_html(template, replacements, signature_html,
                         options.get("include_runbook_blurb") or False)
     subject = _render_subject(alert_type, options, parsed or {})
+    text = _strip_closing_block(text)
+    html = _strip_closing_block_html(html)
     return {"subject": subject, "text": text, "html": html, "template_used": alert_type}
 
 
+# Matches all phrasings of the "If you have any questions..." closing line
+# we ship in defaults, regardless of what middle phrase a template uses.
+_CLOSING_RE = re.compile(
+    r"\n*If you have (?:any )?questions[^\n]*?(?:reach out|contact)[^\n]*\n*",
+    re.IGNORECASE,
+)
+
+
+def _strip_closing_block(text: str) -> str:
+    """Drop the canned 'If you have questions, reach out to ...' line from
+    plain-text output. Templates often append this right before the signature;
+    analysts asked to remove it because their signature already invites reply."""
+    return _CLOSING_RE.sub("\n", text or "").rstrip() + "\n"
+
+
+def _strip_closing_block_html(html: str) -> str:
+    """Same idea for HTML — the renderer wraps each line in <div>...</div>,
+    so we drop any div whose text starts with 'If you have ... questions'."""
+    return re.sub(
+        r'<div[^>]*>\s*If you have (?:any )?questions[^<]*?(?:reach out|contact)[^<]*</div>',
+        "",
+        html or "",
+        flags=re.IGNORECASE,
+    )
+
+
 def _signature_plain(config) -> str:
-    name = config.get("EMAIL_FROM_NAME") or "MDR Analyst"
-    addr = config.get("EMAIL_FROM_ADDRESS") or ""
+    name = (config.get("EMAIL_FROM_NAME") or "").strip()
+    addr = (config.get("EMAIL_FROM_ADDRESS") or "").strip()
     custom = config.get("EMAIL_SIGNATURE") or ""
     if custom.strip() and "<" not in custom:
         return "\n" + custom
-    lines = ["", "Best regards,", name, "MDR Security Analyst"]
-    if addr: lines.append(addr)
+    if not name and not addr:
+        return ""
+    lines = [""]
+    if name:
+        lines += ["Best regards,", name]
+    if addr:
+        lines.append(addr)
     return "\n".join(lines)
+
+
+# ─── AI-generated templates ───────────────────────────────────────────────────
+# Few-shot generator that produces a customer-facing email tailored to the
+# specific log content. Existing static templates serve as style/tone models.
+
+_AI_EXAMPLE_IDS = [
+    "impossible_travel",
+    "defender_detection",
+    "powershell_policy_bypass",
+    "ransomware",
+    "user_added_to_local_admin",
+]
+
+
+def _ai_example_block() -> str:
+    """Render 5 in-repo templates as few-shot examples (kept short for tokens)."""
+    parts = []
+    for aid in _AI_EXAMPLE_IDS:
+        body = _DEFAULT_TEMPLATES.get(aid, "")
+        if not body:
+            continue
+        parts.append(f"## Example — {ALERT_LABEL_BY_ID.get(aid, aid)}\n```\n{body[:1100]}\n```")
+    return "\n\n".join(parts)
+
+
+_AI_SYSTEM = """You are a senior MDR security analyst drafting customer-facing
+email notifications about security alerts. Match the tone, structure, and
+specificity of the example templates: greet, summarize what happened, list
+relevant details as a short bullet block, state the action taken, then end.
+
+Hard rules:
+- Output ONLY the email body. No subject line. No commentary.
+- Never invent values not present in the log. If a value is unknown, omit
+  the field rather than writing "N/A".
+- Do NOT include a closing line like "If you have any questions, reach out
+  to..." — the analyst's signature handles that.
+- Do NOT include a signature block (no "Best regards," / name / title).
+  The system appends one automatically.
+- Plain text only, no markdown formatting, no asterisks, no underscores.
+- Keep it concise — 8–14 lines including blank lines.
+- The first line should be a greeting (e.g. "Greetings,").
+"""
+
+
+async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
+                     config) -> Dict:
+    """Generate a fresh template body via AI, then run it through the same
+    render pipeline so the signature, subject, and HTML wrapping match the
+    static-template flow. Returns {subject, text, html, template_used}."""
+    if not log_text or not log_text.strip():
+        return {"error": "log_text required"}
+
+    key = config.get("OPENAI_API_KEY")
+    if not key:
+        return {"error": "OPENAI_API_KEY not configured"}
+
+    try:
+        from openai import AsyncAzureOpenAI, AsyncOpenAI
+    except ImportError:
+        return {"error": "openai package not installed"}
+
+    base_url = config.get("OPENAI_BASE_URL", "")
+    model    = config.get("AI_MODEL", "gpt-4o-mini")
+    parsed   = parsed or {}
+    options  = options or {}
+
+    # Compact parsed-fields summary for the AI (drop empty + housekeeping keys)
+    parsed_view = {k: v for k, v in parsed.items()
+                   if v not in (None, "", "N/A") and not k.startswith("_")
+                   and k not in ("raw_fields", "suggested_alert_type")}
+    parsed_block = "\n".join(f"- {k}: {v}" for k, v in list(parsed_view.items())[:30])
+
+    response_action = options.get("response_action") or ""
+    action_hint = ""
+    if response_action:
+        for rid, rlabel in RESPONSE_ACTIONS:
+            if rid == response_action:
+                action_hint = f"\n\nAction we took: {rlabel}"
+                break
+
+    user_prompt = (
+        f"{_ai_example_block()}\n\n"
+        "## Now write an email for THIS alert\n"
+        "Raw log:\n```\n"
+        f"{log_text[:5000]}\n```\n\n"
+        f"Extracted fields:\n{parsed_block or '(none)'}"
+        f"{action_hint}\n\n"
+        "Write the email body only. Plain text. No subject line. No signature."
+    )
+
+    try:
+        if "openai.azure.com" in base_url:
+            client = AsyncAzureOpenAI(
+                api_key=key,
+                azure_endpoint=base_url.rstrip("/"),
+                api_version="2024-02-01",
+            )
+        else:
+            client = AsyncOpenAI(api_key=key,
+                                 base_url=base_url or "https://api.openai.com/v1")
+        resp = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": _AI_SYSTEM},
+                {"role": "user",   "content": user_prompt},
+            ],
+            temperature=0.4,
+            max_tokens=900,
+        )
+        body = (resp.choices[0].message.content or "").strip()
+    except Exception as e:
+        return {"error": f"AI call failed: {str(e)[:200]}"}
+
+    if not body:
+        return {"error": "AI returned empty body"}
+
+    # Run the AI body through the same render pipeline so subject + signature
+    # + HTML wrapping stay consistent with template-based composes.
+    signature_html = _build_signature_html(config)
+    replacements   = _build_replacement_map(parsed, {**options, "alert_type": "ai"},
+                                            signature_html, None, None)
+    text_body = body + "{{Signature}}"
+    text = text_body
+    for k, v in replacements.items():
+        if k == "{{Signature}}":
+            text = text.replace(k, _signature_plain(config))
+        else:
+            text = text.replace(k, v if v is not None else "")
+    html = _render_html(text_body, replacements, signature_html, False)
+    subject = _render_subject_ai(log_text, parsed)
+    text = _strip_closing_block(text)
+    html = _strip_closing_block_html(html)
+    return {"subject": subject, "text": text, "html": html, "template_used": "ai_generated"}
+
+
+def _render_subject_ai(log_text: str, parsed: Dict) -> str:
+    """Heuristic subject for AI-generated emails — re-uses the alert-type
+    suggester to pick a label, falls back to a generic security-alert line."""
+    suggested = suggest_alert_type(log_text, parsed)
+    label = ALERT_LABEL_BY_ID.get(suggested) if suggested else None
+    org = parsed.get("organization_name") or "Organization"
+    return f"[MDR Alert] {label or 'Security Alert'} — {org}"
 
 
 # ─── SMTP send ────────────────────────────────────────────────────────────────
@@ -1337,7 +1514,7 @@ def send_smtp(subject: str, body_html: str, body_text: str, to: str,
     user = config.get("EMAIL_SMTP_USER")
     password = config.get("EMAIL_SMTP_PASSWORD")
     from_addr = config.get("EMAIL_FROM_ADDRESS") or user
-    from_name = config.get("EMAIL_FROM_NAME") or "MDR Analyst"
+    from_name = config.get("EMAIL_FROM_NAME") or ""
     if not (host and from_addr and to):
         return {"sent": False, "error": "SMTP not fully configured (need EMAIL_SMTP_HOST, "
                                         "EMAIL_FROM_ADDRESS, and a recipient)"}

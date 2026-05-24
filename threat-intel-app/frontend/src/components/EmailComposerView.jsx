@@ -19,7 +19,7 @@ import {
   ToggleButton, ToggleButtonGroup, MenuItem,
 } from '@mui/material';
 import { alpha as muiAlpha } from '@mui/material/styles';
-import { Mail, Copy, Check, Eye, RefreshCcw, AlertCircle } from 'lucide-react';
+import { Mail, Copy, Check, Eye, RefreshCcw, AlertCircle, Sparkles } from 'lucide-react';
 
 const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
 
@@ -142,20 +142,24 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
     if (!selectedType)  { setComposeError('Pick a template');           return; }
     setComposing(true); setComposeError(null);
     try {
-      // Parse first (silent — fields don't surface in the UI)
+      // Parse first (silent — fields don't surface in the UI). Re-used by
+      // both the static-template and AI compose paths.
       const pr = await fetch('/api/email/parse', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ log_text: rawLog }),
       });
       const parsed = pr.ok ? await pr.json() : (initialParsed || {});
 
-      const r = await fetch('/api/email/compose', {
+      const useAI = selectedType === '__ai__';
+      const endpoint = useAI ? '/api/email/compose-ai' : '/api/email/compose';
+      const body = useAI
+        ? { log_text: rawLog, parsed, options: { response_action: responseAction } }
+        : { alert_type: selectedType, parsed,
+            options: { response_action: responseAction } };
+
+      const r = await fetch(endpoint, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          alert_type: selectedType,
-          parsed,
-          options: { response_action: responseAction },
-        }),
+        body: JSON.stringify(body),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
@@ -183,14 +187,9 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
       {/* Header */}
       <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2.5 }}>
         <Mail size={20} color="#0fbcff"/>
-        <Box>
-          <Typography sx={{ fontSize: 18, fontWeight: 600, color: 'text.primary' }}>
-            Email composer
-          </Typography>
-          <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
-            Paste alert log → pick template → copy customer-ready email
-          </Typography>
-        </Box>
+        <Typography sx={{ fontSize: 18, fontWeight: 600, color: 'text.primary' }}>
+          Email composer
+        </Typography>
         {onClose && (
           <MuiButton onClick={onClose} size="small" variant="text"
             sx={{ ml: 'auto !important', textTransform: 'none', fontSize: 12 }}>
@@ -245,6 +244,10 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
               }}
               InputProps={{ sx: { fontSize: 13 } }}
             >
+              <MenuItem value="__ai__" sx={{ fontSize: 13, gap: 1,
+                color: 'primary.main', fontWeight: 600 }}>
+                <Sparkles size={14}/> AI · Auto-generate from log
+              </MenuItem>
               {alertTypes.map(t => (
                 <MenuItem key={t.id} value={t.id} sx={{ fontSize: 13 }}>
                   {t.label || t.id}
