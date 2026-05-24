@@ -3225,7 +3225,7 @@ function Report({ result }) {
  * Uses MUI Drawer with the OpenCTI nav width/styling, hosting the input area
  * (drop zone + textarea + AgentPipeline) and the extracted-IOCs panel.
  */
-function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanHash, onScanUrl, scanState, page, onPageChange }) {
+function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanHash, onScanUrl, scanState }) {
   const [logText, setLogText] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const [hashInput, setHashInput] = useState('');
@@ -3300,33 +3300,11 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
             filter: 'drop-shadow(0 0 18px rgba(15,188,255,0.35))' }}/>
       </Box>
 
-      {/* Page navigation */}
-      <Box sx={{ display: 'flex', borderBottom: `1px solid ${muiAlpha('#ffffff', 0.12)}` }}>
-        {[
-          { id: 'analysis', label: 'Analyze' },
-          { id: 'scanner',  label: 'File scanner' },
-        ].map(p => (
-          <Box key={p.id}
-            onClick={() => onPageChange?.(p.id)}
-            sx={{
-              flex: 1, textAlign: 'center', cursor: 'pointer',
-              fontSize: 12, fontWeight: 500,
-              py: 1.25,
-              color: page === p.id ? 'primary.main' : 'text.tertiary',
-              borderBottom: page === p.id ? '2px solid' : '2px solid transparent',
-              borderColor: page === p.id ? 'primary.main' : 'transparent',
-              transition: 'color .15s',
-              '&:hover': { color: 'text.primary' },
-            }}>
-            {p.label}
-          </Box>
-        ))}
-      </Box>
-
       {/* Input area + pipeline */}
       <Box sx={{ p: '18px 16px 16px', flex: 1, overflowY: 'auto' }}>
-        {/* Comprehensive file-analyzer drop zone — POST /api/scan/file.
-            On submission the page auto-switches to the File scanner view. */}
+        {/* Comprehensive file-analyzer drop zone — POSTs /api/scan/file.
+            When scanning starts the main view auto-replaces the analysis
+            output with the scanner result panel until dismissed. */}
         <Box
           onDragOver={e => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
@@ -3779,18 +3757,21 @@ function SendToWebhook({ result, available }) {
 export default function App() {
   const [result, setResult] = useState(null);
   const [view, setView] = useState('detail'); // 'detail' | 'table'
-  // Top-level page mode — 'analysis' (default RECON workflow) | 'scanner'
-  // (comprehensive file analyzer per spec §7 of the all-in-one scanner plan)
-  const [page, setPage] = useState('analysis');
   const [webhooks, setWebhooks] = useState({});
   const rs = result?.response_summary;
 
   // Comprehensive file-analyzer state — lifted from FileScannerView so the
-  // sidebar can drive scans (file drop / hash lookup / URL fetch) and have
-  // results render on the File scanner page. Replaces the old YARA-only flow.
+  // sidebar can drive scans (file drop / hash lookup / URL fetch). When
+  // there's active scan state, the main view shows the scanner results
+  // instead of the analysis view.
   const [scanState, setScanState] = useState({
     scanning: false, result: null, error: null, progressStep: 0,
   });
+  // Show scanner whenever there's scan activity in flight or a result on hand
+  const showScanner = scanState.scanning || scanState.result || scanState.error;
+  const clearScan = useCallback(() => {
+    setScanState({ scanning: false, result: null, error: null, progressStep: 0 });
+  }, []);
   const scanProgressTimer = useRef(null);
 
   const startScanProgress = useCallback(() => {
@@ -3811,7 +3792,6 @@ export default function App() {
 
   const _runScan = useCallback(async (fetchFn) => {
     setScanState({ scanning: true, result: null, error: null, progressStep: 0 });
-    setPage('scanner');                              // auto-switch to the scanner page
     startScanProgress();
     try {
       const resp = await fetchFn();
@@ -3884,13 +3864,21 @@ export default function App() {
         onScanHash={scanHash}
         onScanUrl={scanUrl}
         scanState={scanState}
-        page={page}
-        onPageChange={setPage}
       />
 
-      {/* Top-level page mode switch */}
-      {page === 'scanner' && (
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+      {/* Main view — file scanner takes over whenever there's scan activity,
+          otherwise the normal analysis view is shown. */}
+      {showScanner && (
+        <Box sx={{ flex: 1, minWidth: 0, position: 'relative' }}>
+          {/* Close button to dismiss scanner and return to the analysis view */}
+          <MuiIconButton onClick={clearScan}
+            title="Close scan results"
+            sx={{
+              position: 'absolute', top: 12, right: 16, zIndex: 2,
+              color: 'text.tertiary', '&:hover': { color: 'text.primary' },
+            }}>
+            <X size={16}/>
+          </MuiIconButton>
           <FileScannerView
             external={scanState}
             onScanFile={scanFile}
@@ -3899,7 +3887,7 @@ export default function App() {
           />
         </Box>
       )}
-      {page === 'analysis' && (
+      {!showScanner && (
 
       <Box component="main" sx={{
         flex: 1, p: '24px 28px 48px', overflowY: 'auto', minWidth: 0,
