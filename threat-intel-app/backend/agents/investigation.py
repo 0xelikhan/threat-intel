@@ -712,34 +712,60 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                     # No more tool calls — model is done investigating, ask for structured JSON
                     break
 
-                # Final structured-output pass
+                # Final structured-output pass — spec §5 schema
+                analyst_answers = state.get("analyst_answers") or {}
+                answers_block = ""
+                if analyst_answers:
+                    qa = "\n".join(f"  Q: {q}\n  A: {a}" for q, a in analyst_answers.items())
+                    answers_block = (
+                        "\n\n## ANALYST PROVIDED CONTEXT (Phase 2)\n"
+                        "The analyst answered your earlier clarifying questions. "
+                        "Incorporate this into your assessment and populate context_impact "
+                        "explaining how their answers changed your conclusions:\n"
+                        f"{qa}\n"
+                    )
+
                 messages.append({
                     "role": "user",
                     "content": (
-                        "Now output your final assessment as strict JSON. CRITICAL: you MUST "
-                        "include probing_questions (3-5 specific actionable questions that teach the "
-                        "analyst what to investigate next — required even when verdict is confident) "
-                        "and verdict_classification (one of: MALICIOUS, LIKELY_MALICIOUS, AMBIGUOUS, "
-                        "LIKELY_BENIGN, BENIGN_FALSE_POSITIVE).\n\n"
+                        f"{answers_block}"
+                        "Now output your final assessment as strict JSON. Be definitive — if the "
+                        "evidence points to a specific malware family, threat actor, or campaign, "
+                        "name it. Do not hedge unnecessarily.\n\n"
                         "Required keys:\n"
+                        "  summary (2-3 sentence executive summary for a customer-facing report),\n"
                         "  threat_level (CRITICAL|HIGH|MEDIUM|LOW|INFORMATIONAL),\n"
                         "  confidence (0.0-1.0), confidence_basis,\n"
-                        "  summary, attack_chain_hypothesis,\n"
+                        "  malware_family (specific family name or null — e.g. 'Cobalt Strike', 'Emotet'),\n"
+                        "  threat_actor ({name, confidence} for APT/eCrime group or null — e.g. {'name':'APT29','confidence':0.65}),\n"
+                        "  campaign (known campaign name or null),\n"
+                        "  attack_stage (kill chain stage: reconnaissance|weaponization|delivery|\n"
+                        "    exploitation|installation|command_and_control|actions_on_objectives),\n"
+                        "  attack_chain_hypothesis,\n"
                         "  chain_of_thought (array of 3-5 reasoning steps),\n"
-                        "  key_findings (array citing specific evidence),\n"
+                        "  key_findings (3-7 findings; each cites the supporting enrichment source),\n"
                         "  correlated_signals (array of {observation, supporting_signals}),\n"
-                        "  ioc_assessments (array of {ioc, type, verdict, reason}),\n"
-                        "  mitre_techniques (array like 'T1566 - Phishing'),\n"
-                        "  mitre_evidence (array of {technique, evidence}),\n"
-                        "  recommended_actions (array of specific actions),\n"
+                        "  ioc_assessments (array of {ioc, type, verdict, reason, evidence_source}),\n"
+                        "  mitre_techniques (array of 'Txxxx[.yyy] - Name'),\n"
+                        "  mitre_evidence (array of {technique, evidence, confidence}),\n"
+                        "  recommended_actions (array of {action, priority, timeframe} where\n"
+                        "    priority is IMMEDIATE|SHORTTERM|LONGTERM),\n"
+                        "  analyst_notes (1-2 paragraphs of senior-analyst context for junior tier),\n"
                         "  tor_traffic (bool), attribution_hints,\n"
                         "  false_positive_check (which FP patterns you considered + ruled out),\n"
                         "  needs_more_enrichment (bool),\n"
-                        "  verdict_classification: one of MALICIOUS|LIKELY_MALICIOUS|AMBIGUOUS|"
-                        "LIKELY_BENIGN|BENIGN_FALSE_POSITIVE,\n"
-                        "  probing_questions: 3-5 entries of {question, why_asking, if_yes_means, "
-                        "if_no_means} — mix surrounding-activity, FP probes, TP probes, context, "
-                        "lateral-movement checks. These teach the analyst what to investigate.\n\n"
+                        "  verdict_classification: one of MALICIOUS|LIKELY_MALICIOUS|AMBIGUOUS|\n"
+                        "    LIKELY_BENIGN|BENIGN_FALSE_POSITIVE,\n"
+                        "  clarifying_questions: 2-4 questions whose answers would MATERIALLY change\n"
+                        "    your assessment (host role: server/workstation, user privilege level,\n"
+                        "    related alerts in the same timeframe, business context of affected\n"
+                        "    system, scope: isolated vs broader incident). Only include questions\n"
+                        "    whose answer is not derivable from enrichment. Empty list if none.\n"
+                        "  context_impact: string explaining how analyst answers (if any) changed\n"
+                        "    the assessment. Empty if no analyst answers were provided.\n"
+                        "  probing_questions: 3-5 entries of {question, why_asking, if_yes_means,\n"
+                        "    if_no_means} — surrounding-activity, FP probes, TP probes, lateral\n"
+                        "    movement. These teach the analyst what to hunt next.\n\n"
                         "Optional but useful: diamond_model, kill_chain, pyramid_of_pain, evidence_ratings.\n\n"
                         "No markdown fences, no commentary outside the JSON."
                     ),
@@ -812,11 +838,17 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
 
     return {
         **state,
-        "investigation_result": result,
-        "mitre_techniques": result.get("mitre_techniques", []),
-        "threat_level": result.get("threat_level", "MEDIUM"),
-        "confidence": result.get("confidence", 0.5),
-        "needs_more_enrichment": result.get("needs_more_enrichment", False),
-        "tool_call_log": tool_call_log,
-        "agent_trace": trace,
+        "investigation_result":   result,
+        "mitre_techniques":       result.get("mitre_techniques", []),
+        "threat_level":           result.get("threat_level", "MEDIUM"),
+        "confidence":             result.get("confidence", 0.5),
+        "needs_more_enrichment":  result.get("needs_more_enrichment", False),
+        "clarifying_questions":   result.get("clarifying_questions", []),
+        "context_impact":         result.get("context_impact", ""),
+        "malware_family":         result.get("malware_family"),
+        "threat_actor":           result.get("threat_actor"),
+        "campaign":               result.get("campaign"),
+        "attack_stage":           result.get("attack_stage"),
+        "tool_call_log":          tool_call_log,
+        "agent_trace":            trace,
     }

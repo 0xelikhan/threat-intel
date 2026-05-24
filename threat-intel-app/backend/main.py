@@ -406,6 +406,34 @@ async def analyze_sync(req: AnalyzeRequest):
     return result
 
 
+class ClarifyRequest(BaseModel):
+    answers: dict   # {question_text: answer_text}
+
+
+@app.post("/api/analyze/clarify/{run_id}")
+async def analyze_clarify(run_id: str, req: ClarifyRequest):
+    """Spec §5 Phase 2: re-run investigation with analyst answers to clarifying
+    questions. Re-uses the original triage/enrichment state — only the AI
+    investigation step runs again, with analyst_answers appended to the prompt."""
+    if run_id not in _results:
+        raise HTTPException(404, f"unknown run_id {run_id}")
+    if not req.answers:
+        raise HTTPException(400, "answers required")
+
+    state = dict(_results[run_id])
+    state["analyst_answers"] = req.answers
+
+    from agents.investigation import run_investigation
+    state = await run_investigation(state)
+
+    # Refresh GTI scores and persist updated state
+    state["gti_scores"] = compute_gti_scores(state.get("enrichments", {}))
+    _results[run_id] = state
+    result = {k: v for k, v in state.items() if k != "stix_bundle"}
+    result.update({"runId": run_id, "rephased": True})
+    return result
+
+
 # ─── GTI SCORE ───────────────────────────────────────────────────────────────────
 @app.post("/api/gti-score")
 async def gti_score_standalone(req: GTIScoreRequest):
