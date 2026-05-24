@@ -42,15 +42,19 @@ async def correlate(analysis: Dict, config) -> Dict:
 
     out: Dict = {}
 
+    # Synchronous lookups first (no I/O)
+    scan_hist = _scan_history_match(sha256, imphash, tlsh, ssdeep_h)
+    if scan_hist:
+        out["scan_history"] = scan_hist
+
     async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:
         tasks = {
-            "virustotal":     _vt_file(session, sha256, keys["VIRUSTOTAL_KEY"])  if sha256 else _noop(),
-            "malwarebazaar":  _malwarebazaar(session, sha256)                    if sha256 else _noop(),
+            "virustotal":      _vt_file(session, sha256, keys["VIRUSTOTAL_KEY"])  if sha256 else _noop(),
+            "malwarebazaar":   _malwarebazaar(session, sha256)                    if sha256 else _noop(),
             "hybrid_analysis": _hybrid_analysis(session, sha256, keys["HYBRID_ANALYSIS_KEY"]) if sha256 else _noop(),
-            "anyrun":         _anyrun(session, sha256, keys["ANYRUN_KEY"])       if sha256 else _noop(),
-            "feed_cache":     _feed_cache_for_iocs(iocs),
-            "case_history":   _case_history_for(sha256, iocs),
-            "scan_history":   _scan_history_match(sha256, imphash, tlsh, ssdeep_h),
+            "anyrun":          _anyrun(session, sha256, keys["ANYRUN_KEY"])       if sha256 else _noop(),
+            "feed_cache":      _feed_cache_for_iocs(iocs),
+            "case_history":    _case_history_for(sha256, iocs),
         }
         # Domain extras run only when we have domains
         if iocs.get("domains"):
