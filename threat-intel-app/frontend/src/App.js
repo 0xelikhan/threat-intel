@@ -294,6 +294,103 @@ function PreFlight({ result }) {
   );
 }
 
+/* ─── clarifying questions (spec §5 — Phase 1 → Phase 2 re-analysis) ────────
+ * When the AI flags critical unknowns it can't infer from enrichment, render
+ * them as a form. Submitting POSTs to /api/analyze/clarify/{runId} which
+ * re-runs the investigation with the analyst's answers appended.
+ */
+function ClarifyingQuestions({ result, onResult }) {
+  const questions = result?.clarifying_questions || [];
+  const [answers, setAnswers]   = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError]       = useState(null);
+
+  if (!questions.length) return null;
+
+  const submit = async () => {
+    const runId = result?.runId;
+    if (!runId) return;
+    const filled = Object.fromEntries(
+      Object.entries(answers).filter(([, v]) => (v || '').trim())
+    );
+    if (Object.keys(filled).length === 0) {
+      setError('Answer at least one question before re-running');
+      return;
+    }
+    setSubmitting(true); setError(null);
+    try {
+      const r = await fetch(`/api/analyze/clarify/${runId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers: filled }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
+      onResult?.(d);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Card title="AI needs more context · clarifying questions" accent="#E1B823"
+      badge={`${questions.length} questions`} defaultOpen>
+      <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
+        These answers would materially change the assessment. Fill in what you know
+        and submit to re-run the investigation with your context.
+      </Typography>
+      {questions.map((q, i) => {
+        const qText = typeof q === 'string' ? q : (q.question || `Question ${i + 1}`);
+        return (
+          <Box key={i} sx={{ mb: 1.5 }}>
+            <Typography sx={{ fontSize: 12, color: 'text.primary', mb: 0.5, fontWeight: 500 }}>
+              {qText}
+            </Typography>
+            {typeof q === 'object' && q.why_asking && (
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary', mb: 0.75, fontStyle: 'italic' }}>
+                {q.why_asking}
+              </Typography>
+            )}
+            <MuiTextField
+              value={answers[qText] || ''}
+              onChange={e => setAnswers(a => ({ ...a, [qText]: e.target.value }))}
+              size="small"
+              fullWidth
+              placeholder="Your answer (plain text)"
+            />
+          </Box>
+        );
+      })}
+      {error && (
+        <Typography sx={{ color: 'error.main', fontSize: 12, mb: 1 }}>{error}</Typography>
+      )}
+      {result?.context_impact && (
+        <Box sx={{ mt: 1.5, p: 1.5,
+          backgroundColor: muiAlpha('#16AD34', 0.08),
+          border: `1px solid ${muiAlpha('#16AD34', 0.25)}`,
+          borderRadius: '4px',
+        }}>
+          <Typography sx={{ fontSize: 11, color: 'success.main', fontWeight: 600, mb: 0.5,
+            textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Context impact (re-analysis)
+          </Typography>
+          <Typography sx={{ fontSize: 12, color: 'text.primary', lineHeight: 1.6 }}>
+            {result.context_impact}
+          </Typography>
+        </Box>
+      )}
+      <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+        <MuiButton variant="contained" size="small"
+          disabled={submitting} onClick={submit}>
+          {submitting ? 'Re-investigating…' : 'Re-run with my answers'}
+        </MuiButton>
+      </Stack>
+    </Card>
+  );
+}
+
 /* ─── suppressed IOCs (MISP warninglist matches) ─────────────────────────────
  * Spec §4 — show analysts exactly what was filtered out before enrichment so
  * they can spot false-negative filters (e.g., a Tor exit IP swallowed by a
@@ -3082,6 +3179,7 @@ export default function App() {
             <Overview result={result}/>
             <SignalBanners result={result}/>
             <SuppressedIOCs result={result}/>
+            <ClarifyingQuestions result={result} onResult={setResult}/>
             <IOCPivot result={result}/>
             <AnalystSummary rs={rs || {}}/>
             <ChatWithRecon result={result}/>
