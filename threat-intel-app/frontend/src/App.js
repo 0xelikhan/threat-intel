@@ -294,6 +294,112 @@ function PreFlight({ result }) {
   );
 }
 
+/* ─── geopolitical context (spec §7) ─────────────────────────────────────────
+ * Country attribution + risk scoring + false-flag detection. Surfaces
+ * suspected nation-state activity and warns when actor attribution doesn't
+ * match infrastructure country.
+ */
+function GeopoliticalContext({ result }) {
+  const gp = result?.geopolitical;
+  if (!gp || gp.error || (!gp.countries?.length && !gp.attribution)) return null;
+  const riskColor = (n) => n >= 25 ? '#EE3838' : n >= 15 ? '#E6700F' : n >= 10 ? '#E1B823' : '#16AD34';
+
+  return (
+    <Card title="Geopolitical context · nation-state attribution" accent="#E6700F"
+      badge={`${gp.country_count || 0} countries · ${gp.high_risk_count || 0} high-risk`}>
+
+      {gp.false_flag && (
+        <MuiPaper elevation={0} sx={{
+          backgroundColor: muiAlpha('#EE3838', 0.08),
+          border: `1px solid ${muiAlpha('#EE3838', 0.4)}`,
+          borderLeft: '3px solid #EE3838',
+          borderRadius: '4px', p: '10px 12px', mb: 1.5,
+        }}>
+          <Typography sx={{ fontSize: 12, fontWeight: 600, color: 'error.main', mb: 0.5 }}>
+            ⚠ {gp.false_flag.warning}
+          </Typography>
+          <Typography sx={{ fontSize: 11, color: 'text.primary' }}>
+            Actor country: <strong>{gp.false_flag.actor_country}</strong>{' '}
+            · Infrastructure observed in: {gp.false_flag.infrastructure_countries.join(', ')}
+          </Typography>
+          <Typography sx={{ fontSize: 11, color: 'text.tertiary', mt: 0.5, lineHeight: 1.5 }}>
+            {gp.false_flag.rationale}
+          </Typography>
+        </MuiPaper>
+      )}
+
+      {gp.attribution && (
+        <Box sx={{ mb: 1.5 }}>
+          <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
+            textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.5 }}>
+            Threat actor attribution
+          </Typography>
+          <MuiPaper elevation={0} sx={{
+            backgroundColor: '#0C1524',
+            border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+            borderRadius: '4px', p: '10px 12px',
+          }}>
+            <Typography sx={{ fontSize: 12, color: 'text.primary' }}>
+              <strong>{gp.attribution.actor}</strong>
+              {gp.attribution.country && <> · country of origin: <strong>{gp.attribution.country}</strong></>}
+              {gp.attribution.confidence != null && (
+                <Box component="span" sx={{ ml: 1, color: 'text.tertiary' }}>
+                  · confidence: {Math.round((gp.attribution.confidence || 0) * 100)}%
+                </Box>
+              )}
+            </Typography>
+          </MuiPaper>
+        </Box>
+      )}
+
+      {(gp.countries || []).length > 0 && (
+        <Box>
+          <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
+            textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
+            Infrastructure by country
+          </Typography>
+          {gp.countries.map((c, i) => (
+            <MuiPaper key={i} elevation={0} sx={{
+              backgroundColor: '#0C1524',
+              border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+              borderLeft: `3px solid ${riskColor(c.risk_score)}`,
+              borderRadius: '4px', p: '10px 12px', mb: 0.75,
+            }}>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+                <Typography sx={{ fontSize: 13, fontWeight: 600, color: 'text.primary' }}>
+                  {c.country}
+                </Typography>
+                <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
+                  · {c.ip_count} IP{c.ip_count === 1 ? '' : 's'}
+                </Typography>
+                {c.is_high_risk && (
+                  <MuiTag label="high risk" color={riskColor(c.risk_score)}/>
+                )}
+                {c.known_apts?.length > 0 && (
+                  <Box component="span" sx={{ ml: 'auto !important', fontSize: 10, color: 'text.disabled' }}>
+                    Known APTs: {c.known_apts.slice(0, 3).join(', ')}
+                  </Box>
+                )}
+              </Stack>
+              {c.asns?.length > 0 && (
+                <Typography sx={{ fontSize: 11, color: 'text.tertiary',
+                  fontFamily: '"IBM Plex Mono", monospace' }}>
+                  ASNs: {c.asns.join(', ')}
+                </Typography>
+              )}
+              {c.isps?.length > 0 && (
+                <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
+                  ISPs: {c.isps.slice(0, 3).join(', ')}
+                </Typography>
+              )}
+            </MuiPaper>
+          ))}
+        </Box>
+      )}
+    </Card>
+  );
+}
+
 /* ─── deep sandbox behavioral analysis (spec §6) ──────────────────────────────
  * Renders the rich sandbox report for any hash that came back from Hybrid
  * Analysis / ANY.RUN: collapsible process tree, network connections grouped by
@@ -3896,6 +4002,7 @@ export default function App() {
             <InfrastructureIntel result={result}/>
             <HoneypotActivity result={result}/>
             <SandboxBehavioral result={result}/>
+            <GeopoliticalContext result={result}/>
             <ClarifyingQuestions result={result} onResult={setResult}/>
             <IOCPivot result={result}/>
             <AnalystSummary rs={rs || {}}/>
