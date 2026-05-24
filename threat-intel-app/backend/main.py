@@ -1957,7 +1957,55 @@ async def email_send(req: EmailSendRequest):
                 "fallback": {"subject": req.subject, "text": req.body_text, "html": req.body_html}}
     cc = req.cc or config.get("EMAIL_COPY_TO") or ""
     out = send_smtp(req.subject, req.body_html, req.body_text, req.to, cc, smtp_cfg)
+    # Log every send attempt to history regardless of outcome
+    try:
+        from intel.email_composer import append_history
+        append_history({
+            "to": req.to, "cc": cc, "subject": req.subject,
+            "sent": bool(out.get("sent")),
+            "error": out.get("error") if not out.get("sent") else None,
+        })
+    except Exception:
+        pass
     return out
+
+
+@app.get("/api/email/drafts")
+async def email_drafts_list():
+    """List every saved draft (most recent first)."""
+    from intel.email_composer import list_drafts
+    return {"drafts": list_drafts()}
+
+
+@app.get("/api/email/drafts/{draft_id}")
+async def email_draft_get(draft_id: str):
+    from intel.email_composer import load_draft
+    d = load_draft(draft_id)
+    if not d:
+        raise HTTPException(404, "draft not found")
+    return d
+
+
+@app.post("/api/email/drafts")
+async def email_draft_save(req: dict):
+    """Persist a composed email to backend/data/email_drafts/."""
+    from intel.email_composer import save_draft
+    return save_draft(req or {})
+
+
+@app.delete("/api/email/drafts/{draft_id}")
+async def email_draft_delete(draft_id: str):
+    from intel.email_composer import delete_draft
+    if not delete_draft(draft_id):
+        raise HTTPException(404, "draft not found")
+    return {"deleted": True}
+
+
+@app.get("/api/email/history")
+async def email_history_list():
+    """Return the rolling send log (most recent first, capped at 200)."""
+    from intel.email_composer import read_history
+    return {"history": read_history()}
 
 
 @app.post("/api/email/send-test")

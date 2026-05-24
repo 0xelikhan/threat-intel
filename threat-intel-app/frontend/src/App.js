@@ -3973,6 +3973,21 @@ export default function App() {
             onScanFile={scanFile}
             onScanHash={scanHash}
             onScanUrl={scanUrl}
+            onComposeEmail={(scanResult) => {
+              // Build a synthetic "alert log" that captures the scanner's key
+              // findings so the composer parser has something to extract from.
+              const lines = [];
+              if (scanResult?.filename)        lines.push(`AssetName: ${scanResult.filename}`);
+              if (scanResult?.verdict)        lines.push(`Verdict: ${scanResult.verdict}`);
+              if (scanResult?.hashes?.sha256) lines.push(`Hash: ${scanResult.hashes.sha256}`);
+              const cls = scanResult?.ai_analyst?.deep?.malware_classification?.category
+                       || scanResult?.ai_analyst?.triage?.classification;
+              if (cls)                        lines.push(`ThreatName: ${cls}`);
+              const summary = scanResult?.ai_analyst?.deep?.execution_narrative
+                          || scanResult?.ai_analyst?.triage?.summary;
+              if (summary)                    lines.push(`Message: ${summary}`);
+              setEmailState({ log: lines.join('\n'), parsed: null });
+            }}
           />
         </Box>
       )}
@@ -4003,7 +4018,20 @@ export default function App() {
                 )}
               </MuiToggleButton>
             </MuiToggleButtonGroup>
-            <SendToWebhook result={result} available={webhooks}/>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <MuiButton
+                onClick={() => setEmailState({
+                  log: result?.raw_input || '',
+                  parsed: null,
+                })}
+                size="small" variant="outlined"
+                startIcon={<Mail size={12}/>}
+                sx={{ textTransform: 'none' }}
+              >
+                Compose email
+              </MuiButton>
+              <SendToWebhook result={result} available={webhooks}/>
+            </Stack>
           </Stack>
         )}
 
