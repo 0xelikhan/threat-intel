@@ -118,18 +118,6 @@ const iocTypeStyle = {
 
 /* ─── primitives ─────────────────────────────────────────────────────────────── */
 
-const ChevButton = ({ open, onClick, label, count, accent=t.fg }) => (
-  <button onClick={onClick} style={{
-    width:'100%', background:'transparent', border:'none', cursor:'pointer',
-    padding:'12px 18px', display:'flex', alignItems:'center', gap:8,
-    color:t.fg, fontSize:13, fontWeight:500, textAlign:'left', borderRadius:0,
-  }}>
-    {open ? <ChevronDown size={14} color={t.fgMute}/> : <ChevronRight size={14} color={t.fgMute}/>}
-    <span style={{ flex:1, color:accent, fontWeight:600 }}>{label}</span>
-    {count != null && <span style={{ color:t.fgDim, fontSize:12, fontVariantNumeric:'tabular-nums' }}>{count}</span>}
-  </button>
-);
-
 // Thin wrapper → MuiCard (renders via MUI Card + CardHeader, inherits OpenCTI theme)
 function Card({ title, accent, children, defaultOpen=true, badge, noPad=false }) {
   return (
@@ -1730,7 +1718,7 @@ function Detection({ result }) {
   const cur = tabs.find(x => x.id === (active || tabs[0]?.id)) || tabs[0];
 
   return (
-    <Card title="Detection content & hunt queries" accent={t.cy} badge={`${tabs.length} platforms`}>
+    <Card title="Detection content & hunt queries" accent="#0fbcff" badge={`${tabs.length} platforms`}>
       {mitre.length > 0 && (
         <Box sx={{ display:'flex', gap:0.75, flexWrap:'wrap', mb:1.75, alignItems:'center' }}>
           <Typography sx={{ fontSize:11, color:'text.tertiary' }}>Coverage:</Typography>
@@ -2560,7 +2548,7 @@ function BulkTable({ result }) {
   };
 
   return (
-    <Card title={`Bulk indicator matrix · ${rows.length} indicators`} accent={t.cy}>
+    <Card title={`Bulk indicator matrix · ${rows.length} indicators`} accent="#0fbcff">
       <Box sx={{ display:'flex', justifyContent:'flex-end', mb:1.25 }}>
         <MuiButton size="small" variant="outlined" onClick={exportCSV} sx={{ height:26 }}>Export CSV</MuiButton>
       </Box>
@@ -3012,8 +3000,8 @@ export default function App() {
             <SignalBanners result={result}/>
             <IOCPivot result={result}/>
             <BulkTable result={result}/>
-            <Card title="Geographic distribution" accent={t.cy} noPad><MapTab result={result}/></Card>
-            <div style={{ marginBottom:16 }}><ExportBar result={result}/></div>
+            <Card title="Geographic distribution" accent="#0fbcff" noPad><MapTab result={result}/></Card>
+            <Box sx={{ mb: 2 }}><ExportBar result={result}/></Box>
           </>
         )}
 
@@ -3034,18 +3022,18 @@ export default function App() {
             <URLScanLive result={result}/>
             <IRPlaybook rs={rs || {}}/>
 
-            <Card title="Geographic distribution" accent={t.cy} noPad>
+            <Card title="Geographic distribution" accent="#0fbcff" noPad>
               <MapTab result={result}/>
             </Card>
 
-            <Card title="Pivot graph" accent={t.cy} noPad>
-              <div style={{ padding:'14px 16px' }}><PivotGraph result={result}/></div>
+            <Card title="Pivot graph" accent="#0fbcff" noPad>
+              <Box sx={{ p: '14px 16px' }}><PivotGraph result={result}/></Box>
             </Card>
 
             <Enrichments enrichments={result.enrichments}/>
             <Report result={result}/>
             <FileScanner/>
-            <div style={{ marginBottom:16 }}><ExportBar result={result}/></div>
+            <Box sx={{ mb: 2 }}><ExportBar result={result}/></Box>
           </>
         )}
 
