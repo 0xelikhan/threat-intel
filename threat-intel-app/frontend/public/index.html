@@ -3,15 +3,31 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0a0e1a" />
-    <title>Threat Intelligence Platform</title>
+    <meta name="theme-color" content="#0a0e16" />
+    <title>RECON</title>
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <!-- Fonts now bundled via @fontsource/ibm-plex-sans + @fontsource/ibm-plex-mono in index.js -->
+    <!-- (no Google Fonts CDN — adapted from OpenCTI design system) -->
     <style>
-      body { margin: 0; background: #0a0e1a; }
+      *,*::before,*::after { box-sizing: border-box; }
+      html,body { margin: 0; padding: 0; }
+      /* Body styles now driven by MUI CssBaseline (theme.js MuiCssBaseline override).
+         These leftover values keep the very-first paint before React mounts looking
+         correct so the page never flashes light-mode. */
+      body {
+        background: #070d19;
+        color: #F2F2F3;
+        font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      code,pre,kbd { font-family: 'IBM Plex Mono', ui-monospace, 'SF Mono', Consolas, monospace; }
       #root { min-height: 100vh; }
+      ::selection { background: rgba(15,188,255,0.25); color: #fff; }
     </style>
   </head>
   <body>
-    <noscript>JavaScript is required to run this application.</noscript>
+    <noscript>RECON requires JavaScript.</noscript>
     <div id="root"></div>
   </body>
 </html>
