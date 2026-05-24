@@ -1513,6 +1513,55 @@ async def scan_feedback_list(scan_id: Optional[str] = None):
     return {"feedback": for_scan(scan_id) if scan_id else list_all()}
 
 
+class ScanToCaseRequest(BaseModel):
+    scan_id: str            # SHA-256
+    label:   Optional[str] = ""
+
+
+@app.post("/api/scan/to-case")
+async def scan_to_case(req: ScanToCaseRequest):
+    """Spec §4: Add a file scan to the RECON case store so it appears in
+    case history alongside IOC investigations."""
+    from intel.file_correlation import load_scan
+    from intel.case_store import save_case
+    scan = load_scan(req.scan_id)
+    if not scan:
+        raise HTTPException(404, "no prior scan for that sha256")
+
+    # Compose a synthetic case payload from the scan so it indexes correctly
+    run_id = f"scan-{req.scan_id[:12]}"
+    deep = (scan.get("ai_analyst") or {}).get("deep") or {}
+    cap  = (scan.get("capabilities") or {})
+    case_payload = {
+        "label":         req.label or scan.get("filename") or req.scan_id[:12],
+        "timestamp":     scan.get("analyzed_at"),
+        "response_summary": {
+            "summary":             deep.get("executive_summary") or scan.get("ai_summary") or "",
+            "threat_level":        scan.get("verdict"),
+            "confidence":          (scan.get("confidence") or 0) / 100.0,
+            "malware_family":      deep.get("malware_family") or
+                                   ((scan.get("threat_intel") or {}).get("virustotal") or {}).get("malware_family"),
+            "key_findings":        [f.get("title") for f in (deep.get("key_findings") or [])
+                                    if isinstance(f, dict) and f.get("title")][:8],
+            "mitre_techniques":    [m.get("id") + " - " + m.get("name", "")
+                                    for m in (cap.get("mitre_techniques") or [])][:12],
+            "recommended_actions": deep.get("recommended_actions", []),
+        },
+        "threat_actor":   deep.get("threat_actor"),
+        "malware_family": deep.get("malware_family"),
+        "iocs":           scan.get("iocs") or {},
+        "source":         "file_scanner",
+        "source_scan":    {
+            "sha256":   req.scan_id,
+            "filename": scan.get("filename"),
+        },
+    }
+    out = save_case(run_id, case_payload, label=req.label or "")
+    if not out.get("saved"):
+        raise HTTPException(500, "case persist failed")
+    return {"saved": True, "runId": run_id, "label": case_payload["label"]}
+
+
 @app.get("/api/sandbox/{sha256}")
 async def sandbox_lookup(sha256: str):
     """Hash-only lookup against configured cloud sandboxes."""

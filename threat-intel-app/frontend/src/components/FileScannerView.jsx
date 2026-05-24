@@ -1449,10 +1449,13 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
       result.filename || result.hashes.sha256.slice(0, 12));
     if (!label) return;
     try {
-      const r = await fetch('/api/cases', { method: 'GET' });
-      if (!r.ok) throw new Error(`cases endpoint HTTP ${r.status}`);
-      alert(`File scan added to case "${label}" via case_store. ` +
-            `(scan persisted; appears in case search.)`);
+      const r = await fetch('/api/scan/to-case', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scan_id: result.hashes.sha256, label }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
+      alert(`Added to case "${d.label}" — runId ${d.runId}`);
     } catch (e) {
       alert(`Failed: ${e.message}`);
     }
