@@ -1858,6 +1858,132 @@ async def get_history_item(run_id: str):
     return {k: v for k, v in _results[run_id].items() if k != "stix_bundle"}
 
 
+# ─── EMAIL COMPOSER (RECON port of TL.MDR.email — ThreatLocker branding stripped) ─
+class EmailParseRequest(BaseModel):
+    log_text: str
+
+
+class EmailComposeRequest(BaseModel):
+    alert_type: str
+    parsed: dict
+    options: Optional[dict] = None
+    ip1: Optional[dict] = None
+    ip2: Optional[dict] = None
+
+
+class EmailSendRequest(BaseModel):
+    subject: str
+    body_text: str
+    body_html: str
+    to: str
+    cc: Optional[str] = ""
+
+
+class EmailTemplateSave(BaseModel):
+    alert_type: str
+    body: str
+
+
+@app.get("/api/email/templates")
+async def email_templates_list():
+    """List every available email template plus the response-action vocabulary."""
+    from intel.email_composer import list_templates, list_alert_types, list_response_actions
+    return {
+        "templates": list_templates(),
+        "alert_types": list_alert_types(),
+        "response_actions": list_response_actions(),
+    }
+
+
+@app.get("/api/email/templates/{alert_type}")
+async def email_template_get(alert_type: str):
+    from intel.email_composer import load_template
+    body = load_template(alert_type)
+    if not body:
+        raise HTTPException(404, f"no template for {alert_type}")
+    return {"alert_type": alert_type, "body": body}
+
+
+@app.post("/api/email/templates")
+async def email_template_save(req: EmailTemplateSave):
+    from intel.email_composer import save_template
+    if not save_template(req.alert_type, req.body):
+        raise HTTPException(400, "unknown alert_type")
+    return {"saved": True, "alert_type": req.alert_type}
+
+
+@app.post("/api/email/parse")
+async def email_parse(req: EmailParseRequest):
+    """Parse raw log text and return every field the composer will reference."""
+    from intel.email_composer import parse_log
+    if not req.log_text or not req.log_text.strip():
+        raise HTTPException(400, "log_text required")
+    return parse_log(req.log_text)
+
+
+@app.post("/api/email/compose")
+async def email_compose(req: EmailComposeRequest):
+    """Render the email — returns subject + plain text + HTML."""
+    from intel.email_composer import compose
+    cfg = {
+        "EMAIL_FROM_NAME":    config.get("EMAIL_FROM_NAME"),
+        "EMAIL_FROM_ADDRESS": config.get("EMAIL_FROM_ADDRESS"),
+        "EMAIL_SIGNATURE":    config.get("EMAIL_SIGNATURE"),
+    }
+    options = dict(req.options or {})
+    if not options.get("team_name"):
+        options["team_name"] = config.get("EMAIL_TEAM_NAME") or "the MDR analyst team"
+    if not options.get("from_address"):
+        options["from_address"] = config.get("EMAIL_FROM_ADDRESS") or ""
+    return compose(req.alert_type, req.parsed, options, cfg,
+                   ip1=req.ip1, ip2=req.ip2)
+
+
+@app.post("/api/email/send")
+async def email_send(req: EmailSendRequest):
+    """Send via configured SMTP if available. Returns clipboard-ready payload
+    if SMTP isn't configured (caller can fall back to copy / mailto)."""
+    from intel.email_composer import send_smtp
+    smtp_cfg = {
+        "EMAIL_SMTP_HOST":     config.get("EMAIL_SMTP_HOST"),
+        "EMAIL_SMTP_PORT":     config.get("EMAIL_SMTP_PORT"),
+        "EMAIL_SMTP_USER":     config.get("EMAIL_SMTP_USER"),
+        "EMAIL_SMTP_PASSWORD": config.get("EMAIL_SMTP_PASSWORD"),
+        "EMAIL_FROM_ADDRESS":  config.get("EMAIL_FROM_ADDRESS"),
+        "EMAIL_FROM_NAME":     config.get("EMAIL_FROM_NAME"),
+    }
+    if not smtp_cfg["EMAIL_SMTP_HOST"]:
+        return {"sent": False, "error": "SMTP not configured",
+                "fallback": {"subject": req.subject, "text": req.body_text, "html": req.body_html}}
+    cc = req.cc or config.get("EMAIL_COPY_TO") or ""
+    out = send_smtp(req.subject, req.body_html, req.body_text, req.to, cc, smtp_cfg)
+    return out
+
+
+@app.post("/api/email/send-test")
+async def email_send_test(req: dict):
+    """Send a smoke-test email to the supplied recipient using the current
+    SMTP configuration. Used by the Settings drawer's Send Test Email button."""
+    from intel.email_composer import send_smtp
+    to = (req or {}).get("to") or ""
+    if not to:
+        raise HTTPException(400, "to address required")
+    smtp_cfg = {
+        "EMAIL_SMTP_HOST":     config.get("EMAIL_SMTP_HOST"),
+        "EMAIL_SMTP_PORT":     config.get("EMAIL_SMTP_PORT"),
+        "EMAIL_SMTP_USER":     config.get("EMAIL_SMTP_USER"),
+        "EMAIL_SMTP_PASSWORD": config.get("EMAIL_SMTP_PASSWORD"),
+        "EMAIL_FROM_ADDRESS":  config.get("EMAIL_FROM_ADDRESS"),
+        "EMAIL_FROM_NAME":     config.get("EMAIL_FROM_NAME"),
+    }
+    return send_smtp(
+        "RECON Email Composer — SMTP test",
+        "<p>If you're reading this, your RECON email tool SMTP is configured correctly.</p>",
+        "If you're reading this, your RECON email tool SMTP is configured correctly.",
+        to, "", smtp_cfg,
+    )
+
+
 # ─── MISP INGESTION ───────────────────────────────────────────────────────────────
 @app.post("/api/ingest/misp")
 async def ingest_misp(file: UploadFile = File(...)):
