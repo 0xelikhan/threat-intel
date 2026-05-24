@@ -3376,17 +3376,12 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
           }}
         >
           <Mail size={16} color="#0fbcff" style={{ flexShrink: 0 }}/>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{
-              color: emailActive ? '#0fbcff' : 'text.primary',
-              fontSize: 12, fontWeight: 500,
-            }}>
-              Compose customer email
-            </Typography>
-            <Typography sx={{ color: 'text.tertiary', fontSize: 11, mt: 0.25 }}>
-              Parse alert → render notification
-            </Typography>
-          </Box>
+          <Typography sx={{
+            color: emailActive ? '#0fbcff' : 'text.primary',
+            fontSize: 12, fontWeight: 500, flex: 1, minWidth: 0,
+          }}>
+            Email
+          </Typography>
         </Box>
 
         {/* Textarea with clear button */}
