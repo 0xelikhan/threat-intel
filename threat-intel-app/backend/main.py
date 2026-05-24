@@ -672,6 +672,41 @@ async def detection_existing(techniques: str = ""):
     }
 
 
+# ─── THREAT ACTOR INTELLIGENCE (spec §7) ─────────────────────────────────────────
+@app.get("/api/actors")
+async def actors_all():
+    """All MITRE-documented threat actor groups (130+)."""
+    from intel.threat_actors import get_all_groups
+    return {"groups": get_all_groups()}
+
+
+@app.get("/api/actors/match")
+async def actors_match(techniques: str = ""):
+    """Score every group by overlap with the supplied technique IDs."""
+    from intel.threat_actors import match_groups_by_techniques
+    tids = [t.strip() for t in techniques.split(",") if t.strip()]
+    return {"matches": match_groups_by_techniques(tids), "queried": tids}
+
+
+@app.get("/api/actors/{group_id}")
+async def actors_detail(group_id: str):
+    """Full profile: techniques + software + campaigns + APTnotes references."""
+    from intel.threat_actors import (
+        get_all_groups, get_group_techniques, get_group_software, get_group_campaigns,
+    )
+    # Look up base profile from the cached list
+    base = next((g for g in get_all_groups() if g["id"].lower() == group_id.lower()
+                 or g["name"].lower() == group_id.lower()), None)
+    if not base:
+        raise HTTPException(404, f"unknown group {group_id}")
+    return {
+        **base,
+        "techniques": get_group_techniques(group_id),
+        "software":   get_group_software(group_id),
+        "campaigns":  get_group_campaigns(group_id),
+    }
+
+
 # ─── STIX EXPORT ──────────────────────────────────────────────────────────────────
 @app.get("/api/export/stix/{run_id}")
 async def export_stix(run_id: str):
