@@ -959,8 +959,14 @@ function OverviewTab({ result }) {
             confidence {conf}%
           </Typography>
         </Stack>
+        {result.ai_summary && (
+          <Typography sx={{ fontSize: 14, color: 'text.primary', mt: 1.25, lineHeight: 1.6 }}>
+            {result.ai_summary}
+          </Typography>
+        )}
         {cap.plain_english_summary && (
-          <Typography sx={{ fontSize: 13, color: 'text.primary', mt: 1, lineHeight: 1.55 }}>
+          <Typography sx={{ fontSize: 12, color: 'text.tertiary', mt: 1, lineHeight: 1.55,
+            fontStyle: 'italic' }}>
             {cap.plain_english_summary}
           </Typography>
         )}
