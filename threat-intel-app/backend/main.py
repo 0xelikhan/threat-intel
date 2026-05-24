@@ -1157,6 +1157,102 @@ async def sandbox_job_status(job_id: str):
     return {"job_id": job_id, **record}
 
 
+# ─── HEALTH + STATUS (spec §11) ──────────────────────────────────────────────────
+@app.get("/api/status")
+async def status_check():
+    """Spec §11: lightweight test calls to every configured source so analysts
+    can see at a glance which integrations are working, rate-limited, or failing."""
+    import aiohttp
+    out = {"sources": {}, "checked_at": datetime.now(timezone.utc).isoformat()}
+    timeout = aiohttp.ClientTimeout(total=8)
+
+    async def probe(name, url, headers=None, params=None, ok_codes=(200,)):
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as s:
+                async with s.get(url, headers=headers or {}, params=params or {}) as r:
+                    if r.status in ok_codes:
+                        return {"state": "ok", "http": r.status}
+                    if r.status == 429:
+                        return {"state": "rate_limited", "http": 429}
+                    if r.status in (401, 403):
+                        return {"state": "auth_failed", "http": r.status}
+                    return {"state": "failing", "http": r.status}
+        except asyncio.TimeoutError:
+            return {"state": "timeout"}
+        except Exception as e:
+            return {"state": "error", "detail": str(e)[:120]}
+
+    checks = []
+    if config.get("VIRUSTOTAL_KEY"):
+        checks.append(("virustotal", "https://www.virustotal.com/api/v3/users/current",
+                       {"x-apikey": config.get("VIRUSTOTAL_KEY")}, None))
+    if config.get("ABUSEIPDB_KEY"):
+        checks.append(("abuseipdb", "https://api.abuseipdb.com/api/v2/check",
+                       {"Key": config.get("ABUSEIPDB_KEY"), "Accept": "application/json"},
+                       {"ipAddress": "8.8.8.8"}))
+    if config.get("SHODAN_KEY"):
+        checks.append(("shodan", "https://api.shodan.io/api-info",
+                       None, {"key": config.get("SHODAN_KEY")}))
+    if config.get("GREYNOISE_KEY"):
+        checks.append(("greynoise", "https://api.greynoise.io/ping",
+                       {"key": config.get("GREYNOISE_KEY")}, None))
+    if config.get("OTX_KEY"):
+        checks.append(("otx", "https://otx.alienvault.com/api/v1/user/me",
+                       {"X-OTX-API-KEY": config.get("OTX_KEY")}, None))
+    if config.get("URLSCAN_KEY"):
+        checks.append(("urlscan", "https://urlscan.io/api/v1/user/quotas/",
+                       {"API-Key": config.get("URLSCAN_KEY")}, None))
+
+    results = await asyncio.gather(*[probe(*args) for args in [(n, u, h, p) for n, u, h, p in checks]])
+    for (name, *_), result in zip(checks, results):
+        out["sources"][name] = result
+
+    # Free no-key sources (probe with cheap GETs)
+    free_probes = [
+        ("circl_pdns",   "https://www.circl.lu/pdns/query/1.1.1.1"),
+        ("robtex",       "https://freeapi.robtex.com/ipquery/1.1.1.1"),
+        ("hackertarget", "https://api.hackertarget.com/aslookup/?q=1.1.1.1"),
+        ("hashlookup",   "https://hashlookup.circl.lu/lookup/sha256/0000000000000000000000000000000000000000000000000000000000000000"),
+    ]
+    free_results = await asyncio.gather(*[probe(name, url, ok_codes=(200, 404)) for name, url in free_probes])
+    for (name, _), r in zip(free_probes, free_results):
+        out["sources"][name] = r
+    return out
+
+
+@app.get("/api/startup-check")
+async def startup_check():
+    """Spec §11: confirm packages installed + report which keys are configured."""
+    from intel.warninglist_filter import _stats as wl_stats
+    pkg_status = {}
+    for name in ("openai", "sigma", "yara", "stix2", "taxii2client", "feedparser",
+                 "mitreattack", "aiohttp", "fastapi"):
+        try:
+            __import__(name)
+            pkg_status[name] = "ok"
+        except ImportError:
+            pkg_status[name] = "missing"
+
+    required = ("OPENAI_API_KEY",)
+    optional = ("VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "SHODAN_KEY", "GREYNOISE_KEY",
+                "OTX_KEY", "URLSCAN_KEY", "PULSEDIVE_KEY", "CENSYS_ID",
+                "CENSYS_SECRET", "HYBRID_ANALYSIS_KEY", "CROWDSEC_KEY",
+                "MALTIVERSE_KEY", "OPENCTI_TOKEN", "FRESHRSS_API_KEY")
+
+    keys = {}
+    for k in required:
+        keys[k] = "green" if config.get(k) else "red"
+    for k in optional:
+        keys[k] = "green" if config.get(k) else "yellow"
+
+    return {
+        "packages": pkg_status,
+        "keys":     keys,
+        "warninglists": wl_stats(),
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 # ─── REPORT GENERATION (spec §10) ────────────────────────────────────────────────
 def _build_report(run_id: str, state: dict) -> dict:
     rs = state.get("response_summary") or {}
