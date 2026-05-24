@@ -243,49 +243,59 @@ function PreFlight({ result }) {
   }[alertType] || t.cy;
 
   return (
-    <div style={{ background:t.surface, border:`1px solid ${t.line}`,
-      borderLeft:`3px solid ${t.cy}`, borderRadius:8, padding:'14px 16px', marginBottom:14 }}>
+    <MuiPaper elevation={0} sx={{
+      border: theme => `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+      borderLeft: theme => `3px solid ${theme.palette.primary.main}`,
+      borderRadius: '4px',
+      p: '14px 16px',
+      mb: 1.75,
+    }}>
       {/* Top line: detected type + IOC counts + triage timing */}
-      <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom: flags.length ? 12 : 8 }}>
-        <Chip color={typeBadgeColor} soft={`${typeBadgeColor}14`}>
-          {alertType !== 'unknown' ? alertType : 'analyzing…'}
-        </Chip>
-        <span style={{ fontSize:12, color:t.fgMute }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap',
+        mb: flags.length ? 1.5 : 1 }}>
+        <MuiTag label={alertType !== 'unknown' ? alertType : 'analyzing…'} color={typeBadgeColor}/>
+        <Typography sx={{ fontSize: 12, color: 'text.tertiary' }}>
           {totalIOCs > 0
             ? Object.entries(counts).filter(([, n]) => n > 0)
                 .map(([k, n]) => `${n} ${k.slice(0, -1)}${n > 1 ? 's' : ''}`).join(' · ')
             : 'no IOCs extracted — log-content analysis'}
-        </span>
+        </Typography>
         {triageMs != null && (
-          <span style={{ fontSize:11, color:t.fgDim, marginLeft:'auto' }}>
+          <Typography sx={{ fontSize: 11, color: 'text.tertiary', ml: 'auto' }}>
             triage {triageMs}ms{fastPath ? ' · fast-path' : ''}
-          </span>
+          </Typography>
         )}
-      </div>
+      </Box>
 
-      {/* Heuristic flags — INSTANT signal before AI runs */}
+      {/* Heuristic flags */}
       {flags.length > 0 && (
-        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:12 }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
           {flags.map((f, i) => (
-            <div key={i} style={{ background:t.raised, border:`1px solid ${f.color}40`,
-              borderLeft:`2px solid ${f.color}`, borderRadius:4, padding:'4px 9px',
-              fontSize:11, color:t.fg }}>
-              <span style={{ color:f.color, fontWeight:600 }}>{f.label}</span>
-              {f.detail && <span style={{ color:t.fgMute }}> · {f.detail}</span>}
-            </div>
+            <Box key={i} sx={{
+              backgroundColor: 'background.secondary',
+              border: `1px solid ${muiAlpha(f.color, 0.25)}`,
+              borderLeft: `2px solid ${f.color}`,
+              borderRadius: '4px', px: 1.125, py: '4px',
+              fontSize: 11, color: 'text.primary',
+            }}>
+              <Box component="span" sx={{ color: f.color, fontWeight: 600 }}>{f.label}</Box>
+              {f.detail && <Box component="span" sx={{ color: 'text.tertiary' }}> · {f.detail}</Box>}
+            </Box>
           ))}
-        </div>
+        </Box>
       )}
 
       {/* In-progress indicator */}
       {inProgress && stageLabel && (
-        <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:12, color:t.fgMute }}>
-          <span style={{ display:'inline-block', width:6, height:6, borderRadius:99,
-            background:t.cy, animation:'pulse 1.4s ease-in-out infinite' }}/>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: 12, color: 'text.tertiary' }}>
+          <Box component="span" sx={{
+            display: 'inline-block', width: 6, height: 6, borderRadius: 99,
+            backgroundColor: 'primary.main', animation: 'pulse 1.4s ease-in-out infinite',
+          }}/>
           {stageLabel}
-        </div>
+        </Box>
       )}
-    </div>
+    </MuiPaper>
   );
 }
 
@@ -365,23 +375,28 @@ function SignalBanners({ result }) {
   if (!banners.length) return null;
 
   return (
-    <div style={{ marginBottom:14, display:'flex', flexDirection:'column', gap:8 }}>
+    <Stack spacing={1} sx={{ mb: 1.75 }}>
       {banners.map((b, i) => {
-        const color = b.kind === 'critical' ? t.red : t.orange;
-        const soft  = b.kind === 'critical' ? t.redDim : t.orangeDim;
+        const isCritical = b.kind === 'critical';
+        const color = isCritical ? '#F14337' : '#E6700F';
         return (
-          <div key={i} style={{ background:soft, border:`1px solid ${color}50`,
-            borderLeft:`3px solid ${color}`, borderRadius:6, padding:'12px 14px',
-            display:'flex', gap:12, alignItems:'flex-start' }}>
-            <AlertCircle size={16} color={color} style={{ flexShrink:0, marginTop:1 }}/>
-            <div>
-              <div style={{ color, fontWeight:600, fontSize:13, marginBottom:3 }}>{b.title}</div>
-              <div style={{ color:t.fg, fontSize:12, lineHeight:1.6 }}>{b.text}</div>
-            </div>
-          </div>
+          <MuiPaper key={i} elevation={0} sx={{
+            backgroundColor: muiAlpha(color, 0.1),
+            border: `1px solid ${muiAlpha(color, 0.3)}`,
+            borderLeft: `3px solid ${color}`,
+            borderRadius: '4px',
+            p: '12px 14px',
+            display: 'flex', gap: 1.5, alignItems: 'flex-start',
+          }}>
+            <AlertCircle size={16} color={color} style={{ flexShrink: 0, marginTop: 1 }}/>
+            <Box>
+              <Typography sx={{ color, fontWeight: 600, fontSize: 13, mb: 0.375 }}>{b.title}</Typography>
+              <Typography sx={{ color: 'text.primary', fontSize: 12, lineHeight: 1.6 }}>{b.text}</Typography>
+            </Box>
+          </MuiPaper>
         );
       })}
-    </div>
+    </Stack>
   );
 }
 
@@ -395,33 +410,47 @@ function Overview({ result }) {
   const conf  = Math.round((rs.confidence||0)*100);
   const ts    = rs.timestamp ? new Date(rs.timestamp) : new Date();
 
-  const Metric = ({ label, value, sub, color }) => (
-    <div style={{ flex:1, padding:'14px 16px', background:t.surface,
-      border:`1px solid ${t.line}`, borderRadius:8 }}>
-      <div style={{ color:t.fgDim, fontSize:11, fontWeight:500, marginBottom:6 }}>{label}</div>
-      <div style={{ color:color||t.fg, fontSize:22, fontWeight:600, lineHeight:1.1,
-        fontVariantNumeric:'tabular-nums' }}>{value}</div>
-      {sub && <div style={{ color:t.fgDim, fontSize:11, marginTop:4 }}>{sub}</div>}
-    </div>
+  const Metric = ({ label, value, color }) => (
+    <MuiPaper elevation={0} sx={{
+      flex: 1, p: '14px 16px',
+      border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+      borderRadius: '4px',
+    }}>
+      <Typography sx={{ color: 'text.tertiary', fontSize: 11, fontWeight: 500, mb: 0.75 }}>
+        {label}
+      </Typography>
+      <Typography sx={{
+        color: color || 'text.primary',
+        fontSize: 22, fontWeight: 600, lineHeight: 1.1,
+        fontVariantNumeric: 'tabular-nums',
+      }}>{value}</Typography>
+    </MuiPaper>
   );
 
   return (
-    <div style={{ marginBottom:14 }}>
-      <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', marginBottom:10 }}>
-        <h2 style={{ fontSize:18, fontWeight:600, color:t.fg, margin:0, letterSpacing:'-0.01em' }}>
+    <Box sx={{ mb: 1.75 }}>
+      <Box sx={{
+        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 1.25,
+      }}>
+        <Typography sx={{
+          fontSize: 18, fontWeight: 600, color: 'text.primary', letterSpacing: '-0.01em',
+        }}>
           Investigation results
-        </h2>
-        <span style={{ fontSize:12, color:t.fgDim, fontVariantNumeric:'tabular-nums' }}>
+        </Typography>
+        <Typography sx={{
+          fontSize: 12, color: 'text.tertiary', fontVariantNumeric: 'tabular-nums',
+        }}>
           {ts.toLocaleString()}
-        </span>
-      </div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10 }}>
+        </Typography>
+      </Box>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1.25 }}>
         <Metric label="Threat level" value={rs.threat_level} color={lc.fg}/>
-        <Metric label="Confidence" value={`${conf}%`} color={conf>=70?t.green:conf>=40?t.yellow:t.red}/>
-        <Metric label="Indicators" value={total} color={t.cy}/>
-        <Metric label="MITRE TTPs" value={mitre} color={t.purple}/>
-      </div>
-    </div>
+        <Metric label="Confidence" value={`${conf}%`}
+          color={conf >= 70 ? '#17AB1F' : conf >= 40 ? '#E1B823' : '#F14337'}/>
+        <Metric label="Indicators" value={total} color="#0fbcff"/>
+        <Metric label="MITRE TTPs" value={mitre} color="#B286FF"/>
+      </Box>
+    </Box>
   );
 }
 
