@@ -480,78 +480,120 @@ function GTI({ result }) {
   });
 
   return (
-    <Card title="Threat scoring" accent={t.cy} badge={top?`${top.score}/100`:null}>
-      <div style={{ display:'grid', gridTemplateColumns:'auto 1fr', gap:24, marginBottom:18,
-        paddingBottom:16, borderBottom:`1px solid ${t.line}` }}>
+    <Card title="Threat scoring" accent="#0fbcff" badge={top ? `${top.score}/100` : null}>
+      <Box sx={{
+        display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 3, mb: 2.25,
+        pb: 2, borderBottom: `1px solid ${muiAlpha('#ffffff', 0.06)}`,
+      }}>
         {top && (
-          <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.75 }}>
             <Dial score={top.score} color={top.color} size={80}/>
-            <div>
-              <div style={{ fontSize:11, color:t.fgDim, marginBottom:4 }}>Highest scoring indicator</div>
-              <div style={{ fontSize:18, fontWeight:600, color:top.color, marginBottom:6 }}>{top.label}</div>
+            <Box>
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary', mb: 0.5 }}>
+                Highest scoring indicator
+              </Typography>
+              <Typography sx={{ fontSize: 18, fontWeight: 600, color: top.color, mb: 0.75 }}>
+                {top.label}
+              </Typography>
               <Verdict verdict={top.verdict}/>
-            </div>
-          </div>
+            </Box>
+          </Box>
         )}
-        <div style={{ display:'flex', flexDirection:'column', justifyContent:'center' }}>
-          <div style={{ fontSize:11, color:t.fgDim, marginBottom:8 }}>Score distribution</div>
-          {Object.entries(dist).map(([lbl,cnt])=>(
-            <div key={lbl} style={{ display:'flex', gap:10, alignItems:'center', marginBottom:4 }}>
-              <div style={{ width:72, fontSize:11, color:t.fgMute, textTransform:'capitalize' }}>{lbl}</div>
-              <div style={{ flex:1, background:t.raised, borderRadius:99, height:6, overflow:'hidden' }}>
-                {cnt>0 && <div style={{ width:`${Math.min(100,cnt*16)}%`, height:'100%',
-                  background:distC[lbl], borderRadius:99, transition:'width .4s' }}/>}
-              </div>
-              <span style={{ width:18, fontSize:11, color:cnt>0?distC[lbl]:t.fgGhost, fontWeight:600,
-                textAlign:'right', fontVariantNumeric:'tabular-nums' }}>{cnt}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:16 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:7, background:t.raised,
-          border:`1px solid ${t.line}`, borderRadius:6, padding:'6px 11px' }}>
-          <span style={{ width:6, height:6, borderRadius:99, background:t.purple }}/>
-          <span style={{ fontSize:11, color:t.fg, fontWeight:500 }}>STIX 2.1</span>
-          <span style={{ fontSize:11, color:t.fgDim }}>· {total} indicators</span>
-          {result?.runId && <a href={`/api/export/stix/${result.runId}`} target="_blank" rel="noreferrer"
-            style={{ color:t.purple, fontSize:11, display:'inline-flex', alignItems:'center', gap:2, marginLeft:2 }}>
-            export <ArrowUpRight size={11}/>
-          </a>}
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:7, background:t.raised,
-          border:`1px solid ${t.line}`, borderRadius:6, padding:'6px 11px' }}>
-          <span style={{ width:6, height:6, borderRadius:99, background:t.cy }}/>
-          <span style={{ fontSize:11, color:t.fg, fontWeight:500 }}>TAXII feeds</span>
-          <span style={{ fontSize:11, color:t.fgDim }}>
-            · VT, AbuseIPDB, OTX, ThreatFox, MalwareBazaar, GreyNoise, URLScan, Shodan
-          </span>
-        </div>
-      </div>
-
-      <div style={{ fontSize:11, color:t.fgDim, marginBottom:6 }}>Per-indicator score</div>
-      <div style={{ background:t.raised, borderRadius:6, border:`1px solid ${t.line}`, overflow:'hidden' }}>
-        {sorted.map(([ioc,d], i)=>(
-          <div key={ioc} style={{ display:'flex', gap:12, alignItems:'center', padding:'10px 14px',
-            borderTop: i>0?`1px solid ${t.line}`:'none' }}>
-            <Dial score={d.score} color={d.color} size={38}/>
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:12, color:t.fg, fontFamily:'JetBrains Mono',
-                wordBreak:'break-all', marginBottom:3 }}>
-                {ioc.length>58?ioc.slice(0,55)+'…':ioc}
-              </div>
-              <div style={{ fontSize:11, color:t.fgMute }}>
-                {d.label}
-                {d.contributing_factors?.slice(0,1).map((f,i)=>
-                  <span key={i} style={{ color:t.fgDim }}> · {f}</span>
+        <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <Typography sx={{ fontSize: 11, color: 'text.tertiary', mb: 1 }}>
+            Score distribution
+          </Typography>
+          {Object.entries(dist).map(([lbl, cnt]) => (
+            <Box key={lbl} sx={{ display: 'flex', gap: 1.25, alignItems: 'center', mb: 0.5 }}>
+              <Box sx={{ width: 72, fontSize: 11, color: 'text.tertiary', textTransform: 'capitalize' }}>
+                {lbl}
+              </Box>
+              <Box sx={{
+                flex: 1, backgroundColor: 'background.secondary',
+                borderRadius: 99, height: 6, overflow: 'hidden',
+              }}>
+                {cnt > 0 && (
+                  <Box sx={{
+                    width: `${Math.min(100, cnt * 16)}%`, height: '100%',
+                    backgroundColor: distC[lbl], borderRadius: 99,
+                    transition: 'width .4s',
+                  }}/>
                 )}
-              </div>
-            </div>
-            <Verdict verdict={d.verdict} size="xs"/>
-          </div>
+              </Box>
+              <Box sx={{
+                width: 18, fontSize: 11,
+                color: cnt > 0 ? distC[lbl] : 'text.disabled',
+                fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums',
+              }}>{cnt}</Box>
+            </Box>
+          ))}
+        </Box>
+      </Box>
+
+      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mb: 2 }}>
+        <MuiPaper elevation={0} sx={{
+          display: 'flex', alignItems: 'center', gap: 0.875,
+          backgroundColor: 'background.secondary',
+          border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+          borderRadius: '4px', p: '6px 11px',
+        }}>
+          <Box sx={{ width: 6, height: 6, borderRadius: 99, backgroundColor: '#B286FF' }}/>
+          <Typography sx={{ fontSize: 11, color: 'text.primary', fontWeight: 500 }}>STIX 2.1</Typography>
+          <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>· {total} indicators</Typography>
+          {result?.runId && (
+            <Box component="a" href={`/api/export/stix/${result.runId}`} target="_blank" rel="noreferrer"
+              sx={{ color: '#B286FF', fontSize: 11, display: 'inline-flex',
+                alignItems: 'center', gap: 0.25, ml: 0.25 }}>
+              export <ArrowUpRight size={11}/>
+            </Box>
+          )}
+        </MuiPaper>
+        <MuiPaper elevation={0} sx={{
+          display: 'flex', alignItems: 'center', gap: 0.875,
+          backgroundColor: 'background.secondary',
+          border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+          borderRadius: '4px', p: '6px 11px',
+        }}>
+          <Box sx={{ width: 6, height: 6, borderRadius: 99, backgroundColor: 'primary.main' }}/>
+          <Typography sx={{ fontSize: 11, color: 'text.primary', fontWeight: 500 }}>TAXII feeds</Typography>
+          <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
+            · VT, AbuseIPDB, OTX, ThreatFox, MalwareBazaar, GreyNoise, URLScan, Shodan
+          </Typography>
+        </MuiPaper>
+      </Stack>
+
+      <Typography sx={{ fontSize: 11, color: 'text.tertiary', mb: 0.75 }}>Per-indicator score</Typography>
+      <MuiPaper elevation={0} sx={{
+        backgroundColor: 'background.secondary',
+        borderRadius: '4px',
+        border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+        overflow: 'hidden',
+      }}>
+        {sorted.map(([ioc, d], i) => (
+          <Box key={ioc} sx={{
+            display: 'flex', gap: 1.5, alignItems: 'center', p: '10px 14px',
+            borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
+          }}>
+            <Dial score={d.score} color={d.color} size={38}/>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography sx={{
+                fontSize: 12, color: 'text.primary',
+                fontFamily: '"IBM Plex Mono", monospace',
+                wordBreak: 'break-all', mb: 0.375,
+              }}>
+                {ioc.length > 58 ? ioc.slice(0, 55) + '…' : ioc}
+              </Typography>
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
+                {d.label}
+                {d.contributing_factors?.slice(0, 1).map((f, i) =>
+                  <Box component="span" key={i} sx={{ color: 'text.disabled' }}> · {f}</Box>
+                )}
+              </Typography>
+            </Box>
+            <Verdict verdict={d.verdict} size="small"/>
+          </Box>
         ))}
-      </div>
+      </MuiPaper>
     </Card>
   );
 }
@@ -560,133 +602,156 @@ function GTI({ result }) {
 function Assessment({ rs }) {
   const lc = levelStyle[rs.threat_level] || levelStyle.INFORMATIONAL;
   return (
-    <Card title="AI assessment" accent={t.cy} badge={rs.threat_level?.toLowerCase()}>
-      <div style={{ background:lc.bg, border:`1px solid ${lc.line}`, borderRadius:6,
-        padding:'14px 16px', marginBottom:14 }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <span style={{ width:8, height:8, borderRadius:99, background:lc.fg }}/>
-            <span style={{ color:lc.fg, fontWeight:600, fontSize:13 }}>{rs.threat_level}</span>
-          </div>
-          {typeof rs.confidence==='number' && (
-            <span style={{ fontSize:12, color:t.fgMute }}>
-              Confidence <span style={{ color:rs.confidence>=0.7?t.green:rs.confidence>=0.4?t.yellow:t.red, fontWeight:600 }}>
-                {Math.round(rs.confidence*100)}%
-              </span>
-            </span>
+    <Card title="AI assessment" accent="#0fbcff" badge={rs.threat_level?.toLowerCase()}>
+      <MuiPaper elevation={0} sx={{
+        backgroundColor: lc.bg,
+        border: `1px solid ${lc.line}`,
+        borderRadius: '4px', p: '14px 16px', mb: 1.75,
+      }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box sx={{ width: 8, height: 8, borderRadius: 99, backgroundColor: lc.fg }}/>
+            <Typography sx={{ color: lc.fg, fontWeight: 600, fontSize: 13 }}>{rs.threat_level}</Typography>
+          </Box>
+          {typeof rs.confidence === 'number' && (
+            <Typography sx={{ fontSize: 12, color: 'text.tertiary' }}>
+              Confidence{' '}
+              <Box component="span" sx={{
+                color: rs.confidence >= 0.7 ? 'success.main'
+                     : rs.confidence >= 0.4 ? '#E1B823'
+                     : 'error.main',
+                fontWeight: 600,
+              }}>
+                {Math.round(rs.confidence * 100)}%
+              </Box>
+            </Typography>
           )}
-        </div>
-        <p style={{ fontSize:13, color:t.fg, lineHeight:1.7, margin:0 }}>{rs.summary}</p>
-      </div>
+        </Box>
+        <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.7 }}>{rs.summary}</Typography>
+      </MuiPaper>
 
-      {rs.chain_of_thought?.length>0 && (
+      {rs.chain_of_thought?.length > 0 && (
         <Block title="Reasoning chain">
-          {rs.chain_of_thought.map((s,i) => (
-            <li key={i} style={{ display:'flex', gap:10, padding:'6px 0',
-              borderTop: i>0?`1px solid ${t.line}`:'none', fontSize:13, color:t.fg, lineHeight:1.6 }}>
-              <span style={{ color:t.cy, minWidth:18, fontWeight:600, fontVariantNumeric:'tabular-nums' }}>{i+1}</span>
+          {rs.chain_of_thought.map((s, i) => (
+            <Box component="li" key={i} sx={{
+              display: 'flex', gap: 1.25, py: 0.75,
+              borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
+              fontSize: 13, color: 'text.primary', lineHeight: 1.6,
+            }}>
+              <Box component="span" sx={{ color: 'primary.main', minWidth: 18,
+                fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{i + 1}</Box>
               <span>{s}</span>
-            </li>
+            </Box>
           ))}
         </Block>
       )}
 
-      {rs.key_findings?.length>0 && (
+      {rs.key_findings?.length > 0 && (
         <Block title="Key findings">
-          {rs.key_findings.map((f,i) => (
-            <li key={i} style={{ display:'flex', gap:10, padding:'6px 0',
-              borderTop: i>0?`1px solid ${t.line}`:'none', fontSize:13, color:t.fg, lineHeight:1.6 }}>
-              <span style={{ color:t.orange, minWidth:6 }}>›</span>
+          {rs.key_findings.map((f, i) => (
+            <Box component="li" key={i} sx={{
+              display: 'flex', gap: 1.25, py: 0.75,
+              borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
+              fontSize: 13, color: 'text.primary', lineHeight: 1.6,
+            }}>
+              <Box component="span" sx={{ color: 'warning.main', minWidth: 6 }}>›</Box>
               <span>{f}</span>
-            </li>
+            </Box>
           ))}
         </Block>
       )}
 
-      {rs.ioc_assessments?.length>0 && (
+      {rs.ioc_assessments?.length > 0 && (
         <Block title="Indicator verdicts">
-          {rs.ioc_assessments.map((a,i) => (
-            <li key={i} style={{ display:'flex', gap:10, padding:'7px 0',
-              borderTop: i>0?`1px solid ${t.line}`:'none', alignItems:'flex-start' }}>
-              <div style={{ minWidth:90 }}><Verdict verdict={a.verdict} size="xs"/></div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontFamily:'JetBrains Mono', fontSize:12, color:t.fg, wordBreak:'break-all' }}>
-                  {a.ioc}
-                </div>
-                {a.reason && <div style={{ fontSize:12, color:t.fgMute, marginTop:3, lineHeight:1.5 }}>
-                  {a.reason}
-                </div>}
-              </div>
-            </li>
+          {rs.ioc_assessments.map((a, i) => (
+            <Box component="li" key={i} sx={{
+              display: 'flex', gap: 1.25, py: 0.875,
+              borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
+              alignItems: 'flex-start',
+            }}>
+              <Box sx={{ minWidth: 90 }}><Verdict verdict={a.verdict} size="small"/></Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Box sx={{
+                  fontFamily: '"IBM Plex Mono", monospace', fontSize: 12,
+                  color: 'text.primary', wordBreak: 'break-all',
+                }}>{a.ioc}</Box>
+                {a.reason && (
+                  <Typography sx={{ fontSize: 12, color: 'text.tertiary',
+                    mt: 0.375, lineHeight: 1.5 }}>{a.reason}</Typography>
+                )}
+              </Box>
+            </Box>
           ))}
         </Block>
       )}
 
-      {rs.mitre_techniques?.length>0 && (
+      {rs.mitre_techniques?.length > 0 && (
         <Block title="MITRE ATT&CK">
-          <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-            {rs.mitre_techniques.map((t_,i) => {
+          <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+            {rs.mitre_techniques.map((t_, i) => {
               const id = t_.split(' ')[0];
               return (
-                <a key={i} href={`https://attack.mitre.org/techniques/${id.includes('.')?id.replace('.','/'):id}/`}
-                  target="_blank" rel="noreferrer"
-                  style={{ background:t.blueDim, border:`1px solid ${t.blue}30`, color:t.blue,
-                    padding:'3px 9px', borderRadius:5, fontSize:11, fontFamily:'JetBrains Mono',
-                    textDecoration:'none', display:'inline-flex', alignItems:'center', gap:4 }}>
-                  {t_}
-                </a>
+                <MuiTag key={i} label={t_} color="#0fbcff"
+                  onClick={() => window.open(`https://attack.mitre.org/techniques/${id.includes('.') ? id.replace('.','/') : id}/`, '_blank')}
+                  sx={{ fontFamily: '"IBM Plex Mono", monospace' }}/>
               );
             })}
-          </div>
+          </Box>
         </Block>
       )}
 
-      {rs.matched_actors?.length>0 && (
+      {rs.matched_actors?.length > 0 && (
         <Block title="Threat actor attribution">
-          {rs.matched_actors.slice(0,5).map((a,i) => (
-            <div key={i} style={{ padding:'10px 0',
-              borderTop: i>0?`1px solid ${t.line}`:'none', display:'grid',
-              gridTemplateColumns:'1fr auto', gap:12, alignItems:'start' }}>
-              <div>
-                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
-                  <span style={{ fontSize:13, color:t.fg, fontWeight:600 }}>{a.name}</span>
-                  {a.mitre_id && <Chip color={t.fgDim} mono size="xs">{a.mitre_id}</Chip>}
-                </div>
+          {rs.matched_actors.slice(0, 5).map((a, i) => (
+            <Box key={i} sx={{
+              py: 1.25,
+              borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
+              display: 'grid', gridTemplateColumns: '1fr auto', gap: 1.5, alignItems: 'start',
+            }}>
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                  <Typography sx={{ fontSize: 13, color: 'text.primary', fontWeight: 600 }}>{a.name}</Typography>
+                  {a.mitre_id && <MuiTag label={a.mitre_id} color="#848592"
+                    sx={{ fontFamily: '"IBM Plex Mono", monospace' }}/>}
+                </Box>
                 {(a.origin || a.sponsor) && (
-                  <div style={{ fontSize:11, color:t.fgMute, marginBottom:4 }}>
+                  <Typography sx={{ fontSize: 11, color: 'text.tertiary', mb: 0.5 }}>
                     {[a.origin, a.sponsor].filter(Boolean).join(' · ')}
-                  </div>
+                  </Typography>
                 )}
-                {a.aliases?.length>0 && (
-                  <div style={{ fontSize:11, color:t.fgDim, marginBottom:4 }}>
-                    aka {a.aliases.slice(0,4).join(', ')}
-                  </div>
+                {a.aliases?.length > 0 && (
+                  <Typography sx={{ fontSize: 11, color: 'text.disabled', mb: 0.5 }}>
+                    aka {a.aliases.slice(0, 4).join(', ')}
+                  </Typography>
                 )}
                 {a.description && (
-                  <div style={{ fontSize:12, color:t.fgMute, lineHeight:1.5, marginTop:5 }}>
-                    {a.description.slice(0, 200)}{a.description.length>200?'…':''}
-                  </div>
+                  <Typography sx={{ fontSize: 12, color: 'text.tertiary', lineHeight: 1.5, mt: 0.625 }}>
+                    {a.description.slice(0, 200)}{a.description.length > 200 ? '…' : ''}
+                  </Typography>
                 )}
-              </div>
-              <div style={{ textAlign:'right' }}>
-                <div style={{ fontSize:18, color:t.orange, fontWeight:600, fontVariantNumeric:'tabular-nums' }}>
-                  {a.score}%
-                </div>
-                <div style={{ fontSize:10, color:t.fgDim }}>TTP match</div>
-              </div>
-            </div>
+              </Box>
+              <Box sx={{ textAlign: 'right' }}>
+                <Typography sx={{ fontSize: 18, color: 'warning.main', fontWeight: 600,
+                  fontVariantNumeric: 'tabular-nums' }}>{a.score}%</Typography>
+                <Typography sx={{ fontSize: 10, color: 'text.disabled' }}>TTP match</Typography>
+              </Box>
+            </Box>
           ))}
         </Block>
       )}
 
-      {rs.recommended_actions?.length>0 && (
+      {rs.recommended_actions?.length > 0 && (
         <Block title="Recommended actions">
-          {rs.recommended_actions.map((a,i) => (
-            <li key={i} style={{ display:'flex', gap:10, padding:'6px 0',
-              borderTop: i>0?`1px solid ${t.line}`:'none', fontSize:13, color:t.fg, lineHeight:1.6 }}>
-              <span style={{ color:t.green, minWidth:18, fontWeight:600, fontVariantNumeric:'tabular-nums' }}>{i+1}</span>
+          {rs.recommended_actions.map((a, i) => (
+            <Box component="li" key={i} sx={{
+              display: 'flex', gap: 1.25, py: 0.75,
+              borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
+              fontSize: 13, color: 'text.primary', lineHeight: 1.6,
+            }}>
+              <Box component="span" sx={{ color: 'success.main', minWidth: 18,
+                fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{i + 1}</Box>
               <span>{a}</span>
-            </li>
+            </Box>
           ))}
         </Block>
       )}
