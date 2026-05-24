@@ -86,13 +86,6 @@ export default function MapTab({ result }) {
     const L = window.L;
     const map = mapInstanceRef.current;
 
-    // Container may have been zero-sized at init (inside MUI Collapse).
-    // Force the tile loader to re-measure now — safe to call repeatedly.
-    try { map.invalidateSize(); } catch (_) {}
-    [100, 400, 900].forEach(ms => setTimeout(() => {
-      try { map.invalidateSize(); } catch (_) {}
-    }, ms));
-
     // Remove old markers
     markersRef.current.forEach(m => m.remove());
     markersRef.current = [];
