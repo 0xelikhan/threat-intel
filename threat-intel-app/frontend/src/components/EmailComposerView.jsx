@@ -11,7 +11,7 @@
  * preview surface is the only white background, so it shows how the
  * customer will actually see the message.
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Stack, Typography, Paper as MuiPaper,
   Button as MuiButton, TextField as MuiTextField,
@@ -94,6 +94,9 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
   const [composing, setComposing]         = useState(false);
   const [composeError, setComposeError]   = useState(null);
   const [previewMode, setPreviewMode]     = useState('rendered'); // 'rendered' | 'html' | 'text'
+  // Tracks whether the analyst explicitly chose a template — if so, we
+  // stop auto-overriding it with the parser's suggestion on every keystroke.
+  const userPickedType = useRef(false);
 
   // Load alert types once
   useEffect(() => {
@@ -104,14 +107,35 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
         setAlertTypes(types);
         if (types.length && !selectedType) {
           const suggested = (initialParsed?.suggested_alert_type || '').toLowerCase();
-          const pick = types.find(a => a.id === suggested)
-            || types.find(a => a.id === 'generic')
-            || types[0];
+          const pick = types.find(a => a.id === suggested) || types[0];
           setSelectedType(pick?.id || '');
         }
       })
       .catch(() => {});
   }, []); // eslint-disable-line
+
+  // Auto-detect the alert type as the analyst types/pastes — debounced so
+  // we don't hammer the backend on every keystroke. The user's explicit
+  // dropdown pick is preserved via the userPickedType ref.
+  useEffect(() => {
+    if (!rawLog.trim() || userPickedType.current) return;
+    const timer = setTimeout(async () => {
+      try {
+        const r = await fetch('/api/email/parse', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ log_text: rawLog }),
+        });
+        if (!r.ok) return;
+        const parsed = await r.json();
+        const suggested = parsed?.suggested_alert_type;
+        if (suggested && alertTypes.some(t => t.id === suggested)
+            && suggested !== selectedType && !userPickedType.current) {
+          setSelectedType(suggested);
+        }
+      } catch (_) {}
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [rawLog, alertTypes]); // eslint-disable-line
 
   const doCompose = useCallback(async () => {
     if (!rawLog.trim()) { setComposeError('Paste the alert log first'); return; }
@@ -212,7 +236,10 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
             <MuiTextField
               select fullWidth size="small"
               value={selectedType}
-              onChange={e => setSelectedType(e.target.value)}
+              onChange={e => {
+                userPickedType.current = true;
+                setSelectedType(e.target.value);
+              }}
               SelectProps={{
                 MenuProps: { PaperProps: { sx: { maxHeight: 380 } } },
               }}
@@ -279,26 +306,25 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
           border: theme => `1px solid ${muiAlpha('#ffffff', 0.12)}`,
           borderRadius: '4px', p: 2, mb: 2,
         }}>
-          <SectionHeader title="3 · Preview"
-            badge={composed.template_used}
-            right={
-              <Stack direction="row" spacing={1} alignItems="center">
-                <CopyBtn text={composed.text || ''} label="Copy text"/>
-                <CopyBtn text={composed.html || ''} label="Copy HTML"/>
-                <ToggleButtonGroup exclusive size="small" value={previewMode}
-                  onChange={(_, v) => v && setPreviewMode(v)}>
-                  <ToggleButton value="rendered" sx={{ textTransform: 'none', fontSize: 11, px: 1.25 }}>
-                    <Eye size={12} style={{ marginRight: 4 }}/> Rendered
-                  </ToggleButton>
-                  <ToggleButton value="html" sx={{ textTransform: 'none', fontSize: 11, px: 1.25 }}>
-                    HTML
-                  </ToggleButton>
-                  <ToggleButton value="text" sx={{ textTransform: 'none', fontSize: 11, px: 1.25 }}>
-                    Plain
-                  </ToggleButton>
-                </ToggleButtonGroup>
-              </Stack>
-            }/>
+          <SectionHeader title="3 · Preview" badge={composed.template_used}/>
+
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap"
+            useFlexGap sx={{ mb: 1.5, rowGap: 1 }}>
+            <CopyBtn text={composed.text || ''} label="Copy text"/>
+            <CopyBtn text={composed.html || ''} label="Copy HTML"/>
+            <ToggleButtonGroup exclusive size="small" value={previewMode}
+              onChange={(_, v) => v && setPreviewMode(v)}>
+              <ToggleButton value="rendered" sx={{ textTransform: 'none', fontSize: 11, px: 1.25 }}>
+                <Eye size={12} style={{ marginRight: 4 }}/> Rendered
+              </ToggleButton>
+              <ToggleButton value="html" sx={{ textTransform: 'none', fontSize: 11, px: 1.25 }}>
+                HTML
+              </ToggleButton>
+              <ToggleButton value="text" sx={{ textTransform: 'none', fontSize: 11, px: 1.25 }}>
+                Plain
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Stack>
 
           {previewMode === 'rendered' && (
             <Box sx={{

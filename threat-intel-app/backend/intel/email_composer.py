@@ -374,7 +374,108 @@ def parse_log(log_text: str) -> Dict:
         out["user_display_name"] = out["ep_subject_account_name"]
 
     out["raw_fields"] = raw_fields
+    suggested = suggest_alert_type(log_text, out)
+    if suggested:
+        out["suggested_alert_type"] = suggested
     return out
+
+
+# ─── alert-type heuristic ─────────────────────────────────────────────────────
+# Keyword → alert_type id. First match wins. Ordering matters — narrower
+# patterns ("defender exclusion") must precede broader ones ("defender").
+_ALERT_TYPE_KEYWORDS: List[Tuple[str, str]] = [
+    # Cloud / identity
+    ("impossible travel",                "impossible_travel"),
+    ("anonymizedipaddress",              "anonymized_ip"),
+    ("anonymized ip",                    "anonymized_ip"),
+    ("tor exit",                         "anonymized_ip"),
+    ("password spray",                   "password_spray"),
+    ("passwordspray",                    "password_spray"),
+    ("unfamiliar sign",                  "unfamiliar_signin"),
+    ("unfamiliarfeatures",               "unfamiliar_signin"),
+    ("login to disabled",                "login_to_disabled_account"),
+    ("disabled account",                 "login_to_disabled_account"),
+    ("temporary access pass",            "temporary_access_pass"),
+    ("temporaryaccesspass",              "temporary_access_pass"),
+    ("creation of admin",                "creation_of_admin_account"),
+    ("admin account created",            "creation_of_admin_account"),
+    ("privileged role",                  "privileged_role"),
+    ("role assignment",                  "privileged_role"),
+    ("forwarding rule",                  "forwarding_rule"),
+    ("inboxrule",                        "forwarding_rule"),
+    ("forwardto",                        "forwarding_rule"),
+    ("user at risk",                     "user_at_risk"),
+    ("riskystate",                       "user_at_risk"),
+
+    # Endpoint — defender / sentinel
+    ("defender exclusion",               "defender_exclusion_created"),
+    ("add-mppreference",                 "defender_exclusion_created"),
+    ("defender disabled",                "disable_protection"),
+    ("disableantispyware",               "disable_protection"),
+    ("set-mppreference",                 "disable_protection"),
+    ("microsoft defender",               "defender_detection"),
+    ("defender atp",                     "defender_detection"),
+    ("windows defender",                 "defender_detection"),
+    ("sentinelone",                      "sentinel_one_detection"),
+    ("sentinel one",                     "sentinel_one_detection"),
+
+    # Endpoint — behavioral
+    ("powershell",                       "powershell_policy_bypass"),
+    ("executionpolicy bypass",           "powershell_policy_bypass"),
+    ("-encodedcommand",                  "powershell_policy_bypass"),
+    ("bitlocker",                        "bitlocker_disable"),
+    ("manage-bde -off",                  "bitlocker_disable"),
+    ("disable-bitlocker",                "bitlocker_disable"),
+    ("reg export",                       "reg_export"),
+    ("reg.exe export",                   "reg_export"),
+    ("wevtutil cl",                      "cleared_security_logs"),
+    ("clear-eventlog",                   "cleared_security_logs"),
+    ("vulnerable driver",                "vulnerable_driver"),
+    ("loldrivers",                       "vulnerable_driver"),
+    ("byovd",                            "vulnerable_driver"),
+    ("ransomware",                       "ransomware"),
+    ("encrypted",                        "ransomware"),
+    ("ransom note",                      "ransomware"),
+    ("net localgroup administrators",    "user_added_to_local_admin"),
+    ("local administrators",             "user_added_to_local_admin"),
+    ("public rdp",                       "public_rdp_connection"),
+    ("rdp from internet",                "public_rdp_connection"),
+    ("uninstall script",                 "uninstall_script_execution"),
+    ("msiexec /uninstall",               "uninstall_script_execution"),
+    ("uninstall.exe",                    "uninstall_script_execution"),
+    ("disable security",                 "disable_security_agent"),
+    ("net stop",                         "disable_security_agent"),
+    ("sc stop",                          "disable_security_agent"),
+    ("stop-service",                     "disable_security_agent"),
+
+    # Enumeration tradecraft
+    ("ipconfig /all",                    "enumeration"),
+    ("net view",                         "enumeration"),
+    ("nltest /dclist",                   "enumeration"),
+    ("whoami /priv",                     "enumeration"),
+    ("netstat -ano",                     "enumeration"),
+    ("arp -a",                           "enumeration"),
+    ("systeminfo",                       "enumeration"),
+    ("tasklist",                         "enumeration"),
+]
+
+
+def suggest_alert_type(log_text: str, parsed: Optional[Dict] = None) -> Optional[str]:
+    """Pick the most likely alert type from log content. Returns an id from
+    ALERT_TYPES or None when no keyword fires."""
+    lower = (log_text or "").lower()
+    for kw, alert_id in _ALERT_TYPE_KEYWORDS:
+        if kw in lower:
+            return alert_id
+    # Field-based fallback when no keyword hit
+    if parsed:
+        if parsed.get("risk_event_type", "").lower() in ("anonymizedipaddress", "tor"):
+            return "anonymized_ip"
+        if parsed.get("risk_level") and parsed.get("ip_address") and parsed.get("location"):
+            return "user_at_risk"
+        if parsed.get("threat_name") or parsed.get("ep_admin_alert_title"):
+            return "defender_detection"
+    return None
 
 
 # ─── parser helpers ────────────────────────────────────────────────────────────
