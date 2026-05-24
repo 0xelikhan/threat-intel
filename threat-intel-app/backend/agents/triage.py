@@ -243,6 +243,16 @@ async def run_triage(state: dict) -> dict:
     except Exception:
         pass
 
+    # Behavioral / TTP extraction on the raw input (spec §1 — pre-enrichment).
+    # Scans for PowerShell encoded cradles, LOLBin abuse, persistence, lateral
+    # movement, credential access, and C2 patterns; maps each to MITRE.
+    behavioral_indicators: dict = {}
+    try:
+        from intel.behavior_extractor import extract_behavioral_indicators
+        behavioral_indicators = extract_behavioral_indicators(raw)
+    except Exception as e:
+        behavioral_indicators = {"error": str(e), "categories": {}, "total": 0}
+
     # Cross-reference local threat intel: KEV exploited CVEs + LOLBAS binaries
     cross_refs: dict = {}
     try:
@@ -391,11 +401,12 @@ async def run_triage(state: dict) -> dict:
     return {
         **state,
         "iocs": iocs,
-        "suppressed_iocs": suppressed_iocs,   # MISP warninglist removals (spec §4)
-        "triage_score": final_score,
-        "should_proceed": ai_result.get("should_proceed", True) and final_score > 0.15,
-        "triage_reasoning": ai_result.get("reasoning", ""),
-        "cross_refs": cross_refs,
-        "email_analysis": email_analysis,
-        "agent_trace": trace,
+        "suppressed_iocs":       suppressed_iocs,        # MISP warninglist removals (spec §4)
+        "behavioral_indicators": behavioral_indicators,  # TTP / pattern extraction (spec §1)
+        "triage_score":          final_score,
+        "should_proceed":        ai_result.get("should_proceed", True) and final_score > 0.15,
+        "triage_reasoning":      ai_result.get("reasoning", ""),
+        "cross_refs":            cross_refs,
+        "email_analysis":        email_analysis,
+        "agent_trace":           trace,
     }

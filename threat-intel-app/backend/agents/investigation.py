@@ -646,6 +646,11 @@ Tool-budget tips:
 ## Baseline cross-references already collected (do NOT re-query these)
 {cross_ctx[:2500]}
 
+## Behavioral / TTP indicators extracted from raw input (spec §1 — pre-enrichment)
+{json.dumps(state.get('behavioral_indicators', {}).get('categories', {}), indent=2)[:2500] or "(none detected)"}
+Decoded base64 payloads from PowerShell/etc:
+{json.dumps(state.get('behavioral_indicators', {}).get('decoded_payloads', []), indent=2)[:1500] or "(none)"}
+
 ## Baseline enrichment summary (do NOT re-query these IPs/domains/hashes)
 {json.dumps(compressed, indent=2)[:3500]}
 
