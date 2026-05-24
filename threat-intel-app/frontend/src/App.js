@@ -3805,6 +3805,28 @@ export default function App() {
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
       setScanState(s => ({ ...s, scanning: false, result: data }));
+
+      // If the backend kicked off AI in the background, poll GET /api/scan/{sha256}
+      // until ai_pending flips false. The UI re-renders each time we set the result
+      // so the analyst sees verdict / triage / deep / summary pop in as they finish.
+      const sha = data?.hashes?.sha256;
+      if (sha && data.ai_pending) {
+        let tries = 0;
+        const poll = async () => {
+          tries += 1;
+          if (tries > 60) return;   // ~3 min cap (60 × 3s) — bail rather than spin forever
+          try {
+            const r = await fetch(`/api/scan/by-hash/${sha}`);
+            if (r.ok) {
+              const fresh = await r.json();
+              setScanState(s => ({ ...s, result: fresh }));
+              if (fresh.ai_pending === false) return;
+            }
+          } catch (_) {}
+          setTimeout(poll, 3000);
+        };
+        setTimeout(poll, 3000);
+      }
     } catch (e) {
       setScanState(s => ({ ...s, scanning: false, error: e.message }));
     } finally {
