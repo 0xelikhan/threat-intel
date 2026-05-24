@@ -651,6 +651,11 @@ Tool-budget tips:
 Decoded base64 payloads from PowerShell/etc:
 {json.dumps(state.get('behavioral_indicators', {}).get('decoded_payloads', []), indent=2)[:1500] or "(none)"}
 
+## Deterministic confidence scores per IOC (spec §2 — independent of your assessment)
+{json.dumps({k: {"score": v.get("score"), "verdict": v.get("verdict"),
+                  "top_factors": [(f["factor"], f["points"]) for f in (v.get("factors") or [])[:4]]}
+              for k, v in (state.get('confidence_scores') or {}).items()}, indent=2)[:2500] or "(none scored)"}
+
 ## Baseline enrichment summary (do NOT re-query these IPs/domains/hashes)
 {json.dumps(compressed, indent=2)[:3500]}
 

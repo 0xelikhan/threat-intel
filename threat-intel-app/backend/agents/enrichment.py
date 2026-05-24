@@ -1048,6 +1048,22 @@ async def run_enrichment(state: dict) -> dict:
         "any_suspicious":   overall["SUSPICIOUS"] > 0,
     }
 
+    # Spec §2 — transparent confidence engine. Deterministic per-IOC score
+    # independent of the AI assessment so the analyst can audit exactly why
+    # each IOC scored where it did.
+    confidence: dict = {}
+    try:
+        from intel.confidence_engine import score_all
+        try:
+            from intel.feed_aggregator import check_ioc as _feed_lookup
+        except Exception:
+            _feed_lookup = None
+        confidence = score_all(enrichments,
+                               behavioral=state.get("behavioral_indicators"),
+                               feed_cache_lookup=_feed_lookup)
+    except Exception as e:
+        confidence = {"_error": str(e)}
+
     elapsed = (datetime.now(timezone.utc) - start).total_seconds()
     trace.append({
         "agent": "enrichment",
@@ -1064,4 +1080,5 @@ async def run_enrichment(state: dict) -> dict:
 
     return {**state, "enrichments": enrichments,
             "enrichment_summary": summary,
+            "confidence_scores": confidence,
             "iteration_count": iteration + 1, "agent_trace": trace}

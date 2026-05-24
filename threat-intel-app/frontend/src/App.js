@@ -294,6 +294,111 @@ function PreFlight({ result }) {
   );
 }
 
+/* ─── transparent confidence breakdown (spec §2) ──────────────────────────────
+ * Per-IOC deterministic score independent of the AI assessment. Renders a
+ * visual bar + verdict chip + expandable list of every contributing factor.
+ */
+function ConfidenceBreakdown({ result }) {
+  const scores = result?.confidence_scores || {};
+  const [openIoc, setOpenIoc] = useState(null);
+  const ids = Object.keys(scores).filter(k => k && !k.startsWith('_'));
+  if (!ids.length) return null;
+
+  const verdictColor = {
+    CRITICAL: '#EE3838', HIGH: '#E6700F', MEDIUM: '#E1B823',
+    LOW: '#0fbcff', CLEAN: '#16AD34',
+  };
+  const sorted = ids
+    .map(k => ({ ioc: k, ...scores[k] }))
+    .sort((a, b) => (b.score || 0) - (a.score || 0));
+
+  return (
+    <Card title="Confidence breakdown · transparent scoring" accent="#0fbcff"
+      badge={`${ids.length} scored`}>
+      <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
+        Each IOC gets a deterministic 0–100 score computed independently of the
+        AI assessment. Expand any row to see every contributing factor and the
+        evidence that triggered it.
+      </Typography>
+      {sorted.map(({ ioc, type, score, verdict, factors }) => {
+        const open = openIoc === ioc;
+        const color = verdictColor[verdict] || '#848592';
+        return (
+          <MuiPaper key={ioc} elevation={0} sx={{
+            backgroundColor: '#0C1524',
+            border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+            borderLeft: `3px solid ${color}`,
+            borderRadius: '4px', mb: 0.75,
+          }}>
+            <Box
+              onClick={() => setOpenIoc(open ? null : ioc)}
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: 'auto 1fr auto auto auto',
+                gap: 1.5, p: '10px 12px', cursor: 'pointer',
+                alignItems: 'center',
+              }}
+            >
+              <TypeTag type={type === 'hash' ? 'hashes' : type === 'ip' ? 'ips' : 'domains'}/>
+              <Box sx={{
+                fontFamily: '"IBM Plex Mono", monospace', fontSize: 12,
+                color: 'text.primary', wordBreak: 'break-all', overflow: 'hidden',
+              }}>{ioc}</Box>
+              <Box sx={{ width: 120, height: 6, backgroundColor: '#070d19', borderRadius: 3, overflow: 'hidden' }}>
+                <Box sx={{
+                  width: `${score}%`, height: '100%', backgroundColor: color,
+                  transition: 'width .25s',
+                }}/>
+              </Box>
+              <Typography sx={{
+                fontSize: 13, fontWeight: 600, color, minWidth: 32,
+                fontVariantNumeric: 'tabular-nums', textAlign: 'right',
+              }}>{score}</Typography>
+              <MuiTag label={verdict} color={color}/>
+            </Box>
+            {open && (
+              <Box sx={{ borderTop: `1px solid ${muiAlpha('#ffffff', 0.06)}`, p: '8px 12px' }}>
+                {(factors || []).length === 0 && (
+                  <Typography sx={{ fontSize: 12, color: 'text.tertiary' }}>
+                    No contributing factors — score derived entirely from neutral signals.
+                  </Typography>
+                )}
+                {(factors || []).map((f, i) => (
+                  <Box key={i} sx={{
+                    display: 'grid', gridTemplateColumns: '1fr auto',
+                    gap: 1, py: 0.625,
+                    borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.04)}` : 'none',
+                  }}>
+                    <Box>
+                      <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 500 }}>
+                        {f.factor}
+                        <Box component="span" sx={{
+                          ml: 1, fontSize: 10, color: 'text.disabled',
+                          textTransform: 'uppercase', letterSpacing: '0.05em',
+                        }}>{f.category}</Box>
+                      </Typography>
+                      <Typography sx={{ fontSize: 11, color: 'text.tertiary',
+                        fontFamily: '"IBM Plex Mono", monospace', mt: 0.25,
+                        wordBreak: 'break-all',
+                      }}>{f.evidence}</Typography>
+                    </Box>
+                    <Typography sx={{
+                      fontSize: 13, fontWeight: 600,
+                      color: f.points > 0 ? 'warning.main' : 'success.main',
+                      fontVariantNumeric: 'tabular-nums',
+                      whiteSpace: 'nowrap',
+                    }}>{f.points > 0 ? `+${f.points}` : f.points}</Typography>
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </MuiPaper>
+        );
+      })}
+    </Card>
+  );
+}
+
 /* ─── behavioral indicators (spec §1) ────────────────────────────────────────
  * Pattern-matched TTPs extracted from the raw input — PowerShell tradecraft,
  * LOLBin abuse, persistence, lateral movement, credential access, C2. Each
@@ -3306,6 +3411,7 @@ export default function App() {
             <SignalBanners result={result}/>
             <SuppressedIOCs result={result}/>
             <BehavioralIndicators result={result}/>
+            <ConfidenceBreakdown result={result}/>
             <ClarifyingQuestions result={result} onResult={setResult}/>
             <IOCPivot result={result}/>
             <AnalystSummary rs={rs || {}}/>
