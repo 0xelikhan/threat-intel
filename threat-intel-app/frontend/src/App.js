@@ -706,69 +706,97 @@ function AnalystSummary({ rs }) {
   const a = rs?.analyst_summary;
   if (!a || (!a.disposition && !a.client_email)) return null;
 
-  const dispColor = a.disposition === 'CLEAR' ? t.green
-    : a.disposition === 'ESCALATE' ? t.red
-    : t.yellow;
+  const dispColor = a.disposition === 'CLEAR'    ? '#17AB1F'
+                  : a.disposition === 'ESCALATE' ? '#F14337'
+                  :                                '#E1B823';
 
   return (
-    <Card title="Analyst hand-off" accent={t.cy} badge={a.disposition?.toLowerCase()} defaultOpen={true}>
+    <Card title="Analyst hand-off" accent="#0fbcff" badge={a.disposition?.toLowerCase()} defaultOpen>
       {/* Disposition banner */}
       {a.disposition && (
-        <div style={{ background:t.raised, border:`1px solid ${dispColor}40`,
-          borderLeft:`3px solid ${dispColor}`, borderRadius:6, padding:'12px 14px', marginBottom:12 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
-            <span style={{ width:8, height:8, borderRadius:99, background:dispColor }}/>
-            <span style={{ color:dispColor, fontWeight:600, fontSize:13 }}>
+        <MuiPaper elevation={0} sx={{
+          backgroundColor: 'background.secondary',
+          border: `1px solid ${muiAlpha(dispColor, 0.25)}`,
+          borderLeft: `3px solid ${dispColor}`,
+          borderRadius: '4px', p: '12px 14px', mb: 1.5,
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
+            <Box sx={{ width: 8, height: 8, borderRadius: 99, backgroundColor: dispColor }}/>
+            <Typography sx={{ color: dispColor, fontWeight: 600, fontSize: 13 }}>
               Recommended disposition: {a.disposition}
-            </span>
-          </div>
+            </Typography>
+          </Box>
           {a.disposition_reason && (
-            <p style={{ fontSize:13, color:t.fg, lineHeight:1.7, margin:0 }}>{a.disposition_reason}</p>
+            <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.7 }}>
+              {a.disposition_reason}
+            </Typography>
           )}
-        </div>
+        </MuiPaper>
       )}
 
-      {/* Clear justification (always show — explains why or why not) */}
+      {/* Clear justification */}
       {a.clear_justification && (
         <Block title="Why this can / cannot be cleared">
-          <li style={{ listStyle:'none', padding:'4px 0', fontSize:13, color:t.fg, lineHeight:1.7 }}>
+          <Typography component="li" sx={{ listStyle: 'none', py: 0.5, fontSize: 13,
+            color: 'text.primary', lineHeight: 1.7 }}>
             {a.clear_justification}
-          </li>
+          </Typography>
         </Block>
       )}
 
       {/* Escalation steps */}
       {a.escalation_steps?.length > 0 && a.disposition !== 'CLEAR' && (
         <Block title="If escalating · steps for Tier 2">
-          {a.escalation_steps.map((s,i) => (
-            <li key={i} style={{ display:'flex', gap:10, padding:'6px 0',
-              borderTop: i>0?`1px solid ${t.line}`:'none', fontSize:13, color:t.fg, lineHeight:1.6 }}>
-              <span style={{ color:t.red, minWidth:18, fontWeight:600 }}>{i+1}</span>
+          {a.escalation_steps.map((s, i) => (
+            <Box component="li" key={i} sx={{
+              display: 'flex', gap: 1.25, py: 0.75,
+              borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
+              fontSize: 13, color: 'text.primary', lineHeight: 1.6,
+            }}>
+              <Box component="span" sx={{ color: 'error.main', minWidth: 18, fontWeight: 600 }}>
+                {i + 1}
+              </Box>
               <span>{s}</span>
-            </li>
+            </Box>
           ))}
         </Block>
       )}
 
       {/* Client email — the big copy-able paragraph */}
       {a.client_email?.body && (
-        <div style={{ marginTop:8 }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-            <div style={{ fontSize:11, color:t.fgDim, fontWeight:500 }}>Client notification email</div>
-            <CopyBtn text={`Subject: ${a.client_email.subject || ''}\n\n${a.client_email.body}`} label="Copy email"/>
-          </div>
-          <div style={{ background:t.raised, border:`1px solid ${t.line}`, borderRadius:6, padding:14 }}>
+        <Box sx={{ mt: 1 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
+            <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 500,
+              textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Client notification email
+            </Typography>
+            <CopyBtn text={`Subject: ${a.client_email.subject || ''}\n\n${a.client_email.body}`}
+              label="Copy email"/>
+          </Box>
+          <MuiPaper elevation={0} sx={{
+            backgroundColor: 'background.secondary',
+            border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+            borderRadius: '4px', p: 1.75,
+          }}>
             {a.client_email.subject && (
-              <div style={{ paddingBottom:10, marginBottom:10, borderBottom:`1px solid ${t.line}` }}>
-                <span style={{ fontSize:11, color:t.fgDim, marginRight:8 }}>Subject:</span>
-                <span style={{ fontSize:13, color:t.fg, fontWeight:600 }}>{a.client_email.subject}</span>
-              </div>
+              <Box sx={{
+                pb: 1.25, mb: 1.25,
+                borderBottom: `1px solid ${muiAlpha('#ffffff', 0.06)}`,
+              }}>
+                <Box component="span" sx={{ fontSize: 11, color: 'text.tertiary', mr: 1 }}>
+                  Subject:
+                </Box>
+                <Box component="span" sx={{ fontSize: 13, color: 'text.primary', fontWeight: 600 }}>
+                  {a.client_email.subject}
+                </Box>
+              </Box>
             )}
-            <div style={{ fontSize:13, color:t.fg, lineHeight:1.8, whiteSpace:'pre-wrap' }}>
+            <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.8,
+              whiteSpace: 'pre-wrap' }}>
               {a.client_email.body}
-            </div>
-          </div>
-        </div>
+            </Typography>
+          </MuiPaper>
+        </Box>
       )}
     </Card>
   );
