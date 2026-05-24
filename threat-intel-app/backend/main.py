@@ -1093,6 +1093,316 @@ async def scan_file(file: UploadFile = File(...)):
     }
 
 
+# ─── ALL-IN-ONE FILE SCANNER (spec §8) ───────────────────────────────────────
+@app.post("/api/scan/file")
+async def scan_file_v2(file: UploadFile = File(...)):
+    """Comprehensive static + threat-intel + YARA + detection-content analysis.
+    Returns the complete analysis dict from intel.file_analyzer plus a
+    threat_intel section from intel.file_correlation, an ai_yara section
+    from intel.yara_ai_gen, and persists to the scan history."""
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "Empty file")
+    if len(data) > 50 * 1024 * 1024:
+        raise HTTPException(413, "File exceeds 50 MB limit")
+
+    # Magic-byte gate + audit log (re-uses spec §9 helpers)
+    try:
+        from intel.security import validate_file_upload, audit_log
+        ok, detected_type = validate_file_upload(data, max_mb=50)
+        if not ok:
+            raise HTTPException(400, detected_type)
+        audit_log("file_scan", filename=file.filename, size=len(data),
+                  detected_type=detected_type)
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
+    from intel.file_analyzer import analyze_file
+    analysis = analyze_file(data, file.filename or "uploaded")
+
+    # Stash the bytes on the result temporarily so yara_ai_gen can verify the
+    # generated rule against the actual sample. Stripped before persistence.
+    analysis["_file_bytes"] = data
+
+    # Combined YARA (vendor + custom)
+    try:
+        from intel.yara_custom import scan_combined
+        analysis["yara_matches"] = scan_combined(data)
+    except Exception:
+        pass
+
+    # TI correlation (async)
+    try:
+        from intel.file_correlation import correlate, append_scan_history
+        analysis["threat_intel"] = await correlate(analysis, config)
+    except Exception as e:
+        analysis["threat_intel"] = {"error": str(e)}
+
+    # AI-generated YARA rule per file (best-effort)
+    try:
+        from intel.yara_ai_gen import generate_yara_for_file
+        analysis["ai_yara"] = await generate_yara_for_file(analysis, _ai_gen)
+    except Exception as e:
+        analysis["ai_yara"] = {"error": str(e)}
+
+    # Drop the bytes blob before sending / persisting
+    analysis.pop("_file_bytes", None)
+
+    try:
+        from intel.file_correlation import append_scan_history
+        append_scan_history(analysis)
+    except Exception:
+        pass
+
+    return analysis
+
+
+@app.post("/api/scan/hash")
+async def scan_hash(req: dict):
+    """Hash lookup — checks the file-scanner history first, then TI sources."""
+    h = (req or {}).get("hash", "").strip().lower()
+    if not h:
+        raise HTTPException(400, "hash required")
+    if len(h) not in (32, 40, 64):
+        raise HTTPException(400, "hash must be MD5 (32), SHA1 (40), or SHA256 (64) hex")
+    out = {"hash": h, "sources": {}}
+
+    # 1. Prior scan in our history?
+    try:
+        from intel.file_correlation import load_scan, get_scan_history
+        if len(h) == 64:
+            prior = load_scan(h)
+            if prior:
+                return {**prior, "from_cache": True}
+        # MD5/SHA1 lookup via index
+        for entry in get_scan_history():
+            for k in ("md5", "sha1", "sha256"):
+                if entry.get(k) == h and entry.get("sha256"):
+                    prior = load_scan(entry["sha256"])
+                    if prior:
+                        return {**prior, "from_cache": True, "matched_via": k}
+    except Exception:
+        pass
+
+    # 2. TI sources by hash
+    try:
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            from intel.file_correlation import _vt_file, _malwarebazaar, _hybrid_analysis
+            vt, mb, ha = await asyncio.gather(
+                _vt_file(session, h, config.get("VIRUSTOTAL_KEY", "")),
+                _malwarebazaar(session, h),
+                _hybrid_analysis(session, h, config.get("HYBRID_ANALYSIS_KEY", "")),
+                return_exceptions=True,
+            )
+            out["sources"]["virustotal"]      = vt if not isinstance(vt, Exception) else {"error": str(vt)}
+            out["sources"]["malwarebazaar"]   = mb if not isinstance(mb, Exception) else {"error": str(mb)}
+            out["sources"]["hybrid_analysis"] = ha if not isinstance(ha, Exception) else {"error": str(ha)}
+    except Exception as e:
+        out["error"] = str(e)
+    return out
+
+
+@app.post("/api/scan/url")
+async def scan_url_endpoint(req: dict):
+    """Download a URL safely (30s timeout, 50MB cap) and run the file scanner on it."""
+    url = (req or {}).get("url", "").strip()
+    if not url:
+        raise HTTPException(400, "url required")
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(400, "url must be http(s)")
+    import aiohttp
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
+            async with session.get(url, allow_redirects=True) as r:
+                if r.status != 200:
+                    raise HTTPException(400, f"download HTTP {r.status}")
+                chunks = []
+                total = 0
+                async for chunk in r.content.iter_chunked(64 * 1024):
+                    chunks.append(chunk)
+                    total += len(chunk)
+                    if total > 50 * 1024 * 1024:
+                        raise HTTPException(413, "remote file exceeds 50 MB cap")
+                data = b"".join(chunks)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(400, f"download failed: {e}")
+
+    filename = url.rstrip("/").rsplit("/", 1)[-1].split("?", 1)[0] or "downloaded"
+    from intel.file_analyzer import analyze_file
+    analysis = analyze_file(data, filename)
+    analysis["source_url"] = url
+    analysis["_file_bytes"] = data
+    try:
+        from intel.yara_custom import scan_combined
+        analysis["yara_matches"] = scan_combined(data)
+    except Exception:
+        pass
+    try:
+        from intel.file_correlation import correlate, append_scan_history
+        analysis["threat_intel"] = await correlate(analysis, config)
+        analysis.pop("_file_bytes", None)
+        append_scan_history(analysis)
+    except Exception:
+        analysis.pop("_file_bytes", None)
+    return analysis
+
+
+@app.get("/api/scan/history")
+async def scan_history():
+    from intel.file_correlation import get_scan_history
+    return {"history": get_scan_history()}
+
+
+@app.get("/api/scan/stats")
+async def scan_stats():
+    from intel.file_correlation import get_scan_history
+    hist = get_scan_history()
+    verdicts = {"MALICIOUS": 0, "SUSPICIOUS": 0, "LOW": 0, "CLEAN": 0, "UNKNOWN": 0}
+    for e in hist:
+        v = e.get("verdict") or "UNKNOWN"
+        verdicts[v] = verdicts.get(v, 0) + 1
+    try:
+        from intel.yara_custom import stats as ystats
+        yc = ystats()
+    except Exception:
+        yc = {}
+    try:
+        from intel.yara_scanner import stats as ys
+        yv = ys()
+    except Exception:
+        yv = {}
+    return {
+        "total_scanned":  len(hist),
+        "verdicts":       verdicts,
+        "yara_vendor":    yv,
+        "yara_custom":    yc,
+    }
+
+
+@app.get("/api/scan/rules")
+async def scan_rules_list():
+    from intel.yara_custom import list_rules, stats
+    return {"rules": list_rules(), "stats": stats()}
+
+
+class CustomRuleSave(BaseModel):
+    name: str
+    rule: str
+
+
+@app.post("/api/scan/rules")
+async def scan_rules_save(req: CustomRuleSave):
+    from intel.yara_custom import save_rule
+    out = save_rule(req.name, req.rule)
+    if not out.get("saved"):
+        raise HTTPException(400, {"errors": out.get("errors")})
+    return out
+
+
+@app.delete("/api/scan/rules/{rule_name}")
+async def scan_rules_delete(rule_name: str):
+    from intel.yara_custom import delete_rule
+    ok = delete_rule(rule_name)
+    if not ok:
+        raise HTTPException(404, "rule not found")
+    return {"deleted": True, "name": rule_name}
+
+
+@app.post("/api/scan/compare")
+async def scan_compare(req: dict):
+    """Side-by-side compare two prior scans by SHA-256."""
+    a = (req or {}).get("a", "").lower()
+    b = (req or {}).get("b", "").lower()
+    if not (a and b):
+        raise HTTPException(400, "supply 'a' and 'b' SHA-256 hashes")
+    from intel.file_correlation import load_scan
+    sa, sb = load_scan(a), load_scan(b)
+    if not sa:
+        raise HTTPException(404, f"no scan for {a}")
+    if not sb:
+        raise HTTPException(404, f"no scan for {b}")
+    def _diff(left, right):
+        return {
+            "a_only": sorted(set(left) - set(right)),
+            "b_only": sorted(set(right) - set(left)),
+            "shared": sorted(set(left) & set(right)),
+        }
+    return {
+        "a":       {"sha256": a, "verdict": sa.get("verdict"), "filename": sa.get("filename")},
+        "b":       {"sha256": b, "verdict": sb.get("verdict"), "filename": sb.get("filename")},
+        "capabilities_diff": _diff(
+            (sa.get("capabilities") or {}).get("tags") or [],
+            (sb.get("capabilities") or {}).get("tags") or [],
+        ),
+        "yara_diff": _diff(
+            [m.get("rule") for m in (sa.get("yara_matches") or []) if isinstance(m, dict)],
+            [m.get("rule") for m in (sb.get("yara_matches") or []) if isinstance(m, dict)],
+        ),
+        "ioc_diff": {
+            "ips":     _diff((sa.get("iocs") or {}).get("ips") or [], (sb.get("iocs") or {}).get("ips") or []),
+            "domains": _diff((sa.get("iocs") or {}).get("domains") or [], (sb.get("iocs") or {}).get("domains") or []),
+        },
+        "imphash": {
+            "a": ((sa.get("format_specific") or {}).get("pe") or {}).get("imphash"),
+            "b": ((sb.get("format_specific") or {}).get("pe") or {}).get("imphash"),
+            "match": ((sa.get("format_specific") or {}).get("pe") or {}).get("imphash") ==
+                     ((sb.get("format_specific") or {}).get("pe") or {}).get("imphash"),
+        },
+    }
+
+
+class YaraHuntRequest(BaseModel):
+    rule: str
+
+
+@app.post("/api/scan/hunt")
+async def scan_hunt(req: YaraHuntRequest):
+    """Compile a YARA rule and run it against every previously scanned file."""
+    try:
+        import yara
+    except ImportError:
+        raise HTTPException(500, "yara-python not installed")
+    try:
+        compiled = yara.compile(source=req.rule)
+    except Exception as e:
+        raise HTTPException(400, f"rule compile error: {e}")
+    from intel.file_correlation import get_scan_history, _SCAN_HISTORY_DIR
+    matches = []
+    for entry in get_scan_history():
+        sha = entry.get("sha256")
+        if not sha:
+            continue
+        # We don't keep original file bytes — hunt only against stored strings.
+        # This is a deliberate trade-off (binary bytes can be massive).
+        from intel.file_correlation import load_scan
+        scan = load_scan(sha)
+        if not scan:
+            continue
+        # Combine all stored strings into a synthetic buffer for the hunt
+        ascii_s   = (scan.get("strings") or {}).get("ascii_sample") or []
+        unicode_s = (scan.get("strings") or {}).get("unicode_sample") or []
+        haystack  = ("\n".join(ascii_s) + "\n" + "\n".join(unicode_s)).encode("utf-8", "ignore")
+        if not haystack:
+            continue
+        try:
+            ms = compiled.match(data=haystack, timeout=5)
+        except Exception:
+            continue
+        if ms:
+            matches.append({
+                "sha256":   sha,
+                "filename": entry.get("filename"),
+                "verdict":  entry.get("verdict"),
+                "matched":  [m.rule for m in ms],
+            })
+    return {"hunted": len(get_scan_history()), "hits": matches, "hit_count": len(matches)}
+
+
 @app.get("/api/sandbox/{sha256}")
 async def sandbox_lookup(sha256: str):
     """Hash-only lookup against configured cloud sandboxes."""
