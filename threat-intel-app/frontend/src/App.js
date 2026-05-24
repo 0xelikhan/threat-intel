@@ -1340,6 +1340,12 @@ function SignalBanners({ result }) {
 }
 
 /* ─── overview metrics ───────────────────────────────────────────────────────── */
+// Matches every variant of the boilerplate the backend emits when the AI
+// call fails or no OpenAI key is configured. Used to suppress entire UI
+// sections that would otherwise just display these placeholder strings.
+const AI_FAILURE_TEXT = /(openai\s*key\s*not\s*configured|review\s*enrichment\s*data\s*manually|automated\s*ai\s*analysis\s*unavailable|configure\s*openai)/i;
+
+
 function Overview({ result }) {
   const rs = result?.response_summary;
   if (!rs) return null;
@@ -1562,36 +1568,44 @@ function Assessment({ rs }) {
         <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.7 }}>{rs.summary}</Typography>
       </MuiPaper>
 
-      {rs.chain_of_thought?.length > 0 && (
-        <Block title="Reasoning chain">
-          {rs.chain_of_thought.map((s, i) => (
-            <Box component="li" key={i} sx={{
-              display: 'flex', gap: 1.25, py: 0.75,
-              borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
-              fontSize: 13, color: 'text.primary', lineHeight: 1.6,
-            }}>
-              <Box component="span" sx={{ color: 'primary.main', minWidth: 18,
-                fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{i + 1}</Box>
-              <span>{s}</span>
-            </Box>
-          ))}
-        </Block>
-      )}
+      {(() => {
+        const chain = (rs.chain_of_thought || []).filter(s => !AI_FAILURE_TEXT.test(s));
+        if (!chain.length) return null;
+        return (
+          <Block title="Reasoning chain">
+            {chain.map((s, i) => (
+              <Box component="li" key={i} sx={{
+                display: 'flex', gap: 1.25, py: 0.75,
+                borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
+                fontSize: 13, color: 'text.primary', lineHeight: 1.6,
+              }}>
+                <Box component="span" sx={{ color: 'primary.main', minWidth: 18,
+                  fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{i + 1}</Box>
+                <span>{s}</span>
+              </Box>
+            ))}
+          </Block>
+        );
+      })()}
 
-      {rs.key_findings?.length > 0 && (
-        <Block title="Key findings">
-          {rs.key_findings.map((f, i) => (
-            <Box component="li" key={i} sx={{
-              display: 'flex', gap: 1.25, py: 0.75,
-              borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
-              fontSize: 13, color: 'text.primary', lineHeight: 1.6,
-            }}>
-              <Box component="span" sx={{ color: 'warning.main', minWidth: 6 }}>›</Box>
-              <span>{f}</span>
-            </Box>
-          ))}
-        </Block>
-      )}
+      {(() => {
+        const findings = (rs.key_findings || []).filter(f => !AI_FAILURE_TEXT.test(f));
+        if (!findings.length) return null;
+        return (
+          <Block title="Key findings">
+            {findings.map((f, i) => (
+              <Box component="li" key={i} sx={{
+                display: 'flex', gap: 1.25, py: 0.75,
+                borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
+                fontSize: 13, color: 'text.primary', lineHeight: 1.6,
+              }}>
+                <Box component="span" sx={{ color: 'warning.main', minWidth: 6 }}>›</Box>
+                <span>{f}</span>
+              </Box>
+            ))}
+          </Block>
+        );
+      })()}
 
       {rs.ioc_assessments?.length > 0 && (
         <Block title="Indicator verdicts">
