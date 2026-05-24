@@ -294,6 +294,185 @@ function PreFlight({ result }) {
   );
 }
 
+/* ─── deep sandbox behavioral analysis (spec §6) ──────────────────────────────
+ * Renders the rich sandbox report for any hash that came back from Hybrid
+ * Analysis / ANY.RUN: collapsible process tree, network connections grouped by
+ * protocol, file-system writes flagged for persistence, registry persistence,
+ * dropped files, mutexes, MITRE, and auto-synthesized Sigma/YARA stubs.
+ */
+function ProcessTreeNode({ node, depth = 0 }) {
+  const [open, setOpen] = useState(depth < 2);
+  const suspicious = node.suspicious_parent || node.suspicious_child;
+  const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
+  return (
+    <Box sx={{ ml: depth * 1.5, mt: depth ? 0.5 : 0 }}>
+      <Box
+        onClick={() => (node.children || []).length && setOpen(o => !o)}
+        sx={{
+          display: 'flex', alignItems: 'baseline', gap: 0.75, py: 0.375, px: 1,
+          backgroundColor: suspicious ? muiAlpha('#EE3838', 0.08) : 'transparent',
+          border: suspicious ? `1px solid ${muiAlpha('#EE3838', 0.25)}` : 'none',
+          borderLeft: suspicious ? '3px solid #EE3838' : `2px solid ${muiAlpha('#ffffff', 0.06)}`,
+          borderRadius: '3px',
+          cursor: (node.children || []).length ? 'pointer' : 'default',
+        }}
+      >
+        <Box component="span" sx={{ ...monoSx, fontSize: 11,
+          color: suspicious ? 'error.main' : 'text.primary', fontWeight: 600,
+        }}>{node.name || '(unknown)'}</Box>
+        <Box component="span" sx={{ ...monoSx, fontSize: 10, color: 'text.disabled' }}>
+          pid={node.pid}
+        </Box>
+        {node.cmdline && (
+          <Box component="span" sx={{ ...monoSx, fontSize: 10, color: 'text.tertiary',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+            {node.cmdline.slice(0, 200)}
+          </Box>
+        )}
+      </Box>
+      {open && (node.children || []).map((ch, i) => (
+        <ProcessTreeNode key={i} node={ch} depth={depth + 1}/>
+      ))}
+    </Box>
+  );
+}
+
+function SandboxBehavioral({ result }) {
+  const hashes = result?.enrichments?.hashes || {};
+  const rows = Object.entries(hashes)
+    .map(([h, p]) => ({ hash: h, deep: p?.sandbox_deep }))
+    .filter(r => r.deep && r.deep.process_tree);
+  if (!rows.length) return null;
+
+  const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
+
+  return (
+    <Card title="Sandbox behavioral analysis · process tree + IOCs" accent="#EE3838"
+      badge={`${rows.length} sample${rows.length === 1 ? '' : 's'}`} defaultOpen={false}>
+      {rows.map(({ hash, deep }) => (
+        <Box key={hash} sx={{ mb: 2.5 }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.25 }} flexWrap="wrap">
+            <TypeTag type="hashes"/>
+            <Box sx={{ ...monoSx, fontSize: 11, color: 'text.primary',
+              wordBreak: 'break-all' }}>{hash}</Box>
+            <Box component="a" href={deep.report_url} target="_blank" rel="noreferrer"
+              sx={{ ml: 'auto !important', fontSize: 11, color: 'primary.main',
+                textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
+              full {deep.source} report ↗
+            </Box>
+          </Stack>
+          <Stack direction="row" spacing={0.75} flexWrap="wrap" sx={{ mb: 1.5 }}>
+            <MuiTag label={`verdict: ${deep.verdict}`}
+              color={deep.verdict === 'MALICIOUS' ? '#EE3838' : '#848592'}/>
+            {deep.threat_score != null && <MuiTag label={`score ${deep.threat_score}`} color="#E6700F"/>}
+            {deep.malware_family && <MuiTag label={deep.malware_family} color="#EE3838"/>}
+            {deep.environment && <MuiTag label={deep.environment} color="#848592"/>}
+          </Stack>
+
+          {(deep.process_tree || []).length > 0 && (
+            <Box sx={{ mb: 1.5 }}>
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
+                textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
+                Process tree
+              </Typography>
+              <MuiPaper elevation={0} sx={{
+                backgroundColor: '#0C1524',
+                border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+                borderRadius: '4px', p: 1,
+              }}>
+                {deep.process_tree.map((root, i) => (
+                  <ProcessTreeNode key={i} node={root}/>
+                ))}
+              </MuiPaper>
+            </Box>
+          )}
+
+          {(deep.network?.dns?.length || 0) > 0 && (
+            <Box sx={{ mb: 1.5 }}>
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
+                textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.5 }}>
+                Network · DNS / HTTP
+              </Typography>
+              <MuiPaper elevation={0} sx={{
+                backgroundColor: '#0C1524',
+                border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+                borderRadius: '4px', p: 1,
+              }}>
+                {deep.network.dns.slice(0, 10).map((r, i) => (
+                  <Box key={i} sx={{ ...monoSx, fontSize: 11, py: 0.125,
+                    color: 'text.primary', wordBreak: 'break-all' }}>
+                    {r.domain} <Box component="span" sx={{ color: 'text.tertiary' }}>
+                      → {r.ip} {r.country ? `· ${r.country}` : ''}
+                    </Box>
+                  </Box>
+                ))}
+                {deep.network.http.slice(0, 5).map((req, i) => (
+                  <Box key={`http${i}`} sx={{ ...monoSx, fontSize: 11, py: 0.125,
+                    color: 'text.primary', wordBreak: 'break-all', mt: 0.25 }}>
+                    {req.method} <Box component="span" sx={{ color: 'primary.main' }}>{req.url}</Box>
+                  </Box>
+                ))}
+              </MuiPaper>
+            </Box>
+          )}
+
+          {(deep.registry || []).filter(r => r.persistence).length > 0 && (
+            <Box sx={{ mb: 1.5 }}>
+              <Typography sx={{ fontSize: 11, color: 'warning.main', fontWeight: 600,
+                textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.5 }}>
+                Registry persistence
+              </Typography>
+              {deep.registry.filter(r => r.persistence).slice(0, 8).map((r, i) => (
+                <Box key={i} sx={{ ...monoSx, fontSize: 11, color: 'text.primary',
+                  py: 0.125, wordBreak: 'break-all' }}>
+                  {r.path}{r.value_name ? `\\${r.value_name}` : ''}
+                  {r.value && <Box component="span" sx={{ color: 'text.tertiary' }}> = {r.value}</Box>}
+                </Box>
+              ))}
+            </Box>
+          )}
+
+          {(deep.mutexes || []).length > 0 && (
+            <Box sx={{ mb: 1.5 }}>
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
+                textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.5 }}>
+                Mutex names
+              </Typography>
+              <Stack direction="row" spacing={0.5} flexWrap="wrap">
+                {deep.mutexes.slice(0, 10).map((m, i) => (
+                  <MuiTag key={i} label={m} color="#B286FF"
+                    sx={{ ...monoSx, fontFamily: '"IBM Plex Mono", monospace' }}/>
+                ))}
+              </Stack>
+            </Box>
+          )}
+
+          {(deep.detections || []).length > 0 && (
+            <Box>
+              <Typography sx={{ fontSize: 11, color: 'success.main', fontWeight: 600,
+                textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.5 }}>
+                Auto-synthesized detection opportunities
+              </Typography>
+              {deep.detections.map((d, i) => (
+                <Box key={i} component="pre" sx={{
+                  ...monoSx, fontSize: 10, m: 0, mb: 0.75,
+                  backgroundColor: '#070d19',
+                  border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+                  borderRadius: '4px', p: '8px 10px',
+                  color: 'text.primary', whiteSpace: 'pre-wrap',
+                  maxHeight: 200, overflow: 'auto',
+                }}>
+                  {`# ${d.type.toUpperCase()} · ${d.trigger}\n${d.stub}`}
+                </Box>
+              ))}
+            </Box>
+          )}
+        </Box>
+      ))}
+    </Card>
+  );
+}
+
 /* ─── honeypot / deception intelligence (spec §5) ────────────────────────────
  * Per-IP rollup of: GreyNoise RIOT (known-good infra), Shodan InternetDB,
  * DShield SANS ISC, StopForumSpam, Emerging Threats blocklist, Project
@@ -3716,6 +3895,7 @@ export default function App() {
             <ConfidenceBreakdown result={result}/>
             <InfrastructureIntel result={result}/>
             <HoneypotActivity result={result}/>
+            <SandboxBehavioral result={result}/>
             <ClarifyingQuestions result={result} onResult={setResult}/>
             <IOCPivot result={result}/>
             <AnalystSummary rs={rs || {}}/>
