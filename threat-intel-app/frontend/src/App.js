@@ -1843,10 +1843,10 @@ const Block = ({ title, children }) => (
   </MuiBlock>
 );
 
-/* ─── analyst hand-off (disposition, clear/escalate, client email, IR playbook) ── */
+/* ─── analyst hand-off (disposition, clear/escalate, IR playbook) ──────────── */
 function AnalystSummary({ rs }) {
   const a = rs?.analyst_summary;
-  if (!a || (!a.disposition && !a.client_email)) return null;
+  if (!a || !a.disposition) return null;
 
   const dispColor = a.disposition === 'CLEAR'    ? '#17AB1F'
                   : a.disposition === 'ESCALATE' ? '#F14337'
@@ -1904,42 +1904,8 @@ function AnalystSummary({ rs }) {
         </Block>
       )}
 
-      {/* Client email — the big copy-able paragraph */}
-      {a.client_email?.body && (
-        <Box sx={{ mt: 1 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
-            <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 500,
-              textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Client notification email
-            </Typography>
-            <CopyBtn text={`Subject: ${a.client_email.subject || ''}\n\n${a.client_email.body}`}
-              label="Copy email"/>
-          </Box>
-          <MuiPaper elevation={0} sx={{
-            backgroundColor: 'background.secondary',
-            border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-            borderRadius: '4px', p: 1.75,
-          }}>
-            {a.client_email.subject && (
-              <Box sx={{
-                pb: 1.25, mb: 1.25,
-                borderBottom: `1px solid ${muiAlpha('#ffffff', 0.06)}`,
-              }}>
-                <Box component="span" sx={{ fontSize: 11, color: 'text.tertiary', mr: 1 }}>
-                  Subject:
-                </Box>
-                <Box component="span" sx={{ fontSize: 13, color: 'text.primary', fontWeight: 600 }}>
-                  {a.client_email.subject}
-                </Box>
-              </Box>
-            )}
-            <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.8,
-              whiteSpace: 'pre-wrap' }}>
-              {a.client_email.body}
-            </Typography>
-          </MuiPaper>
-        </Box>
-      )}
+      {/* Client notification email removed — pending integration of dedicated
+          email-generator repo from a fellow analyst. */}
     </Card>
   );
 }
@@ -2061,14 +2027,16 @@ function ChatWithRecon({ result }) {
   const accent = isAmbiguous ? '#E6700F' : '#0fbcff';
   const banner = isAmbiguous
     ? 'RECON needs more context to commit to a verdict — pick a question or ask anything'
-    : 'Investigation guidance — what a senior analyst would check next. Click any to chat.';
+    : null;
 
   return (
     <Card title="Ask RECON" accent={accent} defaultOpen
       badge={questions.length > 0 ? `${questions.length} suggested checks` : null}>
-      <Typography sx={{ fontSize:12, color:'text.tertiary', mb:1.5, lineHeight:1.55 }}>
-        {banner}
-      </Typography>
+      {banner && (
+        <Typography sx={{ fontSize:12, color:'text.tertiary', mb:1.5, lineHeight:1.55 }}>
+          {banner}
+        </Typography>
+      )}
 
       {/* Investigation-guidance question cards (teaching tool) */}
       {questions.length > 0 && messages.length === 0 && (
@@ -3453,7 +3421,7 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, scanSta
         )}
         {scanState?.result && !scanState.scanning && (
           <Typography sx={{ color: 'success.main', fontSize: 11, mb: 1.25, mt: -0.5 }}>
-            Scanned {scanState.result.filename} — see YARA file scanner panel below
+            Scanned {scanState.result.filename}
           </Typography>
         )}
 
