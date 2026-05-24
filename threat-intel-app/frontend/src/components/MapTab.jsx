@@ -34,7 +34,7 @@ export default function MapTab({ result }) {
   const [leafletReady, setLeafletReady] = useState(false);
 
   useEffect(() => {
-    // Load Leaflet CSS
+    // Load Leaflet CSS once
     if (!document.getElementById('leaflet-css')) {
       const link = document.createElement('link');
       link.id = 'leaflet-css';
@@ -43,36 +43,61 @@ export default function MapTab({ result }) {
       document.head.appendChild(link);
     }
 
+    const container = mapRef.current;
+    if (!container) return;
+
     const initLeaflet = () => {
-      if (mapInstanceRef.current || !mapRef.current) return;
+      if (mapInstanceRef.current || !mapRef.current || !window.L) return;
+      // Leaflet must NOT be initialized inside a zero-sized container —
+      // its tile loader gets stuck and never recovers, even on later
+      // invalidateSize. Guard until the parent Collapse has expanded.
+      if (container.offsetWidth === 0 || container.offsetHeight === 0) return;
+
       const L = window.L;
-
-      const map = L.map(mapRef.current, { center: [25, 10], zoom: 2, zoomControl: true, attributionControl: false });
-
-      // Dark tile layer
+      const map = L.map(container, {
+        center: [25, 10], zoom: 2,
+        zoomControl: true, attributionControl: false,
+      });
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
-        subdomains: 'abcd', maxZoom: 18
+        subdomains: 'abcd', maxZoom: 18,
       }).addTo(map);
-
-      // Country labels layer
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
-        subdomains: 'abcd', maxZoom: 18, opacity: 0.6
+        subdomains: 'abcd', maxZoom: 18, opacity: 0.6,
       }).addTo(map);
 
       mapInstanceRef.current = map;
       setLeafletReady(true);
     };
 
-    if (window.L) {
-      initLeaflet();
-    } else {
-      const script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.onload = initLeaflet;
-      document.head.appendChild(script);
+    const loadAndInit = () => {
+      if (window.L) { initLeaflet(); return; }
+      let s = document.getElementById('leaflet-script');
+      if (!s) {
+        s = document.createElement('script');
+        s.id = 'leaflet-script';
+        s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        document.head.appendChild(s);
+      }
+      s.addEventListener('load', initLeaflet);
+    };
+    loadAndInit();
+
+    // ResizeObserver: handles (a) deferring init until container has
+    // dimensions, and (b) repainting on later size changes.
+    let ro = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => {
+        if (!mapInstanceRef.current) {
+          initLeaflet();
+        } else {
+          mapInstanceRef.current.invalidateSize();
+        }
+      });
+      ro.observe(container);
     }
 
     return () => {
+      if (ro) ro.disconnect();
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
@@ -80,20 +105,6 @@ export default function MapTab({ result }) {
       }
     };
   }, []);
-
-  // Leaflet renders blank if its container had zero height at init time —
-  // which happens here because the parent MUI Collapse expands over a few
-  // hundred ms. Watch the container and invalidateSize whenever its
-  // dimensions change so tiles paint correctly on first reveal.
-  useEffect(() => {
-    if (!leafletReady || !mapRef.current || !mapInstanceRef.current) return;
-    const map = mapInstanceRef.current;
-    map.invalidateSize();
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => map.invalidateSize());
-    ro.observe(mapRef.current);
-    return () => ro.disconnect();
-  }, [leafletReady]);
 
   useEffect(() => {
     if (!leafletReady || !mapInstanceRef.current || !result) return;
