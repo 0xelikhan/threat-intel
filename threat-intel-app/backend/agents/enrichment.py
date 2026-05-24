@@ -787,6 +787,15 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
             data["osint"] = osint
     except Exception:
         pass
+
+    # Deception / honeypot intelligence (spec §5)
+    try:
+        from intel.deception_intel import enrich_deception
+        dec = await enrich_deception(session, ip, keys)
+        if dec:
+            data["deception"] = dec
+    except Exception:
+        pass
     # ASN reputation — uses ISP/org strings we already have, no extra API call
     try:
         from intel.asn_reputation import check as asn_check
@@ -1062,6 +1071,7 @@ async def run_enrichment(state: dict) -> dict:
         "HYBRID_ANALYSIS_KEY": config.get("HYBRID_ANALYSIS_KEY"),
         "CROWDSEC_KEY":        config.get("CROWDSEC_KEY"),
         "GOOGLE_API_KEY":      config.get("GOOGLE_API_KEY"),
+        "HONEYPOT_KEY":        config.get("HONEYPOT_KEY"),
     }
 
     iocs = state.get("iocs", {})
