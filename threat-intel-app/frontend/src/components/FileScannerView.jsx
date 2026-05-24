@@ -10,7 +10,7 @@
  */
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
-  Box, Stack, Typography, Paper as MuiPaper, Tabs as MuiTabs, Tab as MuiTab,
+  Box, Stack, Typography, Paper as MuiPaper,
   Button as MuiButton, Chip as MuiChip, TextField as MuiTextField,
   IconButton as MuiIconButton, Table as MuiTable, TableHead, TableBody,
   TableRow, TableCell, Tooltip, LinearProgress,
@@ -1041,7 +1041,6 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
   const [localScanning, setLocalScanning] = useState(false);
   const [localStep, setLocalStep] = useState(0);
   const [localError, setLocalError] = useState(null);
-  const [activeTab, setActiveTab] = useState('overview');
   const progressTimer = useRef(null);
 
   // Either consume from props (sidebar-driven) or own state (standalone use)
@@ -1219,27 +1218,28 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
           </Box>
         )}
         {result && (
-          <Box>
-            <MuiTabs value={activeTab} onChange={(_, v) => setActiveTab(v)}
-              sx={{ mb: 2, borderBottom: `1px solid ${muiAlpha('#ffffff', 0.12)}` }}>
-              <MuiTab value="overview" label="Overview" sx={{ fontSize: 12, textTransform: 'none' }}/>
-              <MuiTab value="hashes"   label="Hashes"   sx={{ fontSize: 12, textTransform: 'none' }}/>
-              <MuiTab value="details"  label="File Details" sx={{ fontSize: 12, textTransform: 'none' }}/>
-              <MuiTab value="strings"  label="Strings"  sx={{ fontSize: 12, textTransform: 'none' }}/>
-              <MuiTab value="ti"       label="Threat Intel" sx={{ fontSize: 12, textTransform: 'none' }}/>
-              <MuiTab value="mitre"    label="MITRE"    sx={{ fontSize: 12, textTransform: 'none' }}/>
-              <MuiTab value="yara"     label="YARA"     sx={{ fontSize: 12, textTransform: 'none' }}/>
-              <MuiTab value="detect"   label="Detection Content" sx={{ fontSize: 12, textTransform: 'none' }}/>
-            </MuiTabs>
-            {activeTab === 'overview' && <OverviewTab result={result}/>}
-            {activeTab === 'hashes'   && <HashesTab result={result}/>}
-            {activeTab === 'details'  && <FileDetailsTab result={result}/>}
-            {activeTab === 'strings'  && <StringsTab result={result}/>}
-            {activeTab === 'ti'       && <ThreatIntelTab result={result}/>}
-            {activeTab === 'mitre'    && <MitreTab result={result}/>}
-            {activeTab === 'yara'     && <YaraTab result={result}/>}
-            {activeTab === 'detect'   && <DetectionTab result={result}/>}
-          </Box>
+          <Stack spacing={4}>
+            {[
+              { id: 'overview', label: 'Overview',          Comp: OverviewTab },
+              { id: 'hashes',   label: 'Hashes',            Comp: HashesTab },
+              { id: 'details',  label: 'File Details',      Comp: FileDetailsTab },
+              { id: 'strings',  label: 'Strings',           Comp: StringsTab },
+              { id: 'ti',       label: 'Threat Intel',      Comp: ThreatIntelTab },
+              { id: 'mitre',    label: 'MITRE ATT&CK',      Comp: MitreTab },
+              { id: 'yara',     label: 'YARA',              Comp: YaraTab },
+              { id: 'detect',   label: 'Detection Content', Comp: DetectionTab },
+            ].map(({ id, label, Comp }) => (
+              <Box key={id}>
+                <Typography sx={{
+                  fontSize: 11, color: 'text.tertiary', fontWeight: 600,
+                  textTransform: 'uppercase', letterSpacing: '0.08em',
+                  mb: 1.5, pb: 1,
+                  borderBottom: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+                }}>{label}</Typography>
+                <Comp result={result}/>
+              </Box>
+            ))}
+          </Stack>
         )}
       </Box>
     </Box>
