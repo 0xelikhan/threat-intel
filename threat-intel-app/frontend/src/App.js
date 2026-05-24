@@ -15,8 +15,17 @@ import AgentPipeline from './components/AgentPipeline';
 // the OpenCTI styling overrides defined in theme.js.
 import {
   Box, Typography,
-  Drawer    as MuiDrawer,
-  IconButton as MuiIconButton,
+  Drawer         as MuiDrawer,
+  IconButton     as MuiIconButton,
+  Tabs           as MuiTabs,
+  Tab            as MuiTab,
+  Button         as MuiButton,
+  Table          as MuiTable,
+  TableHead      as MuiTableHead,
+  TableBody      as MuiTableBody,
+  TableRow       as MuiTableRow,
+  TableCell      as MuiTableCell,
+  TableContainer as MuiTableContainer,
 } from '@mui/material';
 import { alpha as muiAlpha } from '@mui/material/styles';
 import {
@@ -1432,7 +1441,7 @@ function CrossRefs({ rs }) {
   );
 }
 
-/* ─── detection rules (multi-SIEM) ────────────────────────────────────────────── */
+/* ─── detection rules (multi-SIEM) — MUI Tabs + CodeBlock ─────────────────── */
 function Detection({ result }) {
   const sigma = result?.sigma_rule;
   const kql   = result?.kql_query;
@@ -1450,59 +1459,39 @@ function Detection({ result }) {
   const [active, setActive] = useState(tabs[0]?.id);
   if (!tabs.length) return null;
 
-  const codeStyle = {
-    background:t.bg, border:`1px solid ${t.line}`, borderRadius:6, padding:14,
-    fontSize:12, color:t.fg, fontFamily:'JetBrains Mono', overflowX:'auto',
-    whiteSpace:'pre-wrap', wordBreak:'break-word', maxHeight:300, overflowY:'auto',
-    margin:0, lineHeight:1.65,
-  };
-
   const cur = tabs.find(x => x.id === (active || tabs[0]?.id)) || tabs[0];
 
   return (
     <Card title="Detection content & hunt queries" accent={t.cy} badge={`${tabs.length} platforms`}>
-      {mitre.length>0 && (
-        <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:14, alignItems:'center' }}>
-          <span style={{ fontSize:11, color:t.fgDim }}>Coverage:</span>
-          {mitre.map((t_,i)=>{
-            const id=t_.split(' ')[0];
+      {mitre.length > 0 && (
+        <Box sx={{ display:'flex', gap:0.75, flexWrap:'wrap', mb:1.75, alignItems:'center' }}>
+          <Typography sx={{ fontSize:11, color:'text.tertiary' }}>Coverage:</Typography>
+          {mitre.map((t_, i) => {
+            const id = t_.split(' ')[0];
             return (
-              <a key={i} href={`https://attack.mitre.org/techniques/${id.includes('.')?id.replace('.','/'):id}/`}
-                target="_blank" rel="noreferrer"
-                style={{ background:t.blueDim, border:`1px solid ${t.blue}30`, color:t.blue,
-                  padding:'2px 8px', borderRadius:4, fontSize:11, fontFamily:'JetBrains Mono', textDecoration:'none' }}>
-                {id}
-              </a>
+              <MuiTag key={i} label={id} color="#0fbcff"
+                onClick={() => window.open(`https://attack.mitre.org/techniques/${id.includes('.') ? id.replace('.','/') : id}/`, '_blank')}
+                sx={{ fontFamily:'"IBM Plex Mono", monospace' }}/>
             );
           })}
-        </div>
+        </Box>
       )}
 
-      {/* Tab strip */}
-      <div style={{ display:'flex', gap:2, marginBottom:10, borderBottom:`1px solid ${t.line}`, overflowX:'auto' }}>
-        {tabs.map(tab => (
-          <button key={tab.id} onClick={()=>setActive(tab.id)}
-            style={{
-              background:'transparent', border:'none', cursor:'pointer',
-              padding:'8px 14px', fontSize:12, fontWeight:500, whiteSpace:'nowrap',
-              color: cur?.id === tab.id ? t.cy : t.fgMute,
-              borderBottom: cur?.id === tab.id ? `2px solid ${t.cy}` : '2px solid transparent',
-              marginBottom:-1,
-            }}>
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {/* MUI Tabs strip — inherits indicator color + lowercase styling from theme */}
+      <MuiTabs value={cur.id} onChange={(_, v) => setActive(v)} variant="scrollable" scrollButtons="auto"
+        sx={{ minHeight:36, mb:1.25, borderBottom: `1px solid ${muiAlpha('#ffffff', 0.12)}` }}>
+        {tabs.map(tab => <MuiTab key={tab.id} value={tab.id} label={tab.label} sx={{ minHeight:36, py:0 }}/>)}
+      </MuiTabs>
 
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-          <span style={{ fontSize:12, color:t.fg, fontWeight:600 }}>{cur.label}</span>
-          {cur.badge === 'validated' && <Chip color={t.green} soft={t.greenDim} size="xs">validated</Chip>}
-          {cur.badge === 'invalid'   && <Chip color={t.red}   soft={t.redDim}   size="xs">invalid</Chip>}
-        </div>
+      <Box sx={{ display:'flex', justifyContent:'space-between', alignItems:'center', mb:1 }}>
+        <Box sx={{ display:'flex', alignItems:'center', gap:1 }}>
+          <Typography sx={{ fontSize:12, color:'text.primary', fontWeight:600 }}>{cur.label}</Typography>
+          {cur.badge === 'validated' && <MuiVerdictTag verdict="CLEAN" size="small"/>}
+          {cur.badge === 'invalid'   && <MuiVerdictTag verdict="MALICIOUS" size="small"/>}
+        </Box>
         <CopyBtn text={cur.content}/>
-      </div>
-      <pre style={codeStyle}>{cur.content}</pre>
+      </Box>
+      <MuiCodeBlock>{cur.content}</MuiCodeBlock>
     </Card>
   );
 }
@@ -2172,40 +2161,45 @@ function BulkTable({ result }) {
 
   return (
     <Card title={`Bulk indicator matrix · ${rows.length} indicators`} accent={t.cy}>
-      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:10 }}>
-        <button onClick={exportCSV} style={{ background:t.raised, border:`1px solid ${t.line}`,
-          color:t.fgMute, padding:'5px 12px', borderRadius:5, cursor:'pointer', fontSize:11 }}>
-          Export CSV
-        </button>
-      </div>
-      <div style={{ background:t.raised, border:`1px solid ${t.line}`, borderRadius:6, overflow:'hidden' }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-          <thead>
-            <tr style={{ background:t.bg }}>
-              {['Type','Indicator','Verdict','Score','Country','Signals','Reason'].map(h => (
-                <th key={h} style={{ padding:'8px 10px', textAlign:'left', color:t.fgDim,
-                  fontWeight:500, fontSize:11, borderBottom:`1px solid ${t.line}` }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
+      <Box sx={{ display:'flex', justifyContent:'flex-end', mb:1.25 }}>
+        <MuiButton size="small" variant="outlined" onClick={exportCSV} sx={{ height:26 }}>Export CSV</MuiButton>
+      </Box>
+      <MuiTableContainer component={Box} sx={{
+        backgroundColor: 'background.secondary',
+        border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+        borderRadius: '4px',
+      }}>
+        <MuiTable size="small">
+          <MuiTableHead>
+            <MuiTableRow>
+              {['Type','Indicator','Verdict','Score','Country','Signals','Reason'].map(h =>
+                <MuiTableCell key={h}>{h}</MuiTableCell>
+              )}
+            </MuiTableRow>
+          </MuiTableHead>
+          <MuiTableBody>
             {rows.map((r, i) => {
               const c = verdictStyle[r.verdict] || t.fgMute;
               return (
-                <tr key={`${r.type}-${r.ioc}-${i}`} style={{ borderBottom:`1px solid ${t.line}` }}>
-                  <td style={{ padding:'6px 10px' }}><TypeTag type={r.type}/></td>
-                  <td style={{ padding:'6px 10px', fontFamily:'JetBrains Mono', color:t.fg, wordBreak:'break-all', maxWidth:260 }}>{r.ioc}</td>
-                  <td style={{ padding:'6px 10px' }}><Verdict verdict={r.verdict} size="xs"/></td>
-                  <td style={{ padding:'6px 10px', color:c, fontWeight:600, fontVariantNumeric:'tabular-nums' }}>{r.score ?? '—'}</td>
-                  <td style={{ padding:'6px 10px', color:t.fgMute, fontSize:11 }}>{r.country || '—'}</td>
-                  <td style={{ padding:'6px 10px', color:t.orange, fontSize:11 }}>{r.meta || '—'}</td>
-                  <td style={{ padding:'6px 10px', color:t.fgMute, fontSize:11, maxWidth:280 }}>{r.reason || '—'}</td>
-                </tr>
+                <MuiTableRow key={`${r.type}-${r.ioc}-${i}`} hover>
+                  <MuiTableCell><TypeTag type={r.type}/></MuiTableCell>
+                  <MuiTableCell sx={{
+                    fontFamily:'"IBM Plex Mono", monospace',
+                    wordBreak:'break-all', maxWidth:260,
+                  }}>{r.ioc}</MuiTableCell>
+                  <MuiTableCell><Verdict verdict={r.verdict} size="small"/></MuiTableCell>
+                  <MuiTableCell sx={{ color:c, fontWeight:600, fontVariantNumeric:'tabular-nums' }}>
+                    {r.score ?? '—'}
+                  </MuiTableCell>
+                  <MuiTableCell sx={{ color:'text.tertiary', fontSize:11 }}>{r.country || '—'}</MuiTableCell>
+                  <MuiTableCell sx={{ color:'warning.main', fontSize:11 }}>{r.meta || '—'}</MuiTableCell>
+                  <MuiTableCell sx={{ color:'text.tertiary', fontSize:11, maxWidth:280 }}>{r.reason || '—'}</MuiTableCell>
+                </MuiTableRow>
               );
             })}
-          </tbody>
-        </table>
-      </div>
+          </MuiTableBody>
+        </MuiTable>
+      </MuiTableContainer>
     </Card>
   );
 }
