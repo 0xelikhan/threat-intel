@@ -1004,6 +1004,19 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
             data["osint"] = osint
     except Exception:
         pass
+
+    # Deep sandbox extraction (spec §6) — process tree, network, files, registry,
+    # mutexes, MITRE, detection-rule stubs. Only runs for SHA-256 (HA requirement).
+    if len(hash_val) == 64:
+        try:
+            from intel.sandbox_deep import fetch_deep_report
+            deep = await fetch_deep_report(hash_val,
+                                           hybrid_key=keys.get("HYBRID_ANALYSIS_KEY", ""),
+                                           anyrun_key=keys.get("ANYRUN_KEY", ""))
+            if deep:
+                data["sandbox_deep"] = deep
+        except Exception:
+            pass
     _cache[ck] = data
     return data
 
@@ -1072,6 +1085,7 @@ async def run_enrichment(state: dict) -> dict:
         "CROWDSEC_KEY":        config.get("CROWDSEC_KEY"),
         "GOOGLE_API_KEY":      config.get("GOOGLE_API_KEY"),
         "HONEYPOT_KEY":        config.get("HONEYPOT_KEY"),
+        "ANYRUN_KEY":          config.get("ANYRUN_KEY"),
     }
 
     iocs = state.get("iocs", {})
