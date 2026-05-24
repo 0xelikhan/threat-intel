@@ -40,48 +40,51 @@ import {
   CopyBtn    as MuiCopyBtn,
 } from './components/ui';
 
-/* ─── design tokens ─────────────────────────────────────────────────────────── */
+/* ─── design tokens — exact values from OpenCTI ThemeDark.ts ────────────────
+ * Adapted from OpenCTI (AGPL-3.0). Every legacy inline-styled element now
+ * inherits the precise OpenCTI palette by referencing this token object.
+ */
 const t = {
-  // surfaces
-  bg:        '#0a0e16',
-  surface:   '#10141f',
-  raised:    '#161b29',
-  sidebar:   '#080b13',
+  // surfaces  (matches OpenCTI background.default / paper / nav / accent / secondary)
+  bg:        '#070d19',           // THEME_DARK_DEFAULT_BACKGROUND
+  surface:   '#09101e',           // THEME_DARK_DEFAULT_PAPER
+  raised:    '#0C1524',           // background.secondary
+  sidebar:   '#070d19',           // THEME_DARK_DEFAULT_NAV
   hover:     'rgba(255,255,255,0.025)',
 
-  // borders
-  line:      'rgba(255,255,255,0.06)',
-  lineHi:    'rgba(255,255,255,0.1)',
-  lineStr:   'rgba(255,255,255,0.14)',
+  // borders  (matches OpenCTI border.paper / border.main)
+  line:      'rgba(255,255,255,0.12)',   // border.paper
+  lineHi:    'rgba(255,255,255,0.15)',   // table cell borders
+  lineStr:   '#252A35',                  // border.main
 
-  // text
-  fg:        '#e8eaed',
-  fgMute:    '#9aa3b4',
-  fgDim:     '#5b6478',
-  fgGhost:   '#3a4153',
+  // text  (matches OpenCTI text.primary / tertiary / disabled)
+  fg:        '#F2F2F3',           // THEME_DARK_DEFAULT_TEXT
+  fgMute:    '#AFB0B6',           // text.light
+  fgDim:     '#848592',           // text.tertiary
+  fgGhost:   '#75829A',           // text.disabled
 
-  // accent — cyan to match logo
-  cy:        '#00b8d4',
-  cyDim:     'rgba(0,184,212,0.1)',
-  cyLine:    'rgba(0,184,212,0.3)',
-  cyWash:    'rgba(0,184,212,0.04)',
+  // accent — primary cyan (matches OpenCTI primary.main)
+  cy:        '#0fbcff',           // THEME_DARK_DEFAULT_PRIMARY
+  cyDim:     'rgba(15,188,255,0.1)',
+  cyLine:    'rgba(15,188,255,0.3)',
+  cyWash:    'rgba(15,188,255,0.04)',
 
-  // semantic
-  red:       '#ef4444',
-  redDim:    'rgba(239,68,68,0.1)',
-  red2:      'rgba(239,68,68,0.04)',
-  orange:    '#f97316',
-  orangeDim: 'rgba(249,115,22,0.1)',
-  orange2:   'rgba(249,115,22,0.04)',
-  yellow:    '#eab308',
-  yellowDim: 'rgba(234,179,8,0.1)',
-  yellow2:   'rgba(234,179,8,0.04)',
-  green:     '#10b981',
-  greenDim:  'rgba(16,185,129,0.1)',
-  blue:      '#3b82f6',
-  blueDim:   'rgba(59,130,246,0.1)',
-  purple:    '#a855f7',
-  purpleDim: 'rgba(168,85,247,0.1)',
+  // semantic  (matches OpenCTI severity palette)
+  red:       '#F14337',           // error.main / severity.critical-ish
+  redDim:    'rgba(241,67,55,0.1)',
+  red2:      'rgba(241,67,55,0.04)',
+  orange:    '#E6700F',           // warn.main / severity.high
+  orangeDim: 'rgba(230,112,15,0.1)',
+  orange2:   'rgba(230,112,15,0.04)',
+  yellow:    '#E1B823',            // severity.medium
+  yellowDim: 'rgba(225,184,35,0.1)',
+  yellow2:   'rgba(225,184,35,0.04)',
+  green:     '#17AB1F',            // success.main / severity.low
+  greenDim:  'rgba(23,171,31,0.1)',
+  blue:      '#1565c0',            // severity.info
+  blueDim:   'rgba(21,101,192,0.1)',
+  purple:    '#B286FF',            // ai.main
+  purpleDim: 'rgba(178,134,255,0.1)',
 };
 
 const levelStyle = {
