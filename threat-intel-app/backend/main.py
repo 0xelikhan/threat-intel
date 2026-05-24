@@ -549,18 +549,56 @@ async def detection(req: DetectionRequest):
         return {"result": _match_threat_actors_fn(req.mitreTechniques or []), "source": "builtin"}
 
     if req.action == "sigma":
+        # Spec §6: AI generates → sigma-cli validates → retry up to 3× on failure,
+        # then auto-convert to SPL and KQL via pySigma backends.
+        import uuid as _u
         a = req.analysis or {}
         ioc_json = json.dumps({k: v[:3] for k, v in (req.iocs or {}).items() if v})
-        prompt = (f"Generate a complete production-ready Sigma detection rule.\n"
-                  f"CHARACTER: Senior Detection Engineer.\n"
-                  f"CONSTRAINTS: Output ONLY valid Sigma YAML. No markdown fences.\n"
-                  f"Threat Level: {a.get('threatLevel','MEDIUM')}\n"
-                  f"Summary: {a.get('summary','')}\n"
-                  f"MITRE: {', '.join(a.get('mitreTechniques',[]))}\n"
-                  f"IOCs: {ioc_json}\n"
-                  f"Include: title, id (UUID), status: experimental, description, tags (with attack.*), "
-                  f"logsource, detection (selection + condition), falsepositives, level.")
-        return {"result": await _ai_gen(prompt)}
+        techniques = a.get("mitreTechniques", [])
+        attack_tags = " ".join(f"attack.{t.split(' ')[0].lower()}" for t in techniques if t.startswith("T"))
+        prompt = (
+            f"Generate a complete, valid Sigma detection rule. Output ONLY the YAML "
+            f"document — no markdown fences, no commentary.\n\n"
+            f"Required fields and their values:\n"
+            f"  title: a descriptive 4-8 word name\n"
+            f"  id: {str(_u.uuid4())}\n"
+            f"  status: experimental\n"
+            f"  description: 2-3 sentences explaining what is detected and why it matters\n"
+            f"  references: array of MITRE ATT&CK technique URLs like "
+            f"    https://attack.mitre.org/techniques/Txxxx/\n"
+            f"  author: RECON Platform\n"
+            f"  date: {datetime.now().strftime('%Y/%m/%d')}\n"
+            f"  tags: {attack_tags}\n"
+            f"  logsource: appropriate category/product (e.g. category: process_creation, product: windows)\n"
+            f"  detection: selection block with actual IOC values and process / command-line patterns\n"
+            f"    condition: selection\n"
+            f"  falsepositives: realistic list (legitimate admin tooling, scanners, etc.)\n"
+            f"  level: matching severity ({(a.get('threatLevel') or 'medium').lower()})\n\n"
+            f"Context for the rule:\n"
+            f"  Threat Level: {a.get('threatLevel','MEDIUM')}\n"
+            f"  Summary: {a.get('summary','')}\n"
+            f"  MITRE: {', '.join(techniques)}\n"
+            f"  IOCs: {ioc_json}\n"
+        )
+        from intel.detection_engineering import (
+            generate_validated_sigma, convert_sigma_to_spl, convert_sigma_to_kql,
+            search_existing_sigma, search_existing_elastic,
+        )
+        sigma = await generate_validated_sigma(_ai_gen, prompt)
+        spl, spl_err = convert_sigma_to_spl(sigma["rule"]) if sigma["valid"] else (None, "skipped: rule invalid")
+        kql, kql_err = convert_sigma_to_kql(sigma["rule"]) if sigma["valid"] else (None, "skipped: rule invalid")
+        return {
+            "result":         sigma["rule"],
+            "valid":          sigma["valid"],
+            "errors":         sigma["errors"],
+            "attempts":       sigma["attempts"],
+            "splunk_spl":     spl,
+            "splunk_error":   spl_err,
+            "kql":            kql,
+            "kql_error":      kql_err,
+            "existing_sigma":   search_existing_sigma(techniques)[:8],
+            "existing_elastic": search_existing_elastic(techniques)[:8],
+        }
 
     if req.action == "kql":
         a = req.analysis or {}
@@ -576,7 +614,62 @@ async def detection(req: DetectionRequest):
                   f"// comments explaining each section, rule metadata as // comments at top.")
         return {"result": await _ai_gen(prompt)}
 
+    if req.action == "yara":
+        # Spec §6: AI generates → yara-python compiles → retry up to 3× on syntax error.
+        a = req.analysis or {}
+        family = a.get("malwareFamily") or a.get("malware_family") or "unknown"
+        hashes = (req.iocs or {}).get("hashes", [])[:3]
+        prompt = (
+            f"Generate a YARA rule for detecting samples of the malware family '{family}'. "
+            f"Output ONLY the YARA rule — no markdown fences, no commentary.\n\n"
+            f"Requirements:\n"
+            f"  rule meta: description, author = 'RECON Platform', date = '{datetime.now().strftime('%Y-%m-%d')}', "
+            f"    hash = first hash from the IOC list ({hashes[0] if hashes else 'unknown'}), "
+            f"    mitre = first technique ID\n"
+            f"  strings: pattern strings drawn from behavioral indicators — mutex names, registry keys, "
+            f"    file paths, network strings, encoded command patterns from any sandbox report context. "
+            f"    Mix ASCII and wide. Use $s1, $s2, $s3, … naming.\n"
+            f"  condition: filesize appropriate to the malware type (typically < 5MB) AND at least 2 of the strings.\n\n"
+            f"Context:\n"
+            f"  Malware family: {family}\n"
+            f"  Hashes: {hashes}\n"
+            f"  Summary: {a.get('summary','')}\n"
+            f"  MITRE: {', '.join(a.get('mitreTechniques',[]))}\n"
+        )
+        from intel.detection_engineering import generate_validated_yara, search_existing_yara
+        yara_out = await generate_validated_yara(_ai_gen, prompt)
+        return {
+            "result":          yara_out["rule"],
+            "valid":           yara_out["valid"],
+            "errors":          yara_out["errors"],
+            "attempts":        yara_out["attempts"],
+            "existing_yara":   search_existing_yara(family, hashes[0] if hashes else None)[:8],
+        }
+
+    if req.action == "existing":
+        # Spec §6: GET /api/detection/existing
+        from intel.detection_engineering import search_existing_sigma, search_existing_elastic
+        techniques = req.mitreTechniques or []
+        return {
+            "sigma":   search_existing_sigma(techniques),
+            "elastic": search_existing_elastic(techniques),
+        }
+
     raise HTTPException(400, f"Unknown action: {req.action}")
+
+
+# Convenience GET endpoint per spec §6: /api/detection/existing?techniques=T1059.001,T1566
+@app.get("/api/detection/existing")
+async def detection_existing(techniques: str = ""):
+    """Find existing detection content in the cloned vendor rule libraries that
+    matches any of the supplied MITRE technique IDs (comma-separated)."""
+    from intel.detection_engineering import search_existing_sigma, search_existing_elastic
+    tids = [t.strip() for t in techniques.split(",") if t.strip()]
+    return {
+        "sigma":   search_existing_sigma(tids),
+        "elastic": search_existing_elastic(tids),
+        "queried": tids,
+    }
 
 
 # ─── STIX EXPORT ──────────────────────────────────────────────────────────────────
