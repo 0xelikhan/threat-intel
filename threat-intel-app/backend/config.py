@@ -190,6 +190,79 @@ API_KEY_DEFINITIONS = {
         "placeholder": "Proxycheck API key",
         "group": "API Keys"
     },
+    # ─── Email Composer (RECON port of the MDR email tool) ───────────────────
+    "EMAIL_FROM_NAME": {
+        "label": "Email · Analyst Display Name",
+        "description": "Shown in the email signature block as the sender name.",
+        "required": False,
+        "url": "",
+        "placeholder": "Jane Analyst",
+        "group": "API Keys"
+    },
+    "EMAIL_FROM_ADDRESS": {
+        "label": "Email · From Address",
+        "description": "Sender address that appears in composed emails and SMTP envelope.",
+        "required": False,
+        "url": "",
+        "placeholder": "analyst@example.com",
+        "group": "API Keys"
+    },
+    "EMAIL_SIGNATURE": {
+        "label": "Email · Custom Signature",
+        "description": "Plain text or full HTML signature block. Leave blank to use the default.",
+        "required": False,
+        "url": "",
+        "placeholder": "Best regards,\\nJane Analyst\\nMDR Team",
+        "group": "API Keys"
+    },
+    "EMAIL_TEAM_NAME": {
+        "label": "Email · Team Name",
+        "description": "Used wherever templates say 'reach out to the MDR team'.",
+        "required": False,
+        "url": "",
+        "placeholder": "the MDR analyst team",
+        "group": "API Keys"
+    },
+    "EMAIL_SMTP_HOST": {
+        "label": "Email · SMTP Host",
+        "description": "Optional — if set, enables Send via SMTP from the composer.",
+        "required": False,
+        "url": "",
+        "placeholder": "smtp.office365.com",
+        "group": "API Keys"
+    },
+    "EMAIL_SMTP_PORT": {
+        "label": "Email · SMTP Port",
+        "description": "Common values: 587 (STARTTLS), 465 (SSL).",
+        "required": False,
+        "url": "",
+        "placeholder": "587",
+        "group": "API Keys"
+    },
+    "EMAIL_SMTP_USER": {
+        "label": "Email · SMTP Username",
+        "description": "Used for authenticating to the SMTP server.",
+        "required": False,
+        "url": "",
+        "placeholder": "analyst@example.com",
+        "group": "API Keys"
+    },
+    "EMAIL_SMTP_PASSWORD": {
+        "label": "Email · SMTP Password / App Password",
+        "description": "Use an app password if your provider requires one.",
+        "required": False,
+        "url": "",
+        "placeholder": "••••••••",
+        "group": "API Keys"
+    },
+    "EMAIL_COPY_TO": {
+        "label": "Email · Default CC",
+        "description": "Comma-separated addresses to CC on every sent email. Optional.",
+        "required": False,
+        "url": "",
+        "placeholder": "team-inbox@example.com",
+        "group": "API Keys"
+    },
 }
 
 # Keys that work with no API key at all
