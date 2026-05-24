@@ -28,6 +28,11 @@ app = FastAPI(title="Threat Intelligence Platform", version="3.0.0",
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
+# Spec §9 platform hardening — security headers + 10MB body limit + audit log
+from intel.security import SecurityHeadersMiddleware, AuditMiddleware
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(AuditMiddleware)
+
 
 @app.on_event("startup")
 async def _kick_prewarm():
@@ -1034,13 +1039,23 @@ async def api_docs(request: Request):
 # ─── YARA FILE SCAN ───────────────────────────────────────────────────────────────
 @app.post("/api/scan-file")
 async def scan_file(file: UploadFile = File(...)):
-    """Hash + YARA-scan a binary. Returns hashes, file metadata, and matched rules."""
+    """Hash + YARA-scan a binary. Returns hashes, file metadata, and matched rules.
+
+    Spec §9: validates magic bytes (not just extension), enforces 50MB cap,
+    audit-logs every upload."""
     import hashlib
     data = await file.read()
     if not data:
         raise HTTPException(400, "Empty file")
     if len(data) > 50 * 1024 * 1024:
         raise HTTPException(413, "File exceeds 50 MB limit")
+
+    from intel.security import validate_file_upload, audit_log
+    ok, detected_type = validate_file_upload(data, max_mb=50)
+    if not ok:
+        raise HTTPException(400, detected_type)
+    audit_log("file_upload", filename=file.filename, size=len(data),
+              detected_type=detected_type)
     hashes = {
         "md5":    hashlib.md5(data).hexdigest(),
         "sha1":   hashlib.sha1(data).hexdigest(),
@@ -1218,6 +1233,13 @@ async def status_check():
     for (name, _), r in zip(free_probes, free_results):
         out["sources"][name] = r
     return out
+
+
+# ─── SECURITY SELF-CHECK (spec §9) ────────────────────────────────────────────
+@app.get("/api/security/check")
+async def security_check():
+    from intel.security import security_self_check
+    return security_self_check(config)
 
 
 # ─── TRAINING MODE (spec §8) ─────────────────────────────────────────────────
