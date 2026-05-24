@@ -14,12 +14,14 @@ import AgentPipeline from './components/AgentPipeline';
 // card, code-block, copy button now renders through MUI components that inherit
 // the OpenCTI styling overrides defined in theme.js.
 import {
-  Box, Typography,
+  Box, Typography, Stack,
+  Paper          as MuiPaper,
   Drawer         as MuiDrawer,
   IconButton     as MuiIconButton,
   Tabs           as MuiTabs,
   Tab            as MuiTab,
   Button         as MuiButton,
+  TextField      as MuiTextField,
   Table          as MuiTable,
   TableHead      as MuiTableHead,
   TableBody      as MuiTableBody,
@@ -849,147 +851,179 @@ function ChatWithRecon({ result }) {
   };
 
   if (!runId) return null;
-  const accent = classification === 'AMBIGUOUS' ? t.orange : t.cy;
-  const banner = classification === 'AMBIGUOUS'
+  const isAmbiguous = classification === 'AMBIGUOUS';
+  const accent = isAmbiguous ? '#E6700F' : '#0fbcff';
+  const banner = isAmbiguous
     ? 'RECON needs more context to commit to a verdict — pick a question or ask anything'
     : 'Investigation guidance — what a senior analyst would check next. Click any to chat.';
 
   return (
     <Card title="Ask RECON" accent={accent} defaultOpen
       badge={questions.length > 0 ? `${questions.length} suggested checks` : null}>
-      <div style={{ fontSize:12, color:t.fgMute, marginBottom:12, lineHeight:1.55 }}>
+      <Typography sx={{ fontSize:12, color:'text.tertiary', mb:1.5, lineHeight:1.55 }}>
         {banner}
-      </div>
+      </Typography>
 
-      {/* Investigation-guidance questions — always shown (teaching tool) */}
+      {/* Investigation-guidance question cards (teaching tool) */}
       {questions.length > 0 && messages.length === 0 && (
-        <div style={{ marginBottom:14 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
-            <div style={{ width:4, height:4, borderRadius:99, background:accent }}/>
-            <span style={{ fontSize:11, color:t.fgDim, fontWeight:500 }}>
-              {classification === 'AMBIGUOUS' ? 'Probing questions' : 'Things to verify · click to ask'}
-            </span>
-          </div>
-          {questions.map((q, i) => (
-            <button key={i} onClick={() => send(q.question)}
-              style={{ width:'100%', textAlign:'left', background:t.raised,
-                border:`1px solid ${t.line}`,
-                borderLeft:`3px solid ${classification === 'AMBIGUOUS' ? t.orange : t.cy}`,
-                borderRadius:6, padding:'11px 14px', marginBottom:8, cursor:'pointer',
-                color:t.fg, transition:'background 0.15s' }}
-              onMouseEnter={e => e.currentTarget.style.background = t.elevated}
-              onMouseLeave={e => e.currentTarget.style.background = t.raised}>
-              <div style={{ fontSize:13, fontWeight:500, marginBottom:6, lineHeight:1.5 }}>{q.question}</div>
-              {q.why_asking && (
-                <div style={{ fontSize:11, color:t.fgMute, marginBottom:6, fontStyle:'italic',
-                  lineHeight:1.5 }}>
-                  why: {q.why_asking}
-                </div>
-              )}
-              {(q.if_yes_means || q.if_no_means) && (
-                <div style={{ display:'flex', flexDirection:'column', gap:3, fontSize:11,
-                  paddingTop:6, borderTop:`1px solid ${t.line}` }}>
-                  {q.if_yes_means && (
-                    <div><span style={{ color:t.green, fontWeight:500 }}>if yes →</span>{' '}
-                      <span style={{ color:t.fgMute }}>{q.if_yes_means}</span></div>
-                  )}
-                  {q.if_no_means && (
-                    <div><span style={{ color:t.red, fontWeight:500 }}>if no →</span>{' '}
-                      <span style={{ color:t.fgMute }}>{q.if_no_means}</span></div>
-                  )}
-                </div>
-              )}
-            </button>
-          ))}
-        </div>
+        <Box sx={{ mb:1.75 }}>
+          <Box sx={{ display:'flex', alignItems:'center', gap:0.75, mb:1 }}>
+            <Box sx={{ width:4, height:4, borderRadius:99, backgroundColor:accent }}/>
+            <Typography variant="caption" sx={{
+              fontSize:11, color:'text.tertiary', fontWeight:500,
+              textTransform:'uppercase', letterSpacing:'0.06em',
+            }}>
+              {isAmbiguous ? 'Probing questions' : 'Things to verify · click to ask'}
+            </Typography>
+          </Box>
+          <Stack spacing={1}>
+            {questions.map((q, i) => (
+              <MuiPaper key={i} onClick={() => send(q.question)} elevation={0}
+                sx={{
+                  p:'11px 14px', cursor:'pointer',
+                  border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+                  borderLeft: `3px solid ${accent}`,
+                  borderRadius: '4px',
+                  backgroundColor: 'background.secondary',
+                  transition: 'background-color 0.15s',
+                  '&:hover': { backgroundColor: muiAlpha('#ffffff', 0.04) },
+                }}>
+                <Typography sx={{ fontSize:13, fontWeight:500, mb:0.75, lineHeight:1.5 }}>
+                  {q.question}
+                </Typography>
+                {q.why_asking && (
+                  <Typography sx={{ fontSize:11, color:'text.tertiary', mb:0.75,
+                    fontStyle:'italic', lineHeight:1.5 }}>
+                    why: {q.why_asking}
+                  </Typography>
+                )}
+                {(q.if_yes_means || q.if_no_means) && (
+                  <Box sx={{ display:'flex', flexDirection:'column', gap:0.4, fontSize:11,
+                    pt:0.75, borderTop: `1px solid ${muiAlpha('#ffffff', 0.06)}` }}>
+                    {q.if_yes_means && (
+                      <Box><Box component="span" sx={{ color:'success.main', fontWeight:500 }}>if yes →</Box>{' '}
+                        <Box component="span" sx={{ color:'text.tertiary' }}>{q.if_yes_means}</Box></Box>
+                    )}
+                    {q.if_no_means && (
+                      <Box><Box component="span" sx={{ color:'error.main', fontWeight:500 }}>if no →</Box>{' '}
+                        <Box component="span" sx={{ color:'text.tertiary' }}>{q.if_no_means}</Box></Box>
+                    )}
+                  </Box>
+                )}
+              </MuiPaper>
+            ))}
+          </Stack>
+        </Box>
       )}
 
-      {/* Conversation history */}
-      <div ref={scrollRef} style={{ maxHeight:480, overflowY:'auto', marginBottom:12,
-        background:messages.length ? t.bg : 'transparent',
-        border:messages.length ? `1px solid ${t.line}` : 'none',
-        borderRadius:6, padding: messages.length ? '12px 14px' : 0 }}>
+      {/* Conversation history (scrollable) */}
+      <Box ref={scrollRef} sx={{
+        maxHeight: 480, overflowY: 'auto', mb: 1.5,
+        backgroundColor: messages.length ? 'background.default' : 'transparent',
+        border: messages.length ? `1px solid ${muiAlpha('#ffffff', 0.12)}` : 'none',
+        borderRadius: '4px',
+        p: messages.length ? '12px 14px' : 0,
+      }}>
         {messages.map((m, i) => {
           const isUser = m.role === 'user';
           return (
-            <div key={i} style={{ display:'flex', gap:10, marginBottom:14,
-              flexDirection: isUser ? 'row-reverse' : 'row' }}>
-              <div style={{ width:28, height:28, borderRadius:99, flexShrink:0,
-                background: isUser ? t.purpleDim : t.cyDim,
-                border:`1px solid ${isUser ? t.purple : t.cy}40`,
+            <Box key={i} sx={{
+              display:'flex', gap:1.25, mb:1.75,
+              flexDirection: isUser ? 'row-reverse' : 'row',
+            }}>
+              <Box sx={{
+                width:28, height:28, borderRadius:'50%', flexShrink:0,
+                backgroundColor: isUser ? muiAlpha('#B286FF', 0.16) : muiAlpha('#0fbcff', 0.16),
+                border: `1px solid ${isUser ? muiAlpha('#B286FF', 0.4) : muiAlpha('#0fbcff', 0.4)}`,
                 display:'flex', alignItems:'center', justifyContent:'center',
-                fontSize:11, fontWeight:700, color: isUser ? t.purple : t.cy }}>
+                fontSize:11, fontWeight:700,
+                color: isUser ? '#B286FF' : '#0fbcff',
+              }}>
                 {isUser ? 'You' : 'AI'}
-              </div>
-              <div style={{ maxWidth:'78%', background: isUser ? t.purpleDim : t.elevated,
-                border:`1px solid ${isUser ? t.purple + '30' : t.line}`,
-                borderRadius:8, padding:'10px 12px', fontSize:13, color:t.fg, lineHeight:1.6,
-                whiteSpace:'pre-wrap', wordBreak:'break-word' }}>
-                {/* Empty streaming bubble → show "thinking" placeholder */}
+              </Box>
+              <MuiPaper elevation={0} sx={{
+                maxWidth:'78%',
+                backgroundColor: isUser ? muiAlpha('#B286FF', 0.12) : 'background.accent',
+                border: `1px solid ${isUser ? muiAlpha('#B286FF', 0.2) : muiAlpha('#ffffff', 0.12)}`,
+                borderRadius: '4px',
+                p:'10px 12px', fontSize:13, color:'text.primary', lineHeight:1.6,
+                whiteSpace:'pre-wrap', wordBreak:'break-word',
+              }}>
                 {!isUser && m._streaming && !m.content && (!m.tool_calls || m.tool_calls.length === 0) && (
-                  <span style={{ color:t.fgMute, fontStyle:'italic',
-                    display:'inline-flex', alignItems:'center', gap:6 }}>
-                    <span style={{ display:'inline-block', width:5, height:5, borderRadius:99,
-                      background:t.cy, animation:'pulse 1.2s ease-in-out infinite' }}/>
+                  <Box component="span" sx={{ color:'text.tertiary', fontStyle:'italic',
+                    display:'inline-flex', alignItems:'center', gap:0.75 }}>
+                    <Box component="span" sx={{
+                      display:'inline-block', width:5, height:5, borderRadius:99,
+                      backgroundColor:'primary.main',
+                      animation:'pulse 1.2s ease-in-out infinite',
+                    }}/>
                     RECON is thinking…
-                  </span>
+                  </Box>
                 )}
                 {m.content}
-                {/* Typing cursor while streaming */}
                 {!isUser && m._streaming && m.content && (
-                  <span style={{ display:'inline-block', width:6, height:14, marginLeft:2,
-                    marginBottom:-2, background:t.cy, animation:'pulse 0.9s ease-in-out infinite',
-                    verticalAlign:'middle' }}/>
+                  <Box component="span" sx={{
+                    display:'inline-block', width:6, height:14, ml:0.25, mb:'-2px',
+                    backgroundColor:'primary.main',
+                    animation:'pulse 0.9s ease-in-out infinite',
+                    verticalAlign:'middle',
+                  }}/>
                 )}
                 {!isUser && m.tool_calls?.length > 0 && (
-                  <div style={{ marginTop:10, paddingTop:8, borderTop:`1px solid ${t.line}` }}>
-                    <div style={{ fontSize:10, color:t.fgDim, marginBottom:5, letterSpacing:'0.04em' }}>
+                  <Box sx={{ mt:1.25, pt:1,
+                    borderTop:`1px solid ${muiAlpha('#ffffff', 0.06)}` }}>
+                    <Typography variant="caption" sx={{
+                      fontSize:10, color:'text.tertiary', mb:0.625,
+                      letterSpacing:'0.04em', display:'block',
+                    }}>
                       RECON checked
-                    </div>
+                    </Typography>
                     {m.tool_calls.map((tc, j) => (
-                      <div key={j} style={{ fontSize:11, color:t.fgMute, padding:'2px 0',
-                        fontFamily:'JetBrains Mono', wordBreak:'break-all' }}>
-                        <span style={{ color:t.cy }}>{tc.tool}</span>
+                      <Box key={j} sx={{ fontSize:11, color:'text.tertiary', py:'2px',
+                        fontFamily:'"IBM Plex Mono", monospace', wordBreak:'break-all' }}>
+                        <Box component="span" sx={{ color:'primary.main' }}>{tc.tool}</Box>
                         <span> → </span>
-                        <span style={{ color:t.fg }}>{tc.summary}</span>
-                      </div>
+                        <Box component="span" sx={{ color:'text.primary' }}>{tc.summary}</Box>
+                      </Box>
                     ))}
-                  </div>
+                  </Box>
                 )}
-              </div>
-            </div>
+              </MuiPaper>
+            </Box>
           );
         })}
-      </div>
+      </Box>
 
-      {/* Input */}
-      <div style={{ display:'flex', gap:8 }}>
-        <textarea value={input} onChange={e => setInput(e.target.value)}
+      {/* Input row */}
+      <Stack direction="row" spacing={1}>
+        <MuiTextField
+          multiline rows={2} fullWidth variant="outlined"
+          value={input} onChange={e => setInput(e.target.value)}
           onKeyDown={e => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
           }}
-          placeholder='Ask anything — "Is this likely a vulnerability scanner?", "What if IT installed this?", "Look up this hash in sandbox"…'
-          rows={2}
-          style={{ flex:1, background:t.raised, border:`1px solid ${t.line}`, color:t.fg,
-            padding:'10px 12px', borderRadius:6, fontSize:13, resize:'vertical',
-            outline:'none', fontFamily:'inherit', lineHeight:1.5, minHeight:60 }}/>
-        <button onClick={() => send()} disabled={sending || !input.trim()}
-          style={{ background: sending || !input.trim() ? t.raised : t.cy,
-            border:`1px solid ${sending || !input.trim() ? t.line : t.cy}`,
-            color: sending || !input.trim() ? t.fgGhost : '#000',
-            padding:'0 18px', borderRadius:6, cursor: sending || !input.trim() ? 'not-allowed' : 'pointer',
-            fontSize:13, fontWeight:600, alignSelf:'stretch' }}>
+          placeholder='Ask anything — "Is this likely a vulnerability scanner?", "Look up this hash in sandbox"…'
+          sx={{ flex:1, '& .MuiOutlinedInput-input': { fontSize:13, lineHeight:1.5 } }}
+        />
+        <MuiButton variant="contained"
+          onClick={() => send()} disabled={sending || !input.trim()}
+          sx={{ alignSelf:'stretch', minWidth:64 }}>
           Send
-        </button>
-      </div>
-      <div style={{ fontSize:10, color:t.fgDim, marginTop:6, textAlign:'right' }}>
+        </MuiButton>
+      </Stack>
+      <Typography sx={{ fontSize:10, color:'text.tertiary', mt:0.75, textAlign:'right' }}>
         ⌘↵ to send
-      </div>
+      </Typography>
       {error && (
-        <div style={{ marginTop:8, padding:'8px 12px', background:'rgba(239,68,68,0.1)',
-          border:`1px solid ${t.red}40`, borderRadius:5, color:t.red, fontSize:12 }}>
+        <Box sx={{
+          mt:1, p:'8px 12px',
+          backgroundColor: muiAlpha('#F14337', 0.1),
+          border:`1px solid ${muiAlpha('#F14337', 0.4)}`,
+          borderRadius:'4px',
+          color:'error.main', fontSize:12,
+        }}>
           {error}
-        </div>
+        </Box>
       )}
     </Card>
   );
