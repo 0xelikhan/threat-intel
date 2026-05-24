@@ -2,9 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 
 const VERDICT_COLORS = { MALICIOUS: '#ff2d2d', SUSPICIOUS: '#ff8c00', CLEAN: '#51cf66', UNKNOWN: '#74c0fc' };
 
-function getIPVerdict(ip, analysis) {
-  if (!analysis?.iocAssessments) return 'UNKNOWN';
-  const assessment = analysis.iocAssessments.find(a => a.ioc === ip);
+function getIPVerdict(ip, response_summary) {
+  if (!response_summary?.ioc_assessments) return 'UNKNOWN';
+  const assessment = response_summary.ioc_assessments.find(a => a.ioc === ip);
   return assessment?.verdict || 'UNKNOWN';
 }
 
@@ -96,7 +96,7 @@ export default function MapTab({ result }) {
 
     Object.keys(result.enrichments.ips).forEach(ip => {
       const details = getIPDetails(ip, result.enrichments);
-      const verdict = getIPVerdict(ip, result.analysis);
+      const verdict = getIPVerdict(ip, result.response_summary);
       const color = VERDICT_COLORS[verdict] || VERDICT_COLORS.UNKNOWN;
 
       if (!details.loc) return;
@@ -197,7 +197,7 @@ export default function MapTab({ result }) {
             <tbody>
               {ips.map((ip, i) => {
                 const d = getIPDetails(ip, result.enrichments);
-                const verdict = getIPVerdict(ip, result.analysis);
+                const verdict = getIPVerdict(ip, result.response_summary);
                 const c = VERDICT_COLORS[verdict];
                 return (
                   <tr key={ip} style={{ borderBottom: '1px solid #0d1a30', background: i % 2 === 0 ? 'transparent' : '#060d1a' }}>

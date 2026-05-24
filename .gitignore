@@ -1,36 +1,37 @@
 # API keys — never commit
-.env
+**/.env
 *.key
-config.local.py
-backend/.env
-backend/data/config.json
+**/config.local.py
+**/data/config.json
 
-# Python
-__pycache__/
-*.pyc
-backend/venv/
-backend/__pycache__/
+# Python bytecode + virtualenvs (any depth)
+**/__pycache__/
+**/*.pyc
+**/venv/
+**/.venv/
 
 # Node
-frontend/node_modules/
-frontend/build/
+**/node_modules/
+**/build/
+**/package-lock.json
 
-# Data
-backend/data/
-!backend/data/.gitkeep
+# Runtime data (cases, history, generated indexes)
+**/backend/data/
+!**/backend/data/.gitkeep
 
 # Vendor third-party repos (cloned via scripts/setup_vendor.sh — not committed)
 vendor/
-threat-intel-app/vendor/
+**/vendor/
 
 # MITRE ATT&CK STIX dataset (47MB, downloaded by setup script)
-threat-intel-app/backend/intel/mitre/
+**/backend/intel/mitre/
 
-# Python bytecode anywhere
-**/__pycache__/
-**/*.pyc
+# Bundled intel datasets (regenerated; too large for git)
+**/backend/intel/feeds/
+**/backend/intel/sigma/
+**/backend/intel/warninglists/
 
-# Internal scratch
+# Scratch + local notes
 scratch/
 *.local.md
 
@@ -38,3 +39,4 @@ scratch/
 .DS_Store
 .vscode/
 *.swp
+Thumbs.db
