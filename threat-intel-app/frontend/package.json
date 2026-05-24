@@ -5,12 +5,19 @@
   "dependencies": {
     "@azure/msal-browser": "^3.14.0",
     "@azure/msal-react": "^2.0.22",
-    "axios": "^1.7.2",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@fontsource/ibm-plex-sans": "^5.2.8",
+    "@mui/icons-material": "^9.0.1",
+    "@mui/material": "^9.0.1",
+    "axios": "^1.16.1",
     "d3": "^7.9.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.383.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-leaflet": "^5.0.0",
     "react-scripts": "5.0.1"
   },
   "scripts": {
@@ -20,11 +27,21 @@
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
-    "extends": ["react-app"]
+    "extends": [
+      "react-app"
+    ]
   },
   "browserslist": {
-    "production": [">0.2%", "not dead", "not op_mini all"],
-    "development": ["last 1 chrome version", "last 1 firefox version", "last 1 safari version"]
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
   },
   "proxy": "http://localhost:8000"
 }
