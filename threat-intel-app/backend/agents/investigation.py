@@ -846,6 +846,17 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
+    # Spec §7 — geopolitical context derived from enrichment + investigation
+    geopolitical = None
+    try:
+        from intel.geopolitical import compute_geopolitical_context
+        geopolitical = compute_geopolitical_context(
+            enrichments=state.get("enrichments", {}),
+            threat_actor=result.get("threat_actor"),
+        )
+    except Exception as _e:
+        geopolitical = {"error": str(_e)}
+
     return {
         **state,
         "investigation_result":   result,
@@ -859,6 +870,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
         "threat_actor":           result.get("threat_actor"),
         "campaign":               result.get("campaign"),
         "attack_stage":           result.get("attack_stage"),
+        "geopolitical":           geopolitical,
         "tool_call_log":          tool_call_log,
         "agent_trace":            trace,
     }
