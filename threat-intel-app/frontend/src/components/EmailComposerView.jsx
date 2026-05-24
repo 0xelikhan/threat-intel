@@ -120,7 +120,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
 
   return (
     <Box sx={{
-      flex: 1, minWidth: 0, height: '100vh', overflowY: 'auto',
+      flex: 1, minWidth: 0, minHeight: '100vh',
       p: { xs: 2, md: '24px 28px 48px' },
       backgroundColor: 'background.default',
     }}>
@@ -205,7 +205,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
           border: theme => `1px solid ${muiAlpha('#ffffff', 0.12)}`,
           borderRadius: '4px', p: 2, mb: 2,
         }}>
-          <SectionHeader title="3 · Preview" badge={composed.template_used}/>
+          <SectionHeader title="3 · Preview"/>
 
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap"
             useFlexGap sx={{ mb: 1.5, rowGap: 1 }}>
