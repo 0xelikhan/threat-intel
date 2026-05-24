@@ -105,7 +105,11 @@ async def generate_yara_for_file(result: Dict, ai_call) -> Dict:
     prompt = base
     last_text = ""
     last_errors: List[str] = []
-    for attempt in range(1, 4):
+    # 2 attempts max — previous 3-attempt loop pushed scans over a minute
+    # when the small model produced bad YARA syntax. The validation+retry is
+    # still here to catch the common case; pathologically broken rules just
+    # ship as 'valid: false' and the analyst sees the error inline.
+    for attempt in range(1, 3):
         text = await ai_call(prompt)
         text = _strip_fences(text)
         ok, errs = _validate_and_test(text, result.get("_file_bytes"))
@@ -120,7 +124,7 @@ async def generate_yara_for_file(result: Dict, ai_call) -> Dict:
             f"No markdown fences. No commentary."
         )
 
-    return {"rule": last_text, "valid": False, "errors": last_errors, "attempts": 3}
+    return {"rule": last_text, "valid": False, "errors": last_errors, "attempts": 2}
 
 
 def _validate_and_test(text: str, file_bytes) -> Tuple[bool, List[str]]:

@@ -476,21 +476,28 @@ function CapabilitiesSection({ result }) {
             textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1 }}>
             Identified capabilities
           </Typography>
-          <Stack direction="row" spacing={0.75} flexWrap="wrap" sx={{ mb: 2 }}>
+          <Box sx={{
+            display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 2,
+            minWidth: 0,   // allow shrinking inside grid/flex parents
+          }}>
             {cap.tags.map(t => {
               const matched = (cap.mitre_techniques || []).find(m => m.label === t);
               const tip = matched ? `${matched.id} · ${matched.explanation}` : t;
               return (
                 <Tooltip key={t} title={tip}>
                   <MuiChip label={t} size="small" sx={{
-                    mb: 0.5,
+                    maxWidth: '100%',
                     backgroundColor: muiAlpha('#EE3838', 0.16),
                     color: 'error.main', fontWeight: 500, fontSize: 11,
+                    '& .MuiChip-label': {
+                      whiteSpace: 'normal',
+                      overflowWrap: 'anywhere',
+                    },
                   }}/>
                 </Tooltip>
               );
             })}
-          </Stack>
+          </Box>
         </Box>
       )}
       {cap.mitre_techniques?.length > 0 && (
