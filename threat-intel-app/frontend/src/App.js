@@ -2104,53 +2104,60 @@ function Report({ result }) {
     w.document.close(); setTimeout(()=>w.print(),400);
   };
 
-  const inputStyle = { background:t.raised, border:`1px solid ${t.line}`, color:t.fg,
-    padding:'8px 11px', borderRadius:5, fontSize:13, outline:'none', width:'100%',
-    boxSizing:'border-box', fontFamily:'inherit', transition:'border-color .15s' };
-
   return (
-    <Card title="Investigation report" accent={t.purple} defaultOpen={false} badge={`${total} indicators`}>
-      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:14 }}>
-        <button onClick={print} data-recon-print style={{ background:t.purpleDim, border:`1px solid ${t.purple}40`,
-          color:t.purple, padding:'7px 14px', borderRadius:5, cursor:'pointer', fontSize:12, fontWeight:500,
-          display:'inline-flex', alignItems:'center', gap:6 }}>
-          <Printer size={12}/>Print / Save PDF
-        </button>
-      </div>
+    <Card title="Investigation report" accent="#B286FF" defaultOpen={false} badge={`${total} indicators`}>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1.75 }}>
+        <MuiButton onClick={print} data-recon-print variant="outlined" size="small"
+          startIcon={<Printer size={12}/>} sx={{ color: '#B286FF', borderColor: muiAlpha('#B286FF', 0.4) }}>
+          Print / Save PDF
+        </MuiButton>
+      </Box>
 
-      <div ref={ref} style={{ background:t.bg, border:`1px solid ${t.line}`, borderRadius:6, padding:28 }}>
-        <header style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end',
-          marginBottom:22, paddingBottom:16, borderBottom:`1px solid ${t.line}` }}>
-          <div>
-            <h1 style={{ fontSize:20, color:t.fg, fontWeight:700, letterSpacing:'-0.02em', margin:0 }}>
-              Threat intelligence report
-            </h1>
-            <div style={{ fontSize:12, color:t.fgDim, marginTop:4 }}>RECON Platform</div>
-          </div>
-          <div style={{ textAlign:'right', fontSize:12, color:t.fgMute }}>
-            <div style={{ fontVariantNumeric:'tabular-nums' }}>{ts.toLocaleDateString()}</div>
-            <div style={{ fontVariantNumeric:'tabular-nums' }}>{ts.toLocaleTimeString()}</div>
-          </div>
-        </header>
+      <Box ref={ref} sx={{
+        backgroundColor: '#070d19',
+        border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+        borderRadius: '4px', p: 3.5,
+      }}>
+        <Box component="header" sx={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end',
+          mb: 2.75, pb: 2, borderBottom: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+        }}>
+          <Box>
+            <Typography component="h1" sx={{
+              fontSize: 20, color: 'text.primary', fontWeight: 700, letterSpacing: '-0.02em',
+            }}>Threat intelligence report</Typography>
+            <Typography sx={{ fontSize: 12, color: 'text.disabled', mt: 0.5 }}>RECON Platform</Typography>
+          </Box>
+          <Box sx={{ textAlign: 'right', fontSize: 12, color: 'text.tertiary' }}>
+            <Box sx={{ fontVariantNumeric: 'tabular-nums' }}>{ts.toLocaleDateString()}</Box>
+            <Box sx={{ fontVariantNumeric: 'tabular-nums' }}>{ts.toLocaleTimeString()}</Box>
+          </Box>
+        </Box>
 
-        <div style={{ marginBottom:18 }}>
-          <label style={{ fontSize:12, color:t.fgDim, display:'block', marginBottom:6 }}>Analyst</label>
-          <input value={analyst} onChange={e=>setAnalyst(e.target.value)} placeholder="Your name" style={inputStyle}/>
-        </div>
+        <Box sx={{ mb: 2.25 }}>
+          <Typography component="label" sx={{
+            fontSize: 12, color: 'text.disabled', display: 'block', mb: 0.75,
+          }}>Analyst</Typography>
+          <MuiTextField value={analyst} onChange={e => setAnalyst(e.target.value)}
+            placeholder="Your name" size="small" fullWidth/>
+        </Box>
 
-        <div style={{ background:lc.bg, border:`1px solid ${lc.line}`, borderRadius:6,
-          padding:'14px 16px', marginBottom:20 }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-              <span style={{ width:8, height:8, borderRadius:99, background:lc.fg }}/>
-              <span style={{ color:lc.fg, fontWeight:600, fontSize:13 }}>{rs.threat_level}</span>
-            </div>
-            <span style={{ fontSize:12, color:t.fgMute }}>
-              Confidence {Math.round((rs.confidence||0)*100)}%
-            </span>
-          </div>
-          <p style={{ fontSize:13, color:t.fg, lineHeight:1.7, margin:0 }}>{rs.summary}</p>
-        </div>
+        <MuiPaper elevation={0} sx={{
+          backgroundColor: lc.bg,
+          border: `1px solid ${lc.line}`,
+          borderRadius: '4px', p: '14px 16px', mb: 2.5,
+        }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ width: 8, height: 8, borderRadius: 99, backgroundColor: lc.fg }}/>
+              <Typography sx={{ color: lc.fg, fontWeight: 600, fontSize: 13 }}>{rs.threat_level}</Typography>
+            </Box>
+            <Typography sx={{ fontSize: 12, color: 'text.tertiary' }}>
+              Confidence {Math.round((rs.confidence || 0) * 100)}%
+            </Typography>
+          </Box>
+          <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.7 }}>{rs.summary}</Typography>
+        </MuiPaper>
 
         <Typography variant="h3" sx={{ fontSize:13, color:'text.tertiary', fontWeight:500, mb:1 }}>
           Indicator inventory · {total}
@@ -2206,28 +2213,39 @@ function Report({ result }) {
           </>
         )}
 
-        {rs.recommended_actions?.length>0 && (
+        {rs.recommended_actions?.length > 0 && (
           <>
-            <h3 style={{ fontSize:13, color:t.fgMute, fontWeight:500, margin:'0 0 8px 0' }}>Recommended actions</h3>
-            <ol style={{ paddingLeft:20, marginBottom:20 }}>
-              {rs.recommended_actions.map((a,i)=>(
-                <li key={i} style={{ fontSize:13, color:t.fg, lineHeight:1.7, marginBottom:4 }}>{a}</li>
+            <Typography variant="h3" sx={{
+              fontSize: 13, color: 'text.tertiary', fontWeight: 500, mb: 1,
+            }}>Recommended actions</Typography>
+            <Box component="ol" sx={{ pl: 2.5, mb: 2.5 }}>
+              {rs.recommended_actions.map((a, i) => (
+                <Box component="li" key={i} sx={{
+                  fontSize: 13, color: 'text.primary', lineHeight: 1.7, mb: 0.5,
+                }}>{a}</Box>
               ))}
-            </ol>
+            </Box>
           </>
         )}
 
-        <h3 style={{ fontSize:13, color:t.fgMute, fontWeight:500, margin:'0 0 8px 0' }}>Analyst notes</h3>
-        <textarea value={notes} onChange={e=>setNotes(e.target.value)}
+        <Typography variant="h3" sx={{
+          fontSize: 13, color: 'text.tertiary', fontWeight: 500, mb: 1,
+        }}>Analyst notes</Typography>
+        <MuiTextField value={notes} onChange={e => setNotes(e.target.value)}
           placeholder="Add observations, context, or follow-up items..."
-          style={{ ...inputStyle, resize:'vertical', lineHeight:1.7, minHeight:90 }}/>
+          multiline minRows={4} fullWidth size="small"
+          sx={{ '& .MuiInputBase-input': { lineHeight: 1.7 } }}/>
 
-        <div style={{ borderTop:`1px solid ${t.line}`, paddingTop:14, marginTop:20,
-          display:'flex', justifyContent:'space-between', fontSize:11, color:t.fgDim }}>
-          <span style={{ fontVariantNumeric:'tabular-nums' }}>{ts.toISOString()}</span>
-          <span>Confidential — Internal use only</span>
-        </div>
-      </div>
+        <Box sx={{
+          borderTop: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+          pt: 1.75, mt: 2.5,
+          display: 'flex', justifyContent: 'space-between',
+          fontSize: 11, color: 'text.disabled',
+        }}>
+          <Box component="span" sx={{ fontVariantNumeric: 'tabular-nums' }}>{ts.toISOString()}</Box>
+          <Box component="span">Confidential — Internal use only</Box>
+        </Box>
+      </Box>
     </Card>
   );
 }
@@ -2728,159 +2746,193 @@ function FileScanner() {
       {error && (
         <Box sx={{ color: 'error.main', fontSize: 12, mb: 1.25, mt: 1.25 }}>{error}</Box>
       )}
-      {result && (
+      {result && (() => {
+        const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
+        const stateColor = (s) => s === 'SUCCESS' ? '#16AD34' : s === 'ERROR' ? '#EE3838' : '#0fbcff';
+        return (
         <>
-          <div style={{ background:t.raised, border:`1px solid ${t.line}`, borderRadius:6,
-            padding:'10px 12px', marginBottom:10 }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
-              <span style={{ fontSize:13, fontWeight:600, color:t.fg }}>{result.filename}</span>
-              <span style={{ fontSize:11, color:t.fgDim }}>{(result.size/1024).toFixed(1)} KB</span>
-            </div>
-            {['md5','sha1','sha256'].map(k => (
-              <div key={k} style={{ display:'flex', gap:8, fontSize:11, padding:'2px 0' }}>
-                <span style={{ color:t.fgDim, minWidth:50 }}>{k}</span>
-                <span style={{ color:t.fg, fontFamily:'JetBrains Mono', wordBreak:'break-all' }}>
+          <MuiPaper elevation={0} sx={{
+            backgroundColor: '#0C1524',
+            border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+            borderRadius: '4px', p: '10px 12px', mb: 1.25,
+          }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+              <Typography sx={{ fontSize: 13, fontWeight: 600, color: 'text.primary' }}>{result.filename}</Typography>
+              <Typography sx={{ fontSize: 11, color: 'text.disabled' }}>{(result.size / 1024).toFixed(1)} KB</Typography>
+            </Box>
+            {['md5', 'sha1', 'sha256'].map(k => (
+              <Box key={k} sx={{ display: 'flex', gap: 1, fontSize: 11, py: 0.25 }}>
+                <Box component="span" sx={{ color: 'text.disabled', minWidth: 50 }}>{k}</Box>
+                <Box component="span" sx={{ color: 'text.primary', ...monoSx, wordBreak: 'break-all' }}>
                   {result.hashes[k]}
-                </span>
-              </div>
+                </Box>
+              </Box>
             ))}
-          </div>
+          </MuiPaper>
           {result.loldrivers_hit && (
-            <div style={{ background:t.redDim, border:`1px solid ${t.red}40`, borderLeft:`3px solid ${t.red}`,
-              borderRadius:6, padding:'10px 12px', marginBottom:10 }}>
-              <div style={{ fontSize:12, color:t.red, fontWeight:600, marginBottom:4 }}>
+            <MuiPaper elevation={0} sx={{
+              backgroundColor: muiAlpha('#EE3838', 0.08),
+              border: `1px solid ${muiAlpha('#EE3838', 0.25)}`,
+              borderLeft: `3px solid #EE3838`,
+              borderRadius: '4px', p: '10px 12px', mb: 1.25,
+            }}>
+              <Typography sx={{ fontSize: 12, color: 'error.main', fontWeight: 600, mb: 0.5 }}>
                 ⚠ Known vulnerable/malicious driver (LOLDrivers)
-              </div>
-              <div style={{ fontSize:11, color:t.fg }}>
+              </Typography>
+              <Typography sx={{ fontSize: 11, color: 'text.primary' }}>
                 Category: {result.loldrivers_hit.category} · MITRE: {result.loldrivers_hit.mitre}
-              </div>
-            </div>
+              </Typography>
+            </MuiPaper>
           )}
 
           {/* Cloud sandbox lookup — Hybrid Analysis / ANY.RUN */}
           {result.sandbox && Object.entries(result.sandbox).map(([name, sb]) => {
             const verdict = (sb.verdict || '').toLowerCase();
-            const color = verdict.includes('mali') || verdict.includes('high') ? t.red
-              : verdict.includes('suspic') || verdict.includes('medium') ? t.orange
-              : verdict.includes('clean') || verdict.includes('benign') || verdict.includes('no_specific') ? t.green
-              : t.fgMute;
+            const color = verdict.includes('mali') || verdict.includes('high') ? '#EE3838'
+              : verdict.includes('suspic') || verdict.includes('medium') ? '#E6700F'
+              : verdict.includes('clean') || verdict.includes('benign') || verdict.includes('no_specific') ? '#16AD34'
+              : '#848592';
             const label = name === 'hybrid_analysis' ? 'Hybrid Analysis (CrowdStrike Falcon Sandbox)' : 'ANY.RUN';
             return (
-              <div key={name} style={{ background:t.raised, border:`1px solid ${t.line}`,
-                borderLeft:`3px solid ${color}`, borderRadius:6, padding:'12px 14px', marginBottom:10 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-                  <span style={{ fontSize:12, fontWeight:600, color:t.fg }}>{label}</span>
-                  {sb.url && <a href={sb.url} target="_blank" rel="noreferrer"
-                    style={{ fontSize:11, color:t.cy, display:'inline-flex', alignItems:'center', gap:2 }}>
-                    view report <ArrowUpRight size={11}/>
-                  </a>}
-                </div>
-                <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:6 }}>
-                  <Chip color={color} soft={`${color}14`}>verdict: {sb.verdict || 'unknown'}</Chip>
-                  {sb.threat_score != null && <Chip color={t.orange} size="xs">score {sb.threat_score}</Chip>}
-                  {sb.malware_family && (Array.isArray(sb.malware_family) ? sb.malware_family[0] : sb.malware_family) &&
-                    <Chip color={t.red} soft={t.redDim} size="xs">
-                      {Array.isArray(sb.malware_family) ? sb.malware_family[0] : sb.malware_family}
-                    </Chip>}
-                  {sb.av_detect != null && <Chip color={t.fgMute} size="xs">AV {sb.av_detect}%</Chip>}
-                </div>
+              <MuiPaper key={name} elevation={0} sx={{
+                backgroundColor: '#0C1524',
+                border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+                borderLeft: `3px solid ${color}`,
+                borderRadius: '4px', p: '12px 14px', mb: 1.25,
+              }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
+                  <Typography sx={{ fontSize: 12, fontWeight: 600, color: 'text.primary' }}>{label}</Typography>
+                  {sb.url && (
+                    <Box component="a" href={sb.url} target="_blank" rel="noreferrer" sx={{
+                      fontSize: 11, color: 'primary.main',
+                      display: 'inline-flex', alignItems: 'center', gap: 0.25,
+                      textDecoration: 'none', '&:hover': { textDecoration: 'underline' },
+                    }}>view report <ArrowUpRight size={11}/></Box>
+                  )}
+                </Box>
+                <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 0.75 }}>
+                  <MuiTag label={`verdict: ${sb.verdict || 'unknown'}`} color={color}/>
+                  {sb.threat_score != null && <MuiTag label={`score ${sb.threat_score}`} color="#E6700F"/>}
+                  {sb.malware_family && (Array.isArray(sb.malware_family) ? sb.malware_family[0] : sb.malware_family) && (
+                    <MuiTag color="#EE3838"
+                      label={Array.isArray(sb.malware_family) ? sb.malware_family[0] : sb.malware_family}/>
+                  )}
+                  {sb.av_detect != null && <MuiTag label={`AV ${sb.av_detect}%`} color="#848592"/>}
+                </Stack>
                 {sb.mitre?.length > 0 && (
-                  <div style={{ fontSize:11, color:t.fgMute }}>
+                  <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
                     MITRE: {sb.mitre.filter(Boolean).slice(0, 6).join(' · ')}
-                  </div>
+                  </Typography>
                 )}
                 {sb.tags?.length > 0 && (
-                  <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:5 }}>
-                    {sb.tags.slice(0, 8).map(tag => <Chip key={tag} color={t.fgDim} size="xs">{tag}</Chip>)}
-                  </div>
+                  <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ mt: 0.625 }}>
+                    {sb.tags.slice(0, 8).map(tag => <MuiTag key={tag} label={tag} color="#848592"/>)}
+                  </Stack>
                 )}
-              </div>
+              </MuiPaper>
             );
           })}
           {/* No existing sandbox report → offer to detonate */}
           {result.sha256 && !hasReport && !submission && (
-            <div style={{ background:t.raised, border:`1px dashed ${t.line}`, borderRadius:6,
-              padding:'12px 14px', marginBottom:10, display:'flex', justifyContent:'space-between',
-              alignItems:'center', gap:10 }}>
-              <div>
-                <div style={{ fontSize:12, color:t.fg, fontWeight:500 }}>No existing sandbox report</div>
-                <div style={{ fontSize:11, color:t.fgMute, marginTop:2 }}>
+            <MuiPaper elevation={0} sx={{
+              backgroundColor: '#0C1524',
+              border: `1px dashed ${muiAlpha('#ffffff', 0.12)}`,
+              borderRadius: '4px', p: '12px 14px', mb: 1.25,
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1.25,
+            }}>
+              <Box>
+                <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 500 }}>
+                  No existing sandbox report
+                </Typography>
+                <Typography sx={{ fontSize: 11, color: 'text.tertiary', mt: 0.25 }}>
                   Submit to Hybrid Analysis for fresh detonation (typically 3–10 minutes).
-                </div>
-              </div>
-              <button onClick={detonate} style={{ background:t.cyDim, border:`1px solid ${t.cyLine}`,
-                color:t.cy, padding:'7px 14px', borderRadius:5, cursor:'pointer', fontSize:12, fontWeight:600 }}>
-                Detonate sample
-              </button>
-            </div>
+                </Typography>
+              </Box>
+              <MuiButton variant="contained" size="small" onClick={detonate}>Detonate sample</MuiButton>
+            </MuiPaper>
           )}
 
           {/* Submission in progress */}
           {submission && (
-            <div style={{ background:t.raised, border:`1px solid ${
-              submission.state === 'SUCCESS' ? t.green
-              : submission.state === 'ERROR'  ? t.red
-              : t.cy}40`,
-              borderLeft:`3px solid ${
-                submission.state === 'SUCCESS' ? t.green
-                : submission.state === 'ERROR'  ? t.red
-                : t.cy}`,
-              borderRadius:6, padding:'12px 14px', marginBottom:10 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-                <span style={{ fontSize:12, color:t.fg, fontWeight:600 }}>
+            <MuiPaper elevation={0} sx={{
+              backgroundColor: '#0C1524',
+              border: `1px solid ${muiAlpha(stateColor(submission.state), 0.25)}`,
+              borderLeft: `3px solid ${stateColor(submission.state)}`,
+              borderRadius: '4px', p: '12px 14px', mb: 1.25,
+            }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
+                <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 600 }}>
                   Hybrid Analysis · {submission.filename || 'sample'}
-                </span>
-                <Chip color={
-                  submission.state === 'SUCCESS' ? t.green
-                  : submission.state === 'ERROR'  ? t.red
-                  : t.cy}>{submission.state}</Chip>
-              </div>
-              {submission.state === 'IN_QUEUE'    && <div style={{ fontSize:11, color:t.fgMute }}>Queued for detonation…</div>}
-              {submission.state === 'IN_PROGRESS' && <div style={{ fontSize:11, color:t.fgMute }}>Detonating in Windows 10 sandbox… polling every 30s</div>}
-              {submission.state === 'ERROR'      && <div style={{ fontSize:11, color:t.red }}>{submission.error || 'Submission error'}</div>}
+                </Typography>
+                <MuiTag label={submission.state} color={stateColor(submission.state)}/>
+              </Box>
+              {submission.state === 'IN_QUEUE' && (
+                <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>Queued for detonation…</Typography>
+              )}
+              {submission.state === 'IN_PROGRESS' && (
+                <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
+                  Detonating in Windows 10 sandbox… polling every 30s
+                </Typography>
+              )}
+              {submission.state === 'ERROR' && (
+                <Typography sx={{ fontSize: 11, color: 'error.main' }}>
+                  {submission.error || 'Submission error'}
+                </Typography>
+              )}
               {submission.state === 'SUCCESS' && submission.summary && (
                 <>
-                  <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:8 }}>
-                    <Chip color={t.fg}>verdict: {submission.summary.verdict}</Chip>
-                    {submission.summary.threat_score != null && <Chip color={t.orange} size="xs">score {submission.summary.threat_score}</Chip>}
-                    {submission.summary.malware_family && <Chip color={t.red} size="xs">
-                      {Array.isArray(submission.summary.malware_family)
-                        ? submission.summary.malware_family[0]
-                        : submission.summary.malware_family}
-                    </Chip>}
-                  </div>
-                  {submission.summary.url && <a href={submission.summary.url} target="_blank" rel="noreferrer"
-                    style={{ fontSize:11, color:t.cy, marginTop:8, display:'inline-flex', alignItems:'center', gap:2 }}>
-                    View full report <ArrowUpRight size={11}/>
-                  </a>}
+                  <Stack direction="row" spacing={0.75} flexWrap="wrap" sx={{ mt: 1 }}>
+                    <MuiTag label={`verdict: ${submission.summary.verdict}`} color="#16AD34"/>
+                    {submission.summary.threat_score != null && (
+                      <MuiTag label={`score ${submission.summary.threat_score}`} color="#E6700F"/>
+                    )}
+                    {submission.summary.malware_family && (
+                      <MuiTag color="#EE3838"
+                        label={Array.isArray(submission.summary.malware_family)
+                          ? submission.summary.malware_family[0]
+                          : submission.summary.malware_family}/>
+                    )}
+                  </Stack>
+                  {submission.summary.url && (
+                    <Box component="a" href={submission.summary.url} target="_blank" rel="noreferrer" sx={{
+                      fontSize: 11, color: 'primary.main', mt: 1,
+                      display: 'inline-flex', alignItems: 'center', gap: 0.25,
+                      textDecoration: 'none', '&:hover': { textDecoration: 'underline' },
+                    }}>View full report <ArrowUpRight size={11}/></Box>
+                  )}
                 </>
               )}
-            </div>
+            </MuiPaper>
           )}
 
           {result.yara_matches?.length > 0 ? (
             <Block title={`YARA matches (${result.yara_matches.length})`}>
-              {result.yara_matches.map((m,i) => (
-                <li key={i} style={{ padding:'7px 0', listStyle:'none',
-                  borderTop: i>0?`1px solid ${t.line}`:'none' }}>
-                  <div style={{ fontSize:12, color:t.fg, fontFamily:'JetBrains Mono', marginBottom:3 }}>
-                    {m.rule}
-                  </div>
-                  {m.description && <div style={{ fontSize:11, color:t.fgMute, lineHeight:1.5 }}>{m.description}</div>}
-                  <div style={{ display:'flex', gap:6, marginTop:4, flexWrap:'wrap' }}>
-                    {m.tags?.map(tag => <Chip key={tag} color={t.fgMute} size="xs">{tag}</Chip>)}
-                    {m.author && <span style={{ fontSize:10, color:t.fgDim }}>by {m.author}</span>}
-                  </div>
-                </li>
+              {result.yara_matches.map((m, i) => (
+                <Box component="li" key={i} sx={{
+                  py: 0.875, listStyle: 'none',
+                  borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
+                }}>
+                  <Box sx={{ fontSize: 12, color: 'text.primary', ...monoSx, mb: 0.375 }}>{m.rule}</Box>
+                  {m.description && (
+                    <Typography sx={{ fontSize: 11, color: 'text.tertiary', lineHeight: 1.5 }}>{m.description}</Typography>
+                  )}
+                  <Stack direction="row" spacing={0.75} flexWrap="wrap" alignItems="center" sx={{ mt: 0.5 }}>
+                    {m.tags?.map(tag => <MuiTag key={tag} label={tag} color="#848592"/>)}
+                    {m.author && (
+                      <Box component="span" sx={{ fontSize: 10, color: 'text.disabled' }}>by {m.author}</Box>
+                    )}
+                  </Stack>
+                </Box>
               ))}
             </Block>
           ) : (
-            <div style={{ fontSize:12, color:t.green, padding:'8px 0' }}>
+            <Typography sx={{ fontSize: 12, color: 'success.main', py: 1 }}>
               No YARA matches — file is clean against {result.yara_matches?.length === 0 ? 'all loaded rules' : 'available rules'}.
-            </div>
+            </Typography>
           )}
         </>
-      )}
+        );
+      })()}
     </Card>
   );
 }
