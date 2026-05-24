@@ -1157,6 +1157,142 @@ async def sandbox_job_status(job_id: str):
     return {"job_id": job_id, **record}
 
 
+# ─── REPORT GENERATION (spec §10) ────────────────────────────────────────────────
+def _build_report(run_id: str, state: dict) -> dict:
+    rs = state.get("response_summary") or {}
+    iocs = state.get("iocs") or {}
+    techniques = state.get("mitre_techniques") or rs.get("mitre_techniques") or []
+
+    # Group recommended_actions by IMMEDIATE / SHORTTERM / LONGTERM per spec §5
+    actions = rs.get("recommended_actions") or []
+    grouped = {"IMMEDIATE": [], "SHORTTERM": [], "LONGTERM": []}
+    for a in actions:
+        if isinstance(a, dict):
+            prio = (a.get("priority") or "SHORTTERM").upper()
+            grouped.setdefault(prio, []).append(a)
+        else:
+            grouped["SHORTTERM"].append({"action": str(a), "priority": "SHORTTERM"})
+
+    mitre_table = []
+    for t in techniques:
+        tid = str(t).split(" ")[0]
+        mitre_table.append({
+            "id":   tid,
+            "name": (str(t).split(" - ", 1)[1] if " - " in str(t) else ""),
+            "url":  f"https://attack.mitre.org/techniques/{tid.replace('.', '/')}/",
+        })
+
+    return {
+        "metadata": {
+            "run_id":           run_id,
+            "label":            state.get("label", ""),
+            "analyst":          state.get("analyst", ""),
+            "generated_at":     datetime.now(timezone.utc).isoformat(),
+            "investigation_at": state.get("timestamp"),
+            "platform_version": "RECON 1.0",
+        },
+        "executive_summary":   rs.get("summary") or "",
+        "threat_level":        rs.get("threat_level") or state.get("threat_level"),
+        "confidence":          rs.get("confidence") or state.get("confidence"),
+        "malware_family":      state.get("malware_family") or rs.get("malware_family"),
+        "threat_actor":        state.get("threat_actor") or rs.get("threat_actor"),
+        "campaign":            state.get("campaign") or rs.get("campaign"),
+        "attack_stage":        state.get("attack_stage") or rs.get("attack_stage"),
+        "technical_findings": {
+            "key_findings":     rs.get("key_findings") or [],
+            "chain_of_thought": rs.get("chain_of_thought") or [],
+            "ioc_assessments":  rs.get("ioc_assessments") or [],
+            "iocs":             iocs,
+            "suppressed_iocs":  state.get("suppressed_iocs") or {},
+        },
+        "detection_content": {
+            "sigma":  state.get("sigma_rule"),
+            "kql":    state.get("kql_query"),
+            "spl":    state.get("splunk_spl"),
+            "yara":   state.get("yara_rule"),
+        },
+        "mitre_coverage":      mitre_table,
+        "recommended_actions": grouped,
+        "analyst_notes":       rs.get("analyst_notes") or "",
+        "appendix": {
+            "enrichments": state.get("enrichments") or {},
+            "cross_refs":  state.get("cross_refs") or {},
+            "gti_scores":  state.get("gti_scores") or {},
+        },
+    }
+
+
+@app.get("/api/report/{run_id}")
+async def report_full(run_id: str):
+    """Spec §10: full structured report for the front-end + export buttons."""
+    if run_id in _results:
+        state = _results[run_id]
+    else:
+        from intel.case_store import load_case
+        state = load_case(run_id)
+        if not state:
+            raise HTTPException(404, "Run not found")
+    return _build_report(run_id, state)
+
+
+@app.get("/api/report/{run_id}/markdown")
+async def report_markdown(run_id: str):
+    """Spec §10: Markdown report for pasting into Jira / Confluence / Slack."""
+    if run_id in _results:
+        state = _results[run_id]
+    else:
+        from intel.case_store import load_case
+        state = load_case(run_id)
+        if not state:
+            raise HTTPException(404, "Run not found")
+    r = _build_report(run_id, state)
+    lines = []
+    m = r["metadata"]
+    lines.append(f"# Threat intelligence report — {m['label'] or 'Untitled'}")
+    lines.append(f"**Run ID:** `{m['run_id']}`  ")
+    lines.append(f"**Generated:** {m['generated_at']}  ")
+    lines.append(f"**Analyst:** {m['analyst'] or '_unassigned_'}  ")
+    lines.append(f"**Platform:** {m['platform_version']}\n")
+    lines.append(f"## Verdict")
+    lines.append(f"- **Threat level:** {r['threat_level']}")
+    lines.append(f"- **Confidence:** {r['confidence']}")
+    if r["malware_family"]:    lines.append(f"- **Malware family:** {r['malware_family']}")
+    if r["threat_actor"]:      lines.append(f"- **Threat actor:** {r['threat_actor']}")
+    if r["campaign"]:          lines.append(f"- **Campaign:** {r['campaign']}")
+    if r["attack_stage"]:      lines.append(f"- **Attack stage:** {r['attack_stage']}")
+    lines.append("")
+    lines.append("## Executive summary")
+    lines.append(r["executive_summary"] or "_no summary available_")
+    lines.append("")
+    lines.append("## Key findings")
+    for f in r["technical_findings"]["key_findings"]:
+        lines.append(f"- {f}")
+    lines.append("")
+    lines.append("## MITRE ATT&CK coverage")
+    for t in r["mitre_coverage"]:
+        lines.append(f"- [{t['id']}]({t['url']}) — {t['name']}")
+    lines.append("")
+    for prio, items in r["recommended_actions"].items():
+        if not items:
+            continue
+        lines.append(f"## Recommended actions ({prio.lower()})")
+        for a in items:
+            txt = a.get("action") if isinstance(a, dict) else str(a)
+            tf = a.get("timeframe", "") if isinstance(a, dict) else ""
+            lines.append(f"- {txt}" + (f" _(by {tf})_" if tf else ""))
+        lines.append("")
+    lines.append("## Detection content")
+    dc = r["detection_content"]
+    for label, content in (("Sigma", dc["sigma"]), ("KQL", dc["kql"]),
+                           ("Splunk SPL", dc["spl"]), ("YARA", dc["yara"])):
+        if content:
+            lines.append(f"### {label}")
+            lines.append("```")
+            lines.append(content)
+            lines.append("```")
+    return JSONResponse(content={"markdown": "\n".join(lines)})
+
+
 # ─── HISTORY ──────────────────────────────────────────────────────────────────────
 @app.get("/api/history")
 async def get_history():
