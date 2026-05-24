@@ -1766,6 +1766,23 @@ function AnalystSummary({ rs }) {
 }
 
 /* ─── Chat with RECON · conversational follow-up on the investigation ───────── */
+// Evergreen investigation prompts shown when the backend didn't return any
+// AI-generated probing_questions. Same shape as the AI ones so the click-to-
+// ask handler treats them identically.
+const FALLBACK_QUESTIONS = [
+  { question: "Are there other endpoints or accounts showing the same behavior right now?",
+    why_asking: "Single-host detections are usually FP; a pattern across multiple hosts points to active intrusion." },
+  { question: "What did this user / process do in the 30 minutes before this alert fired?",
+    why_asking: "Preceding activity often reveals the initial access vector and intent." },
+  { question: "Has this user, host, or IOC appeared in any prior investigation in the last 90 days?",
+    why_asking: "Repeat sightings imply long-dwell or a recurring TTP from the same actor." },
+  { question: "Is the observed activity consistent with this user's normal role and working hours?",
+    why_asking: "Out-of-baseline activity (timezone, app, command) is the strongest signal of compromise vs. expected admin work." },
+  { question: "What persistence, lateral-movement, or exfil indicators showed up after this event?",
+    why_asking: "Confirms whether the alert is isolated or part of an active kill-chain in progress." },
+];
+
+
 function ChatWithRecon({ result }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput]       = useState('');
@@ -1777,7 +1794,12 @@ function ChatWithRecon({ result }) {
 
   const runId = result?.runId;
   const rs    = result?.response_summary || {};
-  const questions = rs.probing_questions || [];
+  // Use the AI-generated probing questions when the investigation produced
+  // any; otherwise fall back to a generic-but-evergreen set so the analyst
+  // always has clickable starting points (helps when the AI omits the field).
+  const aiQuestions = rs.probing_questions || [];
+  const questions = aiQuestions.length > 0 ? aiQuestions : FALLBACK_QUESTIONS;
+  const usingFallback = aiQuestions.length === 0;
   const classification = rs.verdict_classification;
 
   // Load history when run changes
@@ -1920,7 +1942,9 @@ function ChatWithRecon({ result }) {
 
   return (
     <Card title="Ask RECON" accent={accent} defaultOpen
-      badge={questions.length > 0 ? `${questions.length} suggested checks` : null}>
+      badge={questions.length > 0
+        ? `${questions.length} ${usingFallback ? 'starter questions' : 'suggested checks'}`
+        : null}>
       {banner && (
         <Typography sx={{ fontSize:12, color:'text.tertiary', mb:1.5, lineHeight:1.55 }}>
           {banner}
@@ -1937,7 +1961,9 @@ function ChatWithRecon({ result }) {
               fontSize:11, color:'text.tertiary', fontWeight:500,
               textTransform:'uppercase', letterSpacing:'0.06em',
             }}>
-              {isAmbiguous ? 'Probing questions' : 'Things to verify · click — RECON asks, you answer'}
+              {usingFallback
+                ? 'Investigation starting points · click one to ask RECON'
+                : (isAmbiguous ? 'Probing questions' : 'Things to verify · click — RECON asks, you answer')}
             </Typography>
           </Box>
           <Stack spacing={1}>
