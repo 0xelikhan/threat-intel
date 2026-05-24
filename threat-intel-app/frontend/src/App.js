@@ -1916,7 +1916,9 @@ function ChatWithRecon({ result }) {
   const [input, setInput]       = useState('');
   const [sending, setSending]   = useState(false);
   const [error, setError]       = useState(null);
+  const [pendingQuestion, setPendingQuestion] = useState(null);
   const scrollRef = useRef(null);
+  const textareaRef = useRef(null);
 
   const runId = result?.runId;
   const rs    = result?.response_summary || {};
@@ -1937,16 +1939,48 @@ function ChatWithRecon({ result }) {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior:'smooth' });
   }, [messages, sending]);
 
+  // Click-to-ask: the question text appears as a synthetic AI message; the
+  // analyst types their finding in the regular input. On submit we send the
+  // backend a composed prompt that includes both so the AI knows what was
+  // being answered, but the local chat shows just the analyst's raw answer.
+  const askQuestion = (q) => {
+    if (!q || sending) return;
+    setPendingQuestion(q);
+    setMessages(m => [
+      ...m,
+      { role: 'assistant',
+        content: q.question,
+        _from_card: true,
+        _question_meta: q,
+        timestamp: new Date().toISOString() },
+    ]);
+    setTimeout(() => textareaRef.current?.focus(), 50);
+  };
+
   const send = async (msgOverride) => {
-    const text = (msgOverride ?? input).trim();
-    if (!text || !runId || sending) return;
+    const rawText = (msgOverride ?? input).trim();
+    if (!rawText || !runId || sending) return;
     setSending(true); setError(null);
     if (!msgOverride) setInput('');
+
+    // If the analyst is answering a question that was clicked from the cards,
+    // compose a richer prompt for the backend but keep the local chat clean.
+    let backendText = rawText;
+    if (pendingQuestion) {
+      const q = pendingQuestion;
+      backendText =
+        `RECON asked: ${q.question}\n\n` +
+        `My investigation found: ${rawText}\n\n` +
+        (q.if_yes_means ? `(If the answer is yes, that means: ${q.if_yes_means})\n` : '') +
+        (q.if_no_means  ? `(If the answer is no, that means: ${q.if_no_means})\n` : '') +
+        `\nGiven what I found, what's the interpretation and what should I check next?`;
+      setPendingQuestion(null);
+    }
 
     // Push user message immediately + an empty assistant placeholder we'll fill via stream
     setMessages(m => [
       ...m,
-      { role:'user', content:text, timestamp:new Date().toISOString() },
+      { role:'user', content:rawText, timestamp:new Date().toISOString() },
       { role:'assistant', content:'', tool_calls:[], _streaming:true,
         timestamp:new Date().toISOString() },
     ]);
@@ -1954,7 +1988,7 @@ function ChatWithRecon({ result }) {
     try {
       const resp = await fetch(`/api/chat/${runId}`, {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: backendText }),
       });
       if (!resp.ok) {
         const errBody = await resp.json().catch(() => ({}));
@@ -2047,12 +2081,12 @@ function ChatWithRecon({ result }) {
               fontSize:11, color:'text.tertiary', fontWeight:500,
               textTransform:'uppercase', letterSpacing:'0.06em',
             }}>
-              {isAmbiguous ? 'Probing questions' : 'Things to verify · click to ask'}
+              {isAmbiguous ? 'Probing questions' : 'Things to verify · click — RECON asks, you answer'}
             </Typography>
           </Box>
           <Stack spacing={1}>
             {questions.map((q, i) => (
-              <MuiPaper key={i} onClick={() => send(q.question)} elevation={0}
+              <MuiPaper key={i} onClick={() => askQuestion(q)} elevation={0}
                 sx={{
                   p:'11px 14px', cursor:'pointer',
                   border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
@@ -2168,21 +2202,57 @@ function ChatWithRecon({ result }) {
         })}
       </Box>
 
+      {/* Answering-a-question banner */}
+      {pendingQuestion && (
+        <Box sx={{
+          mb: 1, p: '8px 12px',
+          backgroundColor: muiAlpha(accent, 0.08),
+          border: `1px solid ${muiAlpha(accent, 0.4)}`,
+          borderLeft: `3px solid ${accent}`,
+          borderRadius: '4px',
+          display: 'flex', alignItems: 'flex-start', gap: 1, justifyContent: 'space-between',
+        }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ fontSize: 10, color: 'text.tertiary', fontWeight: 600,
+              textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.25 }}>
+              Answering RECON's question
+            </Typography>
+            <Typography sx={{ fontSize: 12, color: 'text.primary', lineHeight: 1.5 }}>
+              {pendingQuestion.question}
+            </Typography>
+          </Box>
+          <MuiIconButton size="small" onClick={() => {
+            setPendingQuestion(null);
+            // Also drop the synthetic AI bubble we just added if it's still the last one
+            setMessages(m => {
+              const last = m[m.length - 1];
+              return last?._from_card ? m.slice(0, -1) : m;
+            });
+          }} title="Cancel and clear the question"
+            sx={{ color: 'text.tertiary', '&:hover': { color: 'text.primary' } }}>
+            <X size={14}/>
+          </MuiIconButton>
+        </Box>
+      )}
+
       {/* Input row */}
       <Stack direction="row" spacing={1}>
         <MuiTextField
+          inputRef={textareaRef}
           multiline rows={2} fullWidth variant="outlined"
           value={input} onChange={e => setInput(e.target.value)}
           onKeyDown={e => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
           }}
-          placeholder='Ask anything — "Is this likely a vulnerability scanner?", "Look up this hash in sandbox"…'
+          placeholder={pendingQuestion
+            ? 'Type what you found when checking this — RECON will interpret your answer…'
+            : 'Ask anything — "Is this likely a vulnerability scanner?", "Look up this hash in sandbox"…'}
           sx={{ flex:1, '& .MuiOutlinedInput-input': { fontSize:13, lineHeight:1.5 } }}
         />
         <MuiButton variant="contained"
           onClick={() => send()} disabled={sending || !input.trim()}
           sx={{ alignSelf:'stretch', minWidth:64 }}>
-          Send
+          {pendingQuestion ? 'Answer' : 'Send'}
         </MuiButton>
       </Stack>
       <Typography sx={{ fontSize:10, color:'text.tertiary', mt:0.75, textAlign:'right' }}>
