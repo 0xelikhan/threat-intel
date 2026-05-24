@@ -3864,7 +3864,12 @@ export default function App() {
       color: 'text.primary',
     }}>
       <Sidebar
-        onResult={setResult}
+        onResult={(r) => {
+          // Starting (r=null) or finishing an Analyze run dismisses the
+          // file scanner view so the analysis result owns the main area.
+          clearScan();
+          setResult(r);
+        }}
         onPartialResult={mergePartial}
         currentResult={result}
         onScanFile={scanFile}

@@ -1140,33 +1140,26 @@ async def scan_file_v2(file: UploadFile = File(...)):
     except Exception as e:
         analysis["threat_intel"] = {"error": str(e)}
 
-    # AI-generated YARA rule per file (best-effort)
+    # Run the three AI workflows in PARALLEL — previously they ran serially
+    # which made total scan time = sum of all three (~60-90s worst case).
+    # Now total ≈ max of any one call (~15-30s).
     try:
         from intel.yara_ai_gen import generate_yara_for_file
-        analysis["ai_yara"] = await generate_yara_for_file(analysis, _ai_gen)
-    except Exception as e:
-        analysis["ai_yara"] = {"error": str(e)}
-
-    # AI plain-English summary — what this file IS and what it does
-    try:
         from intel.file_ai_summary import summarize_file
-        summary = await summarize_file(analysis, config)
-        if summary:
-            analysis["ai_summary"] = summary
-    except Exception:
-        pass
-
-    # Deep AI analyst (spec §1) — triage + full structured assessment.
-    # Spec §2: surface prior analyst corrections on similar files as
-    # institutional knowledge in the deep-analysis prompt.
-    try:
         from intel.file_ai_analyst import run_ai_pipeline
         from intel.scanner_feedback import institutional_knowledge_prompt
         extra = institutional_knowledge_prompt(analysis)
-        analysis["ai_analyst"] = await run_ai_pipeline(
-            analysis, config, extra_context=extra,
+        ai_yara, ai_summary, ai_analyst = await asyncio.gather(
+            generate_yara_for_file(analysis, _ai_gen),
+            summarize_file(analysis, config),
+            run_ai_pipeline(analysis, config, extra_context=extra),
+            return_exceptions=True,
         )
-        if extra:
+        analysis["ai_yara"] = ai_yara if not isinstance(ai_yara, Exception) else {"error": str(ai_yara)[:200]}
+        if ai_summary and not isinstance(ai_summary, Exception):
+            analysis["ai_summary"] = ai_summary
+        analysis["ai_analyst"] = ai_analyst if not isinstance(ai_analyst, Exception) else {"error": str(ai_analyst)[:200]}
+        if extra and isinstance(analysis["ai_analyst"], dict):
             analysis["ai_analyst"]["institutional_knowledge_applied"] = True
     except Exception as e:
         analysis["ai_analyst"] = {"error": str(e)[:200]}
