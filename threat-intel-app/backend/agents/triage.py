@@ -217,6 +217,24 @@ async def run_triage(state: dict) -> dict:
     except Exception:
         email_analysis = None
 
+    # AI log translation (spec §4) — runs before IOC extraction and behavioral
+    # analysis so they operate on structured fields rather than just raw text.
+    # Fails open: if no API key or the call errors out, translation is None and
+    # downstream stages fall back to raw input.
+    log_translation = None
+    try:
+        from intel.log_translator import translate_log, fields_as_text
+        from config import config as _cfg
+        log_translation = await translate_log(raw, _cfg)
+        if log_translation:
+            extracted = fields_as_text(log_translation)
+            if extracted:
+                # Append normalized fields to the text we feed downstream — this
+                # ensures behavior_extractor + extract_iocs see both raw + parsed
+                raw = raw + "\n\n# AI-extracted fields\n" + extracted
+    except Exception:
+        log_translation = None
+
     iocs = extract_iocs(raw)
     if email_analysis:
         for url in email_analysis.get("urls", []):
@@ -403,6 +421,7 @@ async def run_triage(state: dict) -> dict:
         "iocs": iocs,
         "suppressed_iocs":       suppressed_iocs,        # MISP warninglist removals (spec §4)
         "behavioral_indicators": behavioral_indicators,  # TTP / pattern extraction (spec §1)
+        "log_translation":       log_translation,        # AI log format detection (spec §4)
         "triage_score":          final_score,
         "should_proceed":        ai_result.get("should_proceed", True) and final_score > 0.15,
         "triage_reasoning":      ai_result.get("reasoning", ""),

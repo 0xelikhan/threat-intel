@@ -294,6 +294,87 @@ function PreFlight({ result }) {
   );
 }
 
+/* ─── log translation (spec §4) ──────────────────────────────────────────────
+ * AI identifies the format and extracts every security-relevant field. Lets
+ * analysts verify the parser caught everything before trusting the analysis.
+ */
+function LogTranslation({ result }) {
+  const lt = result?.log_translation;
+  if (!lt || lt.error) return null;
+  const fields = lt.extracted_fields || {};
+  const anomalies = lt.anomalies || [];
+  if (!Object.keys(fields).length && !anomalies.length) return null;
+  const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
+  return (
+    <Card title="Log translation · format detection" accent="#16AD34"
+      badge={`${lt.detected_format} · ${Math.round((lt.confidence || 0) * 100)}%`}
+      defaultOpen={false}>
+      {lt.normalized_summary && (
+        <Typography sx={{ fontSize: 12, color: 'text.primary', mb: 1.5,
+          lineHeight: 1.6, fontStyle: 'italic' }}>
+          {lt.normalized_summary}
+        </Typography>
+      )}
+      {Object.keys(fields).length > 0 && (
+        <Box sx={{ mb: 1.5 }}>
+          <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
+            textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
+            Extracted fields ({Object.keys(fields).length})
+          </Typography>
+          <MuiPaper elevation={0} sx={{
+            backgroundColor: '#0C1524',
+            border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+            borderRadius: '4px', overflow: 'hidden',
+          }}>
+            {Object.entries(fields).map(([k, v], i) => (
+              <Box key={k} sx={{
+                display: 'grid', gridTemplateColumns: '180px 1fr', gap: 1.5,
+                p: '5px 12px',
+                borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.04)}` : 'none',
+              }}>
+                <Box sx={{ fontSize: 11, color: 'text.disabled' }}>{k}</Box>
+                <Box sx={{ ...monoSx, fontSize: 11, color: 'text.primary',
+                  wordBreak: 'break-all' }}>
+                  {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                </Box>
+              </Box>
+            ))}
+          </MuiPaper>
+        </Box>
+      )}
+      {anomalies.length > 0 && (
+        <Box>
+          <Typography sx={{ fontSize: 11, color: 'warning.main', fontWeight: 600,
+            textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
+            Anomalies flagged ({anomalies.length})
+          </Typography>
+          {anomalies.map((a, i) => (
+            <MuiPaper key={i} elevation={0} sx={{
+              backgroundColor: muiAlpha('#E6700F', 0.08),
+              border: `1px solid ${muiAlpha('#E6700F', 0.25)}`,
+              borderLeft: '3px solid #E6700F',
+              borderRadius: '4px', p: '8px 12px', mb: 0.5,
+            }}>
+              <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 500 }}>
+                {a.field || a.name || 'anomaly'}
+              </Typography>
+              {a.value && (
+                <Box sx={{ ...monoSx, fontSize: 11, color: 'text.tertiary',
+                  mt: 0.25, wordBreak: 'break-all' }}>{String(a.value).slice(0, 200)}</Box>
+              )}
+              {a.reason && (
+                <Typography sx={{ fontSize: 11, color: 'warning.main', mt: 0.5 }}>
+                  {a.reason}
+                </Typography>
+              )}
+            </MuiPaper>
+          ))}
+        </Box>
+      )}
+    </Card>
+  );
+}
+
 /* ─── infrastructure intel (spec §3 OSINT expansion) ─────────────────────────
  * Surfaces the new OSINT layer added to enrichment.py: BGP ranking, DNS record
  * enumeration, VT graph relationships, MalwareBazaar similar samples, Google
@@ -3560,6 +3641,7 @@ export default function App() {
             <PreFlight result={result}/>
             <Overview result={result}/>
             <SignalBanners result={result}/>
+            <LogTranslation result={result}/>
             <SuppressedIOCs result={result}/>
             <BehavioralIndicators result={result}/>
             <ConfidenceBreakdown result={result}/>
