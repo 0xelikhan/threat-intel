@@ -770,6 +770,23 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     feodo = _p_feodo(ip)
     if feodo:
         data["feodo_tracker"] = feodo
+
+    # OSINT expansion (spec §3): BGP ranking + Google Safe Browsing
+    try:
+        from intel.osint_extra import bgp_ranking, google_safe_browsing
+        osint: dict = {}
+        bgp = await bgp_ranking(session, ip)
+        if bgp and "error" not in bgp:
+            osint["bgp_ranking"] = bgp
+        gsb_key = keys.get("GOOGLE_API_KEY", "")
+        if gsb_key:
+            gsb = await google_safe_browsing(session, ip, "ip", gsb_key)
+            if gsb and "error" not in gsb and "skipped" not in gsb:
+                osint["google_safebrowsing"] = gsb
+        if osint:
+            data["osint"] = osint
+    except Exception:
+        pass
     # ASN reputation — uses ISP/org strings we already have, no extra API call
     try:
         from intel.asn_reputation import check as asn_check
@@ -865,6 +882,24 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
             data["opencti"] = oc
     except Exception:
         pass
+
+    # OSINT expansion (spec §3): DNS records + Google Safe Browsing
+    try:
+        from intel.osint_extra import dns_records, google_safe_browsing
+        osint: dict = {}
+        dns = await dns_records(session, domain)
+        if dns and "error" not in dns:
+            osint["dns_records"] = dns
+        gsb_key = keys.get("GOOGLE_API_KEY", "")
+        if gsb_key:
+            gsb = await google_safe_browsing(session, f"http://{domain}/", "domain", gsb_key)
+            if gsb and "error" not in gsb and "skipped" not in gsb:
+                osint["google_safebrowsing"] = gsb
+        if osint:
+            data["osint"] = osint
+    except Exception:
+        pass
+
     _cache[ck] = data
     return data
 
@@ -942,6 +977,24 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
             data["opencti"] = oc
     except Exception:
         pass
+
+    # OSINT expansion (spec §3): VT graph relationships + MalwareBazaar pivot
+    try:
+        from intel.osint_extra import vt_hash_relationships, malwarebazaar_similar
+        osint: dict = {}
+        vt_rel = await vt_hash_relationships(session, hash_val, keys.get("VIRUSTOTAL_KEY", ""))
+        if vt_rel and "error" not in vt_rel:
+            osint["vt_graph"] = vt_rel
+        family = ((data.get("malwarebazaar") or {}).get("malware_family") or
+                  (data.get("threatfox") or {}).get("malware_family"))
+        if family:
+            sim = await malwarebazaar_similar(session, family)
+            if sim and "error" not in sim:
+                osint["mb_similar"] = sim
+        if osint:
+            data["osint"] = osint
+    except Exception:
+        pass
     _cache[ck] = data
     return data
 
@@ -1008,6 +1061,7 @@ async def run_enrichment(state: dict) -> dict:
         "CENSYS_SECRET":       config.get("CENSYS_SECRET"),
         "HYBRID_ANALYSIS_KEY": config.get("HYBRID_ANALYSIS_KEY"),
         "CROWDSEC_KEY":        config.get("CROWDSEC_KEY"),
+        "GOOGLE_API_KEY":      config.get("GOOGLE_API_KEY"),
     }
 
     iocs = state.get("iocs", {})

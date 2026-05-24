@@ -294,6 +294,157 @@ function PreFlight({ result }) {
   );
 }
 
+/* ─── infrastructure intel (spec §3 OSINT expansion) ─────────────────────────
+ * Surfaces the new OSINT layer added to enrichment.py: BGP ranking, DNS record
+ * enumeration, VT graph relationships, MalwareBazaar similar samples, Google
+ * Safe Browsing. Each IOC's `osint` payload renders as its own panel.
+ */
+function InfrastructureIntel({ result }) {
+  const enr = result?.enrichments || {};
+  const rows = [];
+  for (const cat of ['ips', 'domains', 'hashes']) {
+    for (const [ioc, payload] of Object.entries(enr[cat] || {})) {
+      const osint = payload?.osint;
+      if (osint && Object.keys(osint).length) {
+        rows.push({ ioc, type: cat, osint });
+      }
+    }
+  }
+  if (!rows.length) return null;
+
+  const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
+
+  return (
+    <Card title="Infrastructure intel · OSINT" accent="#0fbcff"
+      badge={`${rows.length} IOC${rows.length === 1 ? '' : 's'}`} defaultOpen={false}>
+      <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
+        Free OSINT — BGP ranking, DNS records, VT graph relationships,
+        MalwareBazaar pivot, Google Safe Browsing. Surfaces infrastructure
+        connections that traditional enrichment misses.
+      </Typography>
+      {rows.map(({ ioc, type, osint }) => (
+        <Box key={ioc} sx={{ mb: 2 }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+            <TypeTag type={type}/>
+            <Box sx={{ ...monoSx, fontSize: 12, color: 'text.primary',
+              wordBreak: 'break-all' }}>{ioc}</Box>
+          </Stack>
+
+          {osint.bgp_ranking && (
+            <MuiPaper elevation={0} sx={{
+              backgroundColor: '#0C1524',
+              border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+              borderRadius: '4px', p: '8px 12px', mb: 0.75,
+            }}>
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
+                textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.5 }}>
+                BGP ranking · CIRCL
+              </Typography>
+              <Typography sx={{ fontSize: 12, color: 'text.primary' }}>
+                AS{osint.bgp_ranking.asn} — {osint.bgp_ranking.asn_description}
+                {osint.bgp_ranking.country && <> · {osint.bgp_ranking.country}</>}
+              </Typography>
+              {osint.bgp_ranking.rank != null && (
+                <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
+                  rank {osint.bgp_ranking.rank} (lower = worse reputation)
+                </Typography>
+              )}
+            </MuiPaper>
+          )}
+
+          {osint.dns_records && (
+            <MuiPaper elevation={0} sx={{
+              backgroundColor: '#0C1524',
+              border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+              borderRadius: '4px', p: '8px 12px', mb: 0.75,
+            }}>
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
+                textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
+                DNS records · {osint.dns_records.total_records}
+              </Typography>
+              {Object.entries(osint.dns_records.records || {}).map(([rt, vals]) => (
+                <Box key={rt} sx={{ display: 'grid', gridTemplateColumns: '40px 1fr', gap: 1, py: 0.25 }}>
+                  <Typography sx={{ ...monoSx, fontSize: 11, color: 'primary.main', fontWeight: 600 }}>
+                    {rt}
+                  </Typography>
+                  <Box sx={{ ...monoSx, fontSize: 11, color: 'text.primary', wordBreak: 'break-all' }}>
+                    {vals.join(', ')}
+                  </Box>
+                </Box>
+              ))}
+            </MuiPaper>
+          )}
+
+          {osint.vt_graph && (
+            <MuiPaper elevation={0} sx={{
+              backgroundColor: '#0C1524',
+              border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+              borderRadius: '4px', p: '8px 12px', mb: 0.75,
+            }}>
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
+                textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
+                VirusTotal graph · pivot points
+              </Typography>
+              {Object.entries(osint.vt_graph).map(([rel, items]) => (
+                <Box key={rel} sx={{ mb: 0.5 }}>
+                  <Typography sx={{ fontSize: 11, color: 'primary.main', mb: 0.25 }}>{rel}</Typography>
+                  {(items || []).map((it, i) => (
+                    <Box key={i} sx={{ ...monoSx, fontSize: 11, color: 'text.primary',
+                      pl: 1, wordBreak: 'break-all' }}>
+                      {it.id} <Box component="span" sx={{ color: 'text.tertiary' }}>· {it.type}</Box>
+                    </Box>
+                  ))}
+                </Box>
+              ))}
+            </MuiPaper>
+          )}
+
+          {osint.mb_similar && (
+            <MuiPaper elevation={0} sx={{
+              backgroundColor: '#0C1524',
+              border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+              borderRadius: '4px', p: '8px 12px', mb: 0.75,
+            }}>
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
+                textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.5 }}>
+                MalwareBazaar similar · family {osint.mb_similar.family}
+              </Typography>
+              {(osint.mb_similar.samples || []).slice(0, 6).map((s, i) => (
+                <Box key={i} sx={{ ...monoSx, fontSize: 11, color: 'text.primary',
+                  py: 0.125, wordBreak: 'break-all' }}>
+                  {s.sha256} <Box component="span" sx={{ color: 'text.tertiary' }}>
+                    · {s.file_type} · {s.first_seen}
+                  </Box>
+                </Box>
+              ))}
+            </MuiPaper>
+          )}
+
+          {osint.google_safebrowsing && (
+            <MuiPaper elevation={0} sx={{
+              backgroundColor: '#0C1524',
+              border: `1px solid ${muiAlpha(osint.google_safebrowsing.verdict === 'MALICIOUS' ? '#EE3838' : '#16AD34', 0.4)}`,
+              borderLeft: `3px solid ${osint.google_safebrowsing.verdict === 'MALICIOUS' ? '#EE3838' : '#16AD34'}`,
+              borderRadius: '4px', p: '8px 12px',
+            }}>
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
+                textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.5 }}>
+                Google Safe Browsing
+              </Typography>
+              <Typography sx={{ fontSize: 12, color: 'text.primary' }}>
+                {osint.google_safebrowsing.verdict} · {osint.google_safebrowsing.match_count} matches
+                {osint.google_safebrowsing.threat_types?.length > 0 && (
+                  <> · {osint.google_safebrowsing.threat_types.join(', ')}</>
+                )}
+              </Typography>
+            </MuiPaper>
+          )}
+        </Box>
+      ))}
+    </Card>
+  );
+}
+
 /* ─── transparent confidence breakdown (spec §2) ──────────────────────────────
  * Per-IOC deterministic score independent of the AI assessment. Renders a
  * visual bar + verdict chip + expandable list of every contributing factor.
@@ -3412,6 +3563,7 @@ export default function App() {
             <SuppressedIOCs result={result}/>
             <BehavioralIndicators result={result}/>
             <ConfidenceBreakdown result={result}/>
+            <InfrastructureIntel result={result}/>
             <ClarifyingQuestions result={result} onResult={setResult}/>
             <IOCPivot result={result}/>
             <AnalystSummary rs={rs || {}}/>
