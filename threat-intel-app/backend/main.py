@@ -1156,6 +1156,13 @@ async def scan_file_v2(file: UploadFile = File(...)):
     except Exception:
         pass
 
+    # Deep AI analyst (spec §1) — triage + full structured assessment
+    try:
+        from intel.file_ai_analyst import run_ai_pipeline
+        analysis["ai_analyst"] = await run_ai_pipeline(analysis, config)
+    except Exception as e:
+        analysis["ai_analyst"] = {"error": str(e)[:200]}
+
     # Drop the bytes blob before sending / persisting
     analysis.pop("_file_bytes", None)
 
