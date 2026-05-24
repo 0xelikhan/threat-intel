@@ -19,6 +19,22 @@ frontend/build/
 backend/data/
 !backend/data/.gitkeep
 
+# Vendor third-party repos (cloned via scripts/setup_vendor.sh — not committed)
+vendor/
+threat-intel-app/vendor/
+
+# MITRE ATT&CK STIX dataset (47MB, downloaded by setup script)
+threat-intel-app/backend/intel/mitre/
+
+# Python bytecode anywhere
+**/__pycache__/
+**/*.pyc
+
+# Internal scratch
+scratch/
+*.local.md
+
 # OS
 .DS_Store
 .vscode/
+*.swp
