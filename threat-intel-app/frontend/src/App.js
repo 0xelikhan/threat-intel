@@ -2,14 +2,15 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Upload, ChevronDown, ChevronRight, Copy, Check, Printer, Search,
   Activity, Database, Layers, Zap, Globe, Network, Shield, FileText,
-  ArrowUpRight, AlertCircle, X, FileSearch,
+  ArrowUpRight, AlertCircle, X, FileSearch, Mail,
 } from 'lucide-react';
 
-import MapTab          from './components/MapTab';
-import PivotGraph      from './components/PivotGraph';
-import ExportBar       from './components/ExportBar';
-import AgentPipeline   from './components/AgentPipeline';
-import FileScannerView from './components/FileScannerView';
+import MapTab            from './components/MapTab';
+import PivotGraph        from './components/PivotGraph';
+import ExportBar         from './components/ExportBar';
+import AgentPipeline     from './components/AgentPipeline';
+import FileScannerView   from './components/FileScannerView';
+import EmailComposerView from './components/EmailComposerView';
 
 // MUI-based primitives (adapted from OpenCTI's Tag.tsx + theme) — every chip,
 // card, code-block, copy button now renders through MUI components that inherit
@@ -3225,7 +3226,7 @@ function Report({ result }) {
  * Uses MUI Drawer with the OpenCTI nav width/styling, hosting the input area
  * (drop zone + textarea + AgentPipeline) and the extracted-IOCs panel.
  */
-function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanHash, onScanUrl, scanState, onHome }) {
+function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanHash, onScanUrl, scanState, onHome, onOpenEmail, emailActive }) {
   const [logText, setLogText] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const [hashInput, setHashInput] = useState('');
@@ -3355,6 +3356,38 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
             {scanState.error}
           </Typography>
         )}
+
+        {/* Email composer entry point — opens the dedicated composer view */}
+        <Box
+          onClick={() => onOpenEmail?.()}
+          sx={{
+            display: 'flex', alignItems: 'center', gap: 1.25,
+            p: '12px 14px',
+            backgroundColor: emailActive ? muiAlpha('#0fbcff', 0.1) : 'background.secondary',
+            border: `1px solid ${emailActive ? muiAlpha('#0fbcff', 0.5) : muiAlpha('#ffffff', 0.12)}`,
+            borderRadius: '4px',
+            cursor: 'pointer',
+            mb: 1.25,
+            transition: 'all .15s',
+            '&:hover': {
+              borderColor: muiAlpha('#0fbcff', 0.5),
+              backgroundColor: muiAlpha('#0fbcff', 0.06),
+            },
+          }}
+        >
+          <Mail size={16} color="#0fbcff" style={{ flexShrink: 0 }}/>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{
+              color: emailActive ? '#0fbcff' : 'text.primary',
+              fontSize: 12, fontWeight: 500,
+            }}>
+              Compose customer email
+            </Typography>
+            <Typography sx={{ color: 'text.tertiary', fontSize: 11, mt: 0.25 }}>
+              Parse alert → render notification
+            </Typography>
+          </Box>
+        </Box>
 
         {/* Textarea with clear button */}
         <Box sx={{ position: 'relative', mb: 1.25 }}>
@@ -3774,6 +3807,10 @@ export default function App() {
   const [scanState, setScanState] = useState({
     scanning: false, result: null, error: null, progressStep: 0,
   });
+  // Email composer takeover — when truthy, main view shows the composer.
+  // Holds optional { log, parsed } seed so the analyze/scanner pipelines
+  // can pre-populate the composer with the current investigation context.
+  const [emailState, setEmailState] = useState(null);
   // Show scanner whenever there's scan activity in flight or a result on hand
   const showScanner = scanState.scanning || scanState.result || scanState.error;
   const clearScan = useCallback(() => {
@@ -3890,6 +3927,7 @@ export default function App() {
           // Starting (r=null) or finishing an Analyze run dismisses the
           // file scanner view so the analysis result owns the main area.
           clearScan();
+          setEmailState(null);
           setResult(r);
         }}
         onPartialResult={mergePartial}
@@ -3898,12 +3936,28 @@ export default function App() {
         onScanHash={scanHash}
         onScanUrl={scanUrl}
         scanState={scanState}
-        onHome={() => { clearScan(); setResult(null); }}
+        onHome={() => { clearScan(); setEmailState(null); setResult(null); }}
+        onOpenEmail={() => {
+          // Pre-populate from whatever's on screen: the file-scanner result
+          // wins if visible, otherwise the analysis result, otherwise blank.
+          const ctx = scanState?.result?.summary?.text
+            ? { log: scanState.result.summary.text }
+            : (result?.raw_input ? { log: result.raw_input } : { log: '' });
+          clearScan();
+          setEmailState(ctx);
+        }}
+        emailActive={!!emailState}
       />
 
-      {/* Main view — file scanner takes over whenever there's scan activity,
-          otherwise the normal analysis view is shown. */}
-      {showScanner && (
+      {/* Main view priority: email composer > file scanner > analysis */}
+      {emailState && (
+        <EmailComposerView
+          initialLog={emailState.log || ''}
+          initialParsed={emailState.parsed || null}
+          onClose={() => setEmailState(null)}
+        />
+      )}
+      {!emailState && showScanner && (
         <Box sx={{ flex: 1, minWidth: 0, position: 'relative' }}>
           {/* Close button to dismiss scanner and return to the analysis view */}
           <MuiIconButton onClick={clearScan}
@@ -3922,7 +3976,7 @@ export default function App() {
           />
         </Box>
       )}
-      {!showScanner && (
+      {!emailState && !showScanner && (
 
       <Box component="main" sx={{
         flex: 1, p: '24px 28px 48px', overflowY: 'auto', minWidth: 0,
