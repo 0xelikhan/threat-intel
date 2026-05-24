@@ -1220,6 +1220,54 @@ async def status_check():
     return out
 
 
+# ─── TRAINING MODE (spec §8) ─────────────────────────────────────────────────
+class TrainingQuizRequest(BaseModel):
+    run_id: str
+
+
+@app.post("/api/training/quiz")
+async def training_quiz(req: TrainingQuizRequest):
+    """Generate three short-answer training questions about a completed
+    investigation. Pulls run state from memory or the persistent case store and
+    asks the AI to produce questions that reinforce the analyst's learning of
+    the techniques + verdicts that actually appeared in this case."""
+    state = _results.get(req.run_id)
+    if state is None:
+        from intel.case_store import load_case
+        state = load_case(req.run_id)
+    if state is None:
+        raise HTTPException(404, "Run not found")
+
+    rs = state.get("response_summary") or {}
+    techniques = state.get("mitre_techniques") or rs.get("mitre_techniques") or []
+    summary = rs.get("summary", "")
+    findings = rs.get("key_findings") or []
+    family = state.get("malware_family") or rs.get("malware_family")
+    actor = state.get("threat_actor") or rs.get("threat_actor")
+
+    prompt = (
+        "You are a senior SOC trainer. Based on the investigation context "
+        "below, generate exactly 3 short-answer training questions a junior "
+        "analyst could answer after reading this report. Each question must "
+        "directly reference content from this specific case — no generic "
+        "trivia. Return strict JSON: {questions: [{q, expected_answer, "
+        "what_it_tests}, ...]}.\n\n"
+        f"## Summary\n{summary}\n\n"
+        f"## Key findings\n{chr(10).join('- ' + f for f in findings[:5])}\n\n"
+        f"## MITRE techniques\n{', '.join(techniques[:8])}\n\n"
+        f"## Malware family: {family or 'unknown'}\n"
+        f"## Threat actor: {actor if isinstance(actor, str) else (actor or {}).get('name') or 'unknown'}\n"
+    )
+    text = await _ai_gen(prompt)
+    # Try to parse JSON; if AI returned commentary just wrap the text
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        parsed = {"questions": [{"q": text[:400], "expected_answer": "",
+                                 "what_it_tests": ""}]}
+    return parsed
+
+
 @app.get("/api/startup-check")
 async def startup_check():
     """Spec §11: confirm packages installed + report which keys are configured."""
