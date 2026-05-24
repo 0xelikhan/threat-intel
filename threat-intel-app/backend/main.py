@@ -1140,40 +1140,72 @@ async def scan_file_v2(file: UploadFile = File(...)):
     except Exception as e:
         analysis["threat_intel"] = {"error": str(e)}
 
-    # Run the three AI workflows in PARALLEL — previously they ran serially
-    # which made total scan time = sum of all three (~60-90s worst case).
-    # Now total ≈ max of any one call (~15-30s).
-    try:
-        from intel.yara_ai_gen import generate_yara_for_file
-        from intel.file_ai_summary import summarize_file
-        from intel.file_ai_analyst import run_ai_pipeline
-        from intel.scanner_feedback import institutional_knowledge_prompt
-        extra = institutional_knowledge_prompt(analysis)
-        ai_yara, ai_summary, ai_analyst = await asyncio.gather(
-            generate_yara_for_file(analysis, _ai_gen),
-            summarize_file(analysis, config),
-            run_ai_pipeline(analysis, config, extra_context=extra),
-            return_exceptions=True,
-        )
-        analysis["ai_yara"] = ai_yara if not isinstance(ai_yara, Exception) else {"error": str(ai_yara)[:200]}
-        if ai_summary and not isinstance(ai_summary, Exception):
-            analysis["ai_summary"] = ai_summary
-        analysis["ai_analyst"] = ai_analyst if not isinstance(ai_analyst, Exception) else {"error": str(ai_analyst)[:200]}
-        if extra and isinstance(analysis["ai_analyst"], dict):
-            analysis["ai_analyst"]["institutional_knowledge_applied"] = True
-    except Exception as e:
-        analysis["ai_analyst"] = {"error": str(e)[:200]}
-
-    # Drop the bytes blob before sending / persisting
+    # Mark AI as pending so the frontend knows to poll. The three AI
+    # workflows then run in a background task; the persisted scan is
+    # updated as each completes. Polling endpoint: GET /api/scan/{sha256}
+    analysis["ai_pending"] = True
     analysis.pop("_file_bytes", None)
 
+    # Persist what we have right now so polling works immediately
     try:
         from intel.file_correlation import append_scan_history
         append_scan_history(analysis)
     except Exception:
         pass
 
+    # Kick off AI workflows in the background — caller doesn't wait for them
+    sha256 = (analysis.get("hashes") or {}).get("sha256")
+    if sha256:
+        asyncio.create_task(_finish_ai_in_background(sha256, data))
+
     return analysis
+
+
+async def _finish_ai_in_background(sha256: str, file_bytes: bytes):
+    """Runs ai_yara + ai_summary + ai_analyst in parallel, then merges into
+    the persisted scan. Frontend polls GET /api/scan/{sha256} to pick up
+    the updated fields."""
+    from intel.file_correlation import load_scan, append_scan_history
+    from intel.yara_ai_gen import generate_yara_for_file
+    from intel.file_ai_summary import summarize_file
+    from intel.file_ai_analyst import run_ai_pipeline
+    from intel.scanner_feedback import institutional_knowledge_prompt
+
+    scan = load_scan(sha256)
+    if not scan:
+        return
+    # yara_ai_gen needs the bytes for match verification — re-attach briefly
+    scan["_file_bytes"] = file_bytes
+    extra = institutional_knowledge_prompt(scan)
+
+    ai_yara, ai_summary, ai_analyst = await asyncio.gather(
+        generate_yara_for_file(scan, _ai_gen),
+        summarize_file(scan, config),
+        run_ai_pipeline(scan, config, extra_context=extra),
+        return_exceptions=True,
+    )
+
+    scan.pop("_file_bytes", None)
+    scan["ai_yara"] = ai_yara if not isinstance(ai_yara, Exception) else {"error": str(ai_yara)[:200]}
+    if ai_summary and not isinstance(ai_summary, Exception):
+        scan["ai_summary"] = ai_summary
+    scan["ai_analyst"] = ai_analyst if not isinstance(ai_analyst, Exception) else {"error": str(ai_analyst)[:200]}
+    if extra and isinstance(scan["ai_analyst"], dict):
+        scan["ai_analyst"]["institutional_knowledge_applied"] = True
+    scan["ai_pending"] = False
+    append_scan_history(scan)
+
+
+@app.get("/api/scan/by-hash/{sha256}")
+async def scan_get(sha256: str):
+    """Polling endpoint — returns the current state of a scan, including
+    any AI fields that have completed since the initial POST returned.
+    Path is /by-hash/ to avoid shadowing /api/scan/history|stats|rules|etc."""
+    from intel.file_correlation import load_scan
+    scan = load_scan(sha256)
+    if not scan:
+        raise HTTPException(404, "no scan for that sha256")
+    return scan
 
 
 @app.post("/api/scan/hash")
