@@ -64,8 +64,25 @@ def _p_abuse(r):
     if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
         return {"error": str(r)}
     d = _safe(r, "data", default={})
-    return {"abuseScore": d.get("abuseConfidenceScore"), "totalReports": d.get("totalReports"),
-            "country": d.get("countryCode"), "isp": d.get("isp"), "usageType": d.get("usageType")}
+    out = {"abuseScore": d.get("abuseConfidenceScore"), "totalReports": d.get("totalReports"),
+           "country": d.get("countryCode"), "isp": d.get("isp"), "usageType": d.get("usageType"),
+           "lastReportedAt": d.get("lastReportedAt")}
+    # Flag same-day IP activity (first/last reported within 24 h is high signal)
+    try:
+        from datetime import datetime, timezone
+        last = d.get("lastReportedAt")
+        if last:
+            ts = datetime.fromisoformat(str(last).replace("Z", "+00:00"))
+            hours = (datetime.now(timezone.utc) - ts).total_seconds() / 3600
+            if hours < 24:
+                out["recent_activity"] = {"hours_since_last_report": round(hours, 1),
+                                          "is_active_today": True}
+            elif hours < 168:
+                out["recent_activity"] = {"hours_since_last_report": round(hours, 1),
+                                          "is_active_this_week": True}
+    except Exception:
+        pass
+    return out
 
 def _p_ipinfo(r):
     if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
@@ -120,11 +137,6 @@ def _p_otx(r):
     return {"pulseCount": _safe(r, "pulse_info", "count"),
             "relatedPulses": [p.get("name") for p in (_safe(r, "pulse_info", "pulses") or [])[:3]]}
 
-def _p_bgp(r):
-    if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
-        return {"error": str(r)}
-    return {"rank": _safe(r, "response", "ranking", "rank")}
-
 def _p_crt(r):
     if isinstance(r, Exception) or not isinstance(r, list):
         return {"error": "No data"}
@@ -142,6 +154,25 @@ def _p_pd(r):
     if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
         return {"error": str(r)}
     return {"risk": r.get("risk"), "threats": [t.get("name") for t in (r.get("threats") or [])[:3]]}
+
+
+def _p_wayback(r):
+    if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
+        return {"error": "no wayback"}
+    snap = (r.get("archived_snapshots") or {}).get("closest") or {}
+    if not snap.get("available"):
+        return {"has_snapshots": False, "note": "Domain not in Wayback Machine — no history at all"}
+    ts = snap.get("timestamp", "")
+    if len(ts) >= 8:
+        formatted = f"{ts[:4]}-{ts[4:6]}-{ts[6:8]}"
+    else:
+        formatted = ts
+    return {
+        "has_snapshots":   True,
+        "closest_snapshot":formatted,
+        "snapshot_url":    snap.get("url"),
+        "status":          snap.get("status"),
+    }
 
 def _p_urlscan(r):
     if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
@@ -169,19 +200,56 @@ def _p_tf(r):
     d = (r.get("data") or [{}])[0]
     return {"malware": d.get("malware_printable"), "confidence": d.get("confidence_level")}
 
-def _p_urlhaus(r):
-    if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
-        return {"error": str(r)}
-    return {"queryStatus": r.get("query_status"), "threat": r.get("threat")}
-
-def _p_pt(r):
-    if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
-        return {"error": str(r)}
-    res = r.get("results", {})
-    return {"inDatabase": res.get("in_database"), "isPhishing": res.get("valid")}
-
 
 # ─── ENRICHMENT FUNCTIONS ─────────────────────────────────────────────────────────
+def _local_ip_check(ip: str) -> dict:
+    try:
+        from intel.feeds_loader import check_ip
+        hit = check_ip(ip)
+        return hit or {}
+    except Exception:
+        return {}
+
+
+def _local_domain_check(domain: str) -> dict:
+    try:
+        from intel.feeds_loader import check_domain
+        hit = check_domain(domain)
+        return hit or {}
+    except Exception:
+        return {}
+
+
+def _typosquat_check(domain: str) -> dict:
+    try:
+        from intel.typosquat import check_domain as twist
+        hit = twist(domain)
+        return hit or {}
+    except Exception:
+        return {}
+
+
+async def _opencti_lookup(value: str, cfg) -> dict:
+    try:
+        from intel.opencti import is_configured, lookup_observable
+        if not is_configured(cfg):
+            return {}
+        r = await lookup_observable(value, cfg.get("OPENCTI_URL", ""),
+                                    cfg.get("OPENCTI_TOKEN", ""))
+        return r or {}
+    except Exception:
+        return {}
+
+
+async def _maltiverse_lookup(ioc_type: str, value: str, cfg) -> dict:
+    try:
+        from intel.maltiverse import lookup
+        r = await lookup(ioc_type, value, cfg.get("MALTIVERSE_KEY", ""))
+        return r or {}
+    except Exception:
+        return {}
+
+
 async def enrich_ip(session, ip: str, keys: dict) -> dict:
     ck = _ck("ip", ip)
     if ck in _cache:
@@ -203,20 +271,47 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
              headers={"x-apikey": keys.get("VIRUSTOTAL_KEY", "")}),
         _get(session, f"https://otx.alienvault.com/api/v1/indicators/IPv4/{ip}/general",
              headers={"X-OTX-API-KEY": keys.get("OTX_KEY", "")}),
-        _post(session, "https://bgpranking-ng.circl.lu/json", json={"ip": ip}),
         return_exceptions=True,
     )
 
+    abuse_data  = _p_abuse(results[0])
+    ipinfo_data = _p_ipinfo(results[1])
     data = {
-        "tor": {"isExitNode": ip in tor_nodes},
-        "abuseipdb": _p_abuse(results[0]),
-        "ipinfo":    _p_ipinfo(results[1]),
-        "greynoise": _p_gn(results[2]),
-        "shodan":    _p_shodan(results[3]),
-        "virustotal":_p_vt_ip(results[4]),
-        "otx":       _p_otx(results[5]),
-        "bgpranking":_p_bgp(results[6]),
+        "tor":         {"isExitNode": ip in tor_nodes},
+        "abuseipdb":   abuse_data,
+        "ipinfo":      ipinfo_data,
+        "greynoise":   _p_gn(results[2]),
+        "shodan":      _p_shodan(results[3]),
+        "virustotal":  _p_vt_ip(results[4]),
+        "otx":         _p_otx(results[5]),
+        "local_feeds": _local_ip_check(ip),
     }
+    # ASN reputation — uses ISP/org strings we already have, no extra API call
+    try:
+        from intel.asn_reputation import check as asn_check
+        asn = asn_check(
+            isp=(abuse_data or {}).get("isp", ""),
+            org=(ipinfo_data or {}).get("org", ""),
+            usage_type=(abuse_data or {}).get("usageType", ""),
+        )
+        if asn:
+            data["asn_reputation"] = asn
+    except Exception:
+        pass
+    # Cortex-style ports: Maltiverse aggregator + OpenCTI prior-context lookup
+    from config import config as _cfg
+    try:
+        mv = await _maltiverse_lookup("ip", ip, _cfg)
+        if mv:
+            data["maltiverse"] = mv
+    except Exception:
+        pass
+    try:
+        oc = await _opencti_lookup(ip, _cfg)
+        if oc:
+            data["opencti"] = oc
+    except Exception:
+        pass
     _cache[ck] = data
     return data
 
@@ -238,17 +333,54 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         _get(session, f"https://who-dat.as93.net/{domain}"),
         _get(session, "https://pulsedive.com/api/info.php",
              params={"indicator": domain, "pretty": 1, "key": keys.get("PULSEDIVE_KEY", "")}),
+        # Wayback Machine — free, no key, indicates if the domain ever had snapshots
+        _get(session, "https://archive.org/wayback/available",
+             params={"url": domain}),
         return_exceptions=True,
     )
 
+    whois_data = _p_whois(results[4])
     data = {
         "virustotal":      _p_vt_domain(results[0]),
         "urlscan":         _p_urlscan(results[1]),
         "otx":             _p_otx(results[2]),
         "certTransparency":_p_crt(results[3]),
-        "whois":           _p_whois(results[4]),
+        "whois":           whois_data,
         "pulsedive":       _p_pd(results[5]),
+        "wayback":         _p_wayback(results[6]),
+        "local_feeds":     _local_domain_check(domain),
+        "typosquat":       _typosquat_check(domain),
     }
+    # Domain heuristics: NRD age, DGA score, IDN/homoglyph — all offline
+    try:
+        from intel.domain_analysis import analyze_domain
+        heuristics = analyze_domain(domain, (whois_data or {}).get("created"))
+        if heuristics:
+            data["heuristics"] = heuristics
+    except Exception:
+        pass
+    # Spamhaus DBL (free DNS-based domain blocklist)
+    try:
+        from intel.spamhaus_dbl import lookup as dbl_lookup
+        dbl = await dbl_lookup(domain)
+        if dbl and dbl.get("hit"):
+            data["spamhaus_dbl"] = dbl
+    except Exception:
+        pass
+    # Maltiverse + OpenCTI
+    from config import config as _cfg
+    try:
+        mv = await _maltiverse_lookup("hostname", domain, _cfg)
+        if mv:
+            data["maltiverse"] = mv
+    except Exception:
+        pass
+    try:
+        oc = await _opencti_lookup(domain, _cfg)
+        if oc:
+            data["opencti"] = oc
+    except Exception:
+        pass
     _cache[ck] = data
     return data
 
@@ -277,6 +409,27 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         "virustotal":    _p_vt_file(results[2]),
         "otx":           _p_otx(results[3]),
     }
+    # Team Cymru MHR (free DNS-based hash reputation) + Maltiverse + OpenCTI
+    try:
+        from intel.team_cymru import lookup as cymru_lookup
+        cy = await cymru_lookup(hash_val)
+        if cy:
+            data["team_cymru_mhr"] = cy
+    except Exception:
+        pass
+    from config import config as _cfg
+    try:
+        mv = await _maltiverse_lookup("hash", hash_val, _cfg)
+        if mv:
+            data["maltiverse"] = mv
+    except Exception:
+        pass
+    try:
+        oc = await _opencti_lookup(hash_val, _cfg)
+        if oc:
+            data["opencti"] = oc
+    except Exception:
+        pass
     _cache[ck] = data
     return data
 
@@ -287,25 +440,16 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
         return {**_cache[ck], "cached": True}
 
     import base64
-    from urllib.parse import quote
     url_b64 = base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
-    encoded = quote(url, safe="")
 
     results = await asyncio.gather(
         _get(session, f"https://www.virustotal.com/api/v3/urls/{url_b64}",
              headers={"x-apikey": keys.get("VIRUSTOTAL_KEY", "")}),
-        _post(session, "https://urlhaus-api.abuse.ch/v1/url/",
-              data=f"url={encoded}",
-              headers={"Content-Type": "application/x-www-form-urlencoded"}),
-        _post(session, "https://checkurl.phishtank.com/checkurl/",
-              params={"url": url, "format": "json", "app_key": keys.get("PHISHTANK_KEY", "")}),
         return_exceptions=True,
     )
 
     data = {
         "virustotal": _p_vt_url(results[0]),
-        "urlhaus":    _p_urlhaus(results[1]),
-        "phishtank":  _p_pt(results[2]),
     }
     _cache[ck] = data
     return data
@@ -322,7 +466,6 @@ async def run_enrichment(state: dict) -> dict:
         "GREYNOISE_KEY":  config.get("GREYNOISE_KEY"),
         "SHODAN_KEY":     config.get("SHODAN_KEY"),
         "URLSCAN_KEY":    config.get("URLSCAN_KEY"),
-        "PHISHTANK_KEY":  config.get("PHISHTANK_KEY"),
         "OTX_KEY":        config.get("OTX_KEY"),
         "PULSEDIVE_KEY":  config.get("PULSEDIVE_KEY"),
     }
@@ -364,6 +507,7 @@ async def run_enrichment(state: dict) -> dict:
                     f"{len(iocs.get('urls',[]))} URLs in {elapsed:.1f}s. "
                     f"{mal} flagged by multiple sources."),
         "iteration": iteration + 1,
+        "elapsed_ms": int(elapsed * 1000),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 

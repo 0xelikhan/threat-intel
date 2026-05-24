@@ -20,7 +20,7 @@ class SOCState(TypedDict):
     should_proceed:        bool
     triage_reasoning:      str
     enrichments:           dict
-    investigation:         dict
+    investigation_result:  dict
     mitre_techniques:      list
     threat_level:          str
     confidence:            float
@@ -31,10 +31,22 @@ class SOCState(TypedDict):
     stix_bundle:           dict
     agent_trace:           list
     iteration_count:       int
+    cross_refs:            dict
+    email_analysis:        dict
 
 
-def _route_triage(state: SOCState) -> Literal["enrichment", "dropped"]:
-    return "enrichment" if state.get("should_proceed") and state.get("triage_score", 0) > 0.15 else "dropped"
+def _route_triage(state: SOCState) -> Literal["enrichment", "investigation", "dropped"]:
+    """Routing:
+      - If triage explicitly dropped (very low score AND no signals)         → dropped
+      - If we have IPs/domains/hashes/URLs to enrich                         → enrichment
+      - Otherwise (process/path/behavior-only logs)                          → investigation
+    The pipeline now ALWAYS produces an AI analysis unless triage scored ~0.
+    """
+    if not state.get("should_proceed") and state.get("triage_score", 0) <= 0.10:
+        return "dropped"
+    iocs = state.get("iocs", {}) or {}
+    has_enrichable = any((iocs.get(k) or []) for k in ("ips", "domains", "hashes", "urls"))
+    return "enrichment" if has_enrichable else "investigation"
 
 
 def _route_investigation(state: SOCState) -> Literal["response", "enrichment"]:
@@ -65,7 +77,11 @@ def _build():
     g.add_node("response",      run_response)
     g.add_node("dropped",       _dropped)
     g.set_entry_point("triage")
-    g.add_conditional_edges("triage", _route_triage, {"enrichment": "enrichment", "dropped": "dropped"})
+    g.add_conditional_edges("triage", _route_triage, {
+        "enrichment":    "enrichment",
+        "investigation": "investigation",
+        "dropped":       "dropped",
+    })
     g.add_edge("enrichment", "investigation")
     g.add_conditional_edges("investigation", _route_investigation, {"response": "response", "enrichment": "enrichment"})
     g.add_edge("response", END)
@@ -85,7 +101,7 @@ async def run_pipeline(raw_input: str, input_type: str = "log") -> dict:
         "should_proceed":        False,
         "triage_reasoning":      "",
         "enrichments":           {},
-        "investigation":         {},
+        "investigation_result":  {},
         "mitre_techniques":      [],
         "threat_level":          "INFORMATIONAL",
         "confidence":            0.0,
@@ -96,5 +112,7 @@ async def run_pipeline(raw_input: str, input_type: str = "log") -> dict:
         "stix_bundle":           {},
         "agent_trace":           [],
         "iteration_count":       0,
+        "cross_refs":            {},
+        "email_analysis":        {},
     }
     return await graph.ainvoke(initial)

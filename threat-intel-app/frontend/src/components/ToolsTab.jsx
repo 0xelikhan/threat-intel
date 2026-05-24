@@ -94,7 +94,7 @@ function DefangTool() {
   const refang = (text) => text
     .split('\n')
     .map(line => line
-      .replace(/hxxps?\[\:\/\/\]|https?\[:\/\/\]|hxxps?:\/\/|https?\[://\]/gi, m => m.includes('hxxps') ? 'https://' : m.includes('hxxp') ? 'http://' : m.replace(/\[.*?\]/g, '://'))
+      .replace(/hxxps?\[:\\\/\\\/\]|https?\[:\\\/\\\/\]/gi, m => m.includes('hxxps') ? 'https://' : 'http://')
       .replace(/\[\.\]/g, '.')
     ).join('\n');
 

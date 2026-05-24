@@ -14,102 +14,181 @@ CONFIG_FILE = DATA_DIR / "config.json"
 
 # All supported API keys with metadata for the settings UI
 API_KEY_DEFINITIONS = {
-    # Required for core functionality
     "OPENAI_API_KEY": {
-        "label": "OpenAI API Key",
-        "description": "Used for AI threat assessment, Sigma rule generation, and KQL query building.",
+        "label": "OpenAI / Azure OpenAI Key",
+        "description": "AI threat assessment, Sigma/KQL generation. Use your Azure OpenAI Key 1 if on Azure.",
         "required": True,
         "url": "https://platform.openai.com/api-keys",
-        "placeholder": "sk-...",
-        "group": "AI"
+        "placeholder": "sk-... or Azure OpenAI Key 1",
+        "group": "API Keys"
     },
     "OPENAI_BASE_URL": {
         "label": "OpenAI Base URL",
-        "description": "Leave default for OpenAI. Change for Azure OpenAI or local models (e.g. Ollama).",
+        "description": "Leave default for OpenAI. For Azure: https://YOUR-RESOURCE.openai.azure.com/openai/deployments/MODEL/chat/completions?api-version=2024-02-01",
         "required": False,
         "default": "https://api.openai.com/v1",
         "placeholder": "https://api.openai.com/v1",
-        "group": "AI"
+        "group": "API Keys"
     },
     "AI_MODEL": {
         "label": "AI Model",
-        "description": "Which model to use for analysis. gpt-4o-mini is recommended for cost efficiency.",
+        "description": "Model to use. gpt-4o-mini for cost efficiency, gpt-4o for best results.",
         "required": False,
         "default": "gpt-4o-mini",
         "placeholder": "gpt-4o-mini",
-        "group": "AI"
+        "group": "API Keys"
     },
     "VIRUSTOTAL_KEY": {
         "label": "VirusTotal API Key",
-        "description": "IP, domain, URL, and hash reputation. Free tier: 500 requests/day.",
+        "description": "IP, domain, URL, hash reputation. Free: 500 req/day.",
         "required": True,
         "url": "https://virustotal.com",
         "placeholder": "64-character hex key",
-        "group": "Core TI"
+        "group": "API Keys"
     },
     "ABUSEIPDB_KEY": {
         "label": "AbuseIPDB API Key",
-        "description": "IP abuse confidence scores and reports. Free tier: 1,000 checks/day.",
+        "description": "IP abuse confidence scores. Free: 1,000 checks/day.",
         "required": True,
         "url": "https://abuseipdb.com",
-        "placeholder": "API key from abuseipdb.com",
-        "group": "Core TI"
+        "placeholder": "AbuseIPDB API key",
+        "group": "API Keys"
     },
     "IPINFO_TOKEN": {
         "label": "ipinfo.io Token",
-        "description": "IP geolocation, org, ASN. Required for the Geo Map tab. Free: 50,000/month.",
+        "description": "IP geolocation, ASN. Required for Geo Map. Free: 50,000/month.",
         "required": True,
         "url": "https://ipinfo.io",
-        "placeholder": "Token from ipinfo.io",
-        "group": "Core TI"
+        "placeholder": "ipinfo token",
+        "group": "API Keys"
     },
     "SHODAN_KEY": {
         "label": "Shodan API Key",
-        "description": "Open ports, services, banners, known CVEs. Free tier available.",
+        "description": "Open ports, services, CVEs, banners.",
         "required": False,
         "url": "https://shodan.io",
         "placeholder": "Shodan API key",
-        "group": "Core TI"
+        "group": "API Keys"
     },
     "GREYNOISE_KEY": {
         "label": "GreyNoise API Key",
-        "description": "Identifies internet noise vs targeted activity. Free community tier.",
+        "description": "Internet noise vs targeted attack classification.",
         "required": False,
         "url": "https://greynoise.io",
         "placeholder": "GreyNoise API key",
-        "group": "Core TI"
+        "group": "API Keys"
     },
     "OTX_KEY": {
         "label": "AlienVault OTX Key",
-        "description": "Community threat pulse database. Free — sign up at otx.alienvault.com.",
+        "description": "Community threat pulses, IOC feeds.",
         "required": False,
         "url": "https://otx.alienvault.com",
         "placeholder": "OTX API key",
-        "group": "Core TI"
+        "group": "API Keys"
     },
     "URLSCAN_KEY": {
         "label": "URLScan.io API Key",
-        "description": "URL and domain scanning. Free tier: 1,000 scans/day.",
+        "description": "URL and domain scanning, screenshots.",
         "required": False,
         "url": "https://urlscan.io",
         "placeholder": "URLScan API key",
-        "group": "Core TI"
+        "group": "API Keys"
     },
-    "PHISHTANK_KEY": {
-        "label": "PhishTank App Key",
-        "description": "Phishing URL database lookup. Free with registration.",
+    "CROWDSEC_KEY": {
+        "label": "CrowdSec CTI Key",
+        "description": "Crowd-sourced IP threat intelligence.",
         "required": False,
-        "url": "https://phishtank.org",
-        "placeholder": "PhishTank app key",
-        "group": "Extended TI"
+        "url": "https://app.crowdsec.net",
+        "placeholder": "CrowdSec CTI key",
+        "group": "API Keys"
     },
     "PULSEDIVE_KEY": {
         "label": "Pulsedive API Key",
-        "description": "Risk scoring and threat feed context for domains. Free tier available.",
+        "description": "Risk scoring and threat feed context.",
         "required": False,
         "url": "https://pulsedive.com",
         "placeholder": "Pulsedive API key",
-        "group": "Extended TI"
+        "group": "API Keys"
+    },
+    "PHISHTANK_KEY": {
+        "label": "PhishTank App Key",
+        "description": "Phishing URL database lookup.",
+        "required": False,
+        "url": "https://phishtank.org",
+        "placeholder": "PhishTank app key",
+        "group": "API Keys"
+    },
+    "SECURITYTRAILS_KEY": {
+        "label": "SecurityTrails API Key",
+        "description": "DNS history and subdomain enumeration. Free: 50/month.",
+        "required": False,
+        "url": "https://securitytrails.com",
+        "placeholder": "SecurityTrails API key",
+        "group": "API Keys"
+    },
+    "CENSYS_ID": {
+        "label": "Censys API ID",
+        "description": "Internet-wide port and certificate scanning. Free: 250/month.",
+        "required": False,
+        "url": "https://censys.io",
+        "placeholder": "Censys API ID",
+        "group": "API Keys"
+    },
+    "CENSYS_SECRET": {
+        "label": "Censys API Secret",
+        "description": "Censys API secret — paired with API ID above.",
+        "required": False,
+        "url": "https://censys.io",
+        "placeholder": "Censys API secret",
+        "group": "API Keys"
+    },
+    "HYBRID_ANALYSIS_KEY": {
+        "label": "Hybrid Analysis API Key",
+        "description": "Sandboxed malware behavior reports. Free tier.",
+        "required": False,
+        "url": "https://hybrid-analysis.com",
+        "placeholder": "Hybrid Analysis API key",
+        "group": "API Keys"
+    },
+    "ANYRUN_KEY": {
+        "label": "Any.run API Key",
+        "description": "Interactive malware sandbox reports.",
+        "required": False,
+        "url": "https://app.any.run",
+        "placeholder": "Any.run API key",
+        "group": "API Keys"
+    },
+    "FULLHUNT_KEY": {
+        "label": "FullHunt API Key",
+        "description": "Attack surface and exposed service discovery. Free: 100/day.",
+        "required": False,
+        "url": "https://fullhunt.io",
+        "placeholder": "FullHunt API key",
+        "group": "API Keys"
+    },
+    "POLYSWARM_KEY": {
+        "label": "Polyswarm API Key",
+        "description": "Decentralized malware scanning network.",
+        "required": False,
+        "url": "https://polyswarm.io",
+        "placeholder": "Polyswarm API key",
+        "group": "API Keys"
+    },
+    "INTELX_KEY": {
+        "label": "Intelligence X API Key",
+        "description": "Paste sites, dark web, leaked credentials.",
+        "required": False,
+        "url": "https://intelx.io",
+        "placeholder": "Intelligence X API key",
+        "group": "API Keys"
+    },
+    "PROXYCHECK_KEY": {
+        "label": "Proxycheck API Key",
+        "description": "VPN, proxy, and Tor exit node detection. Free: 1,000/day.",
+        "required": False,
+        "url": "https://proxycheck.io",
+        "placeholder": "Proxycheck API key",
+        "group": "API Keys"
     },
 }
 
@@ -118,10 +197,17 @@ FREE_APIS = [
     "MalwareBazaar (abuse.ch)",
     "ThreatFox (abuse.ch)",
     "URLHaus (abuse.ch)",
+    "Feodo Tracker (abuse.ch)",
+    "SSL Blacklist (abuse.ch)",
     "crt.sh (certificate transparency)",
     "WHOIS (who-dat.as93.net)",
     "BGP Ranking (CIRCL)",
+    "CIRCL Passive DNS",
+    "Robtex",
     "Tor exit node list (torproject.org)",
+    "CIRCL Hashlookup",
+    "HackerTarget",
+    "Maltiverse",
 ]
 
 
@@ -165,9 +251,14 @@ class ConfigManager:
         self._save()
 
     def is_configured(self) -> bool:
-        """True if minimum required keys are present."""
         required = [k for k, v in API_KEY_DEFINITIONS.items() if v.get("required")]
         return all(self.get(k) for k in required)
+
+    def get_ai_provider(self) -> str:
+        return "azure" if "openai.azure.com" in self.get("OPENAI_BASE_URL", "") else "openai"
+
+    def is_azure_openai(self) -> bool:
+        return "openai.azure.com" in self.get("OPENAI_BASE_URL", "")
 
     def get_status(self) -> dict:
         """Return key status for health/settings UI (never returns actual key values)."""
