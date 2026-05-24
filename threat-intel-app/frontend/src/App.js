@@ -294,6 +294,109 @@ function PreFlight({ result }) {
   );
 }
 
+/* ─── behavioral indicators (spec §1) ────────────────────────────────────────
+ * Pattern-matched TTPs extracted from the raw input — PowerShell tradecraft,
+ * LOLBin abuse, persistence, lateral movement, credential access, C2. Each
+ * indicator carries the MITRE technique it represents plus a plain-English
+ * reason it is suspicious.
+ */
+function BehavioralIndicators({ result }) {
+  const bi = result?.behavioral_indicators || {};
+  const cats = bi.categories || {};
+  const total = bi.total || 0;
+  if (!total && !(bi.decoded_payloads || []).length) return null;
+
+  const sevColor = {
+    CRITICAL: '#EE3838', HIGH: '#E6700F', MEDIUM: '#E1B823', LOW: '#0fbcff',
+  };
+  const catLabel = {
+    powershell:  'PowerShell tradecraft',
+    lolbin:      'Windows LOLBin abuse',
+    persistence: 'Persistence mechanisms',
+    lateral:     'Lateral movement',
+    credentials: 'Credential access',
+    c2:          'C2 communication',
+  };
+
+  return (
+    <Card title="Behavioral indicators · MITRE-mapped TTPs" accent="#B286FF"
+      badge={`${total} signals · ${(bi.techniques || []).length} techniques`}>
+      <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
+        Pattern-matched directly from the raw input — captures attacker tradecraft
+        that wouldn't show up via IOC enrichment alone. Each hit is mapped to the
+        specific MITRE ATT&CK technique it represents.
+      </Typography>
+      {(bi.decoded_payloads || []).length > 0 && (
+        <Box sx={{ mb: 1.75 }}>
+          <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
+            textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
+            Decoded base64 payloads
+          </Typography>
+          {bi.decoded_payloads.map((p, i) => (
+            <Box key={i} component="pre" sx={{
+              fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
+              backgroundColor: '#070d19', border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+              borderRadius: '4px', p: '8px 10px', m: 0, mb: 0.75,
+              whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+              color: 'primary.main', maxHeight: 120, overflow: 'auto',
+            }}>{p}</Box>
+          ))}
+        </Box>
+      )}
+      {Object.entries(cats).map(([cat, hits]) => (
+        <Box key={cat} sx={{ mb: 1.75 }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
+            <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
+              textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              {catLabel[cat] || cat}
+            </Typography>
+            <Typography sx={{ fontSize: 11, color: 'text.disabled' }}>{hits.length}</Typography>
+          </Stack>
+          {hits.map((h, i) => (
+            <MuiPaper key={i} elevation={0} sx={{
+              backgroundColor: '#0C1524',
+              border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+              borderLeft: `3px solid ${sevColor[h.severity] || '#848592'}`,
+              borderRadius: '4px', p: '10px 12px', mb: 0.75,
+            }}>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }} flexWrap="wrap">
+                <Typography sx={{ fontSize: 12, fontWeight: 600, color: 'text.primary' }}>
+                  {h.name}
+                </Typography>
+                <Box component="a" href={`https://attack.mitre.org/techniques/${(h.mitre || '').replace('.', '/')}/`}
+                  target="_blank" rel="noreferrer"
+                  sx={{
+                    fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
+                    color: 'primary.main', textDecoration: 'none',
+                    '&:hover': { textDecoration: 'underline' },
+                  }}>
+                  {h.mitre}{h.mitre_name ? ` · ${h.mitre_name}` : ''}
+                </Box>
+                <Box component="span" sx={{
+                  ml: 'auto !important', fontSize: 10, color: sevColor[h.severity] || '#848592',
+                  fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em',
+                }}>{h.severity}</Box>
+              </Stack>
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary', lineHeight: 1.55, mb: 0.5 }}>
+                {h.explanation}
+              </Typography>
+              <Box sx={{
+                fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
+                color: 'text.primary',
+                backgroundColor: '#070d19',
+                border: `1px solid ${muiAlpha('#ffffff', 0.06)}`,
+                borderRadius: '3px',
+                p: '4px 8px',
+                wordBreak: 'break-all',
+              }}>{h.match}</Box>
+            </MuiPaper>
+          ))}
+        </Box>
+      ))}
+    </Card>
+  );
+}
+
 /* ─── clarifying questions (spec §5 — Phase 1 → Phase 2 re-analysis) ────────
  * When the AI flags critical unknowns it can't infer from enrichment, render
  * them as a form. Submitting POSTs to /api/analyze/clarify/{runId} which
@@ -3202,6 +3305,7 @@ export default function App() {
             <Overview result={result}/>
             <SignalBanners result={result}/>
             <SuppressedIOCs result={result}/>
+            <BehavioralIndicators result={result}/>
             <ClarifyingQuestions result={result} onResult={setResult}/>
             <IOCPivot result={result}/>
             <AnalystSummary rs={rs || {}}/>
