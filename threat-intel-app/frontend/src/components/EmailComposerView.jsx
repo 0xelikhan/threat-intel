@@ -1,17 +1,17 @@
 /**
- * RECON Email Composer — three-step page in the OpenCTI aesthetic.
+ * RECON Email Composer — AI-only flow in the OpenCTI aesthetic.
  *
  *   1. Paste the raw alert log
- *   2. Pick a template + response action (dropdowns)
- *   3. Preview the rendered email with inline Copy buttons
+ *   2. Pick a response action (optional)
+ *   3. Preview the AI-generated email with inline Copy buttons
  *
- * Parsing happens automatically when Compose is clicked — analysts don't
- * have to touch the extracted fields. Every chip / paper / select pulls
- * from theme.palette so the page inherits the RECON dark theme. The
- * preview surface is the only white background, so it shows how the
- * customer will actually see the message.
+ * All static templates live on the backend at backend/intel/email_templates/
+ * and feed the AI as few-shot style examples. The frontend never picks a
+ * template — Compose always calls /api/email/compose-ai, which parses the
+ * log, generates a tailored body via OpenAI/Azure, and renders it through
+ * the same signature pipeline as static composes.
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Stack, Typography, Paper as MuiPaper,
   Button as MuiButton, TextField as MuiTextField,
@@ -34,27 +34,17 @@ const RESPONSE_OPTIONS = [
 ];
 
 
-function CopyBtn({ text, label = 'Copy', size = 'small', variant = 'button' }) {
+function CopyBtn({ text, label = 'Copy', size = 'small' }) {
   const [copied, setCopied] = useState(false);
-  const doCopy = (e) => {
-    e?.stopPropagation();
-    navigator.clipboard.writeText(text || '');
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-  if (variant === 'icon') {
-    return (
-      <Tooltip title={copied ? 'Copied' : label}>
-        <MuiIconButton size={size} onClick={doCopy}
-          sx={{ p: 0.5, color: copied ? 'success.main' : 'text.tertiary' }}>
-          {copied ? <Check size={14}/> : <Copy size={14}/>}
-        </MuiIconButton>
-      </Tooltip>
-    );
-  }
   return (
     <MuiButton
-      size={size} variant="outlined" onClick={doCopy}
+      size={size} variant="outlined"
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(text || '');
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
       startIcon={copied ? <Check size={14}/> : <Copy size={14}/>}
       sx={{
         textTransform: 'none', fontSize: 12,
@@ -68,7 +58,7 @@ function CopyBtn({ text, label = 'Copy', size = 'small', variant = 'button' }) {
 }
 
 
-function SectionHeader({ title, badge, accent = '#0fbcff', right }) {
+function SectionHeader({ title, badge, accent = '#0fbcff' }) {
   return (
     <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.25 }}>
       <Box sx={{ width: 3, height: 14, backgroundColor: accent, borderRadius: 0.5 }}/>
@@ -79,87 +69,37 @@ function SectionHeader({ title, badge, accent = '#0fbcff', right }) {
       {badge && (
         <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>· {badge}</Typography>
       )}
-      {right && <Box sx={{ ml: 'auto !important' }}>{right}</Box>}
     </Stack>
   );
 }
 
 
 export default function EmailComposerView({ initialLog = '', initialParsed = null, onClose }) {
-  const [rawLog, setRawLog]               = useState(initialLog);
-  const [alertTypes, setAlertTypes]       = useState([]);
-  const [selectedType, setSelectedType]   = useState('');
+  const [rawLog, setRawLog]                 = useState(initialLog);
   const [responseAction, setResponseAction] = useState('');
-  const [composed, setComposed]           = useState(null);
-  const [composing, setComposing]         = useState(false);
-  const [composeError, setComposeError]   = useState(null);
-  const [previewMode, setPreviewMode]     = useState('rendered'); // 'rendered' | 'html' | 'text'
-  // Tracks whether the analyst explicitly chose a template — if so, we
-  // stop auto-overriding it with the parser's suggestion on every keystroke.
-  const userPickedType = useRef(false);
-
-  // Load alert types once
-  useEffect(() => {
-    fetch('/api/email/templates')
-      .then(r => r.json())
-      .then(d => {
-        const types = d.alert_types || [];
-        setAlertTypes(types);
-        if (types.length && !selectedType) {
-          const suggested = (initialParsed?.suggested_alert_type || '').toLowerCase();
-          const pick = types.find(a => a.id === suggested) || types[0];
-          setSelectedType(pick?.id || '');
-        }
-      })
-      .catch(() => {});
-  }, []); // eslint-disable-line
-
-  // Auto-detect the alert type as the analyst types/pastes — debounced so
-  // we don't hammer the backend on every keystroke. The user's explicit
-  // dropdown pick is preserved via the userPickedType ref.
-  useEffect(() => {
-    if (!rawLog.trim() || userPickedType.current) return;
-    const timer = setTimeout(async () => {
-      try {
-        const r = await fetch('/api/email/parse', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ log_text: rawLog }),
-        });
-        if (!r.ok) return;
-        const parsed = await r.json();
-        const suggested = parsed?.suggested_alert_type;
-        if (suggested && alertTypes.some(t => t.id === suggested)
-            && suggested !== selectedType && !userPickedType.current) {
-          setSelectedType(suggested);
-        }
-      } catch (_) {}
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [rawLog, alertTypes]); // eslint-disable-line
+  const [composed, setComposed]             = useState(null);
+  const [composing, setComposing]           = useState(false);
+  const [composeError, setComposeError]     = useState(null);
+  const [previewMode, setPreviewMode]       = useState('rendered');
 
   const doCompose = useCallback(async () => {
     if (!rawLog.trim()) { setComposeError('Paste the alert log first'); return; }
-    if (!selectedType)  { setComposeError('Pick a template');           return; }
     setComposing(true); setComposeError(null);
     try {
-      // Parse first (silent — fields don't surface in the UI). Re-used by
-      // both the static-template and AI compose paths.
+      // Parse silently so the AI gets structured fields alongside the raw log
       const pr = await fetch('/api/email/parse', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ log_text: rawLog }),
       });
       const parsed = pr.ok ? await pr.json() : (initialParsed || {});
 
-      const useAI = selectedType === '__ai__';
-      const endpoint = useAI ? '/api/email/compose-ai' : '/api/email/compose';
-      const body = useAI
-        ? { log_text: rawLog, parsed, options: { response_action: responseAction } }
-        : { alert_type: selectedType, parsed,
-            options: { response_action: responseAction } };
-
-      const r = await fetch(endpoint, {
+      const r = await fetch('/api/email/compose-ai', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          log_text: rawLog,
+          parsed,
+          options: { response_action: responseAction },
+        }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
@@ -169,14 +109,14 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
     } finally {
       setComposing(false);
     }
-  }, [rawLog, selectedType, responseAction, initialParsed]);
+  }, [rawLog, responseAction, initialParsed]);
 
   // Auto-compose once when a fresh log is handed in from another view
   useEffect(() => {
-    if (initialLog && selectedType && !composed && !composing) {
+    if (initialLog && !composed && !composing) {
       doCompose();
     }
-  }, [initialLog, selectedType]); // eslint-disable-line
+  }, [initialLog]); // eslint-disable-line
 
   return (
     <Box sx={{
@@ -208,90 +148,46 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
         <MuiTextField
           value={rawLog}
           onChange={e => setRawLog(e.target.value)}
-          placeholder="Paste the raw alert log here (key:value pairs work best). Lines like 'RiskLevel: high', 'UserDisplayName: ...', 'IpAddress: ...' are auto-extracted."
+          placeholder="Paste the raw alert log here. The AI parses key:value lines like 'RiskLevel: high', 'UserDisplayName: ...', 'IpAddress: ...' automatically."
           multiline minRows={6} maxRows={20} fullWidth
           InputProps={{ sx: { ...monoSx, fontSize: 12, lineHeight: 1.55 } }}
         />
       </MuiPaper>
 
-      {/* ─── 2 · Template + response action ─────────────────────────────── */}
+      {/* ─── 2 · Response action + compose button ───────────────────────── */}
       <MuiPaper elevation={0} sx={{
         backgroundColor: '#09253d',
         border: theme => `1px solid ${muiAlpha('#ffffff', 0.12)}`,
         borderRadius: '4px', p: 2, mb: 2,
       }}>
-        <SectionHeader title="2 · Template & response action"
-          badge={`${alertTypes.length} templates · ${RESPONSE_OPTIONS.length - 1} actions`}/>
+        <SectionHeader title="2 · Response action" badge="optional"/>
 
-        <Box sx={{
-          display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' },
-          gap: 1.5, mb: 2,
-        }}>
-          <Box>
-            <Typography sx={{ fontSize: 11, color: 'text.tertiary', mb: 0.5,
-              textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Template
-            </Typography>
-            <MuiTextField
-              select fullWidth size="small"
-              value={selectedType}
-              onChange={e => {
-                userPickedType.current = true;
-                setSelectedType(e.target.value);
-              }}
-              SelectProps={{
-                MenuProps: { PaperProps: { sx: { maxHeight: 380 } } },
-              }}
-              InputProps={{ sx: { fontSize: 13 } }}
-            >
-              <MenuItem value="__ai__" sx={{ fontSize: 13, gap: 1,
-                color: 'primary.main', fontWeight: 600 }}>
-                <Sparkles size={14}/> AI · Auto-generate from log
+        <Box sx={{ maxWidth: 360, mb: 2 }}>
+          <MuiTextField
+            select fullWidth size="small"
+            value={responseAction}
+            onChange={e => setResponseAction(e.target.value)}
+            InputProps={{ sx: { fontSize: 13 } }}
+          >
+            {RESPONSE_OPTIONS.map(r => (
+              <MenuItem key={r.id || 'none'} value={r.id} sx={{ fontSize: 13 }}>
+                {r.label}
               </MenuItem>
-              {alertTypes.map(t => (
-                <MenuItem key={t.id} value={t.id} sx={{ fontSize: 13 }}>
-                  {t.label || t.id}
-                  {t.category && (
-                    <Box component="span" sx={{ ml: 1, fontSize: 10,
-                      color: 'text.disabled', textTransform: 'uppercase',
-                      letterSpacing: '0.06em' }}>
-                      {t.category}
-                    </Box>
-                  )}
-                </MenuItem>
-              ))}
-            </MuiTextField>
-          </Box>
-
-          <Box>
-            <Typography sx={{ fontSize: 11, color: 'text.tertiary', mb: 0.5,
-              textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Response action
-            </Typography>
-            <MuiTextField
-              select fullWidth size="small"
-              value={responseAction}
-              onChange={e => setResponseAction(e.target.value)}
-              InputProps={{ sx: { fontSize: 13 } }}
-            >
-              {RESPONSE_OPTIONS.map(r => (
-                <MenuItem key={r.id || 'none'} value={r.id} sx={{ fontSize: 13 }}>
-                  {r.label}
-                </MenuItem>
-              ))}
-            </MuiTextField>
-          </Box>
+            ))}
+          </MuiTextField>
         </Box>
 
-        <Stack direction="row" spacing={1} alignItems="center">
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
           <MuiButton
             variant="contained" size="small"
-            disabled={composing || !rawLog.trim() || !selectedType}
+            disabled={composing || !rawLog.trim()}
             onClick={doCompose}
-            startIcon={composing ? <CircularProgress size={12} sx={{ color: 'inherit' }}/> : <RefreshCcw size={14}/>}
+            startIcon={composing
+              ? <CircularProgress size={12} sx={{ color: 'inherit' }}/>
+              : (composed ? <RefreshCcw size={14}/> : <Sparkles size={14}/>)}
             sx={{ textTransform: 'none' }}
           >
-            {composing ? 'Composing…' : (composed ? 'Re-compose' : 'Compose email')}
+            {composing ? 'Generating…' : (composed ? 'Re-generate' : 'Generate email')}
           </MuiButton>
           {composeError && (
             <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: 'error.main' }}>
