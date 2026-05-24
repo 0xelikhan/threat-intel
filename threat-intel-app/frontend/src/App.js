@@ -1771,55 +1771,65 @@ function NetworkDetection({ result }) {
   const kql   = result?.response_summary?.ja_kql_snippet;
   if (!fps.length) return null;
   return (
-    <Card title="Network detection · JA3 / JA4 fingerprints" accent={t.purple}
-      badge={`${fps.length} C2 framework${fps.length===1?'':'s'}`} defaultOpen={false}>
-      <div style={{ fontSize:12, color:t.fgMute, marginBottom:12, lineHeight:1.6 }}>
+    <Card title="Network detection · JA3 / JA4 fingerprints" accent="#B286FF"
+      badge={`${fps.length} C2 framework${fps.length === 1 ? '' : 's'}`} defaultOpen={false}>
+      <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
         TLS handshake fingerprints for known C2 frameworks relevant to this alert. Hunt these
         in your Zeek / Suricata / EDR network logs to catch the C2 channel itself, not just the IOC.
-      </div>
-      <div style={{ background:t.raised, border:`1px solid ${t.line}`, borderRadius:6, overflow:'hidden', marginBottom:12 }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-          <thead>
-            <tr style={{ background:t.bg }}>
-              {['Framework','JA3','JA4','Notes'].map(h => (
-                <th key={h} style={{ padding:'8px 10px', textAlign:'left', color:t.fgDim,
-                  fontWeight:500, fontSize:11, borderBottom:`1px solid ${t.line}` }}>{h}</th>
+      </Typography>
+      <MuiTableContainer component={MuiPaper} elevation={0} sx={{
+        backgroundColor: '#0C1524',
+        border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+        borderRadius: '4px', overflow: 'hidden', mb: 1.5,
+      }}>
+        <MuiTable size="small" sx={{ fontSize: 12 }}>
+          <MuiTableHead>
+            <MuiTableRow sx={{ backgroundColor: '#070d19' }}>
+              {['Framework', 'JA3', 'JA4', 'Notes'].map(h => (
+                <MuiTableCell key={h} sx={{
+                  color: 'text.disabled', fontWeight: 500, fontSize: 11,
+                  borderBottom: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+                }}>{h}</MuiTableCell>
               ))}
-            </tr>
-          </thead>
-          <tbody>
+            </MuiTableRow>
+          </MuiTableHead>
+          <MuiTableBody>
             {fps.map((f, i) => (
-              <tr key={i} style={{ borderBottom:`1px solid ${t.line}` }}>
-                <td style={{ padding:'7px 10px', color:t.fg, fontWeight:500 }}>{f.framework}</td>
-                <td style={{ padding:'7px 10px', fontFamily:'JetBrains Mono', fontSize:11, color:t.cy }}>{f.ja3 || '—'}</td>
-                <td style={{ padding:'7px 10px', fontFamily:'JetBrains Mono', fontSize:11, color:t.purple }}>{f.ja4 || '—'}</td>
-                <td style={{ padding:'7px 10px', fontSize:11, color:t.fgMute, maxWidth:280 }}>{f.notes}</td>
-              </tr>
+              <MuiTableRow key={i}>
+                <MuiTableCell sx={{ color: 'text.primary', fontWeight: 500 }}>{f.framework}</MuiTableCell>
+                <MuiTableCell sx={{
+                  fontFamily: '"IBM Plex Mono", monospace', fontSize: 11, color: 'primary.main',
+                }}>{f.ja3 || '—'}</MuiTableCell>
+                <MuiTableCell sx={{
+                  fontFamily: '"IBM Plex Mono", monospace', fontSize: 11, color: '#B286FF',
+                }}>{f.ja4 || '—'}</MuiTableCell>
+                <MuiTableCell sx={{ fontSize: 11, color: 'text.tertiary', maxWidth: 280 }}>{f.notes}</MuiTableCell>
+              </MuiTableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </MuiTableBody>
+        </MuiTable>
+      </MuiTableContainer>
       {sigma && (
-        <div style={{ marginBottom:12 }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-            <span style={{ fontSize:12, fontWeight:600, color:t.fg }}>Sigma — JA3/JA4 selection</span>
+        <Box sx={{ mb: 1.5 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
+            <Typography sx={{ fontSize: 12, fontWeight: 600, color: 'text.primary' }}>
+              Sigma — JA3/JA4 selection
+            </Typography>
             <CopyBtn text={sigma}/>
-          </div>
-          <pre style={{ background:t.bg, border:`1px solid ${t.line}`, borderRadius:5, padding:12,
-            fontSize:11, color:t.fg, fontFamily:'JetBrains Mono', whiteSpace:'pre-wrap',
-            maxHeight:200, overflowY:'auto', margin:0, lineHeight:1.65 }}>{sigma}</pre>
-        </div>
+          </Box>
+          <MuiCodeBlock maxHeight={200}>{sigma}</MuiCodeBlock>
+        </Box>
       )}
       {kql && (
-        <div>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-            <span style={{ fontSize:12, fontWeight:600, color:t.fg }}>KQL — let statements for Sentinel</span>
+        <Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
+            <Typography sx={{ fontSize: 12, fontWeight: 600, color: 'text.primary' }}>
+              KQL — let statements for Sentinel
+            </Typography>
             <CopyBtn text={kql}/>
-          </div>
-          <pre style={{ background:t.bg, border:`1px solid ${t.line}`, borderRadius:5, padding:12,
-            fontSize:11, color:t.fg, fontFamily:'JetBrains Mono', whiteSpace:'pre-wrap',
-            maxHeight:200, overflowY:'auto', margin:0, lineHeight:1.65 }}>{kql}</pre>
-        </div>
+          </Box>
+          <MuiCodeBlock maxHeight={200}>{kql}</MuiCodeBlock>
+        </Box>
       )}
     </Card>
   );
@@ -1874,69 +1884,136 @@ function URLScanLive({ result }) {
   }, [submission?.state, submission?.uuid]);
 
   if (!urls.length) return null;
+  const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
+  const busy = submission?.state === 'submitting' || submission?.state === 'polling';
   return (
-    <Card title="Live URL scan · URLScan.io" accent={t.cy} defaultOpen={false}
-      badge={`${urls.length} URL${urls.length===1?'':'s'} available`}>
-      <div style={{ display:'flex', gap:8, marginBottom:12 }}>
-        <select value={target} onChange={e => setTarget(e.target.value)}
-          style={{ flex:1, background:t.raised, border:`1px solid ${t.line}`, color:t.fg,
-            padding:'7px 10px', borderRadius:5, fontSize:12, fontFamily:'JetBrains Mono' }}>
-          {urls.map(u => <option key={u} value={u}>{u.length>80 ? u.slice(0,77)+'…' : u}</option>)}
-        </select>
-        <button onClick={submit} disabled={submission?.state === 'submitting' || submission?.state === 'polling'}
-          style={{ background:t.cyDim, border:`1px solid ${t.cyLine}`, color:t.cy,
-            padding:'7px 14px', borderRadius:5, cursor:'pointer', fontSize:12, fontWeight:600,
-            opacity: (submission?.state === 'submitting' || submission?.state === 'polling') ? 0.6 : 1 }}>
+    <Card title="Live URL scan · URLScan.io" accent="#0fbcff" defaultOpen={false}
+      badge={`${urls.length} URL${urls.length === 1 ? '' : 's'} available`}>
+      <Stack direction="row" spacing={1} sx={{ mb: 1.5 }}>
+        <MuiTextField
+          select
+          SelectProps={{ native: true }}
+          value={target}
+          onChange={e => setTarget(e.target.value)}
+          size="small"
+          fullWidth
+          sx={{ '& .MuiInputBase-input': { ...monoSx, fontSize: 12 } }}
+        >
+          {urls.map(u => (
+            <option key={u} value={u}>{u.length > 80 ? u.slice(0, 77) + '…' : u}</option>
+          ))}
+        </MuiTextField>
+        <MuiButton variant="contained" size="small" onClick={submit} disabled={busy}
+          sx={{ minWidth: 100 }}>
           Submit
-        </button>
-      </div>
+        </MuiButton>
+      </Stack>
 
-      {submission?.state === 'submitting' && <div style={{ fontSize:12, color:t.fgMute }}>Submitting to URLScan…</div>}
-      {submission?.state === 'polling'    && <div style={{ fontSize:12, color:t.cy }}>Scan in progress — polling every 10s (typically 30–60s)…</div>}
-      {submission?.state === 'timeout'    && <div style={{ fontSize:12, color:t.orange }}>Scan still processing after 3 min. View it directly: <a href={submission.result_url} target="_blank" rel="noreferrer" style={{ color:t.cy }}>{submission.result_url}</a></div>}
-      {submission?.state === 'error'      && <div style={{ fontSize:12, color:t.red }}>{submission.error}</div>}
+      {submission?.state === 'submitting' && (
+        <Typography sx={{ fontSize: 12, color: 'text.tertiary' }}>Submitting to URLScan…</Typography>
+      )}
+      {submission?.state === 'polling' && (
+        <Typography sx={{ fontSize: 12, color: 'primary.main' }}>
+          Scan in progress — polling every 10s (typically 30–60s)…
+        </Typography>
+      )}
+      {submission?.state === 'timeout' && (
+        <Typography sx={{ fontSize: 12, color: 'warning.main' }}>
+          Scan still processing after 3 min. View it directly:{' '}
+          <Box component="a" href={submission.result_url} target="_blank" rel="noreferrer"
+            sx={{ color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
+            {submission.result_url}
+          </Box>
+        </Typography>
+      )}
+      {submission?.state === 'error' && (
+        <Typography sx={{ fontSize: 12, color: 'error.main' }}>{submission.error}</Typography>
+      )}
 
       {submission?.state === 'done' && submission.report && (() => {
         const r = submission.report;
-        const verdictColor = r.verdict === 'malicious' ? t.red
-          : r.verdict === 'suspicious' ? t.orange : t.green;
+        const verdictColor = r.verdict === 'malicious' ? '#EE3838'
+          : r.verdict === 'suspicious' ? '#E6700F' : '#16AD34';
         return (
-          <div style={{ background:t.raised, border:`1px solid ${t.line}`,
-            borderLeft:`3px solid ${verdictColor}`, borderRadius:6, padding:'14px 16px' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12, gap:12 }}>
-              <div>
-                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
-                  <Chip color={verdictColor} soft={`${verdictColor}14`}>verdict: {r.verdict}</Chip>
-                  {r.score != null && <Chip color={t.orange} size="xs">score {r.score}</Chip>}
-                  {r.country && <Chip color={t.fgMute} size="xs">{r.country}</Chip>}
-                </div>
-                {r.page_title && <div style={{ fontSize:13, color:t.fg, fontWeight:500, marginBottom:4 }}>{r.page_title}</div>}
-                <div style={{ fontSize:11, color:t.fgMute, fontFamily:'JetBrains Mono', wordBreak:'break-all' }}>{r.final_url}</div>
-              </div>
-              <a href={r.report_url} target="_blank" rel="noreferrer"
-                style={{ fontSize:11, color:t.cy, display:'inline-flex', alignItems:'center', gap:3, flexShrink:0 }}>
+          <MuiPaper elevation={0} sx={{
+            backgroundColor: '#0C1524',
+            border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+            borderLeft: `3px solid ${verdictColor}`,
+            borderRadius: '4px', p: '14px 16px',
+          }}>
+            <Box sx={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+              mb: 1.5, gap: 1.5,
+            }}>
+              <Box>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }} flexWrap="wrap">
+                  <MuiTag label={`verdict: ${r.verdict}`} color={verdictColor}/>
+                  {r.score != null && <MuiTag label={`score ${r.score}`} color="#E6700F"/>}
+                  {r.country && <MuiTag label={r.country} color="#848592"/>}
+                </Stack>
+                {r.page_title && (
+                  <Typography sx={{ fontSize: 13, color: 'text.primary', fontWeight: 500, mb: 0.5 }}>
+                    {r.page_title}
+                  </Typography>
+                )}
+                <Box sx={{ fontSize: 11, color: 'text.tertiary', ...monoSx, wordBreak: 'break-all' }}>
+                  {r.final_url}
+                </Box>
+              </Box>
+              <Box component="a" href={r.report_url} target="_blank" rel="noreferrer"
+                sx={{
+                  fontSize: 11, color: 'primary.main',
+                  display: 'inline-flex', alignItems: 'center', gap: 0.375,
+                  flexShrink: 0, textDecoration: 'none',
+                  '&:hover': { textDecoration: 'underline' },
+                }}>
                 full report <ArrowUpRight size={11}/>
-              </a>
-            </div>
+              </Box>
+            </Box>
             {r.screenshot && (
-              <a href={r.screenshot} target="_blank" rel="noreferrer">
-                <img src={r.screenshot} alt="URLScan screenshot"
-                  style={{ width:'100%', maxWidth:560, borderRadius:4, border:`1px solid ${t.line}`,
-                    display:'block', marginBottom:12 }}/>
-              </a>
+              <Box component="a" href={r.screenshot} target="_blank" rel="noreferrer">
+                <Box component="img" src={r.screenshot} alt="URLScan screenshot"
+                  sx={{
+                    width: '100%', maxWidth: 560, borderRadius: '4px',
+                    border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+                    display: 'block', mb: 1.5,
+                  }}/>
+              </Box>
             )}
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8, fontSize:11 }}>
-              {r.ip      && <div><span style={{ color:t.fgDim }}>IP:</span> <span style={{ color:t.fg, fontFamily:'JetBrains Mono' }}>{r.ip}</span></div>}
-              {r.asnname && <div><span style={{ color:t.fgDim }}>ASN:</span> <span style={{ color:t.fg }}>{r.asnname}</span></div>}
-              {r.server  && <div><span style={{ color:t.fgDim }}>Server:</span> <span style={{ color:t.fg }}>{r.server}</span></div>}
-              {r.urls_loaded != null && <div><span style={{ color:t.fgDim }}>Page loaded:</span> <span style={{ color:t.fg }}>{r.urls_loaded} URLs / {r.requests} requests</span></div>}
-            </div>
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 1, fontSize: 11 }}>
+              {r.ip && (
+                <Box>
+                  <Box component="span" sx={{ color: 'text.disabled' }}>IP:</Box>{' '}
+                  <Box component="span" sx={{ color: 'text.primary', ...monoSx }}>{r.ip}</Box>
+                </Box>
+              )}
+              {r.asnname && (
+                <Box>
+                  <Box component="span" sx={{ color: 'text.disabled' }}>ASN:</Box>{' '}
+                  <Box component="span" sx={{ color: 'text.primary' }}>{r.asnname}</Box>
+                </Box>
+              )}
+              {r.server && (
+                <Box>
+                  <Box component="span" sx={{ color: 'text.disabled' }}>Server:</Box>{' '}
+                  <Box component="span" sx={{ color: 'text.primary' }}>{r.server}</Box>
+                </Box>
+              )}
+              {r.urls_loaded != null && (
+                <Box>
+                  <Box component="span" sx={{ color: 'text.disabled' }}>Page loaded:</Box>{' '}
+                  <Box component="span" sx={{ color: 'text.primary' }}>
+                    {r.urls_loaded} URLs / {r.requests} requests
+                  </Box>
+                </Box>
+              )}
+            </Box>
             {r.categories?.length > 0 && (
-              <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:8 }}>
-                {r.categories.map(c => <Chip key={c} color={t.fgMute} size="xs">{c}</Chip>)}
-              </div>
+              <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ mt: 1 }}>
+                {r.categories.map(c => <MuiTag key={c} label={c} color="#848592"/>)}
+              </Stack>
             )}
-          </div>
+          </MuiPaper>
         );
       })()}
     </Card>
@@ -1946,38 +2023,57 @@ function URLScanLive({ result }) {
 /* ─── enrichments ─────────────────────────────────────────────────────────────── */
 function Enrichments({ enrichments }) {
   if (!enrichments || !Object.keys(enrichments).length) return null;
+  const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
   return (
-    <Card title="Raw enrichment data" accent={t.fgMute} defaultOpen={false}>
-      {Object.entries(enrichments).map(([iocType, iocMap])=>
-        Object.entries(iocMap||{}).map(([ioc, data])=>(
-          <div key={ioc} style={{ marginBottom:16 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+    <Card title="Raw enrichment data" accent="#848592" defaultOpen={false}>
+      {Object.entries(enrichments).map(([iocType, iocMap]) =>
+        Object.entries(iocMap || {}).map(([ioc, data]) => (
+          <Box key={ioc} sx={{ mb: 2 }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
               <TypeTag type={iocType}/>
-              <span style={{ fontSize:12, color:t.fg, fontFamily:'JetBrains Mono', wordBreak:'break-all' }}>{ioc}</span>
-            </div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))', gap:6 }}>
-              {Object.entries(data).filter(([k])=>k!=='cached').map(([src,srcData])=>{
-                if (!srcData||typeof srcData!=='object') return null;
-                const entries=Object.entries(srcData).filter(([,v])=>v!==null&&v!==undefined&&v!==''&&!(Array.isArray(v)&&!v.length));
+              <Box component="span" sx={{
+                fontSize: 12, color: 'text.primary', ...monoSx, wordBreak: 'break-all',
+              }}>{ioc}</Box>
+            </Stack>
+            <Box sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+              gap: 0.75,
+            }}>
+              {Object.entries(data).filter(([k]) => k !== 'cached').map(([src, srcData]) => {
+                if (!srcData || typeof srcData !== 'object') return null;
+                const entries = Object.entries(srcData).filter(
+                  ([, v]) => v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && !v.length)
+                );
                 if (!entries.length) return null;
                 return (
-                  <div key={src} style={{ background:t.raised, border:`1px solid ${t.line}`, borderRadius:5, padding:10 }}>
-                    <div style={{ fontSize:11, color:t.cy, fontWeight:600, marginBottom:6 }}>{src}</div>
-                    {entries.slice(0,6).map(([k,v])=>(
-                      <div key={k} style={{ display:'flex', justifyContent:'space-between', fontSize:11,
-                        padding:'2px 0', gap:8 }}>
-                        <span style={{ color:t.fgDim, flexShrink:0 }}>{k}</span>
-                        <span style={{ color:t.fg, textAlign:'right', wordBreak:'break-all', maxWidth:140,
-                          fontFamily:'JetBrains Mono' }}>
-                          {Array.isArray(v)?v.slice(0,4).join(', '):String(v).slice(0,80)}
-                        </span>
-                      </div>
+                  <MuiPaper key={src} elevation={0} sx={{
+                    backgroundColor: '#0C1524',
+                    border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+                    borderRadius: '4px', p: 1.25,
+                  }}>
+                    <Typography sx={{ fontSize: 11, color: 'primary.main', fontWeight: 600, mb: 0.75 }}>
+                      {src}
+                    </Typography>
+                    {entries.slice(0, 6).map(([k, v]) => (
+                      <Box key={k} sx={{
+                        display: 'flex', justifyContent: 'space-between',
+                        fontSize: 11, py: 0.25, gap: 1,
+                      }}>
+                        <Box component="span" sx={{ color: 'text.disabled', flexShrink: 0 }}>{k}</Box>
+                        <Box component="span" sx={{
+                          color: 'text.primary', textAlign: 'right',
+                          wordBreak: 'break-all', maxWidth: 140, ...monoSx,
+                        }}>
+                          {Array.isArray(v) ? v.slice(0, 4).join(', ') : String(v).slice(0, 80)}
+                        </Box>
+                      </Box>
                     ))}
-                  </div>
+                  </MuiPaper>
                 );
               })}
-            </div>
-          </div>
+            </Box>
+          </Box>
         ))
       )}
     </Card>
