@@ -1206,45 +1206,70 @@ function EmailAnalysis({ result }) {
   const authChip = (label, value) => {
     if (!value) return null;
     const ok = value === 'pass';
-    const color = ok ? t.green : t.red;
-    return <Chip color={color} soft={`${color}14`} size="xs">{label}: {value}</Chip>;
+    return <MuiTag key={label} label={`${label}: ${value}`} color={ok ? '#16AD34' : '#EE3838'}/>;
   };
+  const borderTop = (i) => i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none';
+  const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
 
   return (
-    <Card title="Email analysis" accent={t.orange} badge={`${e.attachments?.length || 0} attachments`}>
+    <Card title="Email analysis" accent="#E6700F" badge={`${e.attachments?.length || 0} attachments`}>
       {/* Headers */}
-      <div style={{ background:t.raised, border:`1px solid ${t.line}`, borderRadius:6,
-        padding:'12px 14px', marginBottom:10, fontSize:12, lineHeight:1.8 }}>
-        {e.subject && <div><span style={{ color:t.fgDim, marginRight:8 }}>Subject:</span>
-          <span style={{ color:t.fg, fontWeight:500 }}>{e.subject}</span></div>}
-        {e.from && <div><span style={{ color:t.fgDim, marginRight:8 }}>From:</span>
-          <span style={{ color:t.fg, fontFamily:'JetBrains Mono', fontSize:11 }}>{e.from}</span></div>}
-        {e.to?.length > 0 && <div><span style={{ color:t.fgDim, marginRight:8 }}>To:</span>
-          <span style={{ color:t.fg, fontFamily:'JetBrains Mono', fontSize:11 }}>
-            {Array.isArray(e.to) ? e.to.join(', ') : e.to}</span></div>}
-        {e.return_path && e.return_path !== e.from && (
-          <div><span style={{ color:t.fgDim, marginRight:8 }}>Return-Path:</span>
-            <span style={{ color:t.red, fontFamily:'JetBrains Mono', fontSize:11 }}>{e.return_path}</span></div>
+      <MuiPaper elevation={0} sx={{
+        backgroundColor: '#0C1524',
+        border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+        borderRadius: '4px', p: '12px 14px', mb: 1.25,
+        fontSize: 12, lineHeight: 1.8,
+      }}>
+        {e.subject && (
+          <Box>
+            <Box component="span" sx={{ color: 'text.disabled', mr: 1 }}>Subject:</Box>
+            <Box component="span" sx={{ color: 'text.primary', fontWeight: 500 }}>{e.subject}</Box>
+          </Box>
         )}
-        {e.date && <div><span style={{ color:t.fgDim, marginRight:8 }}>Date:</span>
-          <span style={{ color:t.fgMute }}>{e.date}</span></div>}
-      </div>
+        {e.from && (
+          <Box>
+            <Box component="span" sx={{ color: 'text.disabled', mr: 1 }}>From:</Box>
+            <Box component="span" sx={{ color: 'text.primary', ...monoSx, fontSize: 11 }}>{e.from}</Box>
+          </Box>
+        )}
+        {e.to?.length > 0 && (
+          <Box>
+            <Box component="span" sx={{ color: 'text.disabled', mr: 1 }}>To:</Box>
+            <Box component="span" sx={{ color: 'text.primary', ...monoSx, fontSize: 11 }}>
+              {Array.isArray(e.to) ? e.to.join(', ') : e.to}
+            </Box>
+          </Box>
+        )}
+        {e.return_path && e.return_path !== e.from && (
+          <Box>
+            <Box component="span" sx={{ color: 'text.disabled', mr: 1 }}>Return-Path:</Box>
+            <Box component="span" sx={{ color: 'error.main', ...monoSx, fontSize: 11 }}>{e.return_path}</Box>
+          </Box>
+        )}
+        {e.date && (
+          <Box>
+            <Box component="span" sx={{ color: 'text.disabled', mr: 1 }}>Date:</Box>
+            <Box component="span" sx={{ color: 'text.tertiary' }}>{e.date}</Box>
+          </Box>
+        )}
+      </MuiPaper>
 
       {/* Auth + signals */}
-      <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:12 }}>
-        {authChip('SPF',   auth.spf)}
-        {authChip('DKIM',  auth.dkim)}
+      <Stack direction="row" spacing={0.75} flexWrap="wrap" sx={{ mb: 1.5 }}>
+        {authChip('SPF', auth.spf)}
+        {authChip('DKIM', auth.dkim)}
         {authChip('DMARC', auth.dmarc)}
-      </div>
+      </Stack>
 
       {e.phishing_signals?.length > 0 && (
         <Block title="Phishing signals">
           {e.phishing_signals.map((s, i) => (
-            <li key={i} style={{ display:'flex', gap:10, padding:'5px 0',
-              borderTop: i>0?`1px solid ${t.line}`:'none', listStyle:'none' }}>
-              <AlertCircle size={13} color={t.red} style={{ flexShrink:0, marginTop:2 }}/>
-              <span style={{ fontSize:12, color:t.fg }}>{s}</span>
-            </li>
+            <Box component="li" key={i} sx={{
+              display: 'flex', gap: 1.25, py: 0.625, listStyle: 'none', borderTop: borderTop(i),
+            }}>
+              <AlertCircle size={13} color="#EE3838" style={{ flexShrink: 0, marginTop: 2 }}/>
+              <Box component="span" sx={{ fontSize: 12, color: 'text.primary' }}>{s}</Box>
+            </Box>
           ))}
         </Block>
       )}
@@ -1253,15 +1278,20 @@ function EmailAnalysis({ result }) {
       {e.attachments?.length > 0 && (
         <Block title={`Attachments (${e.attachments.length})`}>
           {e.attachments.map((a, i) => (
-            <li key={i} style={{ padding:'6px 0', listStyle:'none',
-              borderTop: i>0?`1px solid ${t.line}`:'none' }}>
-              <div style={{ fontSize:12, color:t.fg, marginBottom:2 }}>{a.filename || '(no name)'}</div>
-              <div style={{ fontSize:11, color:t.fgMute }}>
-                {a.content_type} · {a.size ? `${(a.size/1024).toFixed(1)} KB` : ''}
-              </div>
-              {a.sha256 && <div style={{ fontSize:10, color:t.fgDim, fontFamily:'JetBrains Mono',
-                wordBreak:'break-all', marginTop:2 }}>sha256: {a.sha256}</div>}
-            </li>
+            <Box component="li" key={i} sx={{
+              py: 0.75, listStyle: 'none', borderTop: borderTop(i),
+            }}>
+              <Typography sx={{ fontSize: 12, color: 'text.primary', mb: 0.25 }}>{a.filename || '(no name)'}</Typography>
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
+                {a.content_type} · {a.size ? `${(a.size / 1024).toFixed(1)} KB` : ''}
+              </Typography>
+              {a.sha256 && (
+                <Box sx={{
+                  fontSize: 10, color: 'text.disabled', ...monoSx,
+                  wordBreak: 'break-all', mt: 0.25,
+                }}>sha256: {a.sha256}</Box>
+              )}
+            </Box>
           ))}
         </Block>
       )}
@@ -1269,9 +1299,11 @@ function EmailAnalysis({ result }) {
       {e.urls?.length > 0 && (
         <Block title={`Embedded URLs (${e.urls.length})`}>
           {e.urls.slice(0, 20).map((u, i) => (
-            <li key={i} style={{ padding:'4px 0', listStyle:'none', fontSize:11,
-              color:t.fg, fontFamily:'JetBrains Mono', wordBreak:'break-all',
-              borderTop: i>0?`1px solid ${t.line}`:'none' }}>{u}</li>
+            <Box component="li" key={i} sx={{
+              py: 0.5, listStyle: 'none', fontSize: 11,
+              color: 'text.primary', ...monoSx,
+              wordBreak: 'break-all', borderTop: borderTop(i),
+            }}>{u}</Box>
           ))}
         </Block>
       )}
@@ -1308,114 +1340,147 @@ function CTIFramework({ rs }) {
   // Admiralty code colour by source reliability letter
   const admColor = { A:t.green, B:'#34d399', C:t.yellow, D:t.orange, E:t.red, F:t.fgMute };
 
+  const borderTop = (i) => i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none';
+  const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
+
   return (
-    <Card title="CTI framework analysis" accent={t.purple}
+    <Card title="CTI framework analysis" accent="#B286FF"
       badge="Diamond · Kill Chain · Pyramid · Admiralty">
 
       {/* ── Diamond Model ─── 4-vertex layout ────────────────────────────── */}
       {Object.keys(dm).length > 0 && (
         <Block title="Diamond Model · adversary, capability, infrastructure, victim">
-          <li style={{ listStyle:'none', padding:0 }}>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:4 }}>
+          <Box component="li" sx={{ listStyle: 'none', p: 0 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mt: 0.5 }}>
               {[
-                ['adversary',      'Adversary',      t.red],
-                ['capability',     'Capability',     t.orange],
-                ['infrastructure', 'Infrastructure', t.cy],
-                ['victim',         'Victim',         t.purple],
+                ['adversary',      'Adversary',      '#EE3838'],
+                ['capability',     'Capability',     '#E6700F'],
+                ['infrastructure', 'Infrastructure', '#0fbcff'],
+                ['victim',         'Victim',         '#B286FF'],
               ].map(([k, label, color]) => {
                 const v = dm[k] || {};
                 return (
-                  <div key={k} style={{ background:t.raised, border:`1px solid ${t.line}`,
-                    borderLeft:`3px solid ${color}`, borderRadius:6, padding:'10px 12px' }}>
-                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
-                      <span style={{ fontSize:10, color, fontWeight:600, letterSpacing:'0.05em' }}>{label.toUpperCase()}</span>
-                      {v.confidence && <Chip color={color} soft={`${color}14`} size="xs">{v.confidence}</Chip>}
-                    </div>
-                    <div style={{ fontSize:12, color:t.fg, fontWeight:500, marginBottom:4 }}>{v.value || '—'}</div>
-                    {v.rationale && <div style={{ fontSize:11, color:t.fgMute, lineHeight:1.55 }}>{v.rationale}</div>}
-                  </div>
+                  <MuiPaper key={k} elevation={0} sx={{
+                    backgroundColor: '#0C1524',
+                    border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+                    borderLeft: `3px solid ${color}`,
+                    borderRadius: '4px', p: '10px 12px',
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.75 }}>
+                      <Box component="span" sx={{ fontSize: 10, color, fontWeight: 600, letterSpacing: '0.05em' }}>
+                        {label.toUpperCase()}
+                      </Box>
+                      {v.confidence && <MuiTag label={v.confidence} color={color}/>}
+                    </Box>
+                    <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 500, mb: 0.5 }}>
+                      {v.value || '—'}
+                    </Typography>
+                    {v.rationale && (
+                      <Typography sx={{ fontSize: 11, color: 'text.tertiary', lineHeight: 1.55 }}>
+                        {v.rationale}
+                      </Typography>
+                    )}
+                  </MuiPaper>
                 );
               })}
-            </div>
+            </Box>
             {dm.meta_features && (dm.meta_features.phase || dm.meta_features.methodology) && (
-              <div style={{ marginTop:8, fontSize:11, color:t.fgMute, padding:'6px 10px',
-                background:t.bg, borderRadius:4, border:`1px solid ${t.line}` }}>
-                <span style={{ color:t.fgDim }}>meta:</span> {dm.meta_features.phase || '—'}
+              <Box sx={{
+                mt: 1, fontSize: 11, color: 'text.tertiary', p: '6px 10px',
+                backgroundColor: '#070d19', borderRadius: '4px',
+                border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+              }}>
+                <Box component="span" sx={{ color: 'text.disabled' }}>meta:</Box> {dm.meta_features.phase || '—'}
                 {dm.meta_features.methodology && <> · {dm.meta_features.methodology}</>}
-              </div>
+              </Box>
             )}
-          </li>
+          </Box>
         </Block>
       )}
 
       {/* ── Kill Chain — horizontal stage strip ──────────────────────────── */}
       {Object.values(kc).some(v => v) && (
         <Block title="Cyber Kill Chain · Lockheed Martin 7-stage mapping">
-          <li style={{ listStyle:'none', padding:0 }}>
-            <div style={{ display:'flex', gap:6, marginTop:4, overflowX:'auto' }}>
+          <Box component="li" sx={{ listStyle: 'none', p: 0 }}>
+            <Box sx={{ display: 'flex', gap: 0.75, mt: 0.5, overflowX: 'auto' }}>
               {stages.map(([key, label], i) => {
                 const evidence = kc[key];
                 const hit = evidence && evidence !== 'null' && evidence !== null;
                 return (
-                  <div key={key} style={{ flex:'1 1 0', minWidth:90,
-                    background: hit ? `${t.orange}14` : t.raised,
-                    border:`1px solid ${hit ? t.orange : t.line}`,
-                    borderTop:`3px solid ${hit ? t.orange : t.line}`,
-                    borderRadius:5, padding:'8px 10px' }}>
-                    <div style={{ fontSize:10, color: hit?t.orange:t.fgDim, fontWeight:600,
-                      marginBottom:4, lineHeight:1.3 }}>
+                  <MuiPaper key={key} elevation={0} sx={{
+                    flex: '1 1 0', minWidth: 90,
+                    backgroundColor: hit ? muiAlpha('#E6700F', 0.08) : '#0C1524',
+                    border: `1px solid ${hit ? '#E6700F' : muiAlpha('#ffffff', 0.12)}`,
+                    borderTop: `3px solid ${hit ? '#E6700F' : muiAlpha('#ffffff', 0.12)}`,
+                    borderRadius: '4px', p: '8px 10px',
+                  }}>
+                    <Box sx={{
+                      fontSize: 10, color: hit ? 'warning.main' : 'text.disabled', fontWeight: 600,
+                      mb: 0.5, lineHeight: 1.3,
+                    }}>
                       {String(i + 1).padStart(2, '0')} · {label}
-                    </div>
-                    <div style={{ fontSize:10, color: hit?t.fg:t.fgGhost, lineHeight:1.5 }}>
+                    </Box>
+                    <Box sx={{
+                      fontSize: 10, color: hit ? 'text.primary' : muiAlpha('#ffffff', 0.25),
+                      lineHeight: 1.5,
+                    }}>
                       {hit ? evidence : '—'}
-                    </div>
-                  </div>
+                    </Box>
+                  </MuiPaper>
                 );
               })}
-            </div>
-          </li>
+            </Box>
+          </Box>
         </Block>
       )}
 
       {/* ── Pyramid of Pain ──────────────────────────────────────────────── */}
       {pop.length > 0 && (
         <Block title="Pyramid of Pain · prioritize detections by attacker cost-to-change">
-          <li style={{ listStyle:'none', padding:0 }}>
-            <div style={{ marginTop:6 }}>
+          <Box component="li" sx={{ listStyle: 'none', p: 0 }}>
+            <Box sx={{ mt: 0.75 }}>
               {popOrder.map((lvl, i) => {
                 const entry = popMap[lvl];
                 const indicators = entry?.indicators || [];
                 const hasInd = indicators.length > 0 && !(indicators.length === 1 && (!indicators[0] || indicators[0] === '<observed TTP>'));
-                const widthPct = 100 - (i * 12);  // narrower at top
+                const widthPct = 100 - (i * 12);
                 const color = popColor[lvl];
-                const labelMap = { TTPs:'TTPs (months)', tools:'Tools (months)',
-                                   host_artifacts:'Host artifacts (weeks)', network:'Network artifacts (days)',
-                                   domains:'Domains (hours)', ips:'IPs (minutes)', hashes:'Hashes (seconds)' };
+                const labelMap = { TTPs: 'TTPs (months)', tools: 'Tools (months)',
+                                   host_artifacts: 'Host artifacts (weeks)', network: 'Network artifacts (days)',
+                                   domains: 'Domains (hours)', ips: 'IPs (minutes)', hashes: 'Hashes (seconds)' };
                 return (
-                  <div key={lvl} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:3 }}>
-                    <div style={{ width:`${widthPct}%`, maxWidth:480, marginLeft:'auto', marginRight:0,
-                      background: hasInd ? `${color}20` : t.raised,
-                      border:`1px solid ${hasInd ? color : t.line}`, borderRadius:4,
-                      padding:'5px 10px', display:'flex', justifyContent:'space-between',
-                      alignItems:'center', gap:8 }}>
-                      <span style={{ fontSize:11, color: hasInd?color:t.fgDim, fontWeight:600,
-                        whiteSpace:'nowrap' }}>{labelMap[lvl]}</span>
+                  <Box key={lvl} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 0.375 }}>
+                    <Box sx={{
+                      width: `${widthPct}%`, maxWidth: 480, ml: 'auto', mr: 0,
+                      backgroundColor: hasInd ? muiAlpha(color, 0.12) : '#0C1524',
+                      border: `1px solid ${hasInd ? color : muiAlpha('#ffffff', 0.12)}`,
+                      borderRadius: '4px', p: '5px 10px',
+                      display: 'flex', justifyContent: 'space-between',
+                      alignItems: 'center', gap: 1,
+                    }}>
+                      <Box component="span" sx={{
+                        fontSize: 11, color: hasInd ? color : 'text.disabled',
+                        fontWeight: 600, whiteSpace: 'nowrap',
+                      }}>{labelMap[lvl]}</Box>
                       {hasInd && (
-                        <span style={{ fontSize:10, color:t.fg, fontFamily:'JetBrains Mono',
-                          textAlign:'right', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                          {indicators.slice(0,3).join(', ')}
-                        </span>
+                        <Box component="span" sx={{
+                          fontSize: 10, color: 'text.primary', ...monoSx,
+                          textAlign: 'right', overflow: 'hidden',
+                          textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {indicators.slice(0, 3).join(', ')}
+                        </Box>
                       )}
-                    </div>
-                  </div>
+                    </Box>
+                  </Box>
                 );
               })}
-            </div>
-            <div style={{ marginTop:8, fontSize:11, color:t.fgMute, fontStyle:'italic' }}>
+            </Box>
+            <Typography sx={{ mt: 1, fontSize: 11, color: 'text.tertiary', fontStyle: 'italic' }}>
               Focus detections on the top half (host artifacts, tools, TTPs) — they take attackers
               weeks to months to replace; hashes/IPs they swap in seconds.
-            </div>
-          </li>
+            </Typography>
+          </Box>
         </Block>
       )}
 
@@ -1423,19 +1488,22 @@ function CTIFramework({ rs }) {
       {evid.length > 0 && (
         <Block title="Admiralty Code · NATO STANAG 2511 evidence reliability">
           {evid.map((e, i) => {
-            const c = admColor[e.source_reliability?.[0]?.toUpperCase()] || t.fgMute;
+            const c = admColor[e.source_reliability?.[0]?.toUpperCase()] || '#848592';
             return (
-              <li key={i} style={{ padding:'7px 0', listStyle:'none',
-                borderTop: i>0?`1px solid ${t.line}`:'none' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:3 }}>
-                  <Chip color={c} soft={`${c}14`}>{e.rating || '?'}</Chip>
-                  <span style={{ fontSize:11, color:t.fgMute }}>
+              <Box component="li" key={i} sx={{
+                py: 0.875, listStyle: 'none', borderTop: borderTop(i),
+              }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.375 }}>
+                  <MuiTag label={e.rating || '?'} color={c}/>
+                  <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
                     source={e.source_reliability || '?'} · cred={e.info_credibility || '?'}
-                  </span>
-                </div>
-                <div style={{ fontSize:12, color:t.fg, marginBottom:2 }}>{e.evidence}</div>
-                {e.rationale && <div style={{ fontSize:11, color:t.fgMute, lineHeight:1.5 }}>{e.rationale}</div>}
-              </li>
+                  </Typography>
+                </Box>
+                <Typography sx={{ fontSize: 12, color: 'text.primary', mb: 0.25 }}>{e.evidence}</Typography>
+                {e.rationale && (
+                  <Typography sx={{ fontSize: 11, color: 'text.tertiary', lineHeight: 1.5 }}>{e.rationale}</Typography>
+                )}
+              </Box>
             );
           })}
         </Block>
