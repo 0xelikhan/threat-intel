@@ -81,6 +81,20 @@ export default function MapTab({ result }) {
     };
   }, []);
 
+  // Leaflet renders blank if its container had zero height at init time —
+  // which happens here because the parent MUI Collapse expands over a few
+  // hundred ms. Watch the container and invalidateSize whenever its
+  // dimensions change so tiles paint correctly on first reveal.
+  useEffect(() => {
+    if (!leafletReady || !mapRef.current || !mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+    map.invalidateSize();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => map.invalidateSize());
+    ro.observe(mapRef.current);
+    return () => ro.disconnect();
+  }, [leafletReady]);
+
   useEffect(() => {
     if (!leafletReady || !mapInstanceRef.current || !result) return;
     const L = window.L;
