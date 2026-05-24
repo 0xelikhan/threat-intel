@@ -28,6 +28,10 @@ import {
   TableRow       as MuiTableRow,
   TableCell      as MuiTableCell,
   TableContainer as MuiTableContainer,
+  Menu           as MuiMenu,
+  MenuItem       as MuiMenuItem,
+  ToggleButton   as MuiToggleButton,
+  ToggleButtonGroup as MuiToggleButtonGroup,
 } from '@mui/material';
 import { alpha as muiAlpha } from '@mui/material/styles';
 import {
@@ -2274,6 +2278,7 @@ function BulkTable({ result }) {
 function SendToWebhook({ result, available }) {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState(null);
+  const anchorRef = useRef(null);
   const targets = Object.entries(available || {}).filter(([, ok]) => ok);
   if (!result?.runId || !targets.length) return null;
 
@@ -2300,38 +2305,40 @@ function SendToWebhook({ result, available }) {
   };
 
   return (
-    <div style={{ position:'relative' }}>
-      <button onClick={() => setOpen(o => !o)} style={{ background:t.surface, border:`1px solid ${t.line}`,
-        color:t.fgMute, padding:'6px 12px', borderRadius:6, cursor:'pointer', fontSize:12,
-        display:'inline-flex', alignItems:'center', gap:6 }}>
-        <ArrowUpRight size={12}/>Send to…
-      </button>
-      {open && (
-        <div style={{ position:'absolute', top:'100%', right:0, marginTop:4,
-          background:t.surface, border:`1px solid ${t.lineHi}`, borderRadius:6,
-          boxShadow:'0 8px 24px rgba(0,0,0,0.4)', zIndex:50, minWidth:170, padding:4 }}>
-          {targets.map(([target]) => (
-            <button key={target} onClick={() => send(target)}
-              style={{ width:'100%', background:'transparent', border:'none', color:t.fg,
-                padding:'8px 12px', textAlign:'left', cursor:'pointer', fontSize:13, borderRadius:4 }}
-              onMouseEnter={e => e.currentTarget.style.background = t.hover}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-              {targetLabels[target] || target}
-            </button>
-          ))}
-        </div>
-      )}
+    <Box sx={{ position:'relative' }}>
+      <MuiButton ref={anchorRef} onClick={() => setOpen(o => !o)}
+        variant="outlined" size="small"
+        startIcon={<ArrowUpRight size={12}/>}>
+        Send to…
+      </MuiButton>
+      <MuiMenu anchorEl={anchorRef.current} open={open} onClose={() => setOpen(false)}
+        anchorOrigin={{ vertical:'bottom', horizontal:'right' }}
+        transformOrigin={{ vertical:'top', horizontal:'right' }}>
+        {targets.map(([target]) => (
+          <MuiMenuItem key={target} onClick={() => send(target)} sx={{ fontSize: 13 }}>
+            {targetLabels[target] || target}
+          </MuiMenuItem>
+        ))}
+      </MuiMenu>
       {status && (
-        <div style={{ position:'absolute', top:'calc(100% + 8px)', right:0,
-          background:t.raised, border:`1px solid ${status.state==='ok'?t.green:status.state==='err'?t.red:t.cy}40`,
-          borderRadius:5, padding:'7px 11px', fontSize:11, color:status.state==='ok'?t.green:status.state==='err'?t.red:t.cy,
-          whiteSpace:'nowrap' }}>
+        <Box sx={{
+          position:'absolute', top:'calc(100% + 8px)', right:0,
+          backgroundColor:'background.secondary',
+          border: theme => `1px solid ${muiAlpha(
+            status.state==='ok' ? theme.palette.success.main
+            : status.state==='err' ? theme.palette.error.main
+            : theme.palette.primary.main, 0.4)}`,
+          borderRadius:'4px', p:'7px 11px', fontSize:11,
+          color: status.state==='ok' ? 'success.main'
+               : status.state==='err' ? 'error.main' : 'primary.main',
+          whiteSpace:'nowrap',
+        }}>
           {status.state === 'sending' && `Sending to ${status.target}…`}
           {status.state === 'ok'      && `Sent to ${status.target}`}
           {status.state === 'err'     && `Failed: ${status.detail?.error || 'unknown'}`}
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -2591,28 +2598,40 @@ export default function App() {
   }, [result, isBulk]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div style={{ display:'flex', minHeight:'100vh', background:t.bg, color:t.fg }}>
+    <Box sx={{
+      display: 'flex', minHeight: '100vh',
+      backgroundColor: 'background.default',
+      color: 'text.primary',
+    }}>
       <Sidebar onResult={setResult} onPartialResult={mergePartial} currentResult={result}/>
 
-      <main style={{ flex:1, padding:'24px 28px 48px', overflowY:'auto', minWidth:0 }}>
+      <Box component="main" sx={{
+        flex: 1, p: '24px 28px 48px', overflowY: 'auto', minWidth: 0,
+      }}>
         {/* Top toolbar: view toggle + outbound actions only */}
         {result && (
-          <div style={{ display:'flex', justifyContent:'space-between', gap:8, marginBottom:14, alignItems:'center' }}>
-            {/* Left: view toggle */}
-            <div style={{ display:'flex', background:t.surface, border:`1px solid ${t.line}`, borderRadius:6, padding:2 }}>
-              {[['detail', 'Detail'], ['table', 'Table']].map(([id, label]) => (
-                <button key={id} onClick={() => setView(id)}
-                  style={{ background: view === id ? t.raised : 'transparent', border:'none',
-                    color: view === id ? t.fg : t.fgMute, padding:'5px 14px', borderRadius:4,
-                    cursor:'pointer', fontSize:12, fontWeight:500 }}>
-                  {label}
-                  {id === 'table' && isBulk && <span style={{ marginLeft:5, color:t.cy, fontSize:10 }}>·{totalIOCs}</span>}
-                </button>
-              ))}
-            </div>
-            {/* Right: send to webhook if any configured */}
+          <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1} sx={{ mb: 1.75 }}>
+            <MuiToggleButtonGroup
+              value={view}
+              exclusive
+              size="small"
+              onChange={(_, v) => v && setView(v)}
+              sx={{ height: 32 }}
+            >
+              <MuiToggleButton value="detail" sx={{ px: 1.75, fontSize: 12, textTransform: 'none' }}>
+                Detail
+              </MuiToggleButton>
+              <MuiToggleButton value="table" sx={{ px: 1.75, fontSize: 12, textTransform: 'none' }}>
+                Table
+                {isBulk && (
+                  <Box component="span" sx={{ ml: 0.625, color: 'primary.main', fontSize: 10 }}>
+                    ·{totalIOCs}
+                  </Box>
+                )}
+              </MuiToggleButton>
+            </MuiToggleButtonGroup>
             <SendToWebhook result={result} available={webhooks}/>
-          </div>
+          </Stack>
         )}
 
         {!result && <Empty/>}
@@ -2663,27 +2682,19 @@ export default function App() {
 
         {/* Empty-state file scanner: lets analysts scan a file without running the pipeline first */}
         {!result && (
-          <div style={{ marginTop:32 }}>
+          <Box sx={{ mt: 4 }}>
             <FileScanner/>
-          </div>
+          </Box>
         )}
-      </main>
+      </Box>
 
+      {/* Global keyframes — MUI CssBaseline doesn't include @keyframes */}
       <style>{`
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
         @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-        ::-webkit-scrollbar{width:6px;height:6px}
-        ::-webkit-scrollbar-track{background:transparent}
-        ::-webkit-scrollbar-thumb{background:${t.lineHi};border-radius:3px}
-        ::-webkit-scrollbar-thumb:hover{background:${t.lineStr}}
-        button:focus-visible,input:focus-visible,textarea:focus-visible{
-          outline:2px solid ${t.cyLine};outline-offset:1px;
-        }
-        textarea:focus,input:focus{border-color:${t.cyLine} !important}
         a{color:inherit;transition:opacity .15s}
         a:hover{opacity:.8}
-        h1,h2,h3,h4{margin:0}
       `}</style>
-    </div>
+    </Box>
   );
 }
