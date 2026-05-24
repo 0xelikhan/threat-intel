@@ -1164,9 +1164,58 @@ async def get_history():
 
 @app.get("/api/history/{run_id}")
 async def get_history_item(run_id: str):
-    if run_id not in _results:
+    """Look in memory first, fall back to the persistent case store on disk."""
+    if run_id in _results:
+        return {k: v for k, v in _results[run_id].items() if k != "stix_bundle"}
+    from intel.case_store import load_case
+    case = load_case(run_id)
+    if not case:
         raise HTTPException(404, "Run not found")
-    return {k: v for k, v in _results[run_id].items() if k != "stix_bundle"}
+    _results[run_id] = case
+    return case
+
+
+# ─── CASES (spec §9 persistent storage) ───────────────────────────────────────────
+@app.get("/api/cases")
+async def cases_list(threat_level: Optional[str] = None,
+                     malware_family: Optional[str] = None,
+                     since_days: Optional[int] = None,
+                     limit: int = 25):
+    from intel.case_store import list_cases
+    return {"cases": list_cases(threat_level=threat_level,
+                                malware_family=malware_family,
+                                since_days=since_days, limit=limit)}
+
+
+@app.get("/api/search")
+async def search_cases_endpoint(q: str = "", limit: int = 25):
+    from intel.case_store import search_cases
+    return {"results": search_cases(q, limit=limit), "query": q}
+
+
+class LabelUpdate(BaseModel):
+    label: str
+
+
+@app.put("/api/cases/{run_id}/label")
+async def update_case_label(run_id: str, body: LabelUpdate):
+    from intel.case_store import update_label
+    if not update_label(run_id, body.label):
+        raise HTTPException(404, "case not found")
+    return {"updated": True, "label": body.label}
+
+
+class NoteAppend(BaseModel):
+    note: str
+    analyst: Optional[str] = ""
+
+
+@app.post("/api/cases/{run_id}/notes")
+async def append_case_note(run_id: str, body: NoteAppend):
+    from intel.case_store import append_note
+    if not append_note(run_id, body.note, body.analyst or ""):
+        raise HTTPException(404, "case not found")
+    return {"appended": True}
 
 
 # ─── MISP INGESTION ───────────────────────────────────────────────────────────────
@@ -1244,6 +1293,12 @@ def _add_history(run_id: str, result: dict, label: str):
     })
     if len(_history) > 100:
         _history.pop(0)
+    # Spec §9 — persist the full case to disk so analyses survive a restart
+    try:
+        from intel.case_store import save_case
+        save_case(run_id, result, label or "")
+    except Exception as e:
+        print(f"[recon] case_store.save_case failed: {e}")
 
 def _ts():
     return datetime.now(timezone.utc).isoformat()

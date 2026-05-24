@@ -2402,16 +2402,39 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, scanSta
   }, [onScanFile]);
 
   // Cmd/Ctrl+Enter triggers analysis via the AgentPipeline's button
+  // Spec §9 keyboard shortcuts
   useEffect(() => {
     const handler = (e) => {
+      const inField = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+      // Ctrl+Enter — submit analysis (works even while typing)
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-        const btn = document.querySelector('[data-recon-analyze]');
-        btn?.click();
+        e.preventDefault();
+        document.querySelector('[data-recon-analyze]')?.click();
+      }
+      // Ctrl+N — clear textarea + result for new investigation
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        setLogText('');
+        onResult(null);
+      }
+      // Ctrl+S — trigger Print/Save PDF on the Report card if present
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        const btn = document.querySelector('[data-recon-print]');
+        if (btn) { e.preventDefault(); btn.click(); }
+      }
+      // ? — toggle shortcut help (only when not typing in a field)
+      if (e.key === '?' && !inField) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('recon:toggle-shortcuts'));
+      }
+      // Escape — close shortcut help / clear focus
+      if (e.key === 'Escape') {
+        window.dispatchEvent(new CustomEvent('recon:close-overlays'));
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [onResult]);
 
   const iocs = currentResult?.iocs || {};
   const hasIOCs = Object.values(iocs).some(l=>l?.length>0);
