@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Upload, ChevronDown, ChevronRight, Copy, Check, Printer, Search,
   Activity, Database, Layers, Zap, Globe, Network, Shield, FileText,
-  ArrowUpRight, AlertCircle, X, FileSearch, Mail,
+  ArrowUpRight, AlertCircle, X, FileSearch, Mail, Hash, Link2,
 } from 'lucide-react';
 
 import MapTab            from './components/MapTab';
@@ -3221,6 +3221,76 @@ function Report({ result }) {
   );
 }
 
+/* ─── sidebar scanner input — unified pill with leading icon + submit ────── */
+function ScannerInput({ icon, placeholder, value, onChange, onSubmit, disabled, submitLabel, sx }) {
+  const trimmed = (value || '').trim();
+  const ready = !!trimmed && !disabled;
+  return (
+    <Box sx={{
+      display: 'flex', alignItems: 'stretch',
+      backgroundColor: 'background.secondary',
+      border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+      borderRadius: '4px',
+      overflow: 'hidden',
+      transition: 'border-color .15s',
+      '&:focus-within': { borderColor: 'primary.main' },
+      ...sx,
+    }}>
+      <Box sx={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        px: 1, color: ready ? 'primary.main' : 'text.tertiary',
+        transition: 'color .15s',
+      }}>
+        {icon}
+      </Box>
+      <Box component="input" type="text"
+        value={value}
+        disabled={disabled}
+        onChange={e => onChange(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && trimmed) onSubmit(trimmed);
+        }}
+        placeholder={placeholder}
+        sx={{
+          flex: 1, minWidth: 0,
+          backgroundColor: 'transparent',
+          border: 'none',
+          color: 'text.primary',
+          p: '8px 4px 8px 0',
+          fontFamily: '"IBM Plex Mono", monospace',
+          fontSize: 11,
+          outline: 'none',
+          '&::placeholder': { color: 'text.tertiary' },
+          '&:disabled': { opacity: 0.5 },
+        }}
+      />
+      <Box component="button"
+        disabled={!ready}
+        onClick={() => onSubmit(trimmed)}
+        sx={{
+          backgroundColor: ready ? muiAlpha('#0fbcff', 0.12) : 'transparent',
+          borderLeft: `1px solid ${muiAlpha('#ffffff', 0.08)}`,
+          border: 'none',
+          borderLeftStyle: 'solid',
+          borderLeftWidth: '1px',
+          borderLeftColor: muiAlpha('#ffffff', 0.08),
+          color: ready ? 'primary.main' : 'text.tertiary',
+          fontSize: 11, fontWeight: 600,
+          px: 1.5,
+          cursor: ready ? 'pointer' : 'default',
+          textTransform: 'uppercase', letterSpacing: '0.05em',
+          transition: 'all .15s',
+          '&:hover:not(:disabled)': {
+            backgroundColor: muiAlpha('#0fbcff', 0.2),
+          },
+        }}>
+        {submitLabel}
+      </Box>
+    </Box>
+  );
+}
+
+
 /* ─── sidebar ─────────────────────────────────────────────────────────────────
  * Adapted from OpenCTI (AGPL-3.0) — LeftBar.jsx pattern.
  * Uses MUI Drawer with the OpenCTI nav width/styling, hosting the input area
@@ -3418,82 +3488,28 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
           )}
         </Box>
 
-        {/* File-analyzer entry points secondary to the drop zone — both POST
-            into the same comprehensive scanner and auto-switch the page. */}
-        <Box sx={{ display: 'flex', gap: 0.75, mb: 1 }}>
-          <Box component="input" type="text"
-            value={hashInput} onChange={e => setHashInput(e.target.value)}
-            placeholder="hash lookup"
-            disabled={scanState?.scanning}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && hashInput.trim()) {
-                onScanHash?.(hashInput.trim());
-                setHashInput('');
-              }
-            }}
-            sx={{
-              flex: 1, minWidth: 0,
-              backgroundColor: 'background.secondary',
-              border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-              color: 'text.primary',
-              p: '7px 10px', borderRadius: '4px',
-              fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
-              outline: 'none',
-              '&:focus': { borderColor: 'primary.main' },
-            }}/>
-          <Box component="button"
-            disabled={!hashInput.trim() || scanState?.scanning}
-            onClick={() => { onScanHash?.(hashInput.trim()); setHashInput(''); }}
-            sx={{
-              backgroundColor: 'transparent',
-              border: `1px solid ${muiAlpha('#0fbcff', 0.4)}`,
-              color: 'primary.main',
-              fontSize: 11, fontWeight: 500,
-              px: 1.5, borderRadius: '4px',
-              cursor: 'pointer',
-              '&:disabled': { opacity: 0.4, cursor: 'default' },
-              '&:hover:not(:disabled)': { backgroundColor: muiAlpha('#0fbcff', 0.08) },
-            }}>
-            Lookup
-          </Box>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 0.75, mb: 1.25 }}>
-          <Box component="input" type="text"
-            value={urlInput} onChange={e => setUrlInput(e.target.value)}
-            placeholder="fetch + scan URL"
-            disabled={scanState?.scanning}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && urlInput.trim()) {
-                onScanUrl?.(urlInput.trim());
-                setUrlInput('');
-              }
-            }}
-            sx={{
-              flex: 1, minWidth: 0,
-              backgroundColor: 'background.secondary',
-              border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-              color: 'text.primary',
-              p: '7px 10px', borderRadius: '4px',
-              fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
-              outline: 'none',
-              '&:focus': { borderColor: 'primary.main' },
-            }}/>
-          <Box component="button"
-            disabled={!urlInput.trim() || scanState?.scanning}
-            onClick={() => { onScanUrl?.(urlInput.trim()); setUrlInput(''); }}
-            sx={{
-              backgroundColor: 'transparent',
-              border: `1px solid ${muiAlpha('#0fbcff', 0.4)}`,
-              color: 'primary.main',
-              fontSize: 11, fontWeight: 500,
-              px: 1.5, borderRadius: '4px',
-              cursor: 'pointer',
-              '&:disabled': { opacity: 0.4, cursor: 'default' },
-              '&:hover:not(:disabled)': { backgroundColor: muiAlpha('#0fbcff', 0.08) },
-            }}>
-            Fetch
-          </Box>
-        </Box>
+        {/* Hash / URL input groups — unified pill with leading icon + inline
+            submit button. Button glows primary when input is non-empty. */}
+        <ScannerInput
+          icon={<Hash size={13}/>}
+          placeholder="Lookup hash"
+          value={hashInput}
+          onChange={setHashInput}
+          onSubmit={(v) => { onScanHash?.(v); setHashInput(''); }}
+          disabled={scanState?.scanning}
+          submitLabel="Lookup"
+          sx={{ mb: 1 }}
+        />
+        <ScannerInput
+          icon={<Link2 size={13}/>}
+          placeholder="Scan URL"
+          value={urlInput}
+          onChange={setUrlInput}
+          onSubmit={(v) => { onScanUrl?.(v); setUrlInput(''); }}
+          disabled={scanState?.scanning}
+          submitLabel="Fetch"
+          sx={{ mb: 1.25 }}
+        />
 
         <AgentPipeline logText={logText} label=""
           onComplete={onResult}
