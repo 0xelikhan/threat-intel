@@ -2670,30 +2670,24 @@ function SendToWebhook({ result, available }) {
   );
 }
 
-/* ─── YARA file scanner section ───────────────────────────────────────────────── */
-/* Scan state is lifted to App so the sidebar drop zone and this panel share it.  */
-function FileScanner({ scanning, result, error, file, submission, onScan, onDetonate }) {
+/* ─── YARA file scan results panel ─────────────────────────────────────────────
+ * Display-only. Upload happens in the left sidebar (drop zone). This card only
+ * renders when there's a scan result to show.
+ * --------------------------------------------------------------------------- */
+function FileScanner({ scanning, result, error, submission, onDetonate }) {
   const detonate = onDetonate;
+  if (!result && !error && !scanning) return null;
 
   const hasReport = result?.sandbox && Object.keys(result.sandbox).length > 0;
 
   return (
-    <Card title="YARA file scanner" accent="#B286FF" defaultOpen={!!result}
-      badge="binary analysis">
-      <MuiPaper component="label" htmlFor="yaraFile" elevation={0} sx={{
-        display: 'flex', alignItems: 'center', gap: 1.25, p: '12px 14px',
-        backgroundColor: 'background.secondary',
-        border: theme => `1.5px dashed ${muiAlpha('#ffffff', 0.12)}`,
-        borderRadius: '4px', cursor: 'pointer',
-        color: 'text.tertiary', fontSize: 13,
-        mb: result ? 1.75 : 0,
-        '&:hover': { borderColor: muiAlpha('#B286FF', 0.5) },
-      }}>
-        <FileSearch size={16} color="#B286FF"/>
-        {scanning ? 'Scanning…' : 'Drop or click to scan a file (≤ 50 MB)'}
-        <input id="yaraFile" type="file" style={{ display: 'none' }}
-          onChange={e => onScan(e.target.files[0])} disabled={scanning}/>
-      </MuiPaper>
+    <Card title="YARA file scan" accent="#B286FF" defaultOpen
+      badge={result?.filename || (scanning ? 'scanning…' : 'binary analysis')}>
+      {scanning && !result && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#B286FF', fontSize: 12 }}>
+          <FileSearch size={14}/>Scanning file with YARA + sandbox lookup…
+        </Box>
+      )}
       {error && (
         <Box sx={{ color: 'error.main', fontSize: 12, mb: 1.25, mt: 1.25 }}>{error}</Box>
       )}
@@ -3056,15 +3050,16 @@ export default function App() {
 
             <Enrichments enrichments={result.enrichments}/>
             <Report result={result}/>
-            <FileScanner {...scanState} onScan={scanFile} onDetonate={detonateFile}/>
+            {/* YARA scan results auto-appear here when sidebar drop runs a scan */}
+            <FileScanner {...scanState} onDetonate={detonateFile}/>
             <Box sx={{ mb: 2 }}><ExportBar result={result}/></Box>
           </>
         )}
 
-        {/* Empty-state file scanner: lets analysts scan a file without running the pipeline first */}
-        {!result && (
+        {/* YARA scan results in empty state — only if sidebar drop already ran */}
+        {!result && (scanState.result || scanState.scanning || scanState.error) && (
           <Box sx={{ mt: 4 }}>
-            <FileScanner {...scanState} onScan={scanFile} onDetonate={detonateFile}/>
+            <FileScanner {...scanState} onDetonate={detonateFile}/>
           </Box>
         )}
       </Box>
