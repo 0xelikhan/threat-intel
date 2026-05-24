@@ -3835,6 +3835,11 @@ export default function App() {
   }, []);
 
   const _runScan = useCallback(async (fetchFn) => {
+    // Any new scan immediately switches the main view to the scanner —
+    // clear analyze + email state so the user lands on the action they
+    // just triggered, not whatever was on screen before.
+    setEmailState(null);
+    setResult(null);
     setScanState({ scanning: true, result: null, error: null, progressStep: 0 });
     startScanProgress();
     try {
