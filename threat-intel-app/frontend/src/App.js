@@ -1858,51 +1858,57 @@ function Report({ result }) {
           <p style={{ fontSize:13, color:t.fg, lineHeight:1.7, margin:0 }}>{rs.summary}</p>
         </div>
 
-        <h3 style={{ fontSize:13, color:t.fgMute, fontWeight:500, margin:'0 0 8px 0' }}>
+        <Typography variant="h3" sx={{ fontSize:13, color:'text.tertiary', fontWeight:500, mb:1 }}>
           Indicator inventory · {total}
-        </h3>
-        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12, marginBottom:20 }}>
-          <thead>
-            <tr>
-              {['Type','Indicator','Verdict','Reason'].map(h=>(
-                <th key={h} style={{ padding:'8px 10px', textAlign:'left', color:t.fgDim,
-                  fontWeight:500, fontSize:11, borderBottom:`1px solid ${t.lineHi}` }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(iocs).flatMap(([type,list])=>(list||[]).map((ioc)=>{
-              const a = rs.ioc_assessments?.find(x=>x.ioc===ioc);
+        </Typography>
+        <MuiTable size="small" sx={{ mb:2.5 }}>
+          <MuiTableHead>
+            <MuiTableRow>
+              {['Type','Indicator','Verdict','Reason'].map(h =>
+                <MuiTableCell key={h}>{h}</MuiTableCell>
+              )}
+            </MuiTableRow>
+          </MuiTableHead>
+          <MuiTableBody>
+            {Object.entries(iocs).flatMap(([type,list]) => (list||[]).map(ioc => {
+              const a = rs.ioc_assessments?.find(x => x.ioc === ioc);
               return (
-                <tr key={ioc} style={{ borderBottom:`1px solid ${t.line}` }}>
-                  <td style={{ padding:'8px 10px' }}><TypeTag type={type}/></td>
-                  <td style={{ padding:'8px 10px', fontFamily:'JetBrains Mono', color:t.fg, wordBreak:'break-all' }}>{ioc}</td>
-                  <td style={{ padding:'8px 10px' }}>{a&&<Verdict verdict={a.verdict} size="xs"/>}</td>
-                  <td style={{ padding:'8px 10px', fontSize:11, color:t.fgMute, maxWidth:240 }}>{a?.reason||''}</td>
-                </tr>
+                <MuiTableRow key={ioc} hover>
+                  <MuiTableCell><TypeTag type={type}/></MuiTableCell>
+                  <MuiTableCell sx={{ fontFamily:'"IBM Plex Mono", monospace',
+                    wordBreak:'break-all' }}>{ioc}</MuiTableCell>
+                  <MuiTableCell>{a && <Verdict verdict={a.verdict} size="small"/>}</MuiTableCell>
+                  <MuiTableCell sx={{ fontSize:11, color:'text.tertiary', maxWidth:240 }}>
+                    {a?.reason || ''}
+                  </MuiTableCell>
+                </MuiTableRow>
               );
             }))}
-          </tbody>
-        </table>
+          </MuiTableBody>
+        </MuiTable>
 
-        {rs.mitre_techniques?.length>0 && (
+        {rs.mitre_techniques?.length > 0 && (
           <>
-            <h3 style={{ fontSize:13, color:t.fgMute, fontWeight:500, margin:'0 0 8px 0' }}>MITRE ATT&amp;CK</h3>
-            <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:20 }}>
-              {rs.mitre_techniques.map((t_,i)=>(
-                <span key={i} style={{ background:t.blueDim, border:`1px solid ${t.blue}30`, color:t.blue,
-                  padding:'3px 8px', borderRadius:4, fontSize:11, fontFamily:'JetBrains Mono' }}>{t_}</span>
+            <Typography variant="h3" sx={{ fontSize:13, color:'text.tertiary', fontWeight:500, mb:1 }}>
+              MITRE ATT&amp;CK
+            </Typography>
+            <Box sx={{ display:'flex', gap:0.5, flexWrap:'wrap', mb:2.5 }}>
+              {rs.mitre_techniques.map((t_, i) => (
+                <MuiTag key={i} label={t_} color="#0fbcff"
+                  sx={{ fontFamily:'"IBM Plex Mono", monospace' }}/>
               ))}
-            </div>
+            </Box>
           </>
         )}
 
         {result.sigma_rule && (
           <>
-            <h3 style={{ fontSize:13, color:t.fgMute, fontWeight:500, margin:'0 0 8px 0' }}>Sigma detection rule</h3>
-            <pre style={{ background:t.raised, border:`1px solid ${t.line}`, borderRadius:5, padding:12,
-              fontSize:11, color:t.fg, fontFamily:'JetBrains Mono', maxHeight:200, overflowY:'auto',
-              margin:'0 0 20px 0', whiteSpace:'pre-wrap', lineHeight:1.6 }}>{result.sigma_rule}</pre>
+            <Typography variant="h3" sx={{ fontSize:13, color:'text.tertiary', fontWeight:500, mb:1 }}>
+              Sigma detection rule
+            </Typography>
+            <Box sx={{ mb:2.5 }}>
+              <MuiCodeBlock maxHeight={200}>{result.sigma_rule}</MuiCodeBlock>
+            </Box>
           </>
         )}
 
@@ -2397,20 +2403,25 @@ function FileScanner() {
   const hasReport = result?.sandbox && Object.keys(result.sandbox).length > 0;
 
   return (
-    <Card title="YARA file scanner" accent={t.purple} defaultOpen={false}
+    <Card title="YARA file scanner" accent="#B286FF" defaultOpen={false}
       badge="binary analysis">
-      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:result?14:0 }}>
-        <label htmlFor="yaraFile" style={{
-          flex:1, padding:'12px 14px', background:t.raised, border:`1.5px dashed ${t.line}`,
-          borderRadius:6, cursor:'pointer', display:'flex', alignItems:'center', gap:10,
-          color:t.fgMute, fontSize:13 }}>
-          <FileSearch size={16} color={t.purple}/>
-          {scanning ? 'Scanning…' : 'Drop or click to scan a file (≤ 50 MB)'}
-          <input id="yaraFile" type="file" style={{ display:'none' }}
-            onChange={e => scan(e.target.files[0])} disabled={scanning}/>
-        </label>
-      </div>
-      {error && <div style={{ color:t.red, fontSize:12, marginBottom:10 }}>{error}</div>}
+      <MuiPaper component="label" htmlFor="yaraFile" elevation={0} sx={{
+        display: 'flex', alignItems: 'center', gap: 1.25, p: '12px 14px',
+        backgroundColor: 'background.secondary',
+        border: theme => `1.5px dashed ${muiAlpha('#ffffff', 0.12)}`,
+        borderRadius: '4px', cursor: 'pointer',
+        color: 'text.tertiary', fontSize: 13,
+        mb: result ? 1.75 : 0,
+        '&:hover': { borderColor: muiAlpha('#B286FF', 0.5) },
+      }}>
+        <FileSearch size={16} color="#B286FF"/>
+        {scanning ? 'Scanning…' : 'Drop or click to scan a file (≤ 50 MB)'}
+        <input id="yaraFile" type="file" style={{ display: 'none' }}
+          onChange={e => scan(e.target.files[0])} disabled={scanning}/>
+      </MuiPaper>
+      {error && (
+        <Box sx={{ color: 'error.main', fontSize: 12, mb: 1.25, mt: 1.25 }}>{error}</Box>
+      )}
       {result && (
         <>
           <div style={{ background:t.raised, border:`1px solid ${t.line}`, borderRadius:6,
