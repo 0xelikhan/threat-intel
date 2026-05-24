@@ -3336,7 +3336,7 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
               {scanState?.scanning ? 'Analyzing…' : 'Drop a file to analyze'}
             </Typography>
             <Typography sx={{ color: 'text.tertiary', fontSize: 11, mt: 0.25 }}>
-              static · YARA · sandbox · threat intel · ≤ 50 MB
+              ≤ 50 MB
             </Typography>
           </Box>
           <input id="sidebarFile" type="file"
