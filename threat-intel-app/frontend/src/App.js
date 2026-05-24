@@ -3225,9 +3225,11 @@ function Report({ result }) {
  * Uses MUI Drawer with the OpenCTI nav width/styling, hosting the input area
  * (drop zone + textarea + AgentPipeline) and the extracted-IOCs panel.
  */
-function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, scanState, page, onPageChange }) {
+function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanHash, onScanUrl, scanState, page, onPageChange }) {
   const [logText, setLogText] = useState('');
   const [dragOver, setDragOver] = useState(false);
+  const [hashInput, setHashInput] = useState('');
+  const [urlInput, setUrlInput]   = useState('');
 
   const handleFile = useCallback(file => {
     if (!file) return;
@@ -3323,7 +3325,8 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, scanSta
 
       {/* Input area + pipeline */}
       <Box sx={{ p: '18px 16px 16px', flex: 1, overflowY: 'auto' }}>
-        {/* YARA file scanner drop zone — dropping a file runs /api/scan-file */}
+        {/* Comprehensive file-analyzer drop zone — POST /api/scan/file.
+            On submission the page auto-switches to the File scanner view. */}
         <Box
           onDragOver={e => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
@@ -3352,10 +3355,10 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, scanSta
               color: dragOver ? '#B286FF' : 'text.primary',
               fontSize: 12, fontWeight: 500,
             }}>
-              {scanState?.scanning ? 'Scanning…' : 'Drop a file to scan with YARA'}
+              {scanState?.scanning ? 'Analyzing…' : 'Drop a file to analyze'}
             </Typography>
             <Typography sx={{ color: 'text.tertiary', fontSize: 11, mt: 0.25 }}>
-              binary analysis · sandbox lookup · ≤ 50 MB
+              static · YARA · sandbox · threat intel · ≤ 50 MB
             </Typography>
           </Box>
           <input id="sidebarFile" type="file"
@@ -3367,17 +3370,12 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, scanSta
             {scanState.error}
           </Typography>
         )}
-        {scanState?.result && !scanState.scanning && (
-          <Typography sx={{ color: 'success.main', fontSize: 11, mb: 1.25, mt: -0.5 }}>
-            Scanned {scanState.result.filename}
-          </Typography>
-        )}
 
         {/* Textarea with clear button */}
         <Box sx={{ position: 'relative', mb: 1.25 }}>
           <Box component="textarea"
             value={logText} onChange={e=>setLogText(e.target.value)}
-            placeholder="Or paste alert text, IOCs, log lines, EML headers..."
+            placeholder="Paste to Analyze"
             sx={{
               width: '100%',
               backgroundColor: 'background.secondary',
@@ -3405,6 +3403,83 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, scanSta
               <X size={14}/>
             </MuiIconButton>
           )}
+        </Box>
+
+        {/* File-analyzer entry points secondary to the drop zone — both POST
+            into the same comprehensive scanner and auto-switch the page. */}
+        <Box sx={{ display: 'flex', gap: 0.75, mb: 1 }}>
+          <Box component="input" type="text"
+            value={hashInput} onChange={e => setHashInput(e.target.value)}
+            placeholder="hash lookup"
+            disabled={scanState?.scanning}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && hashInput.trim()) {
+                onScanHash?.(hashInput.trim());
+                setHashInput('');
+              }
+            }}
+            sx={{
+              flex: 1, minWidth: 0,
+              backgroundColor: 'background.secondary',
+              border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+              color: 'text.primary',
+              p: '7px 10px', borderRadius: '4px',
+              fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
+              outline: 'none',
+              '&:focus': { borderColor: 'primary.main' },
+            }}/>
+          <Box component="button"
+            disabled={!hashInput.trim() || scanState?.scanning}
+            onClick={() => { onScanHash?.(hashInput.trim()); setHashInput(''); }}
+            sx={{
+              backgroundColor: 'transparent',
+              border: `1px solid ${muiAlpha('#0fbcff', 0.4)}`,
+              color: 'primary.main',
+              fontSize: 11, fontWeight: 500,
+              px: 1.5, borderRadius: '4px',
+              cursor: 'pointer',
+              '&:disabled': { opacity: 0.4, cursor: 'default' },
+              '&:hover:not(:disabled)': { backgroundColor: muiAlpha('#0fbcff', 0.08) },
+            }}>
+            Lookup
+          </Box>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 0.75, mb: 1.25 }}>
+          <Box component="input" type="text"
+            value={urlInput} onChange={e => setUrlInput(e.target.value)}
+            placeholder="fetch + scan URL"
+            disabled={scanState?.scanning}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && urlInput.trim()) {
+                onScanUrl?.(urlInput.trim());
+                setUrlInput('');
+              }
+            }}
+            sx={{
+              flex: 1, minWidth: 0,
+              backgroundColor: 'background.secondary',
+              border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+              color: 'text.primary',
+              p: '7px 10px', borderRadius: '4px',
+              fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
+              outline: 'none',
+              '&:focus': { borderColor: 'primary.main' },
+            }}/>
+          <Box component="button"
+            disabled={!urlInput.trim() || scanState?.scanning}
+            onClick={() => { onScanUrl?.(urlInput.trim()); setUrlInput(''); }}
+            sx={{
+              backgroundColor: 'transparent',
+              border: `1px solid ${muiAlpha('#0fbcff', 0.4)}`,
+              color: 'primary.main',
+              fontSize: 11, fontWeight: 500,
+              px: 1.5, borderRadius: '4px',
+              cursor: 'pointer',
+              '&:disabled': { opacity: 0.4, cursor: 'default' },
+              '&:hover:not(:disabled)': { backgroundColor: muiAlpha('#0fbcff', 0.08) },
+            }}>
+            Fetch
+          </Box>
         </Box>
 
         <AgentPipeline logText={logText} label=""
@@ -3699,217 +3774,6 @@ function SendToWebhook({ result, available }) {
   );
 }
 
-/* ─── YARA file scan results panel ─────────────────────────────────────────────
- * Display-only. Upload happens in the left sidebar (drop zone). This card only
- * renders when there's a scan result to show.
- * --------------------------------------------------------------------------- */
-function FileScanner({ scanning, result, error, submission, onDetonate }) {
-  const detonate = onDetonate;
-  if (!result && !error && !scanning) return null;
-
-  const hasReport = result?.sandbox && Object.keys(result.sandbox).length > 0;
-
-  return (
-    <Card title="YARA file scan" accent="#B286FF" defaultOpen
-      badge={result?.filename || (scanning ? 'scanning…' : 'binary analysis')}>
-      {scanning && !result && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#B286FF', fontSize: 12 }}>
-          <FileSearch size={14}/>Scanning file with YARA + sandbox lookup…
-        </Box>
-      )}
-      {error && (
-        <Box sx={{ color: 'error.main', fontSize: 12, mb: 1.25, mt: 1.25 }}>{error}</Box>
-      )}
-      {result && (() => {
-        const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
-        const stateColor = (s) => s === 'SUCCESS' ? '#16AD34' : s === 'ERROR' ? '#EE3838' : '#0fbcff';
-        return (
-        <>
-          <MuiPaper elevation={0} sx={{
-            backgroundColor: '#0C1524',
-            border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-            borderRadius: '4px', p: '10px 12px', mb: 1.25,
-          }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-              <Typography sx={{ fontSize: 13, fontWeight: 600, color: 'text.primary' }}>{result.filename}</Typography>
-              <Typography sx={{ fontSize: 11, color: 'text.disabled' }}>{(result.size / 1024).toFixed(1)} KB</Typography>
-            </Box>
-            {['md5', 'sha1', 'sha256'].map(k => (
-              <Box key={k} sx={{ display: 'flex', gap: 1, fontSize: 11, py: 0.25 }}>
-                <Box component="span" sx={{ color: 'text.disabled', minWidth: 50 }}>{k}</Box>
-                <Box component="span" sx={{ color: 'text.primary', ...monoSx, wordBreak: 'break-all' }}>
-                  {result.hashes[k]}
-                </Box>
-              </Box>
-            ))}
-          </MuiPaper>
-          {result.loldrivers_hit && (
-            <MuiPaper elevation={0} sx={{
-              backgroundColor: muiAlpha('#EE3838', 0.08),
-              border: `1px solid ${muiAlpha('#EE3838', 0.25)}`,
-              borderLeft: `3px solid #EE3838`,
-              borderRadius: '4px', p: '10px 12px', mb: 1.25,
-            }}>
-              <Typography sx={{ fontSize: 12, color: 'error.main', fontWeight: 600, mb: 0.5 }}>
-                ⚠ Known vulnerable/malicious driver (LOLDrivers)
-              </Typography>
-              <Typography sx={{ fontSize: 11, color: 'text.primary' }}>
-                Category: {result.loldrivers_hit.category} · MITRE: {result.loldrivers_hit.mitre}
-              </Typography>
-            </MuiPaper>
-          )}
-
-          {/* Cloud sandbox lookup — Hybrid Analysis / ANY.RUN */}
-          {result.sandbox && Object.entries(result.sandbox).map(([name, sb]) => {
-            const verdict = (sb.verdict || '').toLowerCase();
-            const color = verdict.includes('mali') || verdict.includes('high') ? '#EE3838'
-              : verdict.includes('suspic') || verdict.includes('medium') ? '#E6700F'
-              : verdict.includes('clean') || verdict.includes('benign') || verdict.includes('no_specific') ? '#16AD34'
-              : '#848592';
-            const label = name === 'hybrid_analysis' ? 'Hybrid Analysis (CrowdStrike Falcon Sandbox)' : 'ANY.RUN';
-            return (
-              <MuiPaper key={name} elevation={0} sx={{
-                backgroundColor: '#0C1524',
-                border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-                borderLeft: `3px solid ${color}`,
-                borderRadius: '4px', p: '12px 14px', mb: 1.25,
-              }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
-                  <Typography sx={{ fontSize: 12, fontWeight: 600, color: 'text.primary' }}>{label}</Typography>
-                  {sb.url && (
-                    <Box component="a" href={sb.url} target="_blank" rel="noreferrer" sx={{
-                      fontSize: 11, color: 'primary.main',
-                      display: 'inline-flex', alignItems: 'center', gap: 0.25,
-                      textDecoration: 'none', '&:hover': { textDecoration: 'underline' },
-                    }}>view report <ArrowUpRight size={11}/></Box>
-                  )}
-                </Box>
-                <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 0.75 }}>
-                  <MuiTag label={`verdict: ${sb.verdict || 'unknown'}`} color={color}/>
-                  {sb.threat_score != null && <MuiTag label={`score ${sb.threat_score}`} color="#E6700F"/>}
-                  {sb.malware_family && (Array.isArray(sb.malware_family) ? sb.malware_family[0] : sb.malware_family) && (
-                    <MuiTag color="#EE3838"
-                      label={Array.isArray(sb.malware_family) ? sb.malware_family[0] : sb.malware_family}/>
-                  )}
-                  {sb.av_detect != null && <MuiTag label={`AV ${sb.av_detect}%`} color="#848592"/>}
-                </Stack>
-                {sb.mitre?.length > 0 && (
-                  <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
-                    MITRE: {sb.mitre.filter(Boolean).slice(0, 6).join(' · ')}
-                  </Typography>
-                )}
-                {sb.tags?.length > 0 && (
-                  <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ mt: 0.625 }}>
-                    {sb.tags.slice(0, 8).map(tag => <MuiTag key={tag} label={tag} color="#848592"/>)}
-                  </Stack>
-                )}
-              </MuiPaper>
-            );
-          })}
-          {/* No existing sandbox report → offer to detonate */}
-          {result.sha256 && !hasReport && !submission && (
-            <MuiPaper elevation={0} sx={{
-              backgroundColor: '#0C1524',
-              border: `1px dashed ${muiAlpha('#ffffff', 0.12)}`,
-              borderRadius: '4px', p: '12px 14px', mb: 1.25,
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1.25,
-            }}>
-              <Box>
-                <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 500 }}>
-                  No existing sandbox report
-                </Typography>
-                <Typography sx={{ fontSize: 11, color: 'text.tertiary', mt: 0.25 }}>
-                  Submit to Hybrid Analysis for fresh detonation (typically 3–10 minutes).
-                </Typography>
-              </Box>
-              <MuiButton variant="contained" size="small" onClick={detonate}>Detonate sample</MuiButton>
-            </MuiPaper>
-          )}
-
-          {/* Submission in progress */}
-          {submission && (
-            <MuiPaper elevation={0} sx={{
-              backgroundColor: '#0C1524',
-              border: `1px solid ${muiAlpha(stateColor(submission.state), 0.25)}`,
-              borderLeft: `3px solid ${stateColor(submission.state)}`,
-              borderRadius: '4px', p: '12px 14px', mb: 1.25,
-            }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
-                <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 600 }}>
-                  Hybrid Analysis · {submission.filename || 'sample'}
-                </Typography>
-                <MuiTag label={submission.state} color={stateColor(submission.state)}/>
-              </Box>
-              {submission.state === 'IN_QUEUE' && (
-                <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>Queued for detonation…</Typography>
-              )}
-              {submission.state === 'IN_PROGRESS' && (
-                <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
-                  Detonating in Windows 10 sandbox… polling every 30s
-                </Typography>
-              )}
-              {submission.state === 'ERROR' && (
-                <Typography sx={{ fontSize: 11, color: 'error.main' }}>
-                  {submission.error || 'Submission error'}
-                </Typography>
-              )}
-              {submission.state === 'SUCCESS' && submission.summary && (
-                <>
-                  <Stack direction="row" spacing={0.75} flexWrap="wrap" sx={{ mt: 1 }}>
-                    <MuiTag label={`verdict: ${submission.summary.verdict}`} color="#16AD34"/>
-                    {submission.summary.threat_score != null && (
-                      <MuiTag label={`score ${submission.summary.threat_score}`} color="#E6700F"/>
-                    )}
-                    {submission.summary.malware_family && (
-                      <MuiTag color="#EE3838"
-                        label={Array.isArray(submission.summary.malware_family)
-                          ? submission.summary.malware_family[0]
-                          : submission.summary.malware_family}/>
-                    )}
-                  </Stack>
-                  {submission.summary.url && (
-                    <Box component="a" href={submission.summary.url} target="_blank" rel="noreferrer" sx={{
-                      fontSize: 11, color: 'primary.main', mt: 1,
-                      display: 'inline-flex', alignItems: 'center', gap: 0.25,
-                      textDecoration: 'none', '&:hover': { textDecoration: 'underline' },
-                    }}>View full report <ArrowUpRight size={11}/></Box>
-                  )}
-                </>
-              )}
-            </MuiPaper>
-          )}
-
-          {result.yara_matches?.length > 0 ? (
-            <Block title={`YARA matches (${result.yara_matches.length})`}>
-              {result.yara_matches.map((m, i) => (
-                <Box component="li" key={i} sx={{
-                  py: 0.875, listStyle: 'none',
-                  borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
-                }}>
-                  <Box sx={{ fontSize: 12, color: 'text.primary', ...monoSx, mb: 0.375 }}>{m.rule}</Box>
-                  {m.description && (
-                    <Typography sx={{ fontSize: 11, color: 'text.tertiary', lineHeight: 1.5 }}>{m.description}</Typography>
-                  )}
-                  <Stack direction="row" spacing={0.75} flexWrap="wrap" alignItems="center" sx={{ mt: 0.5 }}>
-                    {m.tags?.map(tag => <MuiTag key={tag} label={tag} color="#848592"/>)}
-                    {m.author && (
-                      <Box component="span" sx={{ fontSize: 10, color: 'text.disabled' }}>by {m.author}</Box>
-                    )}
-                  </Stack>
-                </Box>
-              ))}
-            </Block>
-          ) : (
-            <Typography sx={{ fontSize: 12, color: 'success.main', py: 1 }}>
-              No YARA matches — file is clean against {result.yara_matches?.length === 0 ? 'all loaded rules' : 'available rules'}.
-            </Typography>
-          )}
-        </>
-        );
-      })()}
-    </Card>
-  );
-}
 
 /* ─── app ─────────────────────────────────────────────────────────────────────── */
 export default function App() {
@@ -3921,60 +3785,68 @@ export default function App() {
   const [webhooks, setWebhooks] = useState({});
   const rs = result?.response_summary;
 
-  // YARA file-scan state, lifted from FileScanner so the sidebar drop zone shares it.
+  // Comprehensive file-analyzer state — lifted from FileScannerView so the
+  // sidebar can drive scans (file drop / hash lookup / URL fetch) and have
+  // results render on the File scanner page. Replaces the old YARA-only flow.
   const [scanState, setScanState] = useState({
-    scanning: false, result: null, error: null, file: null, submission: null,
+    scanning: false, result: null, error: null, progressStep: 0,
   });
+  const scanProgressTimer = useRef(null);
 
-  const scanFile = useCallback(async (uploaded) => {
-    if (!uploaded) return;
-    setScanState({ scanning: true, result: null, error: null, file: uploaded, submission: null });
-    const form = new FormData();
-    form.append('file', uploaded);
+  const startScanProgress = useCallback(() => {
+    setScanState(s => ({ ...s, progressStep: 0 }));
+    let step = 0;
+    scanProgressTimer.current = setInterval(() => {
+      step = Math.min(step + 1, 9); // ANALYSIS_STEPS.length - 1
+      setScanState(s => ({ ...s, progressStep: step }));
+    }, 700);
+  }, []);
+  const stopScanProgress = useCallback(() => {
+    if (scanProgressTimer.current) {
+      clearInterval(scanProgressTimer.current);
+      scanProgressTimer.current = null;
+    }
+    setScanState(s => ({ ...s, progressStep: 10 }));
+  }, []);
+
+  const _runScan = useCallback(async (fetchFn) => {
+    setScanState({ scanning: true, result: null, error: null, progressStep: 0 });
+    setPage('scanner');                              // auto-switch to the scanner page
+    startScanProgress();
     try {
-      const resp = await fetch('/api/scan-file', { method: 'POST', body: form });
+      const resp = await fetchFn();
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
       setScanState(s => ({ ...s, scanning: false, result: data }));
     } catch (e) {
       setScanState(s => ({ ...s, scanning: false, error: e.message }));
+    } finally {
+      stopScanProgress();
     }
-  }, []);
+  }, [startScanProgress, stopScanProgress]);
 
-  const detonateFile = useCallback(async () => {
-    if (!scanState.file) return;
-    setScanState(s => ({ ...s, error: null }));
+  const scanFile = useCallback((uploaded) => {
+    if (!uploaded) return;
     const form = new FormData();
-    form.append('file', scanState.file);
-    try {
-      const resp = await fetch('/api/sandbox/submit', { method: 'POST', body: form });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
-      setScanState(s => ({
-        ...s,
-        submission: { job_id: data.job_id, state: 'IN_QUEUE', submitted_at: data.submitted_at },
-      }));
-    } catch (e) {
-      setScanState(s => ({ ...s, error: e.message }));
-    }
-  }, [scanState.file]);
+    form.append('file', uploaded);
+    return _runScan(() => fetch('/api/scan/file', { method: 'POST', body: form }));
+  }, [_runScan]);
 
-  // Poll sandbox submission until terminal state
-  useEffect(() => {
-    const sub = scanState.submission;
-    if (!sub?.job_id) return;
-    if (['SUCCESS', 'ERROR'].includes(sub.state)) return;
-    const poll = async () => {
-      try {
-        const r = await fetch(`/api/sandbox/job/${sub.job_id}`);
-        const d = await r.json();
-        setScanState(s => ({ ...s, submission: { ...s.submission, ...d } }));
-      } catch (_) {}
-    };
-    const t = setInterval(poll, 30000);
-    poll();
-    return () => clearInterval(t);
-  }, [scanState.submission?.job_id, scanState.submission?.state]);
+  const scanHash = useCallback((hash) => {
+    if (!hash) return;
+    return _runScan(() => fetch('/api/scan/hash', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hash: hash.trim() }),
+    }));
+  }, [_runScan]);
+
+  const scanUrl = useCallback((url) => {
+    if (!url) return;
+    return _runScan(() => fetch('/api/scan/url', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: url.trim() }),
+    }));
+  }, [_runScan]);
 
   // Stream merge — each stage of the pipeline pushes a partial result;
   // we shallow-merge into the existing result so sections render as data arrives.
@@ -4009,13 +3881,24 @@ export default function App() {
         onPartialResult={mergePartial}
         currentResult={result}
         onScanFile={scanFile}
+        onScanHash={scanHash}
+        onScanUrl={scanUrl}
         scanState={scanState}
         page={page}
         onPageChange={setPage}
       />
 
       {/* Top-level page mode switch */}
-      {page === 'scanner' && <Box sx={{ flex: 1, minWidth: 0 }}><FileScannerView/></Box>}
+      {page === 'scanner' && (
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <FileScannerView
+            external={scanState}
+            onScanFile={scanFile}
+            onScanHash={scanHash}
+            onScanUrl={scanUrl}
+          />
+        </Box>
+      )}
       {page === 'analysis' && (
 
       <Box component="main" sx={{
@@ -4098,17 +3981,8 @@ export default function App() {
 
             <Enrichments enrichments={result.enrichments}/>
             <Report result={result}/>
-            {/* YARA scan results auto-appear here when sidebar drop runs a scan */}
-            <FileScanner {...scanState} onDetonate={detonateFile}/>
             <Box sx={{ mb: 2 }}><ExportBar result={result}/></Box>
           </>
-        )}
-
-        {/* YARA scan results in empty state — only if sidebar drop already ran */}
-        {!result && (scanState.result || scanState.scanning || scanState.error) && (
-          <Box sx={{ mt: 4 }}>
-            <FileScanner {...scanState} onDetonate={detonateFile}/>
-          </Box>
         )}
       </Box>
       )}
