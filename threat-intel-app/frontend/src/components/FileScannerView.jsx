@@ -1033,20 +1033,29 @@ function downloadJson(name, obj) {
 
 
 // ─── main view ────────────────────────────────────────────────────────────────
-export default function FileScannerView() {
-  const [result, setResult] = useState(null);
-  const [scanning, setScanning] = useState(false);
-  const [progressStep, setProgressStep] = useState(0);
-  const [error, setError] = useState(null);
+// Accepts an `external` scan state from App so the sidebar can drive scans
+// and have the results render here. When no external props are passed, falls
+// back to self-managed state.
+export default function FileScannerView({ external, onScanFile, onScanHash, onScanUrl }) {
+  const [localResult, setLocalResult] = useState(null);
+  const [localScanning, setLocalScanning] = useState(false);
+  const [localStep, setLocalStep] = useState(0);
+  const [localError, setLocalError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const progressTimer = useRef(null);
 
+  // Either consume from props (sidebar-driven) or own state (standalone use)
+  const result       = external?.result ?? localResult;
+  const scanning     = external?.scanning ?? localScanning;
+  const progressStep = external?.progressStep ?? localStep;
+  const error        = external?.error ?? localError;
+
   const startProgress = () => {
-    setProgressStep(0);
+    setLocalStep(0);
     let step = 0;
     progressTimer.current = setInterval(() => {
       step = Math.min(step + 1, ANALYSIS_STEPS.length - 1);
-      setProgressStep(step);
+      setLocalStep(step);
     }, 700);
   };
   const stopProgress = () => {
@@ -1054,12 +1063,12 @@ export default function FileScannerView() {
       clearInterval(progressTimer.current);
       progressTimer.current = null;
     }
-    setProgressStep(ANALYSIS_STEPS.length);
+    setLocalStep(ANALYSIS_STEPS.length);
   };
   useEffect(() => () => stopProgress(), []);
 
-  const scanFile = async (file) => {
-    setScanning(true); setError(null); setResult(null);
+  const scanFile = onScanFile || (async (file) => {
+    setLocalScanning(true); setLocalError(null); setLocalResult(null);
     startProgress();
     try {
       const form = new FormData();
@@ -1067,17 +1076,17 @@ export default function FileScannerView() {
       const r = await fetch('/api/scan/file', { method: 'POST', body: form });
       const d = await r.json();
       if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
-      setResult(d);
+      setLocalResult(d);
     } catch (e) {
-      setError(e.message);
+      setLocalError(e.message);
     } finally {
       stopProgress();
-      setScanning(false);
+      setLocalScanning(false);
     }
-  };
+  });
 
-  const scanHash = async (hash) => {
-    setScanning(true); setError(null); setResult(null);
+  const scanHash = onScanHash || (async (hash) => {
+    setLocalScanning(true); setLocalError(null); setLocalResult(null);
     startProgress();
     try {
       const r = await fetch('/api/scan/hash', {
@@ -1086,17 +1095,17 @@ export default function FileScannerView() {
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
-      setResult(d);
+      setLocalResult(d);
     } catch (e) {
-      setError(e.message);
+      setLocalError(e.message);
     } finally {
       stopProgress();
-      setScanning(false);
+      setLocalScanning(false);
     }
-  };
+  });
 
-  const scanUrl = async (url) => {
-    setScanning(true); setError(null); setResult(null);
+  const scanUrl = onScanUrl || (async (url) => {
+    setLocalScanning(true); setLocalError(null); setLocalResult(null);
     startProgress();
     try {
       const r = await fetch('/api/scan/url', {
@@ -1105,58 +1114,108 @@ export default function FileScannerView() {
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
-      setResult(d);
+      setLocalResult(d);
     } catch (e) {
-      setError(e.message);
+      setLocalError(e.message);
     } finally {
       stopProgress();
-      setScanning(false);
+      setLocalScanning(false);
     }
-  };
+  });
+
+  // In external mode the sidebar drives submission — show only progress + export
+  const sidebarDriven = !!external;
+
+  // Single-column layout when sidebar-driven (no left submission panel needed)
+  const gridCols = sidebarDriven ? '1fr' : '320px 1fr';
 
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 2, p: 2,
+    <Box sx={{ display: 'grid', gridTemplateColumns: gridCols, gap: 2, p: 2,
       minHeight: '100vh', backgroundColor: 'background.default' }}>
-      {/* Left column */}
+      {/* Left submission column — hidden when sidebar provides the inputs */}
+      {!sidebarDriven && (
+        <Box>
+          <SubmissionPanel
+            onScanFile={scanFile}
+            onScanHash={scanHash}
+            onScanUrl={scanUrl}
+            scanning={scanning}
+            progressStep={progressStep}
+          />
+          {result && (
+            <Stack spacing={1} sx={{ mt: 2 }}>
+              <MuiButton size="small" variant="outlined"
+                onClick={() => downloadJson(`recon_scan_${(result.hashes?.sha256 || 'result').slice(0,8)}.json`, result)}>
+                <Download size={12} style={{ marginRight: 6 }}/> Export JSON
+              </MuiButton>
+            </Stack>
+          )}
+          {error && (
+            <MuiPaper elevation={0} sx={{ mt: 2, p: 1.5,
+              backgroundColor: muiAlpha('#EE3838', 0.08),
+              border: `1px solid ${muiAlpha('#EE3838', 0.4)}`,
+              borderRadius: '4px', color: 'error.main', fontSize: 12,
+            }}>{error}</MuiPaper>
+          )}
+        </Box>
+      )}
+
+      {/* Results column */}
       <Box>
-        <SubmissionPanel
-          onScanFile={scanFile}
-          onScanHash={scanHash}
-          onScanUrl={scanUrl}
-          scanning={scanning}
-          progressStep={progressStep}
-        />
-        {result && (
-          <Stack spacing={1} sx={{ mt: 2 }}>
+        {/* Sidebar-driven progress stepper — shows while scanning */}
+        {sidebarDriven && scanning && (
+          <MuiPaper elevation={0} sx={{
+            backgroundColor: '#0C1524',
+            border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+            borderRadius: '4px', p: 2, mb: 2, maxWidth: 520,
+          }}>
+            <Typography sx={{ fontSize: 11, color: 'primary.main', fontWeight: 600,
+              textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1 }}>
+              Analysis in progress
+            </Typography>
+            {ANALYSIS_STEPS.map((label, i) => {
+              const done    = i < progressStep;
+              const current = i === progressStep;
+              return (
+                <Stack key={label} direction="row" alignItems="center" spacing={1} sx={{ py: 0.25 }}>
+                  <Box sx={{
+                    width: 12, height: 12, borderRadius: 99,
+                    backgroundColor: done ? 'success.main' : current ? 'primary.main' : muiAlpha('#ffffff', 0.1),
+                    ...(current ? { animation: 'pulse 1.2s ease-in-out infinite' } : {}),
+                  }}/>
+                  <Typography sx={{
+                    fontSize: 11,
+                    color: done ? 'success.main' : current ? 'primary.main' : 'text.disabled',
+                    fontWeight: current ? 600 : 400,
+                  }}>{label}</Typography>
+                </Stack>
+              );
+            })}
+            <LinearProgress sx={{ mt: 1, height: 3, borderRadius: 99 }}
+              variant="determinate" value={(progressStep / ANALYSIS_STEPS.length) * 100}/>
+          </MuiPaper>
+        )}
+        {/* Sidebar-driven export button — shows when there's a result */}
+        {sidebarDriven && result && (
+          <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1.5 }}>
             <MuiButton size="small" variant="outlined"
               onClick={() => downloadJson(`recon_scan_${(result.hashes?.sha256 || 'result').slice(0,8)}.json`, result)}>
               <Download size={12} style={{ marginRight: 6 }}/> Export JSON
             </MuiButton>
           </Stack>
         )}
-        {error && (
-          <MuiPaper elevation={0} sx={{ mt: 2, p: 1.5,
+        {/* Sidebar-driven error display */}
+        {sidebarDriven && error && (
+          <MuiPaper elevation={0} sx={{ p: 1.5, mb: 1.5,
             backgroundColor: muiAlpha('#EE3838', 0.08),
             border: `1px solid ${muiAlpha('#EE3838', 0.4)}`,
             borderRadius: '4px', color: 'error.main', fontSize: 12,
           }}>{error}</MuiPaper>
         )}
-      </Box>
-
-      {/* Right column — tabs */}
-      <Box>
         {!result && !scanning && (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
-            height: '60vh', color: 'text.disabled', fontSize: 13, textAlign: 'center', p: 4 }}>
-            <Box>
-              <Shield size={48} color="#252A35" style={{ marginBottom: 16 }}/>
-              <Typography sx={{ fontSize: 14, color: 'text.tertiary' }}>
-                Drop a file, paste a hash, or fetch a URL to start analysis.
-              </Typography>
-              <Typography sx={{ fontSize: 11, color: 'text.disabled', mt: 1 }}>
-                Static analysis · YARA · sandbox · threat intel · MITRE · detection content
-              </Typography>
-            </Box>
+            height: '60vh', color: 'text.disabled' }}>
+            <Shield size={64} color="#252A35"/>
           </Box>
         )}
         {result && (
