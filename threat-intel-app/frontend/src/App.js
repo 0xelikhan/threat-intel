@@ -294,6 +294,58 @@ function PreFlight({ result }) {
   );
 }
 
+/* ─── suppressed IOCs (MISP warninglist matches) ─────────────────────────────
+ * Spec §4 — show analysts exactly what was filtered out before enrichment so
+ * they can spot false-negative filters (e.g., a Tor exit IP swallowed by a
+ * datacenter list).
+ */
+function SuppressedIOCs({ result }) {
+  const sup = result?.suppressed_iocs || {};
+  const total = Object.values(sup).reduce((n, arr) => n + (arr?.length || 0), 0);
+  if (!total) return null;
+  return (
+    <Card title="Filtered as benign · MISP warninglists" accent="#848592"
+      badge={`${total} suppressed`} defaultOpen={false}>
+      <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
+        These IOCs were extracted from the input but matched a MISP warninglist
+        (known-good service, datacenter range, public DNS, top-1M domain, etc.) so
+        they were removed before enrichment. Verify nothing important was dropped.
+      </Typography>
+      {Object.entries(sup).map(([type, items]) => items?.length > 0 && (
+        <Box key={type} sx={{ mb: 1.5 }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
+            <TypeTag type={type === 'ips' ? 'ips' : type === 'domains' ? 'domains' : type === 'hashes' ? 'hashes' : 'urls'}/>
+            <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>{items.length}</Typography>
+          </Stack>
+          <MuiPaper elevation={0} sx={{
+            backgroundColor: '#0C1524',
+            border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+            borderRadius: '4px', overflow: 'hidden',
+          }}>
+            {items.map((entry, i) => (
+              <Box key={i} sx={{
+                display: 'grid', gridTemplateColumns: '1fr auto',
+                gap: 1.25, p: '6px 10px',
+                borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
+              }}>
+                <Box sx={{
+                  fontFamily: '"IBM Plex Mono", monospace', fontSize: 12,
+                  color: 'text.primary', wordBreak: 'break-all',
+                }}>{entry.ioc}</Box>
+                <Typography sx={{ fontSize: 11, color: 'text.tertiary',
+                  textAlign: 'right', whiteSpace: 'nowrap',
+                  overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 320 }}>
+                  {entry.reason}
+                </Typography>
+              </Box>
+            ))}
+          </MuiPaper>
+        </Box>
+      ))}
+    </Card>
+  );
+}
+
 /* ─── critical signal banners ─────────────────────────────────────────────────── */
 function SignalBanners({ result }) {
   const banners = [];
@@ -3016,6 +3068,7 @@ export default function App() {
             <PreFlight result={result}/>
             <Overview result={result}/>
             <SignalBanners result={result}/>
+            <SuppressedIOCs result={result}/>
             <IOCPivot result={result}/>
             <BulkTable result={result}/>
             <Card title="Geographic distribution" accent="#0fbcff" noPad><MapTab result={result}/></Card>
@@ -3028,6 +3081,7 @@ export default function App() {
             <PreFlight result={result}/>
             <Overview result={result}/>
             <SignalBanners result={result}/>
+            <SuppressedIOCs result={result}/>
             <IOCPivot result={result}/>
             <AnalystSummary rs={rs || {}}/>
             <ChatWithRecon result={result}/>

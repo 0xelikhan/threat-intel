@@ -232,9 +232,14 @@ async def run_triage(state: dict) -> dict:
                     iocs.setdefault("hashes", []).append(h)
                     break
 
+    # MISP warninglist false-positive filter (spec §4).
+    # Both `iocs` (filtered) and `suppressed_iocs` (removed-with-reason) flow
+    # downstream so the analyst sees what was filtered and why.
+    suppressed_iocs: dict = {}
     try:
         from intel.warninglist_filter import filter_iocs
-        iocs, _ = filter_iocs(iocs)
+        filtered, suppressed_iocs = filter_iocs(iocs)
+        iocs = filtered
     except Exception:
         pass
 
@@ -386,6 +391,7 @@ async def run_triage(state: dict) -> dict:
     return {
         **state,
         "iocs": iocs,
+        "suppressed_iocs": suppressed_iocs,   # MISP warninglist removals (spec §4)
         "triage_score": final_score,
         "should_proceed": ai_result.get("should_proceed", True) and final_score > 0.15,
         "triage_reasoning": ai_result.get("reasoning", ""),
