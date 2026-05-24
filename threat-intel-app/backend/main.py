@@ -1939,6 +1939,37 @@ async def email_compose(req: EmailComposeRequest):
                    ip1=req.ip1, ip2=req.ip2)
 
 
+class EmailComposeAIRequest(BaseModel):
+    log_text: str
+    parsed: Optional[dict] = None
+    options: Optional[dict] = None
+
+
+@app.post("/api/email/compose-ai")
+async def email_compose_ai(req: EmailComposeAIRequest):
+    """Generate a customer email via AI using the static templates as style
+    models. Returns the same {subject, text, html, template_used} shape as
+    /api/email/compose so the frontend can render it identically."""
+    from intel.email_composer import compose_ai
+    cfg = {
+        "OPENAI_API_KEY":     config.get("OPENAI_API_KEY"),
+        "OPENAI_BASE_URL":    config.get("OPENAI_BASE_URL"),
+        "AI_MODEL":           config.get("AI_MODEL"),
+        "EMAIL_FROM_NAME":    config.get("EMAIL_FROM_NAME"),
+        "EMAIL_FROM_ADDRESS": config.get("EMAIL_FROM_ADDRESS"),
+        "EMAIL_SIGNATURE":    config.get("EMAIL_SIGNATURE"),
+    }
+    options = dict(req.options or {})
+    if not options.get("team_name"):
+        options["team_name"] = config.get("EMAIL_TEAM_NAME") or "the MDR analyst team"
+    if not options.get("from_address"):
+        options["from_address"] = config.get("EMAIL_FROM_ADDRESS") or ""
+    out = await compose_ai(req.log_text, req.parsed, options, cfg)
+    if "error" in out:
+        raise HTTPException(503, out["error"])
+    return out
+
+
 @app.post("/api/email/send")
 async def email_send(req: EmailSendRequest):
     """Send via configured SMTP if available. Returns clipboard-ready payload
