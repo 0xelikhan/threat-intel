@@ -13,7 +13,12 @@ import AgentPipeline from './components/AgentPipeline';
 // MUI-based primitives (adapted from OpenCTI's Tag.tsx + theme) — every chip,
 // card, code-block, copy button now renders through MUI components that inherit
 // the OpenCTI styling overrides defined in theme.js.
-import { Box } from '@mui/material';
+import {
+  Box, Typography,
+  Drawer    as MuiDrawer,
+  IconButton as MuiIconButton,
+} from '@mui/material';
+import { alpha as muiAlpha } from '@mui/material/styles';
 import {
   Tag        as MuiTag,
   VerdictTag as MuiVerdictTag,
@@ -1868,7 +1873,11 @@ function Report({ result }) {
   );
 }
 
-/* ─── sidebar ─────────────────────────────────────────────────────────────────── */
+/* ─── sidebar ─────────────────────────────────────────────────────────────────
+ * Adapted from OpenCTI (AGPL-3.0) — LeftBar.jsx pattern.
+ * Uses MUI Drawer with the OpenCTI nav width/styling, hosting the input area
+ * (drop zone + textarea + AgentPipeline) and the extracted-IOCs panel.
+ */
 function Sidebar({ onResult, onPartialResult, currentResult }) {
   const [logText, setLogText] = useState('');
   const [dragOver, setDragOver] = useState(false);
@@ -1895,106 +1904,175 @@ function Sidebar({ onResult, onPartialResult, currentResult }) {
   const iocs = currentResult?.iocs || {};
   const hasIOCs = Object.values(iocs).some(l=>l?.length>0);
 
+  const SIDEBAR_WIDTH = 320;
+
   return (
-    <aside style={{ width:320, flexShrink:0, background:t.sidebar, borderRight:`1px solid ${t.line}`,
-      minHeight:'100vh', display:'flex', flexDirection:'column', position:'sticky', top:0,
-      maxHeight:'100vh', overflowY:'auto', overflowX:'hidden' }}>
+    <MuiDrawer
+      variant="permanent"
+      anchor="left"
+      sx={{
+        width: SIDEBAR_WIDTH, flexShrink: 0,
+        '& .MuiDrawer-paper': {
+          width: SIDEBAR_WIDTH, boxSizing: 'border-box',
+          display: 'flex', flexDirection: 'column',
+          overflowX: 'hidden',
+        },
+      }}
+    >
+      {/* Logo header */}
+      <Box sx={{
+        p: '18px 14px 16px',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        borderBottom: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+      }}>
+        <Box component="img" src="/logo.png" alt="RECON"
+          sx={{ width: '100%', maxWidth: 200, height: 'auto', display: 'block',
+            filter: 'drop-shadow(0 0 18px rgba(15,188,255,0.35))' }}/>
+      </Box>
 
-      <div style={{ padding:'18px 14px 16px', display:'flex', alignItems:'center',
-        justifyContent:'center', borderBottom:`1px solid ${t.line}` }}>
-        <img src="/logo.png" alt="RECON"
-          style={{ width:'100%', maxWidth:200, height:'auto', display:'block',
-            filter:'drop-shadow(0 0 18px rgba(0,184,212,0.35))' }}/>
-      </div>
+      {/* Input area + pipeline */}
+      <Box sx={{ p: '18px 16px 16px', flex: 1, overflowY: 'auto' }}>
+        <Typography variant="caption" sx={{
+          display: 'block', mb: 1.25, fontSize: 11, fontWeight: 500,
+          color: 'text.tertiary', textTransform: 'uppercase', letterSpacing: '0.06em',
+        }}>
+          New investigation
+        </Typography>
 
-      <div style={{ padding:'18px 16px 16px', flex:1 }}>
-        <div style={{ marginBottom:14 }}>
-          <div style={{ fontSize:11, color:t.fgDim, fontWeight:500, marginBottom:10 }}>
-            New investigation
-          </div>
+        {/* Drop zone */}
+        <Box
+          onDragOver={e=>{e.preventDefault();setDragOver(true);}}
+          onDragLeave={()=>setDragOver(false)}
+          onDrop={e=>{e.preventDefault();setDragOver(false);handleFile(e.dataTransfer.files[0]);}}
+          onClick={()=>document.getElementById('sidebarFile').click()}
+          sx={{
+            border: theme => `1.5px dashed ${dragOver ? theme.palette.primary.main : muiAlpha('#ffffff', 0.12)}`,
+            borderRadius: '4px',
+            p: '18px 12px',
+            textAlign: 'center', cursor: 'pointer',
+            backgroundColor: dragOver ? muiAlpha('#0fbcff', 0.08) : 'transparent',
+            mb: 1.25,
+            transition: 'all .15s',
+          }}
+        >
+          <Upload size={18} color={dragOver ? '#0fbcff' : '#848592'}
+            style={{ margin: '0 auto 6px', display: 'block' }}/>
+          <Typography sx={{
+            color: dragOver ? 'primary.main' : 'text.secondary',
+            fontSize: 12, fontWeight: 500,
+          }}>
+            Drop a file
+          </Typography>
+          <Typography sx={{ color: 'text.tertiary', fontSize: 11, mt: 0.25 }}>
+            .log .txt .csv .json .eml
+          </Typography>
+          <input id="sidebarFile" type="file" accept=".log,.txt,.csv,.json,.eml"
+            style={{ display: 'none' }} onChange={e=>handleFile(e.target.files[0])}/>
+        </Box>
 
-          <div
-            onDragOver={e=>{e.preventDefault();setDragOver(true);}}
-            onDragLeave={()=>setDragOver(false)}
-            onDrop={e=>{e.preventDefault();setDragOver(false);handleFile(e.dataTransfer.files[0]);}}
-            onClick={()=>document.getElementById('sidebarFile').click()}
-            style={{ border:`1.5px dashed ${dragOver?t.cy:t.line}`, borderRadius:6, padding:'18px 12px',
-              textAlign:'center', cursor:'pointer', background:dragOver?t.cyDim:'transparent',
-              marginBottom:10, transition:'all .15s' }}
-          >
-            <Upload size={18} color={dragOver?t.cy:t.fgDim} style={{ margin:'0 auto 6px', display:'block' }}/>
-            <div style={{ color:dragOver?t.cy:t.fgMute, fontSize:12, fontWeight:500 }}>
-              Drop a file
-            </div>
-            <div style={{ color:t.fgGhost, fontSize:11, marginTop:2 }}>
-              .log .txt .csv .json .eml
-            </div>
-            <input id="sidebarFile" type="file" accept=".log,.txt,.csv,.json,.eml"
-              style={{ display:'none' }} onChange={e=>handleFile(e.target.files[0])}/>
-          </div>
-
-          <div style={{ position:'relative', marginBottom:10 }}>
-            <textarea
-              style={{ width:'100%', background:t.raised, border:`1px solid ${t.line}`,
-                color:t.fg, padding:'10px 12px', borderRadius:6, fontFamily:'JetBrains Mono',
-                fontSize:12, resize:'vertical', outline:'none', lineHeight:1.6,
-                minHeight:128, boxSizing:'border-box' }}
-              value={logText} onChange={e=>setLogText(e.target.value)}
-              placeholder="Or paste alert text, IOCs, log lines, EML headers..."/>
-            {logText && (
-              <button onClick={()=>setLogText('')}
-                title="Clear input"
-                style={{ position:'absolute', top:6, right:6, background:'transparent',
-                  border:'none', cursor:'pointer', color:t.fgDim, padding:4, lineHeight:1,
-                  fontSize:14, borderRadius:4 }}
-                onMouseEnter={e=>e.currentTarget.style.color=t.fg}
-                onMouseLeave={e=>e.currentTarget.style.color=t.fgDim}>×</button>
-            )}
-          </div>
-        </div>
+        {/* Textarea with clear button */}
+        <Box sx={{ position: 'relative', mb: 1.25 }}>
+          <Box component="textarea"
+            value={logText} onChange={e=>setLogText(e.target.value)}
+            placeholder="Or paste alert text, IOCs, log lines, EML headers..."
+            sx={{
+              width: '100%',
+              backgroundColor: 'background.secondary',
+              border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+              color: 'text.primary',
+              p: '10px 12px',
+              borderRadius: '4px',
+              fontFamily: '"IBM Plex Mono", monospace',
+              fontSize: 12,
+              resize: 'vertical',
+              outline: 'none',
+              lineHeight: 1.6,
+              minHeight: 128,
+              boxSizing: 'border-box',
+              '&:focus': { borderColor: 'primary.main' },
+            }}/>
+          {logText && (
+            <MuiIconButton
+              onClick={()=>setLogText('')}
+              title="Clear input"
+              size="small"
+              sx={{ position: 'absolute', top: 4, right: 4, color: 'text.tertiary',
+                '&:hover': { color: 'text.primary' } }}
+            >
+              <X size={14}/>
+            </MuiIconButton>
+          )}
+        </Box>
 
         <AgentPipeline logText={logText} label=""
           onComplete={onResult}
           onPartial={onPartialResult}
           onStart={()=>onResult(null)}/>
 
+        {/* Extracted indicators */}
         {hasIOCs && (
-          <div style={{ marginTop:18 }}>
-            <div style={{ fontSize:11, color:t.fgDim, fontWeight:500, marginBottom:10 }}>
+          <Box sx={{ mt: 2.25 }}>
+            <Typography variant="caption" sx={{
+              display: 'block', mb: 1.25, fontSize: 11, fontWeight: 500,
+              color: 'text.tertiary', textTransform: 'uppercase', letterSpacing: '0.06em',
+            }}>
               Extracted indicators
-            </div>
-            <div style={{ background:t.raised, border:`1px solid ${t.line}`, borderRadius:6, padding:'10px 12px' }}>
-              {Object.entries(iocs).map(([type,list])=>
-                list?.length>0 && (
-                  <div key={type} style={{ marginBottom:10 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:5 }}>
+            </Typography>
+            <Box sx={{
+              backgroundColor: 'background.secondary',
+              border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+              borderRadius: '4px',
+              p: '10px 12px',
+            }}>
+              {Object.entries(iocs).map(([type, list]) =>
+                list?.length > 0 && (
+                  <Box key={type} sx={{ mb: 1.25 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.625 }}>
                       <TypeTag type={type}/>
-                      <span style={{ fontSize:11, color:t.fgDim }}>{list.length}</span>
-                    </div>
-                    {list.map(ioc=>(
-                      <div key={ioc} style={{ fontSize:11, color:t.fg, fontFamily:'JetBrains Mono',
-                        wordBreak:'break-all', overflowWrap:'anywhere', padding:'1px 0',
-                        lineHeight:1.5, minWidth:0 }}>{ioc}</div>
+                      <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>{list.length}</Typography>
+                    </Box>
+                    {list.map(ioc => (
+                      <Box key={ioc} sx={{
+                        fontSize: 11, color: 'text.primary',
+                        fontFamily: '"IBM Plex Mono", monospace',
+                        wordBreak: 'break-all', overflowWrap: 'anywhere',
+                        padding: '1px 0', lineHeight: 1.5, minWidth: 0,
+                      }}>{ioc}</Box>
                     ))}
-                  </div>
+                  </Box>
                 )
               )}
-            </div>
-          </div>
+            </Box>
+          </Box>
         )}
-      </div>
+      </Box>
 
-      <footer style={{ padding:'12px 16px', borderTop:`1px solid ${t.line}`,
-        fontSize:11, color:t.fgGhost, display:'flex', justifyContent:'space-between' }}>
+      {/* Footer */}
+      <Box sx={{
+        p: '12px 16px',
+        borderTop: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+        fontSize: 11, color: 'text.disabled',
+        display: 'flex', justifyContent: 'space-between',
+      }}>
         <span>RECON v1.0</span>
-        <span style={{ fontVariantNumeric:'tabular-nums' }}>
-          <kbd style={{ background:t.raised, border:`1px solid ${t.line}`, borderRadius:3,
-            padding:'1px 5px', fontSize:10, fontFamily:'JetBrains Mono' }}>⌘</kbd>{' '}
-          <kbd style={{ background:t.raised, border:`1px solid ${t.line}`, borderRadius:3,
-            padding:'1px 5px', fontSize:10, fontFamily:'JetBrains Mono' }}>↵</kbd>
+        <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+          <Box component="kbd" sx={{
+            backgroundColor: 'background.accent',
+            border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+            borderRadius: '3px',
+            p: '1px 5px', fontSize: 10,
+            fontFamily: '"IBM Plex Mono", monospace',
+          }}>⌘</Box>{' '}
+          <Box component="kbd" sx={{
+            backgroundColor: 'background.accent',
+            border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+            borderRadius: '3px',
+            p: '1px 5px', fontSize: 10,
+            fontFamily: '"IBM Plex Mono", monospace',
+          }}>↵</Box>
         </span>
-      </footer>
-    </aside>
+      </Box>
+    </MuiDrawer>
   );
 }
 
