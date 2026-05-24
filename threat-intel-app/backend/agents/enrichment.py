@@ -35,6 +35,11 @@ async def _post(session, url, **kw):
         return {"error": str(e)}
 
 
+async def _noop():
+    """Placeholder coroutine for conditionally-disabled sources — returns sentinel."""
+    return {"error": "source not configured", "skipped": True}
+
+
 async def _tor(session):
     global _tor_nodes, _tor_fetched
     import time
@@ -60,18 +65,55 @@ def _safe(d, *keys, default=None):
 
 
 # ─── PARSERS ──────────────────────────────────────────────────────────────────────
+#
+# Every parser:
+#   - accepts an HTTP response (dict / list / Exception)
+#   - returns a flat human-readable dict
+#   - on failure returns {"error": "<reason>", "source": "<name>"}
+#   - adds a "verdict" field on data-bearing results when the source signal is strong
+#     enough to call it (MALICIOUS / SUSPICIOUS / CLEAN / UNKNOWN)
+#
+def _err(source: str, reason) -> dict:
+    return {"error": str(reason), "source": source}
+
+def _is_fail(r) -> bool:
+    return isinstance(r, Exception) or not isinstance(r, (dict, list)) or (
+        isinstance(r, dict) and "error" in r and "source" not in r
+    )
+
+
 def _p_abuse(r):
-    if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
-        return {"error": str(r)}
-    d = _safe(r, "data", default={})
-    out = {"abuseScore": d.get("abuseConfidenceScore"), "totalReports": d.get("totalReports"),
-           "country": d.get("countryCode"), "isp": d.get("isp"), "usageType": d.get("usageType"),
-           "lastReportedAt": d.get("lastReportedAt")}
+    if _is_fail(r):
+        return _err("abuseipdb", r)
+    d = _safe(r, "data", default={}) or {}
+    score = d.get("abuseConfidenceScore") or 0
+    out = {
+        "abuseScore":     score,
+        "totalReports":   d.get("totalReports"),
+        "country":        d.get("countryCode"),
+        "isp":            d.get("isp"),
+        "usageType":      d.get("usageType"),
+        "lastReportedAt": d.get("lastReportedAt"),
+        "isWhitelisted":  d.get("isWhitelisted"),
+        "domain":         d.get("domain"),
+        "hostnames":      (d.get("hostnames") or [])[:5],
+    }
+    # Recent 5 reports — categories + reporter country (per spec §3)
+    reports = (d.get("reports") or [])[:5]
+    if reports:
+        out["recent_reports"] = [
+            {
+                "reportedAt":      x.get("reportedAt"),
+                "categories":      x.get("categories"),
+                "reporterCountry": x.get("reporterCountryCode"),
+                "comment":         (x.get("comment") or "")[:140],
+            }
+            for x in reports
+        ]
     # Flag same-day IP activity (first/last reported within 24 h is high signal)
-    try:
-        from datetime import datetime, timezone
-        last = d.get("lastReportedAt")
-        if last:
+    last = d.get("lastReportedAt")
+    if last:
+        try:
             ts = datetime.fromisoformat(str(last).replace("Z", "+00:00"))
             hours = (datetime.now(timezone.utc) - ts).total_seconds() / 3600
             if hours < 24:
@@ -80,125 +122,531 @@ def _p_abuse(r):
             elif hours < 168:
                 out["recent_activity"] = {"hours_since_last_report": round(hours, 1),
                                           "is_active_this_week": True}
-    except Exception:
-        pass
+        except Exception:
+            pass
+    # Source-level verdict per spec §3
+    if score >= 75:
+        out["verdict"] = "MALICIOUS"
+    elif score > 50:
+        out["verdict"] = "SUSPICIOUS"
+    elif score >= 0:
+        out["verdict"] = "CLEAN" if score == 0 and d.get("totalReports") == 0 else "UNKNOWN"
     return out
 
+
 def _p_ipinfo(r):
-    if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
-        return {"error": str(r)}
+    if _is_fail(r):
+        return _err("ipinfo", r)
     return {"org": r.get("org"), "country": r.get("country"), "city": r.get("city"),
-            "region": r.get("region"), "loc": r.get("loc"), "hostname": r.get("hostname")}
+            "region": r.get("region"), "loc": r.get("loc"), "hostname": r.get("hostname"),
+            "asn": (r.get("org") or "").split(" ")[0] if r.get("org", "").startswith("AS") else None}
+
 
 def _p_gn(r):
-    if isinstance(r, Exception) or not isinstance(r, dict):
-        return {"error": "Not in GreyNoise"}
-    return {"noise": r.get("noise"), "riot": r.get("riot"),
-            "classification": r.get("classification"), "name": r.get("name")}
+    """GreyNoise community + enterprise format. Extracts tags/CVEs/actor."""
+    if _is_fail(r):
+        return _err("greynoise", "Not in GreyNoise" if isinstance(r, dict) else r)
+    classification = r.get("classification") or ""
+    out = {
+        "noise":          r.get("noise"),
+        "riot":           r.get("riot"),
+        "classification": classification,
+        "name":           r.get("name"),
+        "actor":          r.get("actor") or r.get("name"),
+        "tags":           r.get("tags") or [],
+        "cve":            r.get("cve") or [],
+        "first_seen":     r.get("first_seen"),
+        "last_seen":      r.get("last_seen"),
+        "vpn":            r.get("vpn"),
+        "tor":            r.get("tor") or (r.get("metadata") or {}).get("tor"),
+    }
+    meta = r.get("metadata") or {}
+    if meta:
+        out["asn"]          = meta.get("asn")
+        out["organization"] = meta.get("organization")
+        out["city"]         = meta.get("city")
+        out["country"]      = meta.get("country")
+        out["os"]           = meta.get("os")
+    # Source-level verdict
+    if classification == "malicious":
+        out["verdict"] = "MALICIOUS"
+    elif classification == "benign":
+        out["verdict"] = "CLEAN"
+    elif classification == "unknown":
+        out["verdict"] = "SUSPICIOUS"
+    return out
+
 
 def _p_shodan(r):
-    if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
-        return {"error": str(r)}
-    return {"ports": r.get("ports"), "vulns": list((r.get("vulns") or {}).keys()),
-            "os": r.get("os"), "tags": r.get("tags"),
-            "services": [{"port": s.get("port"), "product": s.get("product")} for s in (r.get("data") or [])[:5]]}
+    if _is_fail(r):
+        return _err("shodan", r)
+    vulns = r.get("vulns") or {}
+    data_ports = r.get("data") or []
+    services = []
+    for s in data_ports[:15]:
+        services.append({
+            "port":     s.get("port"),
+            "transport": s.get("transport"),
+            "product":  s.get("product"),
+            "version":  s.get("version"),
+            "banner":   (s.get("data") or "").strip().splitlines()[0][:160] if s.get("data") else None,
+        })
+    ssl = None
+    for s in data_ports:
+        if s.get("ssl"):
+            cert = (s.get("ssl") or {}).get("cert") or {}
+            ssl = {
+                "subject": _safe(cert, "subject", "CN"),
+                "issuer":  _safe(cert, "issuer", "CN"),
+                "expires": cert.get("expires"),
+                "sha256":  cert.get("fingerprint", {}).get("sha256") if isinstance(cert.get("fingerprint"), dict) else None,
+            }
+            break
+    return {
+        "ports":        r.get("ports"),
+        "vulns":        list(vulns.keys())[:25],
+        "vulnsCount":   len(vulns),
+        "os":           r.get("os"),
+        "devtype":      r.get("devtype"),
+        "tags":         r.get("tags"),
+        "org":          r.get("org"),
+        "isp":          r.get("isp"),
+        "asn":          r.get("asn"),
+        "country":      r.get("country_name"),
+        "city":         r.get("city"),
+        "hostnames":    r.get("hostnames"),
+        "services":     services,
+        "ssl_cert":     ssl,
+        "verdict":      "SUSPICIOUS" if vulns else None,
+    }
+
+
+def _vt_top_labels(attrs: dict) -> list:
+    """Pull the most specific detection labels from VT analysis results."""
+    results = (attrs.get("last_analysis_results") or {})
+    labels = []
+    for engine, info in results.items():
+        if isinstance(info, dict) and info.get("category") == "malicious":
+            lbl = info.get("result")
+            if lbl and lbl not in labels:
+                labels.append(lbl)
+        if len(labels) >= 5:
+            break
+    return labels
+
 
 def _p_vt_ip(r):
-    if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
-        return {"error": str(r)}
-    s = _safe(r, "data", "attributes", "last_analysis_stats", default={})
-    return {"malicious": s.get("malicious"), "suspicious": s.get("suspicious"),
-            "harmless": s.get("harmless"), "reputation": _safe(r, "data", "attributes", "reputation")}
+    if _is_fail(r):
+        return _err("virustotal", r)
+    attrs = _safe(r, "data", "attributes", default={}) or {}
+    s = attrs.get("last_analysis_stats") or {}
+    mal = s.get("malicious") or 0
+    out = {
+        "malicious":      mal,
+        "suspicious":     s.get("suspicious"),
+        "harmless":       s.get("harmless"),
+        "reputation":     attrs.get("reputation"),
+        "country":        attrs.get("country"),
+        "as_owner":       attrs.get("as_owner"),
+        "asn":            attrs.get("asn"),
+        "network":        attrs.get("network"),
+        "last_analysis":  attrs.get("last_analysis_date"),
+        "top_labels":     _vt_top_labels(attrs),
+    }
+    out["verdict"] = "MALICIOUS" if mal > 5 else "SUSPICIOUS" if mal >= 1 else "CLEAN" if (s.get("harmless") or 0) > 0 else "UNKNOWN"
+    return out
+
 
 def _p_vt_domain(r):
-    if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
-        return {"error": str(r)}
-    s = _safe(r, "data", "attributes", "last_analysis_stats", default={})
-    return {"malicious": s.get("malicious"), "suspicious": s.get("suspicious"),
-            "reputation": _safe(r, "data", "attributes", "reputation")}
+    if _is_fail(r):
+        return _err("virustotal", r)
+    attrs = _safe(r, "data", "attributes", default={}) or {}
+    s = attrs.get("last_analysis_stats") or {}
+    mal = s.get("malicious") or 0
+    out = {
+        "malicious":         mal,
+        "suspicious":        s.get("suspicious"),
+        "harmless":          s.get("harmless"),
+        "reputation":        attrs.get("reputation"),
+        "categories":        attrs.get("categories"),
+        "creation_date":     attrs.get("creation_date"),
+        "last_modification": attrs.get("last_modification_date"),
+        "last_dns_records":  [d.get("value") for d in (attrs.get("last_dns_records") or [])[:5]],
+        "top_labels":        _vt_top_labels(attrs),
+    }
+    out["verdict"] = "MALICIOUS" if mal > 5 else "SUSPICIOUS" if mal >= 1 else "UNKNOWN"
+    return out
+
 
 def _p_vt_file(r):
-    if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
-        return {"error": str(r)}
-    s = _safe(r, "data", "attributes", "last_analysis_stats", default={})
-    return {"malicious": s.get("malicious"), "suspicious": s.get("suspicious"),
-            "name": _safe(r, "data", "attributes", "meaningful_name"),
-            "type": _safe(r, "data", "attributes", "type_description")}
+    if _is_fail(r):
+        return _err("virustotal", r)
+    attrs = _safe(r, "data", "attributes", default={}) or {}
+    s = attrs.get("last_analysis_stats") or {}
+    mal = s.get("malicious") or 0
+    families = attrs.get("popular_threat_classification") or {}
+    out = {
+        "malicious":           mal,
+        "suspicious":          s.get("suspicious"),
+        "name":                attrs.get("meaningful_name"),
+        "type":                attrs.get("type_description"),
+        "size":                attrs.get("size"),
+        "first_submission":    attrs.get("first_submission_date"),
+        "last_analysis":       attrs.get("last_analysis_date"),
+        "reputation":          attrs.get("reputation"),
+        "malware_family":      families.get("suggested_threat_label"),
+        "family_categories":   [c.get("value") for c in (families.get("popular_threat_category") or [])][:3],
+        "names":               (attrs.get("names") or [])[:5],
+        "tags":                attrs.get("tags") or [],
+        "top_labels":          _vt_top_labels(attrs),
+    }
+    out["verdict"] = "MALICIOUS" if mal > 5 else "SUSPICIOUS" if mal >= 1 else "UNKNOWN"
+    return out
+
 
 def _p_vt_url(r):
-    if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
-        return {"error": str(r)}
-    s = _safe(r, "data", "attributes", "last_analysis_stats", default={})
-    return {"malicious": s.get("malicious"), "suspicious": s.get("suspicious")}
+    if _is_fail(r):
+        return _err("virustotal", r)
+    attrs = _safe(r, "data", "attributes", default={}) or {}
+    s = attrs.get("last_analysis_stats") or {}
+    mal = s.get("malicious") or 0
+    out = {
+        "malicious":   mal,
+        "suspicious":  s.get("suspicious"),
+        "categories":  attrs.get("categories"),
+        "last_analysis": attrs.get("last_analysis_date"),
+        "title":       attrs.get("title"),
+        "top_labels":  _vt_top_labels(attrs),
+    }
+    out["verdict"] = "MALICIOUS" if mal > 5 else "SUSPICIOUS" if mal >= 1 else "UNKNOWN"
+    return out
+
 
 def _p_otx(r):
-    if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
-        return {"error": str(r)}
-    return {"pulseCount": _safe(r, "pulse_info", "count"),
-            "relatedPulses": [p.get("name") for p in (_safe(r, "pulse_info", "pulses") or [])[:3]]}
+    """Pulses + tags + adversaries + linked hashes from related malware samples."""
+    if _is_fail(r):
+        return _err("otx", r)
+    pulses = (_safe(r, "pulse_info", "pulses") or [])
+    tags = set()
+    adversaries = set()
+    related_hashes = set()
+    for p in pulses[:10]:
+        for t in (p.get("tags") or []):
+            tags.add(t.lower())
+        if p.get("adversary"):
+            adversaries.add(p["adversary"])
+        for h in (p.get("indicators") or [])[:5]:
+            v = h.get("indicator") if isinstance(h, dict) else None
+            t_ = h.get("type") if isinstance(h, dict) else None
+            if v and t_ in ("FileHash-MD5", "FileHash-SHA1", "FileHash-SHA256"):
+                related_hashes.add(v)
+    out = {
+        "pulseCount":     _safe(r, "pulse_info", "count") or len(pulses),
+        "relatedPulses":  [p.get("name") for p in pulses[:5]],
+        "tags":           sorted(tags)[:15],
+        "adversaries":    sorted(adversaries),
+        "related_hashes": sorted(related_hashes)[:10],
+    }
+    if out["pulseCount"] >= 5 or adversaries:
+        out["verdict"] = "SUSPICIOUS"
+    return out
 
 def _p_crt(r):
     if isinstance(r, Exception) or not isinstance(r, list):
-        return {"error": "No data"}
-    return {"totalCerts": len(r), "subdomains": list({c.get("name_value") for c in r})[:20]}
+        return _err("crt.sh", "No data")
+    subs = list({c.get("name_value") for c in r if isinstance(c, dict)})
+    return {"totalCerts": len(r), "subdomains": subs[:20]}
+
 
 def _p_whois(r):
-    if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
-        return {"error": str(r)}
-    return {"registrar": _safe(r, "registrar", "name"),
-            "created": _safe(r, "domain", "created_date"),
-            "expires": _safe(r, "domain", "expiration_date"),
+    if _is_fail(r):
+        return _err("whois", r)
+    return {"registrar":   _safe(r, "registrar", "name"),
+            "created":     _safe(r, "domain", "created_date"),
+            "expires":     _safe(r, "domain", "expiration_date"),
+            "updated":     _safe(r, "domain", "updated_date"),
             "nameservers": (r.get("nameservers") or [])[:4]}
 
+
 def _p_pd(r):
-    if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
-        return {"error": str(r)}
-    return {"risk": r.get("risk"), "threats": [t.get("name") for t in (r.get("threats") or [])[:3]]}
+    if _is_fail(r):
+        return _err("pulsedive", r)
+    risk = (r.get("risk") or "").lower()
+    out = {
+        "risk":         r.get("risk"),
+        "risk_factor":  r.get("riskfactor"),
+        "threats":      [t.get("name") for t in (r.get("threats") or [])[:5]],
+        "feeds":        [f.get("name") for f in (r.get("feeds") or [])[:10]],
+        "links":        [l.get("indicator") for l in (r.get("links") or [])[:8]],
+        "manualrisk":   r.get("manualrisk"),
+    }
+    if risk in {"critical", "high"}:
+        out["verdict"] = "MALICIOUS"
+    elif risk in {"medium", "low"}:
+        out["verdict"] = "SUSPICIOUS"
+    return out
 
 
 def _p_wayback(r):
-    if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
-        return {"error": "no wayback"}
+    if _is_fail(r):
+        return _err("wayback", "no wayback")
     snap = (r.get("archived_snapshots") or {}).get("closest") or {}
     if not snap.get("available"):
-        return {"has_snapshots": False, "note": "Domain not in Wayback Machine — no history at all"}
+        return {"has_snapshots": False,
+                "note": "Domain not in Wayback Machine — no history at all"}
     ts = snap.get("timestamp", "")
-    if len(ts) >= 8:
-        formatted = f"{ts[:4]}-{ts[4:6]}-{ts[6:8]}"
-    else:
-        formatted = ts
-    return {
-        "has_snapshots":   True,
-        "closest_snapshot":formatted,
-        "snapshot_url":    snap.get("url"),
-        "status":          snap.get("status"),
-    }
+    formatted = f"{ts[:4]}-{ts[4:6]}-{ts[6:8]}" if len(ts) >= 8 else ts
+    return {"has_snapshots":   True,
+            "closest_snapshot": formatted,
+            "snapshot_url":    snap.get("url"),
+            "status":          snap.get("status")}
+
 
 def _p_urlscan(r):
-    if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
-        return {"error": str(r)}
+    if _is_fail(r):
+        return _err("urlscan", r)
     hits = r.get("results") or []
     if not hits:
-        return {"error": "No scans found"}
-    v = hits[0].get("verdicts", {}).get("overall", {})
-    return {"malicious": v.get("malicious"), "score": v.get("score"), "tags": v.get("tags")}
+        return _err("urlscan", "No scans found")
+    top = hits[0]
+    v = (top.get("verdicts") or {}).get("overall") or {}
+    page = top.get("page") or {}
+    task = top.get("task") or {}
+    out = {
+        "malicious":     v.get("malicious"),
+        "score":         v.get("score"),
+        "tags":          v.get("tags") or [],
+        "categories":    v.get("categories") or [],
+        "screenshot":    task.get("screenshotURL"),
+        "report_url":    task.get("reportURL"),
+        "page_title":    page.get("title"),
+        "page_url":      page.get("url"),
+        "page_server":   page.get("server"),
+        "page_country":  page.get("country"),
+        "technologies":  [t.get("name") for t in (top.get("stats") or {}).get("technologies", [])][:8]
+                          if isinstance((top.get("stats") or {}).get("technologies"), list) else [],
+    }
+    if v.get("malicious"):
+        out["verdict"] = "MALICIOUS"
+    elif (v.get("score") or 0) >= 50:
+        out["verdict"] = "SUSPICIOUS"
+    return out
+
 
 def _p_mb(r):
-    if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
-        return {"error": str(r)}
+    """MalwareBazaar — match = MALICIOUS per spec §3."""
+    if _is_fail(r):
+        return _err("malwarebazaar", r)
     if r.get("query_status") != "ok":
         return {"queryStatus": r.get("query_status")}
     d = (r.get("data") or [{}])[0]
-    return {"malwareName": d.get("signature"), "tags": d.get("tags"),
-            "fileType": d.get("file_type"), "firstSeen": d.get("first_seen")}
+    return {
+        "malwareName":    d.get("signature"),
+        "malware_family": d.get("signature"),
+        "tags":           d.get("tags"),
+        "fileType":       d.get("file_type"),
+        "fileSize":       d.get("file_size"),
+        "firstSeen":      d.get("first_seen"),
+        "lastSeen":       d.get("last_seen"),
+        "delivery_method": d.get("delivery_method"),
+        "yara_rules":     [y.get("rule_name") for y in (d.get("yara_rules") or [])][:5],
+        "verdict":        "MALICIOUS",
+    }
+
 
 def _p_tf(r):
-    if isinstance(r, Exception) or not isinstance(r, dict) or "error" in r:
-        return {"error": str(r)}
+    """ThreatFox — match = MALICIOUS per spec §3."""
+    if _is_fail(r):
+        return _err("threatfox", r)
     if r.get("query_status") != "ok":
         return {"queryStatus": r.get("query_status")}
     d = (r.get("data") or [{}])[0]
-    return {"malware": d.get("malware_printable"), "confidence": d.get("confidence_level")}
+    return {
+        "malware":        d.get("malware_printable"),
+        "malware_family": d.get("malware_printable"),
+        "ioc_type":       d.get("ioc_type"),
+        "threat_type":    d.get("threat_type"),
+        "confidence":     d.get("confidence_level"),
+        "first_seen":     d.get("first_seen"),
+        "last_seen":      d.get("last_seen"),
+        "tags":           d.get("tags") or [],
+        "verdict":        "MALICIOUS",
+    }
+
+
+# ─── Free no-key sources (per spec §3) ─────────────────────────────────────────
+def _p_circl_pdns(r):
+    """Passive DNS from CIRCL — newline-delimited JSON, latest record per name."""
+    if isinstance(r, Exception):
+        return _err("circl_pdns", r)
+    if isinstance(r, dict) and "raw" in r:
+        try:
+            import json
+            lines = [json.loads(l) for l in r["raw"].splitlines() if l.strip()]
+        except Exception as e:
+            return _err("circl_pdns", e)
+    elif isinstance(r, list):
+        lines = r
+    else:
+        return _err("circl_pdns", "unexpected format")
+    if not lines:
+        return _err("circl_pdns", "no records")
+    seen = lines[:20]
+    return {
+        "record_count":  len(lines),
+        "first_seen":    min((x.get("time_first") or 0 for x in seen), default=None),
+        "last_seen":     max((x.get("time_last")  or 0 for x in seen), default=None),
+        "rrtypes":       sorted({x.get("rrtype") for x in seen if x.get("rrtype")}),
+        "answers":       [{"rrname": x.get("rrname"), "rdata": x.get("rdata"), "rrtype": x.get("rrtype")} for x in seen[:5]],
+    }
+
+
+def _p_robtex(r):
+    """Robtex free IP/domain lookup — passive DNS + ASN."""
+    if _is_fail(r):
+        return _err("robtex", r)
+    out = {
+        "asn":        r.get("as"),
+        "asnName":    r.get("asname"),
+        "country":    r.get("country"),
+        "bgproute":   r.get("bgproute"),
+        "active_dns": [d.get("o") for d in (r.get("act") or [])[:10]],
+        "passive_dns": [d.get("o") for d in (r.get("pas") or [])[:10]],
+    }
+    return out
+
+
+def _p_hackertarget(r):
+    """HackerTarget reverse IP / ASN lookup — plain text lines."""
+    if isinstance(r, Exception):
+        return _err("hackertarget", r)
+    if isinstance(r, dict) and "raw" in r:
+        text = r["raw"]
+    elif isinstance(r, str):
+        text = r
+    else:
+        return _err("hackertarget", "unexpected format")
+    if "API count exceeded" in text or "error" in text.lower()[:60]:
+        return _err("hackertarget", text[:120])
+    rows = [l.strip() for l in text.splitlines() if l.strip()]
+    return {"record_count": len(rows), "rows": rows[:25]}
+
+
+def _p_sslbl(domain_or_cert_fp: str) -> dict:
+    """Local SSL Blacklist match (CSV pre-loaded). Match = MALICIOUS."""
+    try:
+        from intel.feeds_loader import check_sslbl
+        hit = check_sslbl(domain_or_cert_fp)
+        if hit:
+            return {**hit, "verdict": "MALICIOUS"}
+    except Exception:
+        pass
+    return {}
+
+
+def _p_feodo(ip: str) -> dict:
+    """Local Feodo Tracker match. Match = MALICIOUS."""
+    try:
+        from intel.feeds_loader import check_feodo
+        hit = check_feodo(ip)
+        if hit:
+            return {**hit, "verdict": "MALICIOUS"}
+    except Exception:
+        pass
+    return {}
+
+
+# ─── Authenticated sources (Censys / Hybrid Analysis / CrowdSec) ───────────────
+def _p_censys(r):
+    """Censys v2 hosts view — services, TLS cert, ASN, location."""
+    if _is_fail(r):
+        return _err("censys", r)
+    res = (r.get("result") or {})
+    services = []
+    for s in (res.get("services") or [])[:15]:
+        services.append({
+            "port":     s.get("port"),
+            "transport": s.get("transport_protocol"),
+            "service":  s.get("service_name"),
+            "product":  _safe(s, "software", 0, "product") or _safe(s, "_decoded"),
+            "banner":   (s.get("banner") or "")[:160] or None,
+        })
+    cert = None
+    tls = next((s.get("tls") for s in (res.get("services") or []) if s.get("tls")), None)
+    if tls:
+        leaf = (tls.get("certificates") or {}).get("leaf_data") or {}
+        cert = {
+            "subject": _safe(leaf, "subject_dn"),
+            "issuer":  _safe(leaf, "issuer_dn"),
+            "sha256":  leaf.get("fingerprint_sha256"),
+            "expires": _safe(leaf, "validity", "end"),
+        }
+    asys = res.get("autonomous_system") or {}
+    loc = res.get("location") or {}
+    out = {
+        "services":    services,
+        "ssl_cert":    cert,
+        "asn":         asys.get("asn"),
+        "asn_name":    asys.get("name"),
+        "bgp_prefix":  asys.get("bgp_prefix"),
+        "country":     loc.get("country"),
+        "city":        loc.get("city"),
+        "last_updated": res.get("last_updated_at"),
+        "os":          _safe(res, "operating_system", "product"),
+    }
+    return out
+
+
+def _p_hybrid(r):
+    """Hybrid Analysis sandbox report (search by hash) → behavioral summary."""
+    if _is_fail(r):
+        return _err("hybrid_analysis", r)
+    if not isinstance(r, list) or not r:
+        return _err("hybrid_analysis", "no reports")
+    top = r[0]  # most recent
+    return {
+        "verdict_raw":     top.get("verdict"),
+        "threat_score":    top.get("threat_score"),
+        "av_detect":       top.get("av_detect"),
+        "malware_family":  top.get("vx_family"),
+        "type":            top.get("type"),
+        "submit_name":     top.get("submit_name"),
+        "environment":     top.get("environment_description"),
+        "mitre":           [t.get("technique") + " " + t.get("name", "") for t in (top.get("mitre_attcks") or [])][:6],
+        "tags":            top.get("tags") or [],
+        "processes":       [p.get("name") for p in (top.get("processes") or [])][:8],
+        "network_hosts":   [(h.get("address") or h.get("name")) for h in (top.get("hosts") or [])][:8],
+        "dropped_count":   len(top.get("extracted_files") or []),
+        "report_url":      f"https://www.hybrid-analysis.com/sample/{top.get('sha256')}" if top.get("sha256") else None,
+        "verdict":         "MALICIOUS" if (top.get("verdict") or "").lower() in {"malicious", "suspicious"} else "UNKNOWN",
+    }
+
+
+def _p_crowdsec(r):
+    """CrowdSec CTI smoke endpoint — score, classifications, attacks."""
+    if _is_fail(r):
+        return _err("crowdsec", r)
+    if r.get("message") or r.get("errors"):
+        return _err("crowdsec", r.get("message") or r.get("errors"))
+    score = (r.get("scores") or {}).get("overall") or {}
+    overall = score.get("aggressiveness") or score.get("total") or 0
+    out = {
+        "score_overall":       overall,
+        "score_aggressiveness": score.get("aggressiveness"),
+        "score_threat":         score.get("threat"),
+        "score_trust":          score.get("trust"),
+        "score_anomaly":        score.get("anomaly"),
+        "classifications":      [c.get("label") for c in (r.get("classifications") or {}).get("classifications", [])][:8],
+        "attack_details":       [a.get("name") for a in (r.get("attack_details") or [])][:8],
+        "behaviors":            [b.get("name") for b in (r.get("behaviors") or [])][:8],
+        "background_noise_score": r.get("background_noise_score"),
+        "reverse_dns":          r.get("reverse_dns"),
+    }
+    if overall > 3:
+        out["verdict"] = "SUSPICIOUS"
+    if any("attack" in (c or "").lower() for c in out["classifications"]):
+        out["verdict"] = "MALICIOUS"
+    return out
 
 
 # ─── ENRICHMENT FUNCTIONS ─────────────────────────────────────────────────────────
@@ -257,7 +705,17 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
 
     tor_nodes = await _tor(session)
 
-    results = await asyncio.gather(
+    censys_id     = keys.get("CENSYS_ID", "")
+    censys_secret = keys.get("CENSYS_SECRET", "")
+    censys_auth = None
+    if censys_id and censys_secret:
+        import base64 as _b64
+        censys_auth = "Basic " + _b64.b64encode(f"{censys_id}:{censys_secret}".encode()).decode()
+
+    crowdsec_key = keys.get("CROWDSEC_KEY", "")
+
+    tasks = [
+        # ── keyed sources (existing) ───────────────────────────────────────────
         _get(session, "https://api.abuseipdb.com/api/v2/check",
              params={"ipAddress": ip, "maxAgeInDays": 90, "verbose": True},
              headers={"Key": keys.get("ABUSEIPDB_KEY", ""), "Accept": "application/json"}),
@@ -271,8 +729,17 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
              headers={"x-apikey": keys.get("VIRUSTOTAL_KEY", "")}),
         _get(session, f"https://otx.alienvault.com/api/v1/indicators/IPv4/{ip}/general",
              headers={"X-OTX-API-KEY": keys.get("OTX_KEY", "")}),
-        return_exceptions=True,
-    )
+        # ── free no-key sources (spec §3) ──────────────────────────────────────
+        _get(session, f"https://www.circl.lu/pdns/query/{ip}"),
+        _get(session, f"https://freeapi.robtex.com/ipquery/{ip}"),
+        _get(session, f"https://api.hackertarget.com/reverseiplookup/?q={ip}"),
+        # ── conditional authenticated sources ──────────────────────────────────
+        _get(session, f"https://search.censys.io/api/v2/hosts/{ip}",
+             headers={"Authorization": censys_auth}) if censys_auth else _noop(),
+        _get(session, f"https://cti.api.crowdsec.net/v2/smoke/{ip}",
+             headers={"x-api-key": crowdsec_key}) if crowdsec_key else _noop(),
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
     abuse_data  = _p_abuse(results[0])
     ipinfo_data = _p_ipinfo(results[1])
@@ -284,8 +751,25 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         "shodan":      _p_shodan(results[3]),
         "virustotal":  _p_vt_ip(results[4]),
         "otx":         _p_otx(results[5]),
+        "circl_pdns":  _p_circl_pdns(results[6]),
+        "robtex":      _p_robtex(results[7]),
+        "hackertarget": _p_hackertarget(results[8]),
         "local_feeds": _local_ip_check(ip),
     }
+    # Censys (optional)
+    if censys_auth and not isinstance(results[9], Exception):
+        cs = _p_censys(results[9])
+        if "error" not in cs:
+            data["censys"] = cs
+    # CrowdSec (optional)
+    if crowdsec_key and not isinstance(results[10], Exception):
+        cs2 = _p_crowdsec(results[10])
+        if "error" not in cs2:
+            data["crowdsec"] = cs2
+    # Feodo Tracker (offline list)
+    feodo = _p_feodo(ip)
+    if feodo:
+        data["feodo_tracker"] = feodo
     # ASN reputation — uses ISP/org strings we already have, no extra API call
     try:
         from intel.asn_reputation import check as asn_check
@@ -390,7 +874,10 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
     if ck in _cache:
         return {**_cache[ck], "cached": True}
 
-    results = await asyncio.gather(
+    hybrid_key = keys.get("HYBRID_ANALYSIS_KEY", "")
+    is_sha256 = len(hash_val) == 64
+
+    tasks = [
         _post(session, "https://mb-api.abuse.ch/api/v1/",
               data=f"query=get_info&hash={hash_val}",
               headers={"Content-Type": "application/x-www-form-urlencoded"}),
@@ -400,8 +887,17 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
              headers={"x-apikey": keys.get("VIRUSTOTAL_KEY", "")}),
         _get(session, f"https://otx.alienvault.com/api/v1/indicators/file/{hash_val}/general",
              headers={"X-OTX-API-KEY": keys.get("OTX_KEY", "")}),
-        return_exceptions=True,
-    )
+        # CIRCL hashlookup — known-legitimate file detection (no key needed)
+        _get(session, f"https://hashlookup.circl.lu/lookup/sha256/{hash_val}") if is_sha256
+            else _get(session, f"https://hashlookup.circl.lu/lookup/md5/{hash_val}"),
+        # Hybrid Analysis — search by hash for prior sandbox detonations
+        _post(session, "https://www.hybrid-analysis.com/api/v2/search/hash",
+              data=f"hash={hash_val}",
+              headers={"api-key": hybrid_key, "user-agent": "Falcon Sandbox",
+                       "Content-Type": "application/x-www-form-urlencoded"}) if hybrid_key
+            else _noop(),
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
     data = {
         "malwarebazaar": _p_mb(results[0]),
@@ -409,6 +905,22 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         "virustotal":    _p_vt_file(results[2]),
         "otx":           _p_otx(results[3]),
     }
+    # CIRCL hashlookup — if present and KnownGood, this overrides everything as CLEAN
+    hl = results[4]
+    if not isinstance(hl, Exception) and isinstance(hl, dict) and not hl.get("error"):
+        known = hl.get("KnownMalicious") or hl.get("hashlookup:trust")
+        data["circl_hashlookup"] = {
+            "FileName":      hl.get("FileName"),
+            "FileSize":      hl.get("FileSize"),
+            "ProductName":   hl.get("ProductName"),
+            "trust":         hl.get("hashlookup:trust"),
+            "verdict":       "CLEAN" if (hl.get("hashlookup:trust") and not known) else None,
+        }
+    # Hybrid Analysis
+    if hybrid_key and not isinstance(results[5], Exception):
+        ha = _p_hybrid(results[5])
+        if "error" not in ha:
+            data["hybrid_analysis"] = ha
     # Team Cymru MHR (free DNS-based hash reputation) + Maltiverse + OpenCTI
     try:
         from intel.team_cymru import lookup as cymru_lookup
@@ -456,18 +968,46 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
 
 
 # ─── AGENT ENTRY POINT ────────────────────────────────────────────────────────────
+def _summarize_ioc(per_source: dict) -> dict:
+    """Count how many sources flagged this IOC as MALICIOUS / SUSPICIOUS / CLEAN."""
+    counts = {"MALICIOUS": 0, "SUSPICIOUS": 0, "CLEAN": 0, "UNKNOWN": 0}
+    sources = []
+    for name, payload in per_source.items():
+        if not isinstance(payload, dict):
+            continue
+        v = payload.get("verdict")
+        if v in counts:
+            counts[v] += 1
+            sources.append({"source": name, "verdict": v})
+    if counts["MALICIOUS"] >= 1:
+        overall = "MALICIOUS"
+    elif counts["SUSPICIOUS"] >= 2 or counts["MALICIOUS"]:
+        overall = "SUSPICIOUS"
+    elif counts["SUSPICIOUS"] == 1:
+        overall = "SUSPICIOUS"
+    elif counts["CLEAN"] >= 1 and counts["SUSPICIOUS"] == 0:
+        overall = "CLEAN"
+    else:
+        overall = "UNKNOWN"
+    return {"overall": overall, "counts": counts, "sources": sources}
+
+
 async def run_enrichment(state: dict) -> dict:
     from config import config
 
     keys = {
-        "VIRUSTOTAL_KEY": config.get("VIRUSTOTAL_KEY"),
-        "ABUSEIPDB_KEY":  config.get("ABUSEIPDB_KEY"),
-        "IPINFO_TOKEN":   config.get("IPINFO_TOKEN"),
-        "GREYNOISE_KEY":  config.get("GREYNOISE_KEY"),
-        "SHODAN_KEY":     config.get("SHODAN_KEY"),
-        "URLSCAN_KEY":    config.get("URLSCAN_KEY"),
-        "OTX_KEY":        config.get("OTX_KEY"),
-        "PULSEDIVE_KEY":  config.get("PULSEDIVE_KEY"),
+        "VIRUSTOTAL_KEY":      config.get("VIRUSTOTAL_KEY"),
+        "ABUSEIPDB_KEY":       config.get("ABUSEIPDB_KEY"),
+        "IPINFO_TOKEN":        config.get("IPINFO_TOKEN"),
+        "GREYNOISE_KEY":       config.get("GREYNOISE_KEY"),
+        "SHODAN_KEY":          config.get("SHODAN_KEY"),
+        "URLSCAN_KEY":         config.get("URLSCAN_KEY"),
+        "OTX_KEY":             config.get("OTX_KEY"),
+        "PULSEDIVE_KEY":       config.get("PULSEDIVE_KEY"),
+        "CENSYS_ID":           config.get("CENSYS_ID"),
+        "CENSYS_SECRET":       config.get("CENSYS_SECRET"),
+        "HYBRID_ANALYSIS_KEY": config.get("HYBRID_ANALYSIS_KEY"),
+        "CROWDSEC_KEY":        config.get("CROWDSEC_KEY"),
     }
 
     iocs = state.get("iocs", {})
@@ -490,26 +1030,38 @@ async def run_enrichment(state: dict) -> dict:
         "urls":    {u:  r for u,  r in zip(iocs.get("urls", []),    url_res)},
     }
 
-    elapsed = (datetime.now(timezone.utc) - start).total_seconds()
-    mal = sum(1 for d in enrichments.get("ips", {}).values()
-              if (d.get("abuseipdb") or {}).get("abuseScore", 0) > 50
-              or (d.get("virustotal") or {}).get("malicious", 0) > 3)
-    mal += sum(1 for d in enrichments.get("hashes", {}).values()
-               if (d.get("virustotal") or {}).get("malicious", 0) > 0
-               or (d.get("malwarebazaar") or {}).get("malwareName"))
+    # ── Per-IOC verdict aggregation (spec §3 top-level summary) ────────────────
+    verdicts = {"ips": {}, "domains": {}, "hashes": {}, "urls": {}}
+    overall = {"MALICIOUS": 0, "SUSPICIOUS": 0, "CLEAN": 0, "UNKNOWN": 0}
+    for cat, items in enrichments.items():
+        for ioc, payload in items.items():
+            s = _summarize_ioc(payload)
+            verdicts[cat][ioc] = s
+            overall[s["overall"]] = overall.get(s["overall"], 0) + 1
+            payload["_summary"] = s  # also attach summary inline for the AI to consume
 
+    summary = {
+        "totals": {k: len(v) for k, v in enrichments.items()},
+        "verdicts_per_ioc": verdicts,
+        "verdict_counts":   overall,
+        "any_malicious":    overall["MALICIOUS"] > 0,
+        "any_suspicious":   overall["SUSPICIOUS"] > 0,
+    }
+
+    elapsed = (datetime.now(timezone.utc) - start).total_seconds()
     trace.append({
         "agent": "enrichment",
         "status": "complete",
-        "summary": (f"Enriched {len(iocs.get('ips',[]))} IPs, "
-                    f"{len(iocs.get('domains',[]))} domains, "
-                    f"{len(iocs.get('hashes',[]))} hashes, "
-                    f"{len(iocs.get('urls',[]))} URLs in {elapsed:.1f}s. "
-                    f"{mal} flagged by multiple sources."),
+        "summary": (f"Enriched {summary['totals']['ips']} IPs, "
+                    f"{summary['totals']['domains']} domains, "
+                    f"{summary['totals']['hashes']} hashes, "
+                    f"{summary['totals']['urls']} URLs in {elapsed:.1f}s. "
+                    f"{overall['MALICIOUS']} malicious, {overall['SUSPICIOUS']} suspicious."),
         "iteration": iteration + 1,
         "elapsed_ms": int(elapsed * 1000),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
     return {**state, "enrichments": enrichments,
+            "enrichment_summary": summary,
             "iteration_count": iteration + 1, "agent_trace": trace}
