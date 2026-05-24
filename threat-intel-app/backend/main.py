@@ -1156,10 +1156,18 @@ async def scan_file_v2(file: UploadFile = File(...)):
     except Exception:
         pass
 
-    # Deep AI analyst (spec §1) — triage + full structured assessment
+    # Deep AI analyst (spec §1) — triage + full structured assessment.
+    # Spec §2: surface prior analyst corrections on similar files as
+    # institutional knowledge in the deep-analysis prompt.
     try:
         from intel.file_ai_analyst import run_ai_pipeline
-        analysis["ai_analyst"] = await run_ai_pipeline(analysis, config)
+        from intel.scanner_feedback import institutional_knowledge_prompt
+        extra = institutional_knowledge_prompt(analysis)
+        analysis["ai_analyst"] = await run_ai_pipeline(
+            analysis, config, extra_context=extra,
+        )
+        if extra:
+            analysis["ai_analyst"]["institutional_knowledge_applied"] = True
     except Exception as e:
         analysis["ai_analyst"] = {"error": str(e)[:200]}
 
@@ -1428,6 +1436,81 @@ async def scan_hunt(req: YaraHuntRequest):
                 "matched":  [m.rule for m in ms],
             })
     return {"hunted": len(get_scan_history()), "hits": matches, "hit_count": len(matches)}
+
+
+# ─── ITERATIVE REFINEMENT (spec §2) ──────────────────────────────────────────
+class ScanClarifyRequest(BaseModel):
+    scan_id: str          # SHA-256 of the scanned file
+    answers: dict         # {question_text: answer_text}
+
+
+@app.post("/api/scan/clarify")
+async def scan_clarify(req: ScanClarifyRequest):
+    """Re-run only the deep AI analysis with analyst answers appended to the
+    prompt. Returns the updated assessment with a context_impact field
+    explaining how the answers changed the conclusion."""
+    from intel.file_correlation import load_scan, append_scan_history
+    from intel.file_ai_analyst import analyze_deep, gather_comparative_context
+    from intel.scanner_feedback import institutional_knowledge_prompt
+
+    scan = load_scan(req.scan_id)
+    if not scan:
+        raise HTTPException(404, "no prior scan for that sha256 — run /api/scan/file first")
+    if not req.answers:
+        raise HTTPException(400, "answers required")
+
+    qa_lines = "\n".join(f"  Q: {q}\n  A: {a}" for q, a in req.answers.items() if a)
+    extra = (
+        "## Analyst-supplied clarifications\n"
+        "The analyst answered your earlier clarifying questions. Incorporate "
+        "this context into the assessment and add a top-level field "
+        '"context_impact" explaining how these answers changed your conclusions '
+        "compared to your prior assessment.\n\n"
+        f"{qa_lines}"
+    )
+    inst = institutional_knowledge_prompt(scan)
+    if inst:
+        extra = inst + "\n\n" + extra
+
+    deep = await analyze_deep(scan, config,
+                              comparative_context=gather_comparative_context(scan),
+                              extra_context=extra)
+    if not deep or deep.get("error"):
+        raise HTTPException(500, f"AI re-analysis failed: {(deep or {}).get('error') or 'no key'}")
+
+    scan.setdefault("ai_analyst", {})
+    scan["ai_analyst"]["deep"] = deep
+    scan["ai_analyst"]["analyst_answers"] = req.answers
+    # Surface context_impact on the analyst object too so the UI can show it
+    if isinstance(deep, dict) and deep.get("context_impact"):
+        scan["ai_analyst"]["context_impact"] = deep["context_impact"]
+    append_scan_history(scan)
+    return scan
+
+
+class ScanFeedbackRequest(BaseModel):
+    scan_id: str
+    thumbs: str          # 'up' | 'down'
+    correction: Optional[dict] = None
+    notes: Optional[str] = ""
+    analyst: Optional[str] = ""
+
+
+@app.post("/api/scan/feedback")
+async def scan_feedback(req: ScanFeedbackRequest):
+    """Record analyst feedback on an AI scan result. Used as institutional
+    knowledge on subsequent analyses of similar files."""
+    if req.thumbs not in ("up", "down"):
+        raise HTTPException(400, "thumbs must be 'up' or 'down'")
+    from intel.scanner_feedback import record
+    entry = record(req.scan_id, req.thumbs, req.correction, req.notes, req.analyst)
+    return {"saved": True, "entry": entry}
+
+
+@app.get("/api/scan/feedback")
+async def scan_feedback_list(scan_id: Optional[str] = None):
+    from intel.scanner_feedback import list_all, for_scan
+    return {"feedback": for_scan(scan_id) if scan_id else list_all()}
 
 
 @app.get("/api/sandbox/{sha256}")
