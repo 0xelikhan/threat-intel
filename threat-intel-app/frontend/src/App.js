@@ -1456,53 +1456,62 @@ function CrossRefs({ rs }) {
   const paths = cr.suspicious_paths || [];
   if (!kev.length && !lolbas.length && !atomic.length && !kits.length && !drivers.length && !rmm.length && !paths.length) return null;
 
+  const borderTop = (i) => i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none';
+  const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
+
   return (
-    <Card title="Threat intel cross-references" accent={t.cy}
+    <Card title="Threat intel cross-references" accent="#0fbcff"
       badge={`${kev.length} KEV · ${lolbas.length} LOLBAS · ${kits.length} kit · ${atomic.length} TTP`}>
       {kits.length > 0 && (
         <Block title={`Phishing-kit fingerprints (${kits.length})`}>
-          {kits.map((k,i) => (
-            <li key={i} style={{ padding:'8px 0', borderTop: i>0?`1px solid ${t.line}`:'none', listStyle:'none' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4, flexWrap:'wrap' }}>
-                <Chip color={t.red} soft={t.redDim}>{k.kit}</Chip>
-                <span style={{ fontSize:11, color:t.fgDim }}>{k.patterns_matched} pattern{k.patterns_matched>1?'s':''}</span>
-              </div>
-              {k.url && <div style={{ fontSize:11, color:t.fg, fontFamily:'JetBrains Mono',
-                wordBreak:'break-all', lineHeight:1.5 }}>{k.url}</div>}
-            </li>
+          {kits.map((k, i) => (
+            <Box component="li" key={i} sx={{ py: 1, borderTop: borderTop(i), listStyle: 'none' }}>
+              <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" sx={{ mb: 0.5 }}>
+                <MuiTag label={k.kit} color="#EE3838"/>
+                <Typography sx={{ fontSize: 11, color: 'text.disabled' }}>
+                  {k.patterns_matched} pattern{k.patterns_matched > 1 ? 's' : ''}
+                </Typography>
+              </Stack>
+              {k.url && (
+                <Box sx={{ ...monoSx, fontSize: 11, color: 'text.primary',
+                  wordBreak: 'break-all', lineHeight: 1.5 }}>{k.url}</Box>
+              )}
+            </Box>
           ))}
         </Block>
       )}
 
       {kev.length > 0 && (
         <Block title={`Actively exploited CVEs · CISA KEV (${kev.length})`}>
-          {kev.map((k,i) => {
+          {kev.map((k, i) => {
             const epss = k.epss;
-            const epssColor = epss?.tier === 'critical' ? t.red
-              : epss?.tier === 'high' ? t.orange
-              : epss?.tier === 'medium' ? t.yellow : t.fgMute;
+            const epssColor = epss?.tier === 'critical' ? '#EE3838'
+              : epss?.tier === 'high' ? '#E6700F'
+              : epss?.tier === 'medium' ? '#E1B823' : '#848592';
             return (
-              <li key={i} style={{ padding:'8px 0', borderTop: i>0?`1px solid ${t.line}`:'none', listStyle:'none' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4, flexWrap:'wrap' }}>
-                  <span style={{ fontFamily:'JetBrains Mono', fontSize:12, color:t.red, fontWeight:600 }}>{k.cve}</span>
-                  <Chip color={t.fgMute} size="xs">{k.vendor}</Chip>
-                  <Chip color={t.fgMute} size="xs">{k.product}</Chip>
-                  {k.ransomware_use && <Chip color={t.red} soft={t.redDim} size="xs">ransomware</Chip>}
-                  {epss && <Chip color={epssColor} soft={`${epssColor}14`} size="xs">
-                    EPSS {epss.epss_percent}% · {epss.tier}
-                  </Chip>}
-                  {k.date_added && <span style={{ fontSize:11, color:t.fgDim, marginLeft:'auto' }}>
-                    added {k.date_added}
-                  </span>}
-                </div>
-                <div style={{ fontSize:12, color:t.fg, marginBottom:3 }}>{k.name}</div>
-                {k.description && <div style={{ fontSize:11, color:t.fgMute, lineHeight:1.55 }}>{k.description}</div>}
-                {k.required_action && (
-                  <div style={{ fontSize:11, color:t.orange, marginTop:5 }}>
-                    Required action: {k.required_action.slice(0, 180)}
-                  </div>
+              <Box component="li" key={i} sx={{ py: 1, borderTop: borderTop(i), listStyle: 'none' }}>
+                <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" sx={{ mb: 0.5 }}>
+                  <Box component="span" sx={{ ...monoSx, fontSize: 12, color: 'error.main', fontWeight: 600 }}>{k.cve}</Box>
+                  <MuiTag label={k.vendor} color="#848592"/>
+                  <MuiTag label={k.product} color="#848592"/>
+                  {k.ransomware_use && <MuiTag label="ransomware" color="#EE3838"/>}
+                  {epss && <MuiTag label={`EPSS ${epss.epss_percent}% · ${epss.tier}`} color={epssColor}/>}
+                  {k.date_added && (
+                    <Typography sx={{ fontSize: 11, color: 'text.disabled', ml: 'auto !important' }}>
+                      added {k.date_added}
+                    </Typography>
+                  )}
+                </Stack>
+                <Typography sx={{ fontSize: 12, color: 'text.primary', mb: 0.375 }}>{k.name}</Typography>
+                {k.description && (
+                  <Typography sx={{ fontSize: 11, color: 'text.tertiary', lineHeight: 1.55 }}>{k.description}</Typography>
                 )}
-              </li>
+                {k.required_action && (
+                  <Typography sx={{ fontSize: 11, color: 'warning.main', mt: 0.625 }}>
+                    Required action: {k.required_action.slice(0, 180)}
+                  </Typography>
+                )}
+              </Box>
             );
           })}
         </Block>
@@ -1510,101 +1519,121 @@ function CrossRefs({ rs }) {
 
       {lolbas.length > 0 && (
         <Block title={`Living-off-the-land binaries · LOLBAS (${lolbas.length})`}>
-          {lolbas.map((l,i) => (
-            <li key={i} style={{ padding:'8px 0', borderTop: i>0?`1px solid ${t.line}`:'none', listStyle:'none' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4, flexWrap:'wrap' }}>
-                <span style={{ fontFamily:'JetBrains Mono', fontSize:12, color:t.orange, fontWeight:600 }}>{l.name}</span>
-                {l.categories?.slice(0,4).map(c => <Chip key={c} color={t.fgMute} size="xs">{c}</Chip>)}
-                {l.url && <a href={l.url} target="_blank" rel="noreferrer"
-                  style={{ marginLeft:'auto', fontSize:11, color:t.cy, display:'inline-flex', alignItems:'center', gap:2 }}>
-                  details <ArrowUpRight size={11}/>
-                </a>}
-              </div>
-              {l.description && <div style={{ fontSize:11, color:t.fgMute, lineHeight:1.55 }}>{l.description}</div>}
-              {l.examples?.length>0 && (
-                <ul style={{ margin:'5px 0 0 14px', padding:0, fontSize:11, color:t.fgDim, lineHeight:1.6 }}>
-                  {l.examples.slice(0,2).map((e,j) => <li key={j}>{e}</li>)}
-                </ul>
+          {lolbas.map((l, i) => (
+            <Box component="li" key={i} sx={{ py: 1, borderTop: borderTop(i), listStyle: 'none' }}>
+              <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" sx={{ mb: 0.5 }}>
+                <Box component="span" sx={{ ...monoSx, fontSize: 12, color: 'warning.main', fontWeight: 600 }}>{l.name}</Box>
+                {l.categories?.slice(0, 4).map(c => <MuiTag key={c} label={c} color="#848592"/>)}
+                {l.url && (
+                  <Box component="a" href={l.url} target="_blank" rel="noreferrer"
+                    sx={{
+                      ml: 'auto !important', fontSize: 11, color: 'primary.main',
+                      display: 'inline-flex', alignItems: 'center', gap: 0.25,
+                      textDecoration: 'none', '&:hover': { textDecoration: 'underline' },
+                    }}>
+                    details <ArrowUpRight size={11}/>
+                  </Box>
+                )}
+              </Stack>
+              {l.description && (
+                <Typography sx={{ fontSize: 11, color: 'text.tertiary', lineHeight: 1.55 }}>{l.description}</Typography>
               )}
-            </li>
+              {l.examples?.length > 0 && (
+                <Box component="ul" sx={{ m: '5px 0 0 14px', p: 0, fontSize: 11, color: 'text.disabled', lineHeight: 1.6 }}>
+                  {l.examples.slice(0, 2).map((e, j) => <li key={j}>{e}</li>)}
+                </Box>
+              )}
+            </Box>
           ))}
         </Block>
       )}
 
       {rmm.length > 0 && (
         <Block title={`Remote-management tools detected · RMM abuse (${rmm.length})`}>
-          {rmm.map((r,i) => (
-            <li key={i} style={{ padding:'8px 0', borderTop: i>0?`1px solid ${t.line}`:'none', listStyle:'none' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4, flexWrap:'wrap' }}>
-                <span style={{ fontFamily:'JetBrains Mono', fontSize:12, color:t.orange, fontWeight:600 }}>{r.binary}</span>
-                <Chip color={t.fgMute} size="xs">{r.vendor}</Chip>
-                {r.groups?.slice(0, 4).map(g => <Chip key={g} color={t.red} soft={t.redDim} size="xs">{g}</Chip>)}
-              </div>
-              <div style={{ fontSize:11, color:t.fgMute, lineHeight:1.55 }}>{r.description}</div>
-            </li>
+          {rmm.map((r, i) => (
+            <Box component="li" key={i} sx={{ py: 1, borderTop: borderTop(i), listStyle: 'none' }}>
+              <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" sx={{ mb: 0.5 }}>
+                <Box component="span" sx={{ ...monoSx, fontSize: 12, color: 'warning.main', fontWeight: 600 }}>{r.binary}</Box>
+                <MuiTag label={r.vendor} color="#848592"/>
+                {r.groups?.slice(0, 4).map(g => <MuiTag key={g} label={g} color="#EE3838"/>)}
+              </Stack>
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary', lineHeight: 1.55 }}>{r.description}</Typography>
+            </Box>
           ))}
         </Block>
       )}
 
       {paths.length > 0 && (
         <Block title={`Suspicious filesystem paths (${paths.length})`}>
-          {paths.map((p,i) => (
-            <li key={i} style={{ padding:'6px 0', borderTop: i>0?`1px solid ${t.line}`:'none', listStyle:'none',
-              fontSize:12, color:t.fg }}>
-              <span style={{ color:t.orange }}>›</span> {p.label}
-            </li>
+          {paths.map((p, i) => (
+            <Box component="li" key={i} sx={{
+              py: 0.75, borderTop: borderTop(i), listStyle: 'none',
+              fontSize: 12, color: 'text.primary',
+            }}>
+              <Box component="span" sx={{ color: 'warning.main' }}>›</Box> {p.label}
+            </Box>
           ))}
         </Block>
       )}
 
       {drivers.length > 0 && (
         <Block title={`Vulnerable drivers · LOLDrivers (${drivers.length})`}>
-          {drivers.map((d,i) => (
-            <li key={i} style={{ padding:'8px 0', borderTop: i>0?`1px solid ${t.line}`:'none', listStyle:'none' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4, flexWrap:'wrap' }}>
-                <span style={{ fontFamily:'JetBrains Mono', fontSize:12, color:t.red, fontWeight:600 }}>{d.value}</span>
-                <Chip color={d.category==='malicious'?t.red:t.orange}
-                  soft={d.category==='malicious'?t.redDim:t.orangeDim} size="xs">{d.category}</Chip>
-                <Chip color={t.fgMute} size="xs">match: {d.match_type}</Chip>
-                {d.mitre && <Chip color={t.blue} soft={t.blueDim} size="xs">{d.mitre}</Chip>}
-                {d.ref && <a href={d.ref} target="_blank" rel="noreferrer"
-                  style={{ marginLeft:'auto', fontSize:11, color:t.cy, display:'inline-flex', alignItems:'center', gap:2 }}>
-                  reference <ArrowUpRight size={11}/>
-                </a>}
-              </div>
-              {d.tags?.length>0 && (
-                <div style={{ fontSize:11, color:t.fgMute, marginTop:3 }}>
+          {drivers.map((d, i) => (
+            <Box component="li" key={i} sx={{ py: 1, borderTop: borderTop(i), listStyle: 'none' }}>
+              <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" sx={{ mb: 0.5 }}>
+                <Box component="span" sx={{ ...monoSx, fontSize: 12, color: 'error.main', fontWeight: 600 }}>{d.value}</Box>
+                <MuiTag label={d.category} color={d.category === 'malicious' ? '#EE3838' : '#E6700F'}/>
+                <MuiTag label={`match: ${d.match_type}`} color="#848592"/>
+                {d.mitre && <MuiTag label={d.mitre} color="#0fbcff"/>}
+                {d.ref && (
+                  <Box component="a" href={d.ref} target="_blank" rel="noreferrer"
+                    sx={{
+                      ml: 'auto !important', fontSize: 11, color: 'primary.main',
+                      display: 'inline-flex', alignItems: 'center', gap: 0.25,
+                      textDecoration: 'none', '&:hover': { textDecoration: 'underline' },
+                    }}>
+                    reference <ArrowUpRight size={11}/>
+                  </Box>
+                )}
+              </Stack>
+              {d.tags?.length > 0 && (
+                <Typography sx={{ fontSize: 11, color: 'text.tertiary', mt: 0.375 }}>
                   Tags: {d.tags.join(', ')}
-                </div>
+                </Typography>
               )}
-            </li>
+            </Box>
           ))}
         </Block>
       )}
 
       {atomic.length > 0 && (
         <Block title={`Attack examples · Atomic Red Team (${atomic.length} techniques)`}>
-          {atomic.map((a,i) => (
-            <li key={i} style={{ padding:'10px 0', borderTop: i>0?`1px solid ${t.line}`:'none', listStyle:'none' }}>
-              <div style={{ fontSize:12, color:t.fg, fontWeight:600, marginBottom:6 }}>
-                <span style={{ color:t.blue, fontFamily:'JetBrains Mono', marginRight:8 }}>
+          {atomic.map((a, i) => (
+            <Box component="li" key={i} sx={{ py: 1.25, borderTop: borderTop(i), listStyle: 'none' }}>
+              <Box sx={{ fontSize: 12, color: 'text.primary', fontWeight: 600, mb: 0.75 }}>
+                <Box component="span" sx={{ color: 'info.main', ...monoSx, mr: 1 }}>
                   {a.technique.split(' ')[0]}
-                </span>
+                </Box>
                 {a.technique.split(' - ').slice(1).join(' - ')}
-              </div>
-              {a.tests.map((tst,j) => (
-                <div key={j} style={{ marginBottom:6, paddingLeft:8, borderLeft:`2px solid ${t.line}` }}>
-                  <div style={{ fontSize:11, color:t.fg, marginBottom:3 }}>{tst.name}</div>
+              </Box>
+              {a.tests.map((tst, j) => (
+                <Box key={j} sx={{ mb: 0.75, pl: 1, borderLeft: `2px solid ${muiAlpha('#ffffff', 0.12)}` }}>
+                  <Typography sx={{ fontSize: 11, color: 'text.primary', mb: 0.375 }}>{tst.name}</Typography>
                   {tst.command && (
-                    <pre style={{ background:t.bg, border:`1px solid ${t.line}`, borderRadius:4,
-                      padding:'6px 9px', fontSize:11, color:t.cy, fontFamily:'JetBrains Mono',
-                      margin:'2px 0', whiteSpace:'pre-wrap', wordBreak:'break-all', maxHeight:80, overflow:'auto' }}>
+                    <Box component="pre" sx={{
+                      backgroundColor: '#070d19',
+                      border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+                      borderRadius: '4px',
+                      p: '6px 9px', fontSize: 11, color: 'primary.main', ...monoSx,
+                      my: '2px', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                      maxHeight: 80, overflow: 'auto',
+                    }}>
                       {tst.command.split('\n')[0].slice(0, 200)}
-                    </pre>
+                    </Box>
                   )}
-                </div>
+                </Box>
               ))}
-            </li>
+            </Box>
           ))}
         </Block>
       )}
