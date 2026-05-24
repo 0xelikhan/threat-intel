@@ -294,152 +294,6 @@ function PreFlight({ result }) {
   );
 }
 
-/* ─── training mode (spec §8) ────────────────────────────────────────────────
- * Toggle stored in localStorage. When ON the app surfaces extra explanatory
- * tooltips and panels — MITRE explanations, source 'why this matters' helpers,
- * confidence score breakdowns (already always-on), recommended-action how-to
- * panels, sigma rule explanations, and a per-case AI quiz at the bottom of
- * the detail view.
- *
- * Implemented as a tiny React context the rest of the app can opt into via
- * `useTraining()`. UI components check the flag before rendering the extras.
- */
-const TrainingContext = React.createContext({ enabled: false, setEnabled: () => {} });
-const useTraining = () => React.useContext(TrainingContext);
-
-function TrainingProvider({ children }) {
-  const [enabled, setEnabledRaw] = useState(() => {
-    try { return localStorage.getItem('recon.training') === '1'; } catch { return false; }
-  });
-  const setEnabled = (v) => {
-    setEnabledRaw(v);
-    try { localStorage.setItem('recon.training', v ? '1' : '0'); } catch {}
-  };
-  return (
-    <TrainingContext.Provider value={{ enabled, setEnabled }}>
-      {children}
-    </TrainingContext.Provider>
-  );
-}
-
-function TrainingToggle() {
-  const { enabled, setEnabled } = useTraining();
-  return (
-    <Box
-      onClick={() => setEnabled(!enabled)}
-      sx={{
-        cursor: 'pointer', userSelect: 'none', fontSize: 11,
-        color: enabled ? 'primary.main' : 'text.disabled',
-        display: 'inline-flex', alignItems: 'center', gap: 0.5,
-      }}
-    >
-      <Box sx={{
-        width: 8, height: 8, borderRadius: 99,
-        backgroundColor: enabled ? 'primary.main' : muiAlpha('#ffffff', 0.2),
-      }}/>
-      training mode {enabled ? 'on' : 'off'}
-    </Box>
-  );
-}
-
-// Why-this-matters source explanations
-const SOURCE_HELP = {
-  virustotal:  "VirusTotal aggregates ~70 AV engines. >5 malicious = high signal; reputation negative = community-reported bad.",
-  abuseipdb:   "AbuseIPDB tracks user-reported IP abuse. >75 confidence + recent activity = highly suspicious.",
-  shodan:      "Shodan scans the entire internet — open ports, services, CVEs. Surprising ports (4444, 8080) suggest C2.",
-  greynoise:   "GreyNoise classifies internet-wide scanners. 'malicious' = known bad scanner; 'benign' = Google/Shodan.",
-  otx:         "AlienVault OTX is community threat sharing. High pulse count = many analysts have written about this IOC.",
-  threatfox:   "abuse.ch ThreatFox — any match = confirmed malicious in someone's sandbox or hunt. Treat as MALICIOUS.",
-  malwarebazaar:"abuse.ch MalwareBazaar holds real malware samples. A match means this hash IS that malware family.",
-  pulsedive:   "Pulsedive aggregates feeds. Risk=critical/high reflects multi-source consensus.",
-  censys:      "Censys provides deep TLS certificate + service fingerprinting. Useful for infrastructure pivot.",
-  crowdsec:    "CrowdSec CTI tracks IPs seen attacking participating defenders. >5 = real ongoing attacker.",
-  hybrid_analysis: "Hybrid Analysis (Falcon Sandbox) is dynamic analysis. Provides full process tree, network, dropped files.",
-};
-
-function SourceHelp({ source }) {
-  const { enabled } = useTraining();
-  const text = SOURCE_HELP[source];
-  if (!enabled || !text) return null;
-  return (
-    <Box component="span" sx={{
-      fontSize: 10, color: 'text.disabled', fontStyle: 'italic',
-      ml: 0.75, display: 'inline',
-    }}>
-      — {text}
-    </Box>
-  );
-}
-
-/* AI quiz that fires when training mode is on, run id is set, and analyst
- * clicks the 'Quiz me on this case' button. */
-function TrainingQuiz({ result }) {
-  const { enabled } = useTraining();
-  const [quiz, setQuiz] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  if (!enabled || !result?.runId) return null;
-
-  const generate = async () => {
-    setLoading(true); setError(null);
-    try {
-      const r = await fetch('/api/training/quiz', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ run_id: result.runId }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
-      setQuiz(d);
-    } catch (e) { setError(e.message); }
-    finally { setLoading(false); }
-  };
-
-  return (
-    <Card title="Training quiz · reinforce what this case taught you" accent="#16AD34" defaultOpen>
-      {!quiz && !loading && (
-        <MuiButton variant="contained" size="small" onClick={generate}>
-          Quiz me on this case
-        </MuiButton>
-      )}
-      {loading && (
-        <Typography sx={{ fontSize: 12, color: 'text.tertiary' }}>
-          Generating 3 short-answer questions…
-        </Typography>
-      )}
-      {error && (
-        <Typography sx={{ fontSize: 12, color: 'error.main' }}>{error}</Typography>
-      )}
-      {quiz?.questions?.map((q, i) => (
-        <MuiPaper key={i} elevation={0} sx={{
-          backgroundColor: '#0C1524',
-          border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-          borderRadius: '4px', p: '10px 12px', mb: 0.75,
-        }}>
-          <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 600, mb: 0.5 }}>
-            {i + 1}. {q.q}
-          </Typography>
-          {q.what_it_tests && (
-            <Typography sx={{ fontSize: 10, color: 'text.disabled',
-              fontStyle: 'italic', textTransform: 'uppercase',
-              letterSpacing: '0.05em', mb: 0.5,
-            }}>tests: {q.what_it_tests}</Typography>
-          )}
-          {q.expected_answer && (
-            <Box component="details" sx={{ fontSize: 11, color: 'text.tertiary', mt: 0.5 }}>
-              <Box component="summary" sx={{ cursor: 'pointer', color: 'primary.main' }}>
-                Show expected answer
-              </Box>
-              <Typography sx={{ fontSize: 11, color: 'text.primary', mt: 0.5, lineHeight: 1.55 }}>
-                {q.expected_answer}
-              </Typography>
-            </Box>
-          )}
-        </MuiPaper>
-      ))}
-    </Card>
-  );
-}
-
 /* ─── geopolitical context (spec §7) ─────────────────────────────────────────
  * Country attribution + risk scoring + false-flag detection. Surfaces
  * suspected nation-state activity and warns when actor attribution doesn't
@@ -3580,10 +3434,7 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, scanSta
         display: 'flex', justifyContent: 'space-between',
         alignItems: 'center',
       }}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <span>RECON v1.0</span>
-          <TrainingToggle/>
-        </Stack>
+        <span>RECON v1.0</span>
         <span style={{ fontVariantNumeric: 'tabular-nums' }}>
           <Box component="kbd" sx={{
             backgroundColor: 'background.accent',
@@ -4038,14 +3889,6 @@ function FileScanner({ scanning, result, error, submission, onDetonate }) {
 
 /* ─── app ─────────────────────────────────────────────────────────────────────── */
 export default function App() {
-  return (
-    <TrainingProvider>
-      <AppShell/>
-    </TrainingProvider>
-  );
-}
-
-function AppShell() {
   const [result, setResult] = useState(null);
   const [view, setView] = useState('detail'); // 'detail' | 'table'
   const [webhooks, setWebhooks] = useState({});
@@ -4222,7 +4065,6 @@ function AppShell() {
 
             <Enrichments enrichments={result.enrichments}/>
             <Report result={result}/>
-            <TrainingQuiz result={result}/>
             {/* YARA scan results auto-appear here when sidebar drop runs a scan */}
             <FileScanner {...scanState} onDetonate={detonateFile}/>
             <Box sx={{ mb: 2 }}><ExportBar result={result}/></Box>
