@@ -73,7 +73,9 @@ async def translate_log(raw: str, config) -> Optional[Dict]:
         return None
 
     base_url = config.get("OPENAI_BASE_URL", "")
-    model    = config.get("AI_MODEL", "gpt-4o-mini")
+    # Log-format normalization is a light, latency-sensitive step that runs first
+    # in triage and blocks IOC extraction → fast model tier.
+    model    = config.get_model(fast=True)
     try:
         if "openai.azure.com" in base_url:
             client = AsyncAzureOpenAI(
