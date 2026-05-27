@@ -123,7 +123,8 @@ async def summarize_file(analysis: Dict, config) -> Optional[str]:
     except ImportError:
         return None
     base_url = config.get("OPENAI_BASE_URL", "")
-    model    = config.get("AI_MODEL", "gpt-4o-mini")
+    # Short 2-3 sentence summary — light, latency-sensitive → fast model tier.
+    model    = config.get_model(fast=True)
     try:
         if "openai.azure.com" in base_url:
             client = AsyncAzureOpenAI(

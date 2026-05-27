@@ -31,10 +31,18 @@ API_KEY_DEFINITIONS = {
         "group": "API Keys"
     },
     "AI_MODEL": {
-        "label": "AI Model",
-        "description": "Model to use. gpt-4o-mini for cost efficiency, gpt-4o for best results.",
+        "label": "AI Model (deep reasoning)",
+        "description": "Smart model for the deep analyst + investigation. gpt-4o for best results. On Azure, this is your deployment name.",
         "required": False,
         "default": "gpt-4o-mini",
+        "placeholder": "gpt-4o",
+        "group": "API Keys"
+    },
+    "FAST_AI_MODEL": {
+        "label": "Fast AI Model (light tasks)",
+        "description": "Optional speed boost. Faster/cheaper model for latency-sensitive calls: triage classification, file summaries, chat, and Sigma/YARA/KQL generation. On Azure, deploy gpt-4o-mini and put its deployment name here. Leave blank to use the main AI Model for everything.",
+        "required": False,
+        "default": "",
         "placeholder": "gpt-4o-mini",
         "group": "API Keys"
     },
@@ -326,6 +334,15 @@ class ConfigManager:
     def is_configured(self) -> bool:
         required = [k for k, v in API_KEY_DEFINITIONS.items() if v.get("required")]
         return all(self.get(k) for k in required)
+
+    def get_model(self, fast: bool = False) -> str:
+        """Pick the model/deployment for a call. `fast=True` returns the
+        lightweight model (FAST_AI_MODEL) for latency-sensitive tasks; otherwise
+        the smart model (AI_MODEL) for deep reasoning. Falls back to the smart
+        model if no fast model is configured."""
+        if fast:
+            return self.get("FAST_AI_MODEL") or self.get("AI_MODEL", "gpt-4o-mini")
+        return self.get("AI_MODEL", "gpt-4o-mini")
 
     def get_ai_provider(self) -> str:
         return "azure" if "openai.azure.com" in self.get("OPENAI_BASE_URL", "") else "openai"
