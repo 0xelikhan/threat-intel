@@ -371,6 +371,38 @@ async def _stream(raw_input: str, input_type: str, label: str = ""):
                 yield f"data: {json.dumps({'event': 'agent_update', 'runId': run_id, 'trace': trace[-1]})}\n\n"
             yield f"data: {json.dumps({'event': 'partial_result', 'runId': run_id, 'result': _strip(state, run_id, label)})}\n\n"
 
+            # Provisional verdict (P3): a deterministic, enrichment-based read the
+            # analyst sees NOW — ~2 min before the AI investigation finishes. Clearly
+            # flagged `provisional` so the UI labels it preliminary; the AI verdict
+            # (early_rs below) overwrites it the moment investigation completes.
+            _counts = (state.get("enrichment_summary", {}).get("verdict_counts") or {})
+            _cscores = state.get("confidence_scores") or {}
+            _max_score = max((v.get("score", 0) for v in _cscores.values()
+                              if isinstance(v, dict)), default=0)
+            if _counts.get("MALICIOUS"):
+                _prov_level = "HIGH"
+            elif _counts.get("SUSPICIOUS"):
+                _prov_level = "MEDIUM"
+            elif _max_score >= 25:
+                _prov_level = "LOW"
+            else:
+                _prov_level = "INFORMATIONAL"
+            _bits = [f"{_counts[k]} {k.lower()}" for k in ("MALICIOUS", "SUSPICIOUS", "CLEAN")
+                     if _counts.get(k)]
+            state["response_summary"] = {
+                "provisional":      True,
+                "threat_level":     _prov_level,
+                "confidence":       round(_max_score / 100.0, 2),
+                "summary":          ("Preliminary read from automated enrichment: "
+                                     + (", ".join(_bits) or "no high-risk indicators")
+                                     + " indicator(s). Full AI correlation in progress…"),
+                "ioc_assessments":  [],
+                "mitre_techniques": [],
+                "cross_refs":       state.get("cross_refs", {}),
+                "timestamp":        _ts(),
+            }
+            yield f"data: {json.dumps({'event': 'partial_result', 'runId': run_id, 'result': _strip(state, run_id, label)})}\n\n"
+
         # ── Stage 3: INVESTIGATION (AI correlation + tool-calling loop) ─────
         # Stream each tool call the AI makes the moment it happens (via on_event)
         # so the analyst watches the investigation reason live, instead of seeing
@@ -854,9 +886,11 @@ async def _chat_stream(run_id: str, user_msg: str):
     base_url = config.get("OPENAI_BASE_URL", "")
     if "openai.azure.com" in base_url:
         client = AsyncAzureOpenAI(api_key=key, azure_endpoint=base_url.rstrip("/"),
-                                   api_version="2024-02-01")
+                                   api_version="2024-02-01",
+                                   timeout=45.0, max_retries=1)
     else:
-        client = AsyncOpenAI(api_key=key, base_url=base_url or "https://api.openai.com/v1")
+        client = AsyncOpenAI(api_key=key, base_url=base_url or "https://api.openai.com/v1",
+                             timeout=45.0, max_retries=1)
 
     state = _results[run_id]
     sys_msg = _build_chat_system_msg(state)

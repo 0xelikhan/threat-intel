@@ -82,9 +82,11 @@ async def translate_log(raw: str, config) -> Optional[Dict]:
                 api_key=key,
                 azure_endpoint=base_url.rstrip("/"),
                 api_version="2024-02-01",
+                timeout=30.0, max_retries=1,   # triage is latency-critical — fail fast
             )
         else:
-            client = AsyncOpenAI(api_key=key, base_url=base_url or "https://api.openai.com/v1")
+            client = AsyncOpenAI(api_key=key, base_url=base_url or "https://api.openai.com/v1",
+                                 timeout=30.0, max_retries=1)
         resp = await client.chat.completions.create(
             model=model,
             messages=[

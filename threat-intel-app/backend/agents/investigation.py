@@ -659,11 +659,13 @@ async def run_investigation(state: dict, on_event=None) -> dict:
                     api_key=openai_key,
                     azure_endpoint=base_url.rstrip("/"),
                     api_version="2024-02-01",
+                    timeout=45.0, max_retries=1,   # cap tail latency under throttling
                 )
             else:
                 client = AsyncOpenAI(
                     api_key=openai_key,
                     base_url=base_url or "https://api.openai.com/v1",
+                    timeout=45.0, max_retries=1,
                 )
 
             # ════════════════════════════════════════════════════════════════════
@@ -727,9 +729,10 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                 ]
 
                 # Fewer roundtrips: each tool-selection roundtrip is ~15s on the
-                # large context, so cap iterations (was 6). 3 is plenty — the
-                # baseline already enriched every IOC; tools just fill small gaps.
-                max_iterations = 3
+                # large context, so cap iterations (was 6, then 3). 2 is enough —
+                # the baseline already enriched every IOC; tools just fill small gaps,
+                # and the final synthesis runs regardless after the loop.
+                max_iterations = 2
                 for iteration in range(max_iterations):
                     resp = await client.chat.completions.create(
                         model=fast_model,   # tool-selection roundtrip → fast tier
