@@ -93,7 +93,7 @@ async def translate_log(raw: str, config) -> Optional[Dict]:
             ],
             response_format={"type": "json_object"},
             temperature=0.0,
-            max_tokens=1200,
+            max_tokens=600,   # normalized fields only — keeps this critical-path call fast
         )
         # Lenient parse: a truncated translation keeps its completed fields
         # rather than discarding the whole step (which gates IOC extraction).
