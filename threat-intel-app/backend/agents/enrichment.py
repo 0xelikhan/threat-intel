@@ -731,7 +731,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     tasks = [
         # ── keyed sources (existing) ───────────────────────────────────────────
         _get(session, "https://api.abuseipdb.com/api/v2/check",
-             params={"ipAddress": ip, "maxAgeInDays": 90, "verbose": True},
+             params={"ipAddress": ip, "maxAgeInDays": 90, "verbose": "true"},
              headers={"Key": keys.get("ABUSEIPDB_KEY", ""), "Accept": "application/json"}),
         _get(session, f"https://ipinfo.io/{ip}/json",
              params={"token": keys.get("IPINFO_TOKEN", "")}),
