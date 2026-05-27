@@ -1,0 +1,18 @@
+# Keep the build context small for `az acr build` / docker build.
+# The image rebuilds deps from requirements.txt + package.json anyway.
+**/venv/
+**/.venv/
+**/__pycache__/
+**/*.pyc
+**/node_modules/
+frontend/build/
+backend/data/
+**/.env
+*.key
+.git/
+.github/
+docs/
+scripts/benchmark.ps1
+scripts/transparent_logo.py
+vendor/
+**/.DS_Store

@@ -13,7 +13,8 @@
 # Node
 **/node_modules/
 **/build/
-**/package-lock.json
+# package-lock.json IS committed — `npm ci` (Dockerfile + CI) requires it
+# for reproducible builds.
 
 # Runtime data (cases, history, generated indexes)
 **/backend/data/
