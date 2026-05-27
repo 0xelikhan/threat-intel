@@ -3,8 +3,53 @@ Investigation Agent — chain-of-thought reasoning over enriched IOC data.
 Reads AI config at call time from config manager.
 """
 
+import asyncio
 import json
+import re as _re
 from datetime import datetime, timezone
+
+
+def _loads_lenient(text: str) -> dict:
+    """Parse model JSON, tolerating truncation.
+
+    The structured assessment is large; if the model's response is cut off by
+    max_tokens it ends mid-string and strict json.loads throws away the entire
+    assessment (this caused 'AI investigation unavailable'). This recovers a
+    usable object from a truncated response by closing an open string and
+    balancing unclosed brackets, so the completed fields survive."""
+    text = (text or "").strip()
+    if not text:
+        return {}
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    s = text
+    # If we ended inside a string (odd count of unescaped quotes), close it.
+    if len(_re.findall(r'(?<!\\)"', s)) % 2 == 1:
+        s += '"'
+    # Balance the brackets that are open outside of strings.
+    stack, instr, esc = [], False, False
+    for ch in s:
+        if esc:
+            esc = False
+        elif ch == "\\" and instr:
+            esc = True
+        elif ch == '"':
+            instr = not instr
+        elif not instr:
+            if ch in "{[":
+                stack.append(ch)
+            elif ch == "}" and stack and stack[-1] == "{":
+                stack.pop()
+            elif ch == "]" and stack and stack[-1] == "[":
+                stack.pop()
+    s += "".join("}" if c == "{" else "]" for c in reversed(stack))
+    s = _re.sub(r",\s*([}\]])", r"\1", s)   # drop trailing commas before a close
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError:
+        return {}
 
 
 def _compress(enrichments: dict) -> dict:
@@ -764,59 +809,82 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 })
 
-                messages.append({
-                    "role": "user",
-                    "content": (
-                        f"{answers_block}"
-                        "Now output your final assessment as strict JSON. Be definitive — if the "
-                        "evidence points to a specific malware family, threat actor, or campaign, "
-                        "name it. Do not hedge unnecessarily.\n\n"
-                        "Required keys:\n"
-                        "  summary (2-3 sentence executive summary for a customer-facing report),\n"
-                        "  threat_level (CRITICAL|HIGH|MEDIUM|LOW|INFORMATIONAL),\n"
-                        "  confidence (0.0-1.0), confidence_basis,\n"
-                        "  malware_family (specific family name or null — e.g. 'Cobalt Strike', 'Emotet'),\n"
-                        "  threat_actor ({name, confidence} for APT/eCrime group or null — e.g. {'name':'APT29','confidence':0.65}),\n"
-                        "  campaign (known campaign name or null),\n"
-                        "  attack_stage (kill chain stage: reconnaissance|weaponization|delivery|\n"
-                        "    exploitation|installation|command_and_control|actions_on_objectives),\n"
-                        "  attack_chain_hypothesis,\n"
-                        "  chain_of_thought (array of 3-5 reasoning steps),\n"
-                        "  key_findings (3-7 findings; each cites the supporting enrichment source),\n"
-                        "  correlated_signals (array of {observation, supporting_signals}),\n"
-                        "  ioc_assessments (array of {ioc, type, verdict, reason, evidence_source}),\n"
-                        "  mitre_techniques (array of 'Txxxx[.yyy] - Name'),\n"
-                        "  mitre_evidence (array of {technique, evidence, confidence}),\n"
-                        "  recommended_actions (array of {action, priority, timeframe} where\n"
-                        "    priority is IMMEDIATE|SHORTTERM|LONGTERM),\n"
-                        "  analyst_notes (1-2 paragraphs of senior-analyst context for junior tier),\n"
-                        "  tor_traffic (bool), attribution_hints,\n"
-                        "  false_positive_check (which FP patterns you considered + ruled out),\n"
-                        "  needs_more_enrichment (bool),\n"
-                        "  verdict_classification: one of MALICIOUS|LIKELY_MALICIOUS|AMBIGUOUS|\n"
-                        "    LIKELY_BENIGN|BENIGN_FALSE_POSITIVE,\n"
-                        "  clarifying_questions: 2-4 questions whose answers would MATERIALLY change\n"
-                        "    your assessment (host role: server/workstation, user privilege level,\n"
-                        "    related alerts in the same timeframe, business context of affected\n"
-                        "    system, scope: isolated vs broader incident). Only include questions\n"
-                        "    whose answer is not derivable from enrichment. Empty list if none.\n"
-                        "  context_impact: string explaining how analyst answers (if any) changed\n"
-                        "    the assessment. Empty if no analyst answers were provided.\n"
-                        "  probing_questions: 3-5 entries of {question, why_asking, if_yes_means,\n"
-                        "    if_no_means} — surrounding-activity, FP probes, TP probes, lateral\n"
-                        "    movement. These teach the analyst what to hunt next.\n\n"
-                        "Optional but useful: diamond_model, kill_chain, pyramid_of_pain, evidence_ratings.\n\n"
-                        "No markdown fences, no commentary outside the JSON."
-                    ),
-                })
-                final = await client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    response_format={"type": "json_object"},
-                    temperature=0.1,
-                    max_tokens=1500,
+                # The final assessment is split into two field-groups generated by
+                # CONCURRENT calls on the smart model — verdict/narrative + structured
+                # findings — then merged. Halves the wall-clock of the longest stage
+                # while keeping every field (downstream readers default missing keys).
+                verdict_instr = (
+                    f"{answers_block}"
+                    "Now output PART 1 of your final assessment as strict JSON — the verdict and "
+                    "narrative. Be definitive — if the evidence points to a specific malware family, "
+                    "threat actor, or campaign, name it. Do not hedge unnecessarily.\n\n"
+                    "Output ONLY these keys (nothing else):\n"
+                    "  summary (2-3 sentence executive summary for a customer-facing report),\n"
+                    "  threat_level (CRITICAL|HIGH|MEDIUM|LOW|INFORMATIONAL),\n"
+                    "  confidence (0.0-1.0), confidence_basis,\n"
+                    "  malware_family (specific family name or null — e.g. 'Cobalt Strike', 'Emotet'),\n"
+                    "  threat_actor ({name, confidence} for APT/eCrime group or null),\n"
+                    "  campaign (known campaign name or null),\n"
+                    "  attack_stage (reconnaissance|weaponization|delivery|exploitation|\n"
+                    "    installation|command_and_control|actions_on_objectives),\n"
+                    "  attack_chain_hypothesis,\n"
+                    "  chain_of_thought (array of 3-5 reasoning steps),\n"
+                    "  verdict_classification (MALICIOUS|LIKELY_MALICIOUS|AMBIGUOUS|\n"
+                    "    LIKELY_BENIGN|BENIGN_FALSE_POSITIVE),\n"
+                    "  needs_more_enrichment (bool), tor_traffic (bool), attribution_hints,\n"
+                    "  false_positive_check (which FP patterns you considered + ruled out),\n"
+                    "  context_impact (how analyst answers, if any, changed the assessment; '' if none).\n\n"
+                    "No markdown fences, no commentary outside the JSON."
                 )
-                result = json.loads(final.choices[0].message.content)
+                findings_instr = (
+                    "Now output PART 2 of your final assessment as strict JSON — the structured "
+                    "findings. Cite specific evidence; do not be vague.\n\n"
+                    "Output ONLY these keys (nothing else):\n"
+                    "  key_findings (3-7 findings; each cites the supporting enrichment source),\n"
+                    "  correlated_signals (array of {observation, supporting_signals}),\n"
+                    "  ioc_assessments (array of {ioc, type, verdict, reason, evidence_source}),\n"
+                    "  mitre_techniques (array of 'Txxxx[.yyy] - Name'),\n"
+                    "  mitre_evidence (array of {technique, evidence, confidence}),\n"
+                    "  recommended_actions (array of {action, priority, timeframe} where\n"
+                    "    priority is IMMEDIATE|SHORTTERM|LONGTERM),\n"
+                    "  analyst_notes (1-2 paragraphs of senior-analyst context for junior tier),\n"
+                    "  clarifying_questions (2-4 questions whose answers would MATERIALLY change the\n"
+                    "    assessment — host role, user privilege, related alerts, business context,\n"
+                    "    scope; only if not derivable from enrichment; empty list if none),\n"
+                    "  probing_questions (3-5 entries of {question, why_asking, if_yes_means,\n"
+                    "    if_no_means} — surrounding-activity, FP probes, TP probes, lateral movement),\n"
+                    "  diamond_model, kill_chain, pyramid_of_pain, evidence_ratings.\n\n"
+                    "No markdown fences, no commentary outside the JSON."
+                )
+
+                async def _synth(instruction: str, max_tokens: int):
+                    resp = await client.chat.completions.create(
+                        model=model,   # smart — quality-critical synthesis
+                        messages=messages + [{"role": "user", "content": instruction}],
+                        response_format={"type": "json_object"},
+                        temperature=0.1,
+                        max_tokens=max_tokens,
+                    )
+                    # Lenient parse: even if the half is truncated, keep its
+                    # completed fields rather than discarding the whole half.
+                    return _loads_lenient(resp.choices[0].message.content)
+
+                # Generous per-half budgets so the full schema isn't truncated —
+                # the findings half (lists + CTI frameworks) is the heavy one.
+                # Both run concurrently, so wall-time ≈ the findings call, still
+                # faster than one complete ~3500-token single call.
+                part_a, part_b = await asyncio.gather(
+                    _synth(verdict_instr, 1500),
+                    _synth(findings_instr, 3000),
+                    return_exceptions=True,
+                )
+                result = {}
+                for part in (part_a, part_b):
+                    if isinstance(part, dict):
+                        result.update(part)
+                if not result:
+                    # Both halves failed → surface to the single-shot fallback below
+                    raise RuntimeError(f"synthesis failed: {part_a!r} / {part_b!r}")
 
             except Exception as e:
                 # Tool-calling path failed — fall back to the original single-shot prompt
@@ -825,7 +893,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                 traceback.print_exc()
                 tool_call_log.append({"tool": "_fallback", "summary": f"tool-calling failed: {str(e)[:120]}"})
                 resp = await client.chat.completions.create(
-                    model=config.get("AI_MODEL", "gpt-4o-mini"),
+                    model=config.get_model(),   # smart
                     messages=[{"role": "user", "content": PROMPT.format(
                         raw_input=(state.get("raw_input") or "")[:2000],
                         enrichments=json.dumps(compressed, indent=2)[:5000] or "(empty — log-only analysis required)",
@@ -833,11 +901,11 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                         triage_score=round(triage_score, 2),
                         cross_ctx=cross_ctx or "(none)",
                     )}],
-                    max_tokens=1200,
+                    max_tokens=3000,   # full single-shot schema needs real headroom
                     temperature=0.1,
                     response_format={"type": "json_object"},
                 )
-                result = json.loads(resp.choices[0].message.content)
+                result = _loads_lenient(resp.choices[0].message.content)
 
         except Exception as outer_e:
             import traceback

@@ -345,34 +345,26 @@ def _safe_normalize_deep(out: Dict) -> Dict:
 
 
 async def _deep_group(client, model, system_msg: str, user_msg: str,
-                      max_tokens: int = 1600) -> Dict:
-    """Generate one field-group of the deep report. Retries once on bad JSON.
-    Returns the raw parsed dict, or {} on failure (caller merges + normalizes)."""
-    messages = [
-        {"role": "system", "content": system_msg},
-        {"role": "user",   "content": user_msg},
-    ]
-    text = "{}"
-    for _attempt in range(2):
-        try:
-            resp = await client.chat.completions.create(
-                model=model,
-                messages=messages,
-                response_format={"type": "json_object"},
-                temperature=0.15,
-                max_tokens=max_tokens,
-            )
-            text = resp.choices[0].message.content or "{}"
-            return json.loads(text)
-        except json.JSONDecodeError as e:
-            messages.append({"role": "assistant", "content": text})
-            messages.append({"role": "user",
-                "content": f"That response did not parse as JSON ({e}). Output the same "
-                           f"fields again as strict JSON only — no markdown, no commentary."})
-            continue
-        except Exception:
-            return {}
-    return {}
+                      max_tokens: int = 2600) -> Dict:
+    """Generate one field-group of the deep report. Tolerates truncation via a
+    lenient parse (a cut-off response keeps its completed fields instead of
+    throwing the whole group away). Returns {} only on hard failure — the caller
+    merges + normalizes whatever comes back."""
+    from agents.investigation import _loads_lenient
+    try:
+        resp = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user",   "content": user_msg},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.15,
+            max_tokens=max_tokens,
+        )
+        return _loads_lenient(resp.choices[0].message.content)
+    except Exception:
+        return {}
 
 
 async def analyze_deep(analysis: Dict, config,
