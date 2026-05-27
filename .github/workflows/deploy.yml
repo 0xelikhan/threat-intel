@@ -31,6 +31,15 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      # Container Apps deploys fail hard if these resource providers aren't
+      # registered on the subscription (this broke a prior run). Registration is
+      # idempotent and returns immediately when already registered, so it's safe
+      # to run every deploy — it self-heals if a provider ever gets dropped.
+      - name: Ensure required resource providers are registered
+        run: |
+          az provider register -n Microsoft.App --wait
+          az provider register -n Microsoft.OperationalInsights --wait
+
       # Build in the cloud (ACR Tasks) — no Docker needed on the runner. The
       # build context is the threat-intel-app folder; the Dockerfile builds the
       # React frontend and Python backend in one multi-stage image.
