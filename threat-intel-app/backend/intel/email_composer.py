@@ -1454,7 +1454,9 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
 
     base_url = config.get("OPENAI_BASE_URL", "")
     # Short customer-facing email — light, latency-sensitive → fast model tier.
-    model    = config.get_model(fast=True)
+    # NOTE: `config` here is a plain dict (passed from the endpoint), not the
+    # ConfigManager, so resolve the fast model via dict access, not get_model().
+    model    = config.get("FAST_AI_MODEL") or config.get("AI_MODEL") or "gpt-4o-mini"
     parsed   = parsed or {}
     options  = options or {}
 

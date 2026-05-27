@@ -2025,6 +2025,7 @@ async def email_compose_ai(req: EmailComposeAIRequest):
         "OPENAI_API_KEY":     config.get("OPENAI_API_KEY"),
         "OPENAI_BASE_URL":    config.get("OPENAI_BASE_URL"),
         "AI_MODEL":           config.get("AI_MODEL"),
+        "FAST_AI_MODEL":      config.get("FAST_AI_MODEL"),
         "EMAIL_FROM_NAME":    config.get("EMAIL_FROM_NAME"),
         "EMAIL_FROM_ADDRESS": config.get("EMAIL_FROM_ADDRESS"),
         "EMAIL_SIGNATURE":    config.get("EMAIL_SIGNATURE"),
