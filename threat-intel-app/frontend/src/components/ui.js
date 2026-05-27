@@ -125,17 +125,23 @@ export const TypeTag = ({ type }) => (
   />
 );
 
+// Lets a parent set the default open/closed state for every Card beneath it
+// (e.g. collapse all analysis sections on completion) without each Card needing
+// an explicit prop. An explicit `defaultOpen` on a Card still wins.
+export const CardDefaultOpenContext = React.createContext(true);
+
 // ─── Card — collapsible MUI Card matching OpenCTI's panel pattern ───────────
 export const Card = ({
   title,
   accent,
   badge = null,
   children,
-  defaultOpen = true,
+  defaultOpen,
   noPad = false,
   collapsible = true,
 }) => {
-  const [open, setOpen] = useState(defaultOpen);
+  const ctxDefaultOpen = React.useContext(CardDefaultOpenContext);
+  const [open, setOpen] = useState(defaultOpen ?? ctxDefaultOpen);
   const theme = useTheme();
   return (
     <MuiCard

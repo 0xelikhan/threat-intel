@@ -43,6 +43,7 @@ import {
   Block      as MuiBlock,
   CodeBlock  as MuiCodeBlock,
   CopyBtn    as MuiCopyBtn,
+  CardDefaultOpenContext,
 } from './components/ui';
 
 /* ─── design tokens — exact values from OpenCTI ThemeDark.ts ────────────────
@@ -119,8 +120,10 @@ const iocTypeStyle = {
 
 /* ─── primitives ─────────────────────────────────────────────────────────────── */
 
-// Thin wrapper → MuiCard (renders via MUI Card + CardHeader, inherits OpenCTI theme)
-function Card({ title, accent, children, defaultOpen=true, badge, noPad=false }) {
+// Thin wrapper → MuiCard (renders via MUI Card + CardHeader, inherits OpenCTI theme).
+// defaultOpen is forwarded as-is (undefined when omitted) so the Card can inherit
+// the open/closed default from CardDefaultOpenContext (e.g. collapse-all on result).
+function Card({ title, accent, children, defaultOpen, badge, noPad=false }) {
   return (
     <MuiCard title={title} accent={accent} badge={badge} defaultOpen={defaultOpen} noPad={noPad}>
       {children}
@@ -4058,6 +4061,10 @@ export default function App() {
             <PreFlight result={result}/>
             <Overview result={result}/>
             <SignalBanners result={result}/>
+            {/* Everything below starts COLLAPSED so the analyst expands only what
+                they need (verdict + banners above stay visible). Keyed by run id
+                so each new investigation resets to collapsed. */}
+            <CardDefaultOpenContext.Provider value={false} key={result.runId || 'detail'}>
             <LogTranslation result={result}/>
             <SuppressedIOCs result={result}/>
             <BehavioralIndicators result={result}/>
@@ -4089,6 +4096,7 @@ export default function App() {
 
             <Enrichments enrichments={result.enrichments}/>
             <Report result={result}/>
+            </CardDefaultOpenContext.Provider>
           </>
         )}
       </Box>
