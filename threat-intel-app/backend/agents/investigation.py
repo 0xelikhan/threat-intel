@@ -626,7 +626,12 @@ async def run_investigation(state: dict, on_event=None) -> dict:
             # ════════════════════════════════════════════════════════════════════
             try:
                 from agents.investigation_tools import TOOL_SCHEMAS, execute_tool, _summarize_for_trace
-                model = config.get("AI_MODEL", "gpt-4o-mini")
+                # Tool-selection roundtrips ("which tool should I call next?") are a
+                # routing decision the fast model handles well → fast tier. The final
+                # structured assessment (the quality-critical synthesis) stays on the
+                # smart model. Cuts investigation latency without dropping rigor.
+                model = config.get_model()                # smart — final synthesis
+                fast_model = config.get_model(fast=True)   # fast — tool loop
                 type_focus = _get_type_focus(alert_type)
                 system_msg = f"""You are a senior MDR analyst (GCIA, GCFA, 10+ years) investigating a SOC alert.
 
@@ -679,7 +684,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                 max_iterations = 6
                 for iteration in range(max_iterations):
                     resp = await client.chat.completions.create(
-                        model=model,
+                        model=fast_model,   # tool-selection roundtrip → fast tier
                         messages=messages,
                         tools=TOOL_SCHEMAS,
                         tool_choice="auto",
