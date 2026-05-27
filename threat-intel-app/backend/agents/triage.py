@@ -377,7 +377,9 @@ async def run_triage(state: dict) -> dict:
                     base_url=base_url or "https://api.openai.com/v1",
                 )
             resp = await client.chat.completions.create(
-                model=config.get("AI_MODEL", "gpt-4o-mini"),
+                # Triage is a fast routing decision (the real reasoning is the
+                # investigation step) → fast model tier.
+                model=config.get_model(fast=True),
                 messages=[{"role": "user", "content": TRIAGE_PROMPT.format(
                     log_snippet=raw[:600], ioc_summary=ioc_summary,
                 )}],
