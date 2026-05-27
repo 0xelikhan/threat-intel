@@ -194,34 +194,15 @@ async def health():
 
 
 def _check_ioc_pivot(iocs: dict, current_run_id: str) -> list[dict]:
-    """For each IOC in the current run, see if it appeared in any previous run.
-    Returns the list of pivots so the analyst can jump to those earlier investigations."""
-    pivots = []
-    seen = set()
-    for typ, lst in (iocs or {}).items():
-        for ioc in lst or []:
-            prior = _ioc_index.get(ioc) or []
-            prior = [p for p in prior if p[0] != current_run_id]
-            if prior and ioc not in seen:
-                seen.add(ioc)
-                # newest prior first
-                prior_sorted = sorted(prior, key=lambda x: x[1], reverse=True)[:3]
-                pivots.append({
-                    "ioc":  ioc,
-                    "type": typ,
-                    "sightings": [{"run_id": rid, "timestamp": ts, "threat_level": lvl}
-                                   for rid, ts, lvl in prior_sorted],
-                })
-    return pivots
+    """Disabled for full per-investigation isolation: no cross-investigation IOC
+    pivots are surfaced (a new investigation never reads data from prior runs)."""
+    return []
 
 
 def _index_iocs(run_id: str, iocs: dict, response_summary: dict):
-    """Add this run's IOCs to the pivot index."""
-    lvl = (response_summary or {}).get("threat_level", "INFORMATIONAL")
-    ts = _ts()
-    for typ, lst in (iocs or {}).items():
-        for ioc in lst or []:
-            _ioc_index.setdefault(ioc, []).append((run_id, ts, lvl))
+    """Disabled for full per-investigation isolation: IOCs from one investigation
+    are not indexed for/recalled by later ones."""
+    return
 
 
 def _webhooks_available() -> dict:
@@ -1288,30 +1269,16 @@ async def scan_get(sha256: str):
 
 @app.post("/api/scan/hash")
 async def scan_hash(req: dict):
-    """Hash lookup — checks the file-scanner history first, then TI sources."""
+    """Hash lookup — always a fresh TI query.
+
+    Full per-investigation isolation: we do NOT return a prior scan from history,
+    so a lookup never serves data saved from an earlier investigation."""
     h = (req or {}).get("hash", "").strip().lower()
     if not h:
         raise HTTPException(400, "hash required")
     if len(h) not in (32, 40, 64):
         raise HTTPException(400, "hash must be MD5 (32), SHA1 (40), or SHA256 (64) hex")
     out = {"hash": h, "sources": {}}
-
-    # 1. Prior scan in our history?
-    try:
-        from intel.file_correlation import load_scan, get_scan_history
-        if len(h) == 64:
-            prior = load_scan(h)
-            if prior:
-                return {**prior, "from_cache": True}
-        # MD5/SHA1 lookup via index
-        for entry in get_scan_history():
-            for k in ("md5", "sha1", "sha256"):
-                if entry.get(k) == h and entry.get("sha256"):
-                    prior = load_scan(entry["sha256"])
-                    if prior:
-                        return {**prior, "from_cache": True, "matched_via": k}
-    except Exception:
-        pass
 
     # 2. No prior scan — query TI sources by hash and shape the result like a
     #    scan (hashes + threat_intel + verdict) so the frontend renders it via the
@@ -2230,17 +2197,11 @@ if FRONTEND_BUILD.exists():
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────────
 def _add_history(run_id: str, result: dict, label: str):
-    _history.append({
-        "runId": run_id,
-        "label": label or "Untitled investigation",
-        "timestamp": _ts(),
-        "threatLevel": result.get("threat_level", "UNKNOWN"),
-        "iocCount": sum(len(v) for v in (result.get("iocs") or {}).values() if isinstance(v, list)),
-        "mitreTechniqueCount": len(result.get("mitre_techniques") or []),
-        "dropped": (result.get("triage_score") or 1) < 0.15,
-    })
-    if len(_history) > 100:
-        _history.pop(0)
+    """Disabled for full per-investigation isolation: investigations are not
+    accumulated into a cross-session history. (Per-run state is still held in
+    _results for the lifetime of the current run so chat / export / clarify on
+    THAT run keep working; nothing from one investigation feeds another.)"""
+    return
 
 def _ts():
     return datetime.now(timezone.utc).isoformat()

@@ -42,10 +42,8 @@ async def correlate(analysis: Dict, config) -> Dict:
 
     out: Dict = {}
 
-    # Synchronous lookups first (no I/O)
-    scan_hist = _scan_history_match(sha256, imphash, tlsh, ssdeep_h)
-    if scan_hist:
-        out["scan_history"] = scan_hist
+    # Full per-investigation isolation: do NOT correlate against prior scans
+    # ("similar files" by sha256/imphash/tlsh/ssdeep). Each scan stands alone.
 
     async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:
         tasks = {
@@ -312,17 +310,11 @@ def append_scan_history(analysis: Dict) -> None:
         "yara_match_count": len(analysis.get("yara_matches") or []),
     }
     try:
-        idx = []
-        if _SCAN_INDEX.exists():
-            with open(_SCAN_INDEX, encoding="utf-8") as f:
-                idx = json.load(f) or []
-        # Replace any existing entry for this hash, else prepend
-        idx = [e for e in idx if e.get("sha256") != entry["sha256"]]
-        idx.insert(0, entry)
-        idx = idx[:1000]
-        with open(_SCAN_INDEX, "w", encoding="utf-8") as f:
-            json.dump(idx, f, indent=2, default=str)
-        # Full record per file (so the UI can re-load any prior scan)
+        # Full per-investigation isolation: write ONLY the per-file record. The
+        # scanner's progressive AI polls /api/scan/by-hash/{sha256}, which reads
+        # this single file, so it's required for the CURRENT scan's lifecycle. We
+        # no longer maintain a cross-scan index, so scans aren't accumulated into
+        # a history that a later investigation could see or correlate against.
         with open(_SCAN_HISTORY_DIR / f"{entry['sha256']}.json", "w", encoding="utf-8") as f:
             json.dump(analysis, f, indent=2, default=str)
     except Exception:
