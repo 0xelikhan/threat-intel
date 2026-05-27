@@ -171,6 +171,19 @@ def parse_log(log_text: str) -> Dict:
     out["location_state"]   = _extract_section_value(lines, "location", "state")
     out["location_country"] = (_extract_section_value(lines, "location", "countryOrRegion")
                                or _extract_section_value(lines, "location", "country"))
+    # Single-line "Location: City, State, Country" — many SIEM/EDR exports emit
+    # location on one line instead of a structured block, which the section
+    # parser above can't read. Split it into city/state/country as a fallback.
+    if not out["location_city"] and not out["location_country"]:
+        m = re.search(r"^\s*location\s*:\s*(\S.*)$", log_text, re.IGNORECASE | re.MULTILINE)
+        if m:
+            parts = [p.strip() for p in m.group(1).split(",") if p.strip()]
+            if len(parts) >= 3:
+                out["location_city"], out["location_state"], out["location_country"] = parts[0], parts[1], parts[-1]
+            elif len(parts) == 2:
+                out["location_city"], out["location_country"] = parts
+            elif len(parts) == 1:
+                out["location_country"] = parts[0]
 
     # IP address — alias cascade then 3 increasingly desperate regex fallbacks
     ip = get("ClientIP", "clientIp", "clientIP", "ipAddress", "IPAddress", "ip",
@@ -406,6 +419,10 @@ _ALERT_TYPE_KEYWORDS: List[Tuple[str, str]] = [
     ("forwardto",                        "forwarding_rule"),
     ("user at risk",                     "user_at_risk"),
     ("riskystate",                       "user_at_risk"),
+    ("risky sign-in",                    "user_at_risk"),
+    ("risky signin",                     "user_at_risk"),
+    ("risky sign in",                    "user_at_risk"),
+    ("risk detection",                   "user_at_risk"),
 
     # Endpoint — defender / sentinel
     ("defender exclusion",               "defender_exclusion_created"),
@@ -471,7 +488,10 @@ def suggest_alert_type(log_text: str, parsed: Optional[Dict] = None) -> Optional
     if parsed:
         if parsed.get("risk_event_type", "").lower() in ("anonymizedipaddress", "tor"):
             return "anonymized_ip"
-        if parsed.get("risk_level") and parsed.get("ip_address") and parsed.get("location"):
+        # A risk level on an authenticated IP is a user-at-risk sign-in. (Was
+        # gated on parsed["location"], a key the parser never emits — it stores
+        # location_city/state/country — so this fallback never fired.)
+        if parsed.get("risk_level") and parsed.get("ip_address"):
             return "user_at_risk"
         if parsed.get("threat_name") or parsed.get("ep_admin_alert_title"):
             return "defender_detection"
@@ -1490,10 +1510,12 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
                 api_key=key,
                 azure_endpoint=base_url.rstrip("/"),
                 api_version="2024-02-01",
+                timeout=45.0, max_retries=1,   # don't hang the composer under throttling
             )
         else:
             client = AsyncOpenAI(api_key=key,
-                                 base_url=base_url or "https://api.openai.com/v1")
+                                 base_url=base_url or "https://api.openai.com/v1",
+                                 timeout=45.0, max_retries=1)
         resp = await client.chat.completions.create(
             model=model,
             messages=[
@@ -1536,8 +1558,19 @@ def _render_subject_ai(log_text: str, parsed: Dict) -> str:
     suggester to pick a label, falls back to a generic security-alert line."""
     suggested = suggest_alert_type(log_text, parsed)
     label = ALERT_LABEL_BY_ID.get(suggested) if suggested else None
-    org = parsed.get("organization_name") or "Organization"
-    return f"[MDR Alert] {label or 'Security Alert'} — {org}"
+    # Org hint: prefer an explicit org name, else derive from the user's email
+    # domain (identifies the customer). Never emit the literal "Organization"
+    # placeholder — drop the suffix entirely when we can't determine an org.
+    org = parsed.get("organization_name")
+    if not org:
+        upn = (parsed.get("user_principal_name") or parsed.get("target_user_principal_name") or "")
+        if "@" in upn:
+            dom = upn.split("@")[-1].strip().lower()
+            if dom and dom not in ("gmail.com", "outlook.com", "hotmail.com",
+                                   "yahoo.com", "icloud.com", "live.com", "aol.com"):
+                org = dom
+    base = f"[MDR Alert] {label or 'Security Alert'}"
+    return f"{base} — {org}" if org else base
 
 
 # ─── SMTP send ────────────────────────────────────────────────────────────────
