@@ -1361,7 +1361,11 @@ async def scan_url_endpoint(req: dict):
 
     filename = url.rstrip("/").rsplit("/", 1)[-1].split("?", 1)[0] or "downloaded"
     from intel.file_analyzer import analyze_file
-    analysis = analyze_file(data, filename)
+    # Mirror the file-scanner fast path: CPU-bound static analysis runs off the
+    # event loop, the full AI suite (triage badge, summary, YARA-gen, split deep
+    # analyst) runs in the background on the two-tier models, and we return
+    # immediately so the frontend can poll /api/scan/by-hash for progressive fill.
+    analysis = await asyncio.to_thread(analyze_file, data, filename)
     analysis["source_url"] = url
     analysis["_file_bytes"] = data
     try:
@@ -1370,23 +1374,20 @@ async def scan_url_endpoint(req: dict):
     except Exception:
         pass
     try:
-        from intel.file_correlation import correlate, append_scan_history
+        from intel.file_correlation import correlate
         analysis["threat_intel"] = await correlate(analysis, config)
-    except Exception:
-        pass
-    try:
-        from intel.file_ai_summary import summarize_file
-        s = await summarize_file(analysis, config)
-        if s:
-            analysis["ai_summary"] = s
-    except Exception:
-        pass
+    except Exception as e:
+        analysis["threat_intel"] = {"error": str(e)}
+    analysis["ai_pending"] = True
     analysis.pop("_file_bytes", None)
     try:
         from intel.file_correlation import append_scan_history
         append_scan_history(analysis)
     except Exception:
         pass
+    sha256 = (analysis.get("hashes") or {}).get("sha256")
+    if sha256:
+        asyncio.create_task(_finish_ai_in_background(sha256, data))
     return analysis
 
 
