@@ -1,4 +1,9 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* The UI is built with explicit px font sizes, so a single rem bump won't scale
+   it. A small global zoom enlarges everything uniformly (text + spacing) to undo
+   the "everything looks smaller on the website" shrink. Tweak this one number to
+   taste — 1.0 = original size, 1.07 ≈ 7% larger. */
+html { zoom: 1.07; }
 body { background: #0a0e1a; color: #c8d6e5; font-family: 'Courier New', monospace; }
 button { font-family: 'Courier New', monospace; }
 input, textarea, select { font-family: 'Courier New', monospace; }

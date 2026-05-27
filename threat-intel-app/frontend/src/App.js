@@ -4048,17 +4048,7 @@ export default function App() {
               </MuiToggleButton>
             </MuiToggleButtonGroup>
             <Stack direction="row" spacing={1} alignItems="center">
-              <MuiButton
-                onClick={() => setEmailState({
-                  log: result?.raw_input || '',
-                  parsed: null,
-                })}
-                size="small" variant="outlined"
-                startIcon={<Mail size={12}/>}
-                sx={{ textTransform: 'none' }}
-              >
-                Compose email
-              </MuiButton>
+              {/* Compose-email lives in the left sidebar ("Email"); no duplicate here. */}
               <SendToWebhook result={result} available={webhooks}/>
             </Stack>
           </Stack>
