@@ -1,4 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
+// Bundle Leaflet locally — loading it from a CDN is blocked by the app's
+// Content Security Policy (script-src/style-src 'self'). Local import is
+// same-origin, synchronous, and removes the async-load timing issues.
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 const VERDICT_COLORS = { MALICIOUS: '#ff2d2d', SUSPICIOUS: '#ff8c00', CLEAN: '#51cf66', UNKNOWN: '#74c0fc' };
 
@@ -34,47 +39,29 @@ export default function MapTab({ result }) {
   const [leafletReady, setLeafletReady] = useState(false);
 
   useEffect(() => {
-    // Load Leaflet CSS
-    if (!document.getElementById('leaflet-css')) {
-      const link = document.createElement('link');
-      link.id = 'leaflet-css';
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(link);
-    }
-
-    const initLeaflet = () => {
-      if (mapInstanceRef.current || !mapRef.current) return;
-      const L = window.L;
-
-      const map = L.map(mapRef.current, { center: [25, 10], zoom: 2, zoomControl: true, attributionControl: false });
-
-      // Dark tile layer
+    if (mapInstanceRef.current || !mapRef.current) return;
+    try {
+      const map = L.map(mapRef.current, {
+        center: [25, 10], zoom: 2, zoomControl: true, attributionControl: false,
+      });
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
-        subdomains: 'abcd', maxZoom: 18
+        subdomains: 'abcd', maxZoom: 18,
       }).addTo(map);
-
-      // Country labels layer
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
-        subdomains: 'abcd', maxZoom: 18, opacity: 0.6
+        subdomains: 'abcd', maxZoom: 18, opacity: 0.6,
       }).addTo(map);
-
       mapInstanceRef.current = map;
       setLeafletReady(true);
-    };
-
-    if (window.L) {
-      initLeaflet();
-    } else {
-      const script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.onload = initLeaflet;
-      document.head.appendChild(script);
-    }
+      // Container is often zero-sized while the parent Collapse expands —
+      // re-measure shortly after so tiles paint. Safe to call repeatedly.
+      [60, 300, 700].forEach(ms => setTimeout(() => {
+        try { map.invalidateSize(); } catch (_) {}
+      }, ms));
+    } catch (_) { /* never let map init crash the page */ }
 
     return () => {
       if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
+        try { mapInstanceRef.current.remove(); } catch (_) {}
         mapInstanceRef.current = null;
         setLeafletReady(false);
       }
@@ -83,7 +70,6 @@ export default function MapTab({ result }) {
 
   useEffect(() => {
     if (!leafletReady || !mapInstanceRef.current || !result) return;
-    const L = window.L;
     const map = mapInstanceRef.current;
 
     // Remove old markers
