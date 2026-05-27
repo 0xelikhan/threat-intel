@@ -128,7 +128,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
       <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2.5 }}>
         <Mail size={20} color="#0fbcff"/>
         <Typography sx={{ fontSize: 18, fontWeight: 600, color: 'text.primary' }}>
-          Email composer
+          Email
         </Typography>
         {onClose && (
           <MuiButton onClick={onClose} size="small" variant="text"

@@ -20,7 +20,7 @@ import { alpha as muiAlpha, useTheme } from '@mui/material/styles';
 import {
   FileSearch, Copy, Check, Search, Download,
   ArrowUpRight, AlertTriangle, Shield, Play, Plus,
-  ThumbsUp, ThumbsDown, FileText, ChevronRight, RotateCcw,
+  FileText, ChevronRight, RotateCcw,
 } from 'lucide-react';
 
 // ─── verdict / severity color helper (uses theme tokens) ──────────────────────
@@ -1078,8 +1078,6 @@ function NotesAndRefinement({ result, onRefreshScan }) {
   const [answers, setAnswers] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [refineErr, setRefineErr] = useState(null);
-  const [feedbackSent, setFeedbackSent] = useState(null);
-  const [feedbackNote, setFeedbackNote] = useState('');
 
   const refine = async () => {
     if (!sha) return;
@@ -1098,17 +1096,6 @@ function NotesAndRefinement({ result, onRefreshScan }) {
       onRefreshScan?.(d);
     } catch (e) { setRefineErr(e.message); }
     finally { setSubmitting(false); }
-  };
-
-  const sendFeedback = async (thumbs) => {
-    if (!sha) return;
-    try {
-      const r = await fetch('/api/scan/feedback', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scan_id: sha, thumbs, notes: feedbackNote }),
-      });
-      if (r.ok) setFeedbackSent(thumbs);
-    } catch (_) {}
   };
 
   if (!notes && !confAssess?.overall_confidence && !questions.length) return null;
@@ -1196,32 +1183,6 @@ function NotesAndRefinement({ result, onRefreshScan }) {
         </Box>
       )}
 
-      {/* Feedback row */}
-      <Box sx={{ mt: 2, pt: 1.5,
-        borderTop: `1px solid ${muiAlpha('#ffffff', 0.06)}` }}>
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>Was this analysis useful?</Typography>
-          <MuiIconButton size="small" onClick={() => sendFeedback('up')}
-            sx={{ color: feedbackSent === 'up' ? 'success.main' : 'text.tertiary',
-              '&:hover': { color: 'success.main' } }}>
-            <ThumbsUp size={14}/>
-          </MuiIconButton>
-          <MuiIconButton size="small" onClick={() => sendFeedback('down')}
-            sx={{ color: feedbackSent === 'down' ? 'error.main' : 'text.tertiary',
-              '&:hover': { color: 'error.main' } }}>
-            <ThumbsDown size={14}/>
-          </MuiIconButton>
-          {feedbackSent && (
-            <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontStyle: 'italic' }}>
-              feedback recorded — institutional knowledge updated
-            </Typography>
-          )}
-        </Stack>
-        <MuiTextField size="small" fullWidth multiline minRows={1}
-          value={feedbackNote} onChange={e => setFeedbackNote(e.target.value)}
-          placeholder="Optional: correction or comment to record for future similar samples…"
-          sx={{ mt: 1, '& .MuiInputBase-input': { fontSize: 11 } }}/>
-      </Box>
     </SectionCard>
   );
 }
