@@ -189,20 +189,37 @@ _PATTERNS = [
 _BASE64_RE = re.compile(r"\b(?:[A-Za-z0-9+/]{40,}={0,2})\b")
 
 
+def _printable_ascii_ratio(s: str) -> float:
+    """Fraction of chars that are printable ASCII (0x20–0x7E) or common whitespace."""
+    if not s:
+        return 0.0
+    ok = sum(1 for c in s if 0x20 <= ord(c) <= 0x7E or c in "\t\n\r")
+    return ok / len(s)
+
+
 def _decode_b64_candidates(text: str, max_decodes: int = 5) -> List[str]:
-    """Try to base64-decode any long base64-ish string from the input — UTF-16LE
-    common for PowerShell -EncodedCommand."""
+    """Base64-decode long base64-ish runs, returning ONLY payloads that decode to
+    mostly-printable-ASCII text (PowerShell -EncodedCommand is UTF-16LE; other
+    bodies UTF-8). Strict decoding + a >90% printable-ASCII threshold is what
+    keeps binary/random base64 from rendering as Chinese/mojibake — anything that
+    isn't readable text is dropped (not shown), so the UI can say 'None'."""
     out = []
     for m in _BASE64_RE.findall(text)[:max_decodes]:
+        pad = "=" * (-len(m) % 4)
+        try:
+            raw = base64.b64decode(m + pad)
+        except Exception:
+            continue
         for enc in ("utf-16le", "utf-8"):
             try:
-                pad = "=" * (-len(m) % 4)
-                decoded = base64.b64decode(m + pad).decode(enc, errors="ignore").strip()
-                if len(decoded) > 4 and any(c.isprintable() for c in decoded):
-                    out.append(decoded)
-                    break
-            except Exception:
+                # Strict (no errors="ignore") so binary can't be coerced into a
+                # short, falsely-printable string by silently dropping bytes.
+                decoded = raw.decode(enc).strip()
+            except (UnicodeDecodeError, ValueError):
                 continue
+            if len(decoded) >= 4 and _printable_ascii_ratio(decoded) > 0.90:
+                out.append(decoded[:800])
+                break
     return out
 
 
