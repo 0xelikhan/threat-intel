@@ -3822,6 +3822,10 @@ export default function App() {
   const [result, setResult] = useState(null);
   const [view, setView] = useState('detail'); // 'detail' | 'table'
   const [webhooks, setWebhooks] = useState({});
+  // Bumped on "go home" (logo) to remount the Sidebar — this clears its local
+  // input state AND the AgentPipeline's internal trace/pipeline, which would
+  // otherwise linger under the Scan URL input after returning home.
+  const [homeNonce, setHomeNonce] = useState(0);
   const rs = result?.response_summary;
 
   // Comprehensive file-analyzer state — lifted from FileScannerView so the
@@ -3952,6 +3956,7 @@ export default function App() {
       color: 'text.primary',
     }}>
       <Sidebar
+        key={homeNonce}
         onResult={(r) => {
           // Starting (r=null) or finishing an Analyze run dismisses the
           // file scanner view so the analysis result owns the main area.
@@ -3965,7 +3970,7 @@ export default function App() {
         onScanHash={scanHash}
         onScanUrl={scanUrl}
         scanState={scanState}
-        onHome={() => { clearScan(); setEmailState(null); setResult(null); }}
+        onHome={() => { clearScan(); setEmailState(null); setResult(null); setHomeNonce(n => n + 1); }}
         onOpenEmail={() => {
           // Pre-populate from whatever's on screen: the file-scanner result
           // wins if visible, otherwise the analysis result, otherwise blank.
