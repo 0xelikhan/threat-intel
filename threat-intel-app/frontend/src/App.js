@@ -303,15 +303,13 @@ function PreFlight({ result }) {
  * suspected nation-state activity and warns when actor attribution doesn't
  * match infrastructure country.
  */
-function GeopoliticalContext({ result }) {
+function GeopoliticalContext({ result, bare }) {
   const gp = result?.geopolitical;
   if (!gp || gp.error || (!gp.countries?.length && !gp.attribution)) return null;
   const riskColor = (n) => n >= 25 ? '#EE3838' : n >= 15 ? '#E6700F' : n >= 10 ? '#E1B823' : '#16AD34';
 
-  return (
-    <Card title="Geopolitical context · nation-state attribution" accent="#E6700F"
-      badge={`${gp.country_count || 0} countries · ${gp.high_risk_count || 0} high-risk`}>
-
+  const body = (
+    <>
       {gp.false_flag && (
         <MuiPaper elevation={0} sx={{
           backgroundColor: muiAlpha('#EE3838', 0.08),
@@ -400,6 +398,13 @@ function GeopoliticalContext({ result }) {
           ))}
         </Box>
       )}
+    </>
+  );
+  if (bare) return body;
+  return (
+    <Card title="Geopolitical context · nation-state attribution" accent="#E6700F"
+      badge={`${gp.country_count || 0} countries · ${gp.high_risk_count || 0} high-risk`}>
+      {body}
     </Card>
   );
 }
@@ -749,7 +754,9 @@ function InfrastructureIntel({ result }) {
       }
     }
   }
-  if (!rows.length) return null;
+  const gp = result?.geopolitical;
+  const hasGeo = !!(gp && !gp.error && (gp.countries?.length || gp.attribution));
+  if (!rows.length && !hasGeo) return null;
 
   const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
 
@@ -880,6 +887,16 @@ function InfrastructureIntel({ result }) {
           )}
         </Box>
       ))}
+      {hasGeo && (
+        <Box sx={{ mt: rows.length ? 2 : 0, pt: rows.length ? 2 : 0,
+          borderTop: rows.length ? `1px solid ${muiAlpha('#ffffff', 0.08)}` : 'none' }}>
+          <Typography sx={{ fontSize: 11, fontWeight: 600, color: 'text.tertiary',
+            textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.25 }}>
+            Geopolitical context
+          </Typography>
+          <GeopoliticalContext result={result} bare/>
+        </Box>
+      )}
     </Card>
   );
 }
@@ -1363,7 +1380,7 @@ const isAIFailureText = (v) => {
 };
 
 
-function Overview({ result }) {
+function Overview({ result, bare }) {
   const rs = result?.response_summary;
   if (!rs) return null;
   const lc = levelStyle[rs.threat_level] || levelStyle.INFORMATIONAL;
@@ -1389,6 +1406,16 @@ function Overview({ result }) {
     </MuiPaper>
   );
 
+  const metrics = (
+    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1.25 }}>
+      <Metric label="Threat level" value={rs.threat_level} color={lc.fg}/>
+      <Metric label="Confidence" value={`${conf}%`}
+        color={conf >= 70 ? '#17AB1F' : conf >= 40 ? '#E1B823' : '#F14337'}/>
+      <Metric label="Indicators" value={total} color="#0fbcff"/>
+      <Metric label="MITRE TTPs" value={mitre} color="#B286FF"/>
+    </Box>
+  );
+  if (bare) return metrics;
   return (
     <Box sx={{ mb: 1.75 }}>
       <Box sx={{
@@ -1405,13 +1432,7 @@ function Overview({ result }) {
           {ts.toLocaleString()}
         </Typography>
       </Box>
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1.25 }}>
-        <Metric label="Threat level" value={rs.threat_level} color={lc.fg}/>
-        <Metric label="Confidence" value={`${conf}%`}
-          color={conf >= 70 ? '#17AB1F' : conf >= 40 ? '#E1B823' : '#F14337'}/>
-        <Metric label="Indicators" value={total} color="#0fbcff"/>
-        <Metric label="MITRE TTPs" value={mitre} color="#B286FF"/>
-      </Box>
+      {metrics}
     </Box>
   );
 }
@@ -1422,7 +1443,9 @@ function GTI({ result }) {
   const sorted = Object.entries(gti).sort(([,a],[,b])=>b.score-a.score);
   const top = sorted[0]?.[1];
   const total = Object.values(result?.iocs||{}).flat().length;
-  if (!sorted.length) return null;
+  // Fused headline card: shows investigation metrics + threat score; render
+  // whenever there's an investigation result, even if no GTI scores.
+  if (!sorted.length && !result?.response_summary) return null;
 
   const dist = { critical:0, high:0, elevated:0, suspicious:0, clean:0 };
   const distC = { critical:t.red, high:t.orange, elevated:t.yellow, suspicious:'#f59e0b', clean:t.green };
@@ -1435,7 +1458,17 @@ function GTI({ result }) {
   });
 
   return (
-    <Card title="Threat score" accent="#0fbcff" badge={top ? `${top.score}/100` : null}>
+    <Card title="Investigation results" accent="#0fbcff" badge={top ? `${top.score}/100` : null} defaultOpen>
+      {/* Investigation metrics (threat level / confidence / indicators / MITRE) */}
+      <Overview result={result} bare/>
+
+      {sorted.length > 0 && (
+        <Typography sx={{ fontSize: 11, fontWeight: 600, color: 'text.tertiary',
+          textTransform: 'uppercase', letterSpacing: '0.06em', mt: 2.25, mb: 1.25,
+          pt: 2, borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
+          Threat score
+        </Typography>
+      )}
       <Box sx={{
         display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 3, mb: 2.25,
         pb: 2, borderBottom: `1px solid ${muiAlpha('#ffffff', 0.06)}`,
@@ -1824,8 +1857,16 @@ function ChatWithRecon({ result, bare }) {
   // any; otherwise fall back to a generic-but-evergreen set so the analyst
   // always has clickable starting points (helps when the AI omits the field).
   const aiQuestions = rs.probing_questions || [];
-  const questions = aiQuestions.length > 0 ? aiQuestions : FALLBACK_QUESTIONS;
-  const usingFallback = aiQuestions.length === 0;
+  // 'AI needs more context' clarifying questions (plain strings) are surfaced as
+  // clickable chips here too — click one to ask it in the chat and answer it
+  // together with RECON, instead of a separate form.
+  const clarifying = (result?.clarifying_questions || []).map(q =>
+    typeof q === 'string'
+      ? { question: q, why_asking: 'Clarifying question — your answer refines the verdict' }
+      : q);
+  const combined = [...clarifying, ...aiQuestions];
+  const questions = combined.length > 0 ? combined : FALLBACK_QUESTIONS;
+  const usingFallback = combined.length === 0;
   const classification = rs.verdict_classification;
 
   // Load history when run changes
@@ -2782,7 +2823,7 @@ function Detection({ result }) {
   // Nothing generated yet → show the on-demand generate button.
   if (!tabs.length) {
     return (
-      <Card title="Detection content & hunt queries" accent="#0fbcff">
+      <Card title="Detection Rules" accent="#0fbcff">
         <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
           Generate a validated Sigma rule, a Microsoft Sentinel KQL analytics rule, and a
           Splunk SPL query for this alert's IOCs and MITRE techniques — on demand, so
@@ -2802,7 +2843,7 @@ function Detection({ result }) {
   const cur = tabs.find(x => x.id === (active || tabs[0]?.id)) || tabs[0];
 
   return (
-    <Card title="Detection content & hunt queries" accent="#0fbcff" badge={`${tabs.length} platforms`}>
+    <Card title="Detection Rules" accent="#0fbcff" badge={`${tabs.length} platforms`}>
       {mitre.length > 0 && (
         <Box sx={{ display:'flex', gap:0.75, flexWrap:'wrap', mb:1.75, alignItems:'center' }}>
           <Typography sx={{ fontSize:11, color:'text.tertiary' }}>Coverage:</Typography>
@@ -4124,33 +4165,25 @@ export default function App() {
         {result && view === 'detail' && (
           <>
             <PreFlight result={result}/>
-            <Overview result={result}/>
             <SignalBanners result={result}/>
-            {/* Everything below starts COLLAPSED so the analyst expands only what
-                they need (verdict + banners above stay visible). Keyed by run id
-                so each new investigation resets to collapsed. */}
+            {/* Collapsible detail stack, keyed by run so each new investigation
+                resets to collapsed. Headline cards (Investigation results, Summary)
+                are open by default; the rest collapse. */}
             <CardDefaultOpenContext.Provider value={false} key={result.runId || 'detail'}>
-            {/* Ask RECON pinned first as its own card. The AI assessment card was
-                removed as redundant with the Analyst hand-off; Threat score now
-                carries the per-indicator confidence breakdown. */}
-            <ChatWithRecon result={result}/>
+            <GTI result={result}/>                {/* Investigation results + threat score + confidence (open) */}
+            <AnalystSummary rs={rs || {}}/>        {/* Summary (open) */}
+            <ChatWithRecon result={result}/>       {/* Ask RECON — clarifying + probing questions */}
             <LogTranslation result={result}/>
             <SuppressedIOCs result={result}/>
             <BehavioralIndicators result={result}/>
-            <InfrastructureIntel result={result}/>
+            <InfrastructureIntel result={result}/> {/* OSINT — now includes geopolitical context */}
             <HoneypotActivity result={result}/>
             <SandboxBehavioral result={result}/>
-            <GeopoliticalContext result={result}/>
-            <ClarifyingQuestions result={result} onResult={setResult}/>
             <IOCPivot result={result}/>
-            <AnalystSummary rs={rs || {}}/>
             <EmailAnalysis result={result}/>
-            <GTI result={result}/>
             <CrossRefs rs={rs || {}}/>
-            <Detection result={result}/>
             <NetworkDetection result={result}/>
             <URLScanLive result={result}/>
-            <IRPlaybook rs={rs || {}}/>
 
             <Card title="Geographic distribution" accent="#0fbcff" noPad>
               <MapTab result={result}/>
@@ -4160,7 +4193,7 @@ export default function App() {
               <Box sx={{ p: '14px 16px' }}><PivotGraph result={result}/></Box>
             </Card>
 
-            <Report result={result}/>
+            <Detection result={result}/>          {/* Detection Rules — on-demand, at bottom */}
             </CardDefaultOpenContext.Provider>
           </>
         )}
