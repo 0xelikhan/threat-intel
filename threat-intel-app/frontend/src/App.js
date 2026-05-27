@@ -2740,21 +2740,64 @@ function CrossRefs({ rs }) {
 
 /* ─── detection rules (multi-SIEM) — MUI Tabs + CodeBlock ─────────────────── */
 function Detection({ result }) {
-  const sigma = result?.sigma_rule;
-  const kql   = result?.kql_query;
-  const valid = result?.response_summary?.sigma_valid;
-  const mitre = result?.response_summary?.mitre_techniques || [];
+  const rs    = result?.response_summary || {};
+  const mitre = rs.mitre_techniques || [];
+  // On-demand generation state — detection content is generated from the
+  // Detection card via /api/detection rather than auto-generated every run.
+  const [g, setG] = useState(null);      // { sigma, kql, spl, sigma_valid }
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState(null);
+  const [active, setActive] = useState(null);
+
+  // Prefer on-demand generated content; fall back to any auto content (legacy).
+  const sigma = g?.sigma ?? result?.sigma_rule;
+  const kql   = g?.kql   ?? result?.kql_query;
   const siem  = result?.response_summary?.siem_queries || {};
+  const sigmaValid = g ? g.sigma_valid : rs.sigma_valid;
   const tabs = [
-    sigma                  && { id:'sigma',       label:'Sigma',                 content:sigma,                  badge: valid===true?'validated':valid===false?'invalid':null },
+    sigma                  && { id:'sigma',       label:'Sigma',                 content:sigma,                  badge: sigmaValid===true?'validated':sigmaValid===false?'invalid':null },
     kql                    && { id:'kql',         label:'KQL · Sentinel',        content:kql },
-    siem.splunk_spl        && { id:'spl',         label:'Splunk SPL',            content:siem.splunk_spl },
+    (g?.spl || siem.splunk_spl) && { id:'spl',    label:'Splunk SPL',            content:g?.spl || siem.splunk_spl },
     siem.elastic_eql       && { id:'eql',         label:'Elastic EQL',           content:siem.elastic_eql },
     siem.chronicle_yara_l  && { id:'yaral',       label:'Chronicle YARA-L',      content:siem.chronicle_yara_l },
     siem.crowdstrike_fql   && { id:'fql',         label:'CrowdStrike Falcon',    content:siem.crowdstrike_fql },
   ].filter(Boolean);
-  const [active, setActive] = useState(tabs[0]?.id);
-  if (!tabs.length) return null;
+
+  const generate = async () => {
+    setLoading(true); setErr(null);
+    try {
+      const analysis = { threatLevel: rs.threat_level, summary: rs.summary, mitreTechniques: mitre };
+      const base = { iocs: result?.iocs || {}, analysis };
+      const post = (action) => fetch('/api/detection', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...base, action }),
+      }).then(r => r.json());
+      const [sg, kq] = await Promise.all([post('sigma'), post('kql')]);
+      setG({ sigma: sg.result, kql: kq.result, spl: sg.splunk_spl, sigma_valid: sg.valid });
+      setActive('sigma');
+    } catch (e) { setErr(e.message || 'Generation failed'); }
+    finally { setLoading(false); }
+  };
+
+  // Nothing generated yet → show the on-demand generate button.
+  if (!tabs.length) {
+    return (
+      <Card title="Detection content & hunt queries" accent="#0fbcff">
+        <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
+          Generate a validated Sigma rule, a Microsoft Sentinel KQL analytics rule, and a
+          Splunk SPL query for this alert's IOCs and MITRE techniques — on demand, so
+          investigations stay fast.
+        </Typography>
+        <MuiButton variant="contained" onClick={generate} disabled={loading}
+          sx={{ textTransform: 'none' }}>
+          {loading ? 'Generating…' : 'Generate detection content'}
+        </MuiButton>
+        {err && (
+          <Typography sx={{ fontSize: 12, color: 'error.main', mt: 1 }}>{err}</Typography>
+        )}
+      </Card>
+    );
+  }
 
   const cur = tabs.find(x => x.id === (active || tabs[0]?.id)) || tabs[0];
 

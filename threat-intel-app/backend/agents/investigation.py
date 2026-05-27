@@ -864,8 +864,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                     "    assessment — host role, user privilege, related alerts, business context,\n"
                     "    scope; only if not derivable from enrichment; empty list if none),\n"
                     "  probing_questions (3-5 entries of {question, why_asking, if_yes_means,\n"
-                    "    if_no_means} — surrounding-activity, FP probes, TP probes, lateral movement),\n"
-                    "  diamond_model, kill_chain, pyramid_of_pain, evidence_ratings.\n\n"
+                    "    if_no_means} — surrounding-activity, FP probes, TP probes, lateral movement).\n\n"
                     "No markdown fences, no commentary outside the JSON."
                 )
 
