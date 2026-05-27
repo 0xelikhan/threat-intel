@@ -698,6 +698,20 @@ async def _maltiverse_lookup(ioc_type: str, value: str, cfg) -> dict:
         return {}
 
 
+def _ok_dict(r):
+    """A gathered result that's usable as enrichment data: a dict that isn't an
+    exception. Filters out exceptions (return_exceptions=True) and None so the
+    concurrent secondary-lookup blocks read just like the old sequential ones."""
+    return r if isinstance(r, dict) else None
+
+
+async def _skip():
+    """Falsy placeholder for a disabled/unavailable concurrent lookup — returns
+    an empty dict so `if result:` checks treat it as 'nothing found'. (Unlike
+    _noop(), which is a truthy sentinel for the keyed-source parsers.)"""
+    return {}
+
+
 async def enrich_ip(session, ip: str, keys: dict) -> dict:
     ck = _ck("ip", ip)
     if ck in _cache:
@@ -771,32 +785,51 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     if feodo:
         data["feodo_tracker"] = feodo
 
-    # OSINT expansion (spec §3): BGP ranking + Google Safe Browsing
+    # ── Secondary lookups — all independent, so fire them concurrently instead
+    #    of one await after another (BGP, Safe Browsing, deception, Maltiverse,
+    #    OpenCTI). Each helper already fails soft; return_exceptions keeps one
+    #    slow/broken source from sinking the rest. ────────────────────────────
+    from config import config as _cfg
+    gsb_key = keys.get("GOOGLE_API_KEY", "")
     try:
         from intel.osint_extra import bgp_ranking, google_safe_browsing
-        osint: dict = {}
-        bgp = await bgp_ranking(session, ip)
-        if bgp and "error" not in bgp:
-            osint["bgp_ranking"] = bgp
-        gsb_key = keys.get("GOOGLE_API_KEY", "")
-        if gsb_key:
-            gsb = await google_safe_browsing(session, ip, "ip", gsb_key)
-            if gsb and "error" not in gsb and "skipped" not in gsb:
-                osint["google_safebrowsing"] = gsb
-        if osint:
-            data["osint"] = osint
+        _bgp_co = bgp_ranking(session, ip)
+        _gsb_co = google_safe_browsing(session, ip, "ip", gsb_key) if gsb_key else _skip()
     except Exception:
-        pass
-
-    # Deception / honeypot intelligence (spec §5)
+        _bgp_co, _gsb_co = _skip(), _skip()
     try:
         from intel.deception_intel import enrich_deception
-        dec = await enrich_deception(session, ip, keys)
-        if dec:
-            data["deception"] = dec
+        _dec_co = enrich_deception(session, ip, keys)
     except Exception:
-        pass
-    # ASN reputation — uses ISP/org strings we already have, no extra API call
+        _dec_co = _skip()
+
+    bgp_r, gsb_r, dec_r, mv_r, oc_r = await asyncio.gather(
+        _bgp_co, _gsb_co, _dec_co,
+        _maltiverse_lookup("ip", ip, _cfg),
+        _opencti_lookup(ip, _cfg),
+        return_exceptions=True,
+    )
+
+    osint: dict = {}
+    bgp = _ok_dict(bgp_r)
+    if bgp and "error" not in bgp:
+        osint["bgp_ranking"] = bgp
+    gsb = _ok_dict(gsb_r)
+    if gsb and "error" not in gsb and "skipped" not in gsb:
+        osint["google_safebrowsing"] = gsb
+    if osint:
+        data["osint"] = osint
+    dec = _ok_dict(dec_r)
+    if dec:
+        data["deception"] = dec
+    mv = _ok_dict(mv_r)
+    if mv:
+        data["maltiverse"] = mv
+    oc = _ok_dict(oc_r)
+    if oc:
+        data["opencti"] = oc
+
+    # ASN reputation — offline, uses ISP/org strings we already have, no API call
     try:
         from intel.asn_reputation import check as asn_check
         asn = asn_check(
@@ -806,20 +839,6 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         )
         if asn:
             data["asn_reputation"] = asn
-    except Exception:
-        pass
-    # Cortex-style ports: Maltiverse aggregator + OpenCTI prior-context lookup
-    from config import config as _cfg
-    try:
-        mv = await _maltiverse_lookup("ip", ip, _cfg)
-        if mv:
-            data["maltiverse"] = mv
-    except Exception:
-        pass
-    try:
-        oc = await _opencti_lookup(ip, _cfg)
-        if oc:
-            data["opencti"] = oc
     except Exception:
         pass
     _cache[ck] = data
@@ -869,45 +888,48 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
             data["heuristics"] = heuristics
     except Exception:
         pass
-    # Spamhaus DBL (free DNS-based domain blocklist)
+    # ── Secondary lookups — independent, so run them concurrently (Spamhaus DBL,
+    #    Maltiverse, OpenCTI, passive DNS, Safe Browsing). ──────────────────────
+    from config import config as _cfg
+    gsb_key = keys.get("GOOGLE_API_KEY", "")
     try:
         from intel.spamhaus_dbl import lookup as dbl_lookup
-        dbl = await dbl_lookup(domain)
-        if dbl and dbl.get("hit"):
-            data["spamhaus_dbl"] = dbl
+        _dbl_co = dbl_lookup(domain)
     except Exception:
-        pass
-    # Maltiverse + OpenCTI
-    from config import config as _cfg
-    try:
-        mv = await _maltiverse_lookup("hostname", domain, _cfg)
-        if mv:
-            data["maltiverse"] = mv
-    except Exception:
-        pass
-    try:
-        oc = await _opencti_lookup(domain, _cfg)
-        if oc:
-            data["opencti"] = oc
-    except Exception:
-        pass
-
-    # OSINT expansion (spec §3): DNS records + Google Safe Browsing
+        _dbl_co = _skip()
     try:
         from intel.osint_extra import dns_records, google_safe_browsing
-        osint: dict = {}
-        dns = await dns_records(session, domain)
-        if dns and "error" not in dns:
-            osint["dns_records"] = dns
-        gsb_key = keys.get("GOOGLE_API_KEY", "")
-        if gsb_key:
-            gsb = await google_safe_browsing(session, f"http://{domain}/", "domain", gsb_key)
-            if gsb and "error" not in gsb and "skipped" not in gsb:
-                osint["google_safebrowsing"] = gsb
-        if osint:
-            data["osint"] = osint
+        _dns_co = dns_records(session, domain)
+        _gsb_co = google_safe_browsing(session, f"http://{domain}/", "domain", gsb_key) if gsb_key else _skip()
     except Exception:
-        pass
+        _dns_co, _gsb_co = _skip(), _skip()
+
+    dbl_r, mv_r, oc_r, dns_r, gsb_r = await asyncio.gather(
+        _dbl_co,
+        _maltiverse_lookup("hostname", domain, _cfg),
+        _opencti_lookup(domain, _cfg),
+        _dns_co, _gsb_co,
+        return_exceptions=True,
+    )
+
+    dbl = _ok_dict(dbl_r)
+    if dbl and dbl.get("hit"):
+        data["spamhaus_dbl"] = dbl
+    mv = _ok_dict(mv_r)
+    if mv:
+        data["maltiverse"] = mv
+    oc = _ok_dict(oc_r)
+    if oc:
+        data["opencti"] = oc
+    osint: dict = {}
+    dns = _ok_dict(dns_r)
+    if dns and "error" not in dns:
+        osint["dns_records"] = dns
+    gsb = _ok_dict(gsb_r)
+    if gsb and "error" not in gsb and "skipped" not in gsb:
+        osint["google_safebrowsing"] = gsb
+    if osint:
+        data["osint"] = osint
 
     _cache[ck] = data
     return data
@@ -965,58 +987,63 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         ha = _p_hybrid(results[5])
         if "error" not in ha:
             data["hybrid_analysis"] = ha
-    # Team Cymru MHR (free DNS-based hash reputation) + Maltiverse + OpenCTI
-    try:
-        from intel.team_cymru import lookup as cymru_lookup
-        cy = await cymru_lookup(hash_val)
-        if cy:
-            data["team_cymru_mhr"] = cy
-    except Exception:
-        pass
+    # ── Secondary lookups — independent, run concurrently (Team Cymru MHR,
+    #    Maltiverse, OpenCTI, VT graph, MalwareBazaar pivot, deep sandbox). The
+    #    family pivot + deep sandbox depend only on data already collected above. ─
     from config import config as _cfg
     try:
-        mv = await _maltiverse_lookup("hash", hash_val, _cfg)
-        if mv:
-            data["maltiverse"] = mv
+        from intel.team_cymru import lookup as cymru_lookup
+        _cy_co = cymru_lookup(hash_val)
     except Exception:
-        pass
-    try:
-        oc = await _opencti_lookup(hash_val, _cfg)
-        if oc:
-            data["opencti"] = oc
-    except Exception:
-        pass
-
-    # OSINT expansion (spec §3): VT graph relationships + MalwareBazaar pivot
+        _cy_co = _skip()
     try:
         from intel.osint_extra import vt_hash_relationships, malwarebazaar_similar
-        osint: dict = {}
-        vt_rel = await vt_hash_relationships(session, hash_val, keys.get("VIRUSTOTAL_KEY", ""))
-        if vt_rel and "error" not in vt_rel:
-            osint["vt_graph"] = vt_rel
+        _vt_co = vt_hash_relationships(session, hash_val, keys.get("VIRUSTOTAL_KEY", ""))
         family = ((data.get("malwarebazaar") or {}).get("malware_family") or
                   (data.get("threatfox") or {}).get("malware_family"))
-        if family:
-            sim = await malwarebazaar_similar(session, family)
-            if sim and "error" not in sim:
-                osint["mb_similar"] = sim
-        if osint:
-            data["osint"] = osint
+        _mb_co = malwarebazaar_similar(session, family) if family else _skip()
     except Exception:
-        pass
-
-    # Deep sandbox extraction (spec §6) — process tree, network, files, registry,
-    # mutexes, MITRE, detection-rule stubs. Only runs for SHA-256 (HA requirement).
+        _vt_co, _mb_co = _skip(), _skip()
     if len(hash_val) == 64:
         try:
             from intel.sandbox_deep import fetch_deep_report
-            deep = await fetch_deep_report(hash_val,
-                                           hybrid_key=keys.get("HYBRID_ANALYSIS_KEY", ""),
-                                           anyrun_key=keys.get("ANYRUN_KEY", ""))
-            if deep:
-                data["sandbox_deep"] = deep
+            _deep_co = fetch_deep_report(hash_val,
+                                         hybrid_key=keys.get("HYBRID_ANALYSIS_KEY", ""),
+                                         anyrun_key=keys.get("ANYRUN_KEY", ""))
         except Exception:
-            pass
+            _deep_co = _skip()
+    else:
+        _deep_co = _skip()
+
+    cy_r, mv_r, oc_r, vt_r, mb_r, deep_r = await asyncio.gather(
+        _cy_co,
+        _maltiverse_lookup("hash", hash_val, _cfg),
+        _opencti_lookup(hash_val, _cfg),
+        _vt_co, _mb_co, _deep_co,
+        return_exceptions=True,
+    )
+
+    cy = _ok_dict(cy_r)
+    if cy:
+        data["team_cymru_mhr"] = cy
+    mv = _ok_dict(mv_r)
+    if mv:
+        data["maltiverse"] = mv
+    oc = _ok_dict(oc_r)
+    if oc:
+        data["opencti"] = oc
+    osint: dict = {}
+    vt_rel = _ok_dict(vt_r)
+    if vt_rel and "error" not in vt_rel:
+        osint["vt_graph"] = vt_rel
+    sim = _ok_dict(mb_r)
+    if sim and "error" not in sim:
+        osint["mb_similar"] = sim
+    if osint:
+        data["osint"] = osint
+    deep = _ok_dict(deep_r)
+    if deep:
+        data["sandbox_deep"] = deep
     _cache[ck] = data
     return data
 
