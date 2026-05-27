@@ -862,9 +862,20 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                     "  analyst_notes (1-2 paragraphs of senior-analyst context for junior tier),\n"
                     "  clarifying_questions (2-4 questions whose answers would MATERIALLY change the\n"
                     "    assessment — host role, user privilege, related alerts, business context,\n"
-                    "    scope; only if not derivable from enrichment; empty list if none),\n"
-                    "  probing_questions (3-5 entries of {question, why_asking, if_yes_means,\n"
-                    "    if_no_means} — surrounding-activity, FP probes, TP probes, lateral movement).\n\n"
+                    "    scope; only if not derivable from enrichment; empty list if none).\n\n"
+                    "No markdown fences, no commentary outside the JSON."
+                )
+                # Probing questions get their OWN call so they always have token
+                # headroom — when bundled into the findings half they were the last
+                # field generated and got truncated away, leaving Ask RECON empty.
+                probing_instr = (
+                    "Now output ONLY the investigation's probing questions as strict JSON. "
+                    "Produce 3-5 questions — mix surrounding-activity, false-positive probes, "
+                    "true-positive probes, context, and lateral-movement checks. Each MUST be "
+                    "specific and answerable by checking a SIEM/EDR/ticket or asking the customer.\n\n"
+                    "Output ONLY this key:\n"
+                    "  probing_questions (array of {question, why_asking, if_yes_means, if_no_means}),\n"
+                    "    where if_yes_means / if_no_means state the verdict path each answer points to.\n\n"
                     "No markdown fences, no commentary outside the JSON."
                 )
 
@@ -884,18 +895,19 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                 # the findings half (lists + CTI frameworks) is the heavy one.
                 # Both run concurrently, so wall-time ≈ the findings call, still
                 # faster than one complete ~3500-token single call.
-                part_a, part_b = await asyncio.gather(
+                part_a, part_b, part_c = await asyncio.gather(
                     _synth(verdict_instr, 1300),
-                    _synth(findings_instr, 2000),
+                    _synth(findings_instr, 1900),
+                    _synth(probing_instr, 900),
                     return_exceptions=True,
                 )
                 result = {}
-                for part in (part_a, part_b):
+                for part in (part_a, part_b, part_c):
                     if isinstance(part, dict):
                         result.update(part)
                 if not result:
-                    # Both halves failed → surface to the single-shot fallback below
-                    raise RuntimeError(f"synthesis failed: {part_a!r} / {part_b!r}")
+                    # All halves failed → surface to the single-shot fallback below
+                    raise RuntimeError(f"synthesis failed: {part_a!r} / {part_b!r} / {part_c!r}")
 
             except Exception as e:
                 # Tool-calling path failed — fall back to the original single-shot prompt
