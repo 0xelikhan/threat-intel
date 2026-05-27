@@ -3366,10 +3366,17 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
         },
       }}
     >
-      {/* Logo header — click to return to the main analysis view */}
+      {/* Logo header — click to fully reset: clears the main view (scan /
+          email / result) and every sidebar input. */}
       <Box
-        onClick={() => onHome?.()}
-        title="Back to main"
+        onClick={() => {
+          setLogText('');
+          setHashInput('');
+          setUrlInput('');
+          setDragOver(false);
+          onHome?.();
+        }}
+        title="Back to main — clears everything"
         sx={{
           p: '18px 14px 16px',
           display: 'flex', alignItems: 'center', justifyContent: 'center',

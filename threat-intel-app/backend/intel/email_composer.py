@@ -1318,6 +1318,8 @@ def compose(alert_type: str, parsed: Dict, options: Dict, config,
     subject = _render_subject(alert_type, options, parsed or {})
     text = _strip_closing_block(text)
     html = _strip_closing_block_html(html)
+    text = _inject_closing_text(text, _signature_plain(config))
+    html = _inject_closing_html(html, signature_html)
     return {"subject": subject, "text": text, "html": html, "template_used": alert_type}
 
 
@@ -1326,6 +1328,15 @@ def compose(alert_type: str, parsed: Dict, options: Dict, config,
 _CLOSING_RE = re.compile(
     r"\n*If you have (?:any )?questions[^\n]*?(?:reach out|contact)[^\n]*\n*",
     re.IGNORECASE,
+)
+
+# Generic closing statement appended to every composed email, right before
+# the signature. Mirrors the original tool's per-template closers but is
+# vendor-neutral.
+_CLOSING_STATEMENT = (
+    "We'll continue monitoring your environment for any related activity. "
+    "If this activity looks unfamiliar or unauthorized, please contact us right "
+    "away so we can act quickly — and as always, we're here for any questions."
 )
 
 
@@ -1345,6 +1356,24 @@ def _strip_closing_block_html(html: str) -> str:
         html or "",
         flags=re.IGNORECASE,
     )
+
+
+def _inject_closing_text(text: str, sig_plain: str) -> str:
+    """Insert the generic closing statement before the signature in plain text.
+    Falls back to appending at the end when there's no signature block."""
+    closing = "\n\n" + _CLOSING_STATEMENT
+    if sig_plain and sig_plain in (text or ""):
+        return text.replace(sig_plain, closing + sig_plain, 1)
+    return (text or "").rstrip() + closing + "\n"
+
+
+def _inject_closing_html(html: str, sig_html: str) -> str:
+    """Insert the generic closing statement before the signature in HTML."""
+    closing = (f'<div style="margin:16px 0 0; line-height:1.4;">'
+               f'{html_escape(_CLOSING_STATEMENT)}</div>')
+    if sig_html and sig_html in (html or ""):
+        return html.replace(sig_html, closing + sig_html, 1)
+    return (html or "") + closing
 
 
 def _signature_plain(config) -> str:
@@ -1494,6 +1523,8 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     subject = _render_subject_ai(log_text, parsed)
     text = _strip_closing_block(text)
     html = _strip_closing_block_html(html)
+    text = _inject_closing_text(text, _signature_plain(config))
+    html = _inject_closing_html(html, signature_html)
     return {"subject": subject, "text": text, "html": html, "template_used": "ai_generated"}
 
 
