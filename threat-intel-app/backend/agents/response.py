@@ -383,14 +383,14 @@ RESPOND with this EXACT JSON (no markdown fences, no commentary):
 Remember: every disposition_reason and clear_justification claim must trace back to
 the evidence pack. No generic phrasing."""
 
-    sigma_rule, kql_query, siem_queries, analyst_summary = await asyncio.gather(
-        _ai_call(sigma_prompt, config),
-        _ai_call(kql_prompt, config),
-        _ai_call_json(siem_prompt, config),
-        _ai_call_json(analyst_prompt, config),
-    )
-
-    sigma_valid, sigma_error = validate_sigma_rule(sigma_rule)
+    # Detection content (Sigma/KQL/multi-SIEM) is generated ON DEMAND from the UI
+    # via /api/detection — it's the slowest part of this stage and isn't needed on
+    # every alert. Here we only generate the analyst Summary (the verdict hand-off),
+    # which keeps the response stage to a single AI call. The prompts above are
+    # still built so the on-demand path can reuse the same context.
+    analyst_summary = await _ai_call_json(analyst_prompt, config)
+    sigma_rule, kql_query, siem_queries = "", "", {}
+    sigma_valid, sigma_error = False, "on-demand: generate from the Detection card"
 
     stix_bundle = _build_stix(iocs, investigation)
     # matched_actors already computed above (before evidence_pack was built)
@@ -458,6 +458,7 @@ the evidence pack. No generic phrasing."""
         "timestamp":           datetime.now(timezone.utc).isoformat(),
         "sigma_valid":         sigma_valid,
         "sigma_error":         sigma_error,
+        "detections_on_demand": True,   # UI generates Sigma/KQL/SIEM via /api/detection
         "cross_refs":          state.get("cross_refs", {}),
         "atomic_examples":     atomic_examples,
         "siem_queries":        siem_queries or {},
