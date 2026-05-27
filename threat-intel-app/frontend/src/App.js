@@ -1018,13 +1018,13 @@ function BehavioralIndicators({ result }) {
         that wouldn't show up via IOC enrichment alone. Each hit is mapped to the
         specific MITRE ATT&CK technique it represents.
       </Typography>
-      {(bi.decoded_payloads || []).length > 0 && (
-        <Box sx={{ mb: 1.75 }}>
-          <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
-            textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
-            Decoded base64 payloads
-          </Typography>
-          {bi.decoded_payloads.map((p, i) => (
+      <Box sx={{ mb: 1.75 }}>
+        <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
+          textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
+          Decoded base64 payloads
+        </Typography>
+        {(bi.decoded_payloads || []).length > 0 ? (
+          bi.decoded_payloads.map((p, i) => (
             <Box key={i} component="pre" sx={{
               fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
               backgroundColor: '#070d19', border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
@@ -1032,9 +1032,13 @@ function BehavioralIndicators({ result }) {
               whiteSpace: 'pre-wrap', wordBreak: 'break-all',
               color: 'primary.main', maxHeight: 120, overflow: 'auto',
             }}>{p}</Box>
-          ))}
-        </Box>
-      )}
+          ))
+        ) : (
+          <Typography sx={{ fontSize: 12, color: 'text.disabled', fontStyle: 'italic' }}>
+            None — no readable base64-encoded content found.
+          </Typography>
+        )}
+      </Box>
       {Object.entries(cats).map(([cat, hits]) => (
         <Box key={cat} sx={{ mb: 1.75 }}>
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
