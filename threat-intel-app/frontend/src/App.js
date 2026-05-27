@@ -806,11 +806,6 @@ function InfrastructureIntel({ result, bare }) {
 
   const body = (
     <>
-      <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
-        Free OSINT — BGP ranking, DNS records, VT graph relationships,
-        MalwareBazaar pivot, Google Safe Browsing. Surfaces infrastructure
-        connections that traditional enrichment misses.
-      </Typography>
       {rows.map(({ ioc, type, osint }) => (
         <Box key={ioc} sx={{ mb: 2 }}>
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
@@ -1572,12 +1567,23 @@ function Overview({ result, bare }) {
   );
 
   const metrics = (
-    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1.25 }}>
-      <Metric label="Threat level" value={rs.threat_level} color={lc.fg}/>
-      <Metric label="Confidence" value={`${conf}%`}
-        color={conf >= 70 ? '#17AB1F' : conf >= 40 ? '#E1B823' : '#F14337'}/>
-      <Metric label="Indicators" value={total} color="#0fbcff"/>
-      <Metric label="MITRE TTPs" value={mitre} color="#B286FF"/>
+    <Box>
+      {rs.provisional && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25 }}>
+          <Box sx={{ width: 7, height: 7, borderRadius: 99, backgroundColor: '#E1B823',
+            animation: 'pulse 1.5s ease-in-out infinite' }}/>
+          <Typography sx={{ fontSize: 11, color: '#E1B823', fontWeight: 500 }}>
+            Preliminary verdict from enrichment — AI analysis in progress…
+          </Typography>
+        </Box>
+      )}
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1.25 }}>
+        <Metric label="Threat level" value={rs.threat_level} color={lc.fg}/>
+        <Metric label="Confidence" value={`${conf}%`}
+          color={conf >= 70 ? '#17AB1F' : conf >= 40 ? '#E1B823' : '#F14337'}/>
+        <Metric label="Indicators" value={total} color="#0fbcff"/>
+        <Metric label="MITRE TTPs" value={mitre} color="#B286FF"/>
+      </Box>
     </Box>
   );
   if (bare) return metrics;

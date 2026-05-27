@@ -370,11 +370,13 @@ async def run_triage(state: dict) -> dict:
                     api_key=openai_key,
                     azure_endpoint=base_url.rstrip("/"),
                     api_version="2024-02-01",
+                    timeout=30.0, max_retries=1,   # triage is latency-critical — fail fast
                 )
             else:
                 client = AsyncOpenAI(
                     api_key=openai_key,
                     base_url=base_url or "https://api.openai.com/v1",
+                    timeout=30.0, max_retries=1,
                 )
             resp = await client.chat.completions.create(
                 # Triage is a fast routing decision (the real reasoning is the

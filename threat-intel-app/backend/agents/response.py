@@ -135,8 +135,10 @@ def _make_client(config):
             api_key=key,
             azure_endpoint=base_url.rstrip("/"),
             api_version="2024-02-01",
+            timeout=45.0, max_retries=1,   # cap tail latency under throttling
         )
-    return AsyncOpenAI(api_key=key, base_url=base_url or "https://api.openai.com/v1")
+    return AsyncOpenAI(api_key=key, base_url=base_url or "https://api.openai.com/v1",
+                       timeout=45.0, max_retries=1)
 
 
 async def _ai_call(prompt: str, config, max_tokens: int = 1500) -> str:
@@ -274,11 +276,9 @@ Each query MUST reference at least one of the provided IOCs and use realistic fi
     }
 
     analyst_prompt = f"""You are a senior MDR analyst (5+ years, T2/T3 escalation lead) writing the
-final hand-off for a SOC investigation. Be CONCISE throughout — tight sentences, no
-padding; keep each list to its most important 2-3 items. Two distinct outputs are required:
-
-(A) INTERNAL DISPOSITION — for the next-tier analyst or shift lead
-(B) CLIENT NOTIFICATION EMAIL — for a non-technical IT manager at the customer site
+final INTERNAL DISPOSITION for a SOC investigation (for the next-tier analyst / shift
+lead). Be CONCISE throughout — tight sentences, no padding; keep each list to its most
+important 2-3 items.
 
 You must base every claim on SPECIFIC evidence from the investigation. Do not invent.
 Do not be vague. "Suspicious activity detected" is FORBIDDEN — say what activity,
@@ -296,31 +296,13 @@ Evidence pack:
 {json.dumps(evidence_pack, indent=2)[:3500]}
 
 ═══════════════════════════════════════════════════════════════════════════════════
-OUTPUT REQUIREMENTS
+DISPOSITION DECISION TREE
 ═══════════════════════════════════════════════════════════════════════════════════
-
-(A) Disposition decision tree:
   • CLEAR    → only if you can cite a specific reason it's benign
                  (GreyNoise=benign, MISP warning list match, well-known infrastructure,
                   legitimate corporate service, etc.) AND confidence is high.
   • MONITOR  → suspicious but not actionable yet; specify the trigger that would escalate.
   • ESCALATE → real-world threat with corroborating evidence; give concrete next steps.
-
-(B) Client email tone calibration:
-  CRITICAL → urgent, plain "we observed an active attack", no hedging
-  HIGH     → clear concern, recommended actions are time-sensitive
-  MEDIUM   → professional caution, contextual, action recommended within business day
-  LOW/INFO → informational only, no panic, often "we noticed but it appears benign"
-
-  STRICT email rules:
-  - No MITRE codes (no "T1566"), no raw hashes (refer to "a suspicious file")
-  - No raw URLs in attack form; defang if mentioned ("a fake Microsoft login page on
-    a newly registered domain")
-  - Talk in terms of business impact ("could allow access to corporate email")
-  - Specific recommendations ("please review sign-in logs in Entra ID for user X
-    over the past 24 hours"), not vague ("please investigate")
-  - 2-3 short paragraphs maximum. No bullet lists in the body — write prose.
-  - Always end with a specific question/confirmation the client should reply with.
 
 ═══════════════════════════════════════════════════════════════════════════════════
 RESPOND with this EXACT JSON (no markdown fences, no commentary):
@@ -339,45 +321,7 @@ RESPOND with this EXACT JSON (no markdown fences, no commentary):
     "<concrete step — e.g. 'Query Entra ID sign-in logs for user X 24h back'>",
     "<another>",
     "<another>"
-  ],
-  "tier2_talking_points": [
-    "<the one signal that most strongly drives your disposition>",
-    "<the most important correlation between signals>",
-    "<the biggest uncertainty / what to verify>"
-  ],
-  "client_email": {{
-    "subject": "<plain-English subject line conveying severity. Examples:
-                 CRITICAL → 'URGENT: Active credential phishing attempt detected'
-                 HIGH     → 'Security alert: suspicious sign-in attempt on Acme account'
-                 MEDIUM   → 'Notification: unusual activity observed on your network'
-                 LOW      → 'Informational: routine threat-intel match'>",
-    "body":    "<paragraph 1: WHAT WE OBSERVED in plain English — 'Earlier today we
-                  detected an attempt to deliver a phishing email impersonating your
-                  Microsoft 365 sign-in page from a domain that was registered just
-                  hours before.' Reference the actual evidence from the pack but in
-                  human terms.\\n\\nparagraph 2: WHAT THIS MEANS for them — connect to
-                  their business risk ('If a user enters credentials, the attacker
-                  would gain access to corporate email and any apps using SSO').\\n\\n
-                  paragraph 3: WHAT WE'VE DONE and what we RECOMMEND they do —
-                  specific actions ('We've blocked the source IP at our perimeter.
-                  Please ask your IT team to review sign-in logs for any user that
-                  received this email in the past 4 hours and confirm whether MFA
-                  challenges were satisfied.').\\n\\nparagraph 4: HOW TO RESPOND —
-                  'Please reply to confirm sign-in review is complete, or let us
-                  know if you need our team to assist directly.'>"
-  }},
-  "ir_playbook": {{
-    "phase_identification": ["<NIST 800-61 identification step — specific, evidence-tied>",
-                              "<another>", "<another>"],
-    "phase_containment":    ["<containment action targeting the specific IOCs/users at risk>",
-                              "<another>", "<another>"],
-    "phase_eradication":    ["<eradication step — e.g. revoke tokens for affected users>",
-                              "<another>"],
-    "phase_recovery":       ["<recovery step — restore service, validate access>",
-                              "<another>"],
-    "phase_lessons":        ["<post-incident lesson tied to this specific case>",
-                              "<another>"]
-  }}
+  ]
 }}
 
 Remember: every disposition_reason and clear_justification claim must trace back to
@@ -386,9 +330,9 @@ the evidence pack. No generic phrasing."""
     # Detection content (Sigma/KQL/multi-SIEM) is generated ON DEMAND from the UI
     # via /api/detection — it's the slowest part of this stage and isn't needed on
     # every alert. Here we only generate the analyst Summary (the verdict hand-off),
-    # which keeps the response stage to a single AI call. The prompts above are
-    # still built so the on-demand path can reuse the same context.
-    analyst_summary = await _ai_call_json(analyst_prompt, config)
+    # which keeps the response stage to a single AI call. The trimmed schema (no
+    # client email / IR playbook — neither is shown in the UI) needs little headroom.
+    analyst_summary = await _ai_call_json(analyst_prompt, config, max_tokens=700)
     sigma_rule, kql_query, siem_queries = "", "", {}
     sigma_valid, sigma_error = False, "on-demand: generate from the Detection card"
 
