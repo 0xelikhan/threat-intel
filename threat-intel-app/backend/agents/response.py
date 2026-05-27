@@ -145,7 +145,11 @@ async def _ai_call(prompt: str, config, max_tokens: int = 1500) -> str:
         return "# OpenAI API key not configured"
     try:
         resp = await client.chat.completions.create(
-            model=config.get("AI_MODEL", "gpt-4o-mini"),
+            # Detection-content generation (Sigma/KQL) + templated hand-off →
+            # fast model tier. The response stage runs these concurrently, so the
+            # slowest call bounds the stage; keeping all of them fast is what
+            # actually shortens it.
+            model=config.get_model(fast=True),
             messages=[{"role": "user", "content": prompt}],
             max_tokens=max_tokens,
             temperature=0.1,
@@ -161,7 +165,7 @@ async def _ai_call_json(prompt: str, config, max_tokens: int = 1800) -> dict:
         return {}
     try:
         resp = await client.chat.completions.create(
-            model=config.get("AI_MODEL", "gpt-4o-mini"),
+            model=config.get_model(fast=True),
             messages=[{"role": "user", "content": prompt}],
             max_tokens=max_tokens,
             temperature=0.1,
