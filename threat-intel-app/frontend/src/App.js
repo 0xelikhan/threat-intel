@@ -664,7 +664,7 @@ function LogTranslation({ result }) {
   if (!Object.keys(fields).length && !anomalies.length) return null;
   const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
   return (
-    <Card title="Log translation · format detection" accent="#16AD34"
+    <Card title="Logs" accent="#16AD34"
       badge={`${lt.detected_format} · ${Math.round((lt.confidence || 0) * 100)}%`}
       defaultOpen={false}>
       {lt.normalized_summary && (
@@ -754,7 +754,7 @@ function InfrastructureIntel({ result }) {
   const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
 
   return (
-    <Card title="Infrastructure intel · OSINT" accent="#0fbcff"
+    <Card title="OSINT" accent="#0fbcff"
       badge={`${rows.length} IOC${rows.length === 1 ? '' : 's'}`} defaultOpen={false}>
       <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
         Free OSINT — BGP ranking, DNS records, VT graph relationships,
@@ -888,7 +888,7 @@ function InfrastructureIntel({ result }) {
  * Per-IOC deterministic score independent of the AI assessment. Renders a
  * visual bar + verdict chip + expandable list of every contributing factor.
  */
-function ConfidenceBreakdown({ result }) {
+function ConfidenceBreakdown({ result, bare }) {
   const scores = result?.confidence_scores || {};
   const [openIoc, setOpenIoc] = useState(null);
   const ids = Object.keys(scores).filter(k => k && !k.startsWith('_'));
@@ -902,9 +902,8 @@ function ConfidenceBreakdown({ result }) {
     .map(k => ({ ioc: k, ...scores[k] }))
     .sort((a, b) => (b.score || 0) - (a.score || 0));
 
-  return (
-    <Card title="Confidence breakdown · transparent scoring" accent="#0fbcff"
-      badge={`${ids.length} scored`}>
+  const body = (
+    <>
       <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
         Each IOC gets a deterministic 0–100 score computed independently of the
         AI assessment. Expand any row to see every contributing factor and the
@@ -985,6 +984,13 @@ function ConfidenceBreakdown({ result }) {
           </MuiPaper>
         );
       })}
+    </>
+  );
+  if (bare) return body;
+  return (
+    <Card title="Confidence breakdown · transparent scoring" accent="#0fbcff"
+      badge={`${ids.length} scored`}>
+      {body}
     </Card>
   );
 }
@@ -1429,7 +1435,7 @@ function GTI({ result }) {
   });
 
   return (
-    <Card title="Threat scoring" accent="#0fbcff" badge={top ? `${top.score}/100` : null}>
+    <Card title="Threat score" accent="#0fbcff" badge={top ? `${top.score}/100` : null}>
       <Box sx={{
         display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 3, mb: 2.25,
         pb: 2, borderBottom: `1px solid ${muiAlpha('#ffffff', 0.06)}`,
@@ -1543,12 +1549,22 @@ function GTI({ result }) {
           </Box>
         ))}
       </MuiPaper>
+
+      {Object.keys(result?.confidence_scores || {}).filter(k => k && !k.startsWith('_')).length > 0 && (
+        <Box sx={{ mt: 2.25, pt: 2, borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
+          <Typography sx={{ fontSize: 11, fontWeight: 600, color: 'text.tertiary',
+            textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.25 }}>
+            Per-indicator confidence breakdown
+          </Typography>
+          <ConfidenceBreakdown result={result} bare/>
+        </Box>
+      )}
     </Card>
   );
 }
 
 /* ─── assessment ────────────────────────────────────────────────────────────── */
-function Assessment({ rs }) {
+function Assessment({ rs, result }) {
   const lc = levelStyle[rs.threat_level] || levelStyle.INFORMATIONAL;
   return (
     <Card title="AI assessment" accent="#0fbcff" badge={rs.threat_level?.toLowerCase()}>
@@ -1697,6 +1713,16 @@ function Assessment({ rs }) {
         </Block>
       )}
 
+      {/* Ask RECON — fused into the assessment so follow-up Q&A lives with the verdict */}
+      {result?.runId && (
+        <Box sx={{ mt: 2.25, pt: 2, borderTop: `1px solid ${muiAlpha('#ffffff', 0.12)}` }}>
+          <Typography sx={{ fontSize: 11, fontWeight: 600, color: 'primary.main',
+            textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.25 }}>
+            Ask RECON
+          </Typography>
+          <ChatWithRecon result={result} bare/>
+        </Box>
+      )}
     </Card>
   );
 }
@@ -1793,7 +1819,7 @@ const FALLBACK_QUESTIONS = [
 ];
 
 
-function ChatWithRecon({ result }) {
+function ChatWithRecon({ result, bare }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput]       = useState('');
   const [sending, setSending]   = useState(false);
@@ -1950,11 +1976,8 @@ function ChatWithRecon({ result }) {
     ? 'RECON needs more context to commit to a verdict — pick a question or ask anything'
     : null;
 
-  return (
-    <Card title="Ask RECON" accent={accent} defaultOpen
-      badge={questions.length > 0
-        ? `${questions.length} ${usingFallback ? 'starter questions' : 'suggested checks'}`
-        : null}>
+  const body = (
+    <>
       {banner && (
         <Typography sx={{ fontSize:12, color:'text.tertiary', mb:1.5, lineHeight:1.55 }}>
           {banner}
@@ -2161,6 +2184,15 @@ function ChatWithRecon({ result }) {
           {error}
         </Box>
       )}
+    </>
+  );
+  if (bare) return body;
+  return (
+    <Card title="Ask RECON" accent={accent} defaultOpen
+      badge={questions.length > 0
+        ? `${questions.length} ${usingFallback ? 'starter questions' : 'suggested checks'}`
+        : null}>
+      {body}
     </Card>
   );
 }
@@ -4065,10 +4097,13 @@ export default function App() {
                 they need (verdict + banners above stay visible). Keyed by run id
                 so each new investigation resets to collapsed. */}
             <CardDefaultOpenContext.Provider value={false} key={result.runId || 'detail'}>
+            {/* AI assessment (now with Ask RECON fused in) sits first so the
+                verdict + follow-up Q&A are the top collapsible card. Threat score
+                now carries the per-indicator confidence breakdown. */}
+            <Assessment rs={rs || {}} result={result}/>
             <LogTranslation result={result}/>
             <SuppressedIOCs result={result}/>
             <BehavioralIndicators result={result}/>
-            <ConfidenceBreakdown result={result}/>
             <InfrastructureIntel result={result}/>
             <HoneypotActivity result={result}/>
             <SandboxBehavioral result={result}/>
@@ -4076,10 +4111,8 @@ export default function App() {
             <ClarifyingQuestions result={result} onResult={setResult}/>
             <IOCPivot result={result}/>
             <AnalystSummary rs={rs || {}}/>
-            <ChatWithRecon result={result}/>
             <EmailAnalysis result={result}/>
             <GTI result={result}/>
-            <Assessment rs={rs || {}}/>
             <CrossRefs rs={rs || {}}/>
             <Detection result={result}/>
             <NetworkDetection result={result}/>
