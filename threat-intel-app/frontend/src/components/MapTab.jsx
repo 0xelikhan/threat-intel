@@ -7,6 +7,31 @@ import 'leaflet/dist/leaflet.css';
 
 const VERDICT_COLORS = { MALICIOUS: '#ff2d2d', SUSPICIOUS: '#ff8c00', CLEAN: '#51cf66', UNKNOWN: '#74c0fc' };
 
+// Approximate country centroids (ISO-3166 alpha-2 → [lat, lng]). Used as a
+// fallback when an IP has a country but no precise ipinfo "loc" — otherwise
+// that IP silently drops off the map (common for the 2nd IP in an
+// impossible-travel pair when one ipinfo lookup returns no coordinates).
+const COUNTRY_CENTROIDS = {
+  US:[37.1,-95.7], CA:[56.1,-106.3], MX:[23.6,-102.5], BR:[-14.2,-51.9], AR:[-38.4,-63.6],
+  GB:[55.4,-3.4], IE:[53.4,-8.2], FR:[46.2,2.2], DE:[51.2,10.4], ES:[40.5,-3.7], PT:[39.4,-8.2],
+  IT:[41.9,12.6], NL:[52.1,5.3], BE:[50.5,4.5], CH:[46.8,8.2], AT:[47.5,14.6], SE:[60.1,18.6],
+  NO:[60.5,8.5], FI:[61.9,25.7], DK:[56.3,9.5], PL:[51.9,19.1], CZ:[49.8,15.5], UA:[48.4,31.2],
+  RU:[61.5,105.3], TR:[39.0,35.2], GR:[39.1,21.8], RO:[45.9,24.9], HU:[47.2,19.5],
+  CN:[35.9,104.2], JP:[36.2,138.3], KR:[35.9,127.8], KP:[40.3,127.5], IN:[20.6,79.0],
+  PK:[30.4,69.3], BD:[23.7,90.4], VN:[14.1,108.3], TH:[15.9,100.99], ID:[-0.8,113.9],
+  PH:[12.9,121.8], MY:[4.2,101.98], SG:[1.35,103.8], HK:[22.4,114.1], TW:[23.7,121.0],
+  AU:[-25.3,133.8], NZ:[-40.9,174.9], ZA:[-30.6,22.9], NG:[9.1,8.7], EG:[26.8,30.8],
+  KE:[-0.0,37.9], MA:[31.8,-7.1], SA:[23.9,45.1], AE:[23.4,53.8], IL:[31.0,34.9],
+  IR:[32.4,53.7], IQ:[33.2,43.7], CO:[4.6,-74.3], CL:[-35.7,-71.5], PE:[-9.2,-75.0],
+  VE:[6.4,-66.6],
+};
+
+function locFromCountry(cc) {
+  if (!cc) return null;
+  const hit = COUNTRY_CENTROIDS[cc.toUpperCase()];
+  return hit ? `${hit[0]},${hit[1]}` : null;
+}
+
 function getIPVerdict(ip, response_summary) {
   if (!response_summary?.ioc_assessments) return 'UNKNOWN';
   const assessment = response_summary.ioc_assessments.find(a => a.ioc === ip);
@@ -16,11 +41,17 @@ function getIPVerdict(ip, response_summary) {
 function getIPDetails(ip, enrichments) {
   const data = enrichments?.ips?.[ip];
   if (!data) return {};
+  const country = data.ipinfo?.country || data.abuseipdb?.country
+    || data.censys?.country || '';
   return {
-    country: data.ipinfo?.country || data.abuseipdb?.country || '??',
+    country: country || '??',
     org: data.ipinfo?.org || data.abuseipdb?.isp || 'Unknown',
     city: data.ipinfo?.city || '',
-    loc: data.ipinfo?.loc,
+    // Precise coords when ipinfo has them; otherwise fall back to the
+    // country centroid so the IP still appears on the map. approxLoc flags
+    // that the position is country-level, not exact.
+    loc: data.ipinfo?.loc || locFromCountry(country),
+    approxLoc: !data.ipinfo?.loc && !!locFromCountry(country),
     abuseScore: data.abuseipdb?.abuseScore,
     vtMalicious: data.virustotal?.malicious,
     isTor: data.tor?.isExitNode,
@@ -111,6 +142,7 @@ export default function MapTab({ result }) {
           <div style="font-size:14px;color:#e2e8f0;margin-bottom:8px;font-weight:bold">${ip}</div>
           <div style="display:inline-block;background:${color}22;border:1px solid ${color}66;color:${color};padding:2px 8px;border-radius:3px;font-size:10px;letter-spacing:1px;margin-bottom:8px">${verdict}</div>
           ${details.city ? `<div style="color:#718096">${details.city}, ${details.country}</div>` : `<div style="color:#718096">${details.country}</div>`}
+          ${details.approxLoc ? `<div style="color:#5a6678;font-size:10px;margin-top:2px">approx — country-level location</div>` : ''}
           ${details.org ? `<div style="color:#718096;margin-top:4px">${details.org}</div>` : ''}
           ${details.abuseScore > 0 ? `<div style="margin-top:6px;color:#ffa94d">Abuse score: ${details.abuseScore}%</div>` : ''}
           ${details.vtMalicious > 0 ? `<div style="color:#ff6b6b">VT: ${details.vtMalicious} malicious engines</div>` : ''}
@@ -133,7 +165,7 @@ export default function MapTab({ result }) {
   }, [leafletReady, result]);
 
   const ips = result?.enrichments?.ips ? Object.keys(result.enrichments.ips) : [];
-  const ipsWithLocation = ips.filter(ip => result?.enrichments?.ips?.[ip]?.ipinfo?.loc);
+  const ipsWithLocation = ips.filter(ip => getIPDetails(ip, result?.enrichments)?.loc).length;
 
   return (
     <div>
