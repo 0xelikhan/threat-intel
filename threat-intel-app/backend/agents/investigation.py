@@ -726,7 +726,10 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                     {"role": "user",   "content": user_msg},
                 ]
 
-                max_iterations = 6
+                # Fewer roundtrips: each tool-selection roundtrip is ~15s on the
+                # large context, so cap iterations (was 6). 3 is plenty — the
+                # baseline already enriched every IOC; tools just fill small gaps.
+                max_iterations = 3
                 for iteration in range(max_iterations):
                     resp = await client.chat.completions.create(
                         model=fast_model,   # tool-selection roundtrip → fast tier
@@ -747,12 +750,20 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                                                          "arguments": tc.function.arguments}}
                                            for tc in msg.tool_calls],
                         })
-                        for tc in msg.tool_calls:
+
+                        # Execute this iteration's tool calls CONCURRENTLY — they're
+                        # independent and some do network I/O, so running them in
+                        # parallel instead of one-await-at-a-time is a large speedup.
+                        async def _run_tool(tc):
                             try:
                                 args = json.loads(tc.function.arguments)
                             except Exception:
                                 args = {}
-                            tool_result = await execute_tool(tc.function.name, args, config)
+                            res = await execute_tool(tc.function.name, args, config)
+                            return tc, args, res
+
+                        outcomes = await asyncio.gather(*[_run_tool(tc) for tc in msg.tool_calls])
+                        for tc, args, tool_result in outcomes:
                             summary = _summarize_for_trace(tc.function.name, tool_result)
                             tool_call_log.append({
                                 "iteration": iteration,

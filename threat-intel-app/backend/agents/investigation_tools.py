@@ -338,7 +338,6 @@ async def _t_lookup_domain(args, config):
 
 async def _t_lookup_hash(args, config):
     from agents.enrichment import enrich_hash
-    from intel.sandbox import lookup_all as sandbox_lookup
     from intel.loldrivers import lookup_hash as drv_lookup
     import aiohttp
     h = args.get("file_hash", "").strip()
@@ -347,8 +346,8 @@ async def _t_lookup_hash(args, config):
     keys = {k: config.get(k) for k in ("VIRUSTOTAL_KEY", "OTX_KEY")}
     async with aiohttp.ClientSession() as session:
         result = await enrich_hash(session, h, keys)
-    if len(h) == 64:
-        result["sandbox"] = await sandbox_lookup(h, config)
+    # NOTE: enrich_hash already runs the deep sandbox lookup for SHA-256, so we
+    # don't make a second (slow) sandbox call here.
     drv = drv_lookup(h)
     if drv:
         result["loldrivers"] = drv
