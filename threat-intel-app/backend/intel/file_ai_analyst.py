@@ -143,7 +143,8 @@ async def triage_classify(analysis: Dict, config) -> Optional[Dict]:
             temperature=0.0,
             max_tokens=200,
         )
-        parsed = json.loads(resp.choices[0].message.content or "{}")
+        from agents.investigation import _loads_lenient
+        parsed = _loads_lenient(resp.choices[0].message.content)
         cls = parsed.get("classification") or "Unknown Malware"
         # Defensive — coerce to a known label
         if cls not in CLASSIFICATIONS:

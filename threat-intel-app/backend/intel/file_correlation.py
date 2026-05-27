@@ -188,7 +188,7 @@ async def _hybrid_analysis(session, sha256, key) -> Optional[Dict]:
         "environment":    top.get("environment_description"),
         "submit_name":    top.get("submit_name"),
         "tags":           top.get("tags") or [],
-        "mitre":          [t.get("technique") + " - " + t.get("name", "")
+        "mitre":          [f"{t.get('technique') or ''} - {t.get('name') or ''}"
                            for t in (top.get("mitre_attcks") or [])][:8],
         "report_url":     f"https://www.hybrid-analysis.com/sample/{sha256}",
     }
