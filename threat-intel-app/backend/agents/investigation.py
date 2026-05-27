@@ -849,7 +849,8 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                 )
                 findings_instr = (
                     "Now output PART 2 of your final assessment as strict JSON — the structured "
-                    "findings. Cite specific evidence; do not be vague.\n\n"
+                    "findings. Cite specific evidence; do not be vague. Keep every field TIGHT: "
+                    "short phrases, not paragraphs; one brief entry per CTI-framework field.\n\n"
                     "Output ONLY these keys (nothing else):\n"
                     "  key_findings (3-7 findings; each cites the supporting enrichment source),\n"
                     "  correlated_signals (array of {observation, supporting_signals}),\n"
@@ -885,8 +886,8 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                 # Both run concurrently, so wall-time ≈ the findings call, still
                 # faster than one complete ~3500-token single call.
                 part_a, part_b = await asyncio.gather(
-                    _synth(verdict_instr, 1500),
-                    _synth(findings_instr, 3000),
+                    _synth(verdict_instr, 1300),
+                    _synth(findings_instr, 2000),
                     return_exceptions=True,
                 )
                 result = {}
