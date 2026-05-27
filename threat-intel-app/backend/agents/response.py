@@ -159,7 +159,7 @@ async def _ai_call(prompt: str, config, max_tokens: int = 1500) -> str:
         return f"# AI generation failed: {e}"
 
 
-async def _ai_call_json(prompt: str, config, max_tokens: int = 1800) -> dict:
+async def _ai_call_json(prompt: str, config, max_tokens: int = 1400) -> dict:
     client = _make_client(config)
     if not client:
         return {}
@@ -171,7 +171,10 @@ async def _ai_call_json(prompt: str, config, max_tokens: int = 1800) -> dict:
             temperature=0.1,
             response_format={"type": "json_object"},
         )
-        return json.loads(resp.choices[0].message.content)
+        # Truncation-tolerant parse so a capped response keeps its completed
+        # fields instead of returning {} (lets us run a tighter token budget).
+        from agents.investigation import _loads_lenient
+        return _loads_lenient(resp.choices[0].message.content)
     except Exception:
         return {}
 
@@ -271,7 +274,8 @@ Each query MUST reference at least one of the provided IOCs and use realistic fi
     }
 
     analyst_prompt = f"""You are a senior MDR analyst (5+ years, T2/T3 escalation lead) writing the
-final hand-off for a SOC investigation. Two distinct outputs are required:
+final hand-off for a SOC investigation. Be CONCISE throughout — tight sentences, no
+padding; keep each list to its most important 2-3 items. Two distinct outputs are required:
 
 (A) INTERNAL DISPOSITION — for the next-tier analyst or shift lead
 (B) CLIENT NOTIFICATION EMAIL — for a non-technical IT manager at the customer site
@@ -315,7 +319,7 @@ OUTPUT REQUIREMENTS
   - Talk in terms of business impact ("could allow access to corporate email")
   - Specific recommendations ("please review sign-in logs in Entra ID for user X
     over the past 24 hours"), not vague ("please investigate")
-  - 3-4 paragraphs maximum. No bullet lists in the body — write prose.
+  - 2-3 short paragraphs maximum. No bullet lists in the body — write prose.
   - Always end with a specific question/confirmation the client should reply with.
 
 ═══════════════════════════════════════════════════════════════════════════════════
