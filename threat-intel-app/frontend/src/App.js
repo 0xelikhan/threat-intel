@@ -3952,8 +3952,10 @@ export default function App() {
         onOpenEmail={() => {
           // Pre-populate from whatever's on screen: the file-scanner result
           // wins if visible, otherwise the analysis result, otherwise blank.
-          const ctx = scanState?.result?.summary?.text
-            ? { log: scanState.result.summary.text }
+          const scanSummary = scanState?.result?.ai_analyst?.deep?.executive_summary
+            || scanState?.result?.ai_summary;
+          const ctx = scanSummary
+            ? { log: scanSummary }
             : (result?.raw_input ? { log: result.raw_input } : { log: '' });
           clearScan();
           setEmailState(ctx);
