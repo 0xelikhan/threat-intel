@@ -3428,7 +3428,7 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
               color: dragOver ? '#B286FF' : 'text.primary',
               fontSize: 12, fontWeight: 500,
             }}>
-              {scanState?.scanning ? 'Analyzing…' : 'Drop a file to analyze'}
+              {scanState?.scanning ? 'Analyzing…' : 'File Analyzer'}
             </Typography>
             <Typography sx={{ color: 'text.tertiary', fontSize: 11, mt: 0.25 }}>
               ≤ 50 MB
@@ -3571,32 +3571,6 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
         )}
       </Box>
 
-      {/* Footer */}
-      <Box sx={{
-        p: '12px 16px',
-        borderTop: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-        fontSize: 11, color: 'text.disabled',
-        display: 'flex', justifyContent: 'space-between',
-        alignItems: 'center',
-      }}>
-        <span>RECON v1.0</span>
-        <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-          <Box component="kbd" sx={{
-            backgroundColor: 'background.accent',
-            border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-            borderRadius: '3px',
-            p: '1px 5px', fontSize: 10,
-            fontFamily: '"IBM Plex Mono", monospace',
-          }}>⌘</Box>{' '}
-          <Box component="kbd" sx={{
-            backgroundColor: 'background.accent',
-            border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-            borderRadius: '3px',
-            p: '1px 5px', fontSize: 10,
-            fontFamily: '"IBM Plex Mono", monospace',
-          }}>↵</Box>
-        </span>
-      </Box>
     </MuiDrawer>
   );
 }
