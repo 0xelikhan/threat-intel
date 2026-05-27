@@ -661,17 +661,15 @@ function HoneypotActivity({ result }) {
  * AI identifies the format and extracts every security-relevant field. Lets
  * analysts verify the parser caught everything before trusting the analysis.
  */
-function LogTranslation({ result }) {
+function LogTranslation({ result, bare }) {
   const lt = result?.log_translation;
   if (!lt || lt.error) return null;
   const fields = lt.extracted_fields || {};
   const anomalies = lt.anomalies || [];
   if (!Object.keys(fields).length && !anomalies.length) return null;
   const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
-  return (
-    <Card title="Logs" accent="#16AD34"
-      badge={`${lt.detected_format} · ${Math.round((lt.confidence || 0) * 100)}%`}
-      defaultOpen={false}>
+  const body = (
+    <>
       {lt.normalized_summary && (
         <Typography sx={{ fontSize: 12, color: 'text.primary', mb: 1.5,
           lineHeight: 1.6, fontStyle: 'italic' }}>
@@ -734,6 +732,14 @@ function LogTranslation({ result }) {
           ))}
         </Box>
       )}
+    </>
+  );
+  if (bare) return body;
+  return (
+    <Card title="Logs" accent="#16AD34"
+      badge={`${lt.detected_format} · ${Math.round((lt.confidence || 0) * 100)}%`}
+      defaultOpen={false}>
+      {body}
     </Card>
   );
 }
@@ -1221,13 +1227,43 @@ function ClarifyingQuestions({ result, onResult }) {
  * they can spot false-negative filters (e.g., a Tor exit IP swallowed by a
  * datacenter list).
  */
-function SuppressedIOCs({ result }) {
+// Triage: log normalization + MISP-warninglist false-positive filtering, fused.
+function Triage({ result }) {
+  const lt = result?.log_translation;
+  const hasLogs = !!(lt && !lt.error &&
+    (Object.keys(lt.extracted_fields || {}).length || (lt.anomalies || []).length));
+  const sup = result?.suppressed_iocs || {};
+  const hasSup = Object.values(sup).reduce((n, a) => n + (a?.length || 0), 0) > 0;
+  if (!hasLogs && !hasSup) return null;
+  const Label = ({ children }) => (
+    <Typography sx={{ fontSize: 11, fontWeight: 600, color: 'text.tertiary',
+      textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.25 }}>{children}</Typography>
+  );
+  return (
+    <Card title="Triage" accent="#16AD34" defaultOpen={false}>
+      {hasLogs && (
+        <>
+          <Label>Log normalization</Label>
+          <LogTranslation result={result} bare/>
+        </>
+      )}
+      {hasSup && (
+        <Box sx={{ mt: hasLogs ? 2 : 0, pt: hasLogs ? 2 : 0,
+          borderTop: hasLogs ? `1px solid ${muiAlpha('#ffffff', 0.08)}` : 'none' }}>
+          <Label>Filtered as benign · MISP warninglists</Label>
+          <SuppressedIOCs result={result} bare/>
+        </Box>
+      )}
+    </Card>
+  );
+}
+
+function SuppressedIOCs({ result, bare }) {
   const sup = result?.suppressed_iocs || {};
   const total = Object.values(sup).reduce((n, arr) => n + (arr?.length || 0), 0);
   if (!total) return null;
-  return (
-    <Card title="Filtered as benign · MISP warninglists" accent="#848592"
-      badge={`${total} suppressed`} defaultOpen={false}>
+  const body = (
+    <>
       <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
         These IOCs were extracted from the input but matched a MISP warninglist
         (known-good service, datacenter range, public DNS, top-1M domain, etc.) so
@@ -1264,6 +1300,13 @@ function SuppressedIOCs({ result }) {
           </MuiPaper>
         </Box>
       ))}
+    </>
+  );
+  if (bare) return body;
+  return (
+    <Card title="Filtered as benign · MISP warninglists" accent="#848592"
+      badge={`${total} suppressed`} defaultOpen={false}>
+      {body}
     </Card>
   );
 }
@@ -1856,17 +1899,11 @@ function ChatWithRecon({ result, bare }) {
   // Use the AI-generated probing questions when the investigation produced
   // any; otherwise fall back to a generic-but-evergreen set so the analyst
   // always has clickable starting points (helps when the AI omits the field).
-  const aiQuestions = rs.probing_questions || [];
-  // 'AI needs more context' clarifying questions (plain strings) are surfaced as
-  // clickable chips here too — click one to ask it in the chat and answer it
-  // together with RECON, instead of a separate form.
-  const clarifying = (result?.clarifying_questions || []).map(q =>
-    typeof q === 'string'
-      ? { question: q, why_asking: 'Clarifying question — your answer refines the verdict' }
-      : q);
-  const combined = [...clarifying, ...aiQuestions];
-  const questions = combined.length > 0 ? combined : FALLBACK_QUESTIONS;
-  const usingFallback = combined.length === 0;
+  // Ask RECON only surfaces probing questions that carry an if-yes / if-no
+  // verdict path (the actionable ones). Plain clarifying questions and the
+  // generic fallback set are intentionally omitted.
+  const questions = (rs.probing_questions || []).filter(q => q && (q.if_yes_means || q.if_no_means));
+  const usingFallback = false;
   const classification = rs.verdict_classification;
 
   // Load history when run changes
@@ -3616,16 +3653,7 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
 
         {/* Hash / URL input groups — unified pill with leading icon + inline
             submit button. Button glows primary when input is non-empty. */}
-        <ScannerInput
-          icon={<Hash size={13}/>}
-          placeholder="Lookup hash"
-          value={hashInput}
-          onChange={setHashInput}
-          onSubmit={(v) => { onScanHash?.(v); setHashInput(''); }}
-          disabled={scanState?.scanning}
-          submitLabel="Lookup"
-          sx={{ mb: 1 }}
-        />
+        {/* Hash lookup removed — paste hashes into Analyze (same enrichment). */}
         <ScannerInput
           icon={<Link2 size={13}/>}
           placeholder="Scan URL"
@@ -4172,25 +4200,22 @@ export default function App() {
             <CardDefaultOpenContext.Provider value={false} key={result.runId || 'detail'}>
             <GTI result={result}/>                {/* Investigation results + threat score + confidence (open) */}
             <AnalystSummary rs={rs || {}}/>        {/* Summary (open) */}
-            <ChatWithRecon result={result}/>       {/* Ask RECON — clarifying + probing questions */}
-            <LogTranslation result={result}/>
-            <SuppressedIOCs result={result}/>
+            <ChatWithRecon result={result}/>       {/* Ask RECON — probing questions */}
+            <Triage result={result}/>              {/* Logs + MISP-filtered IOCs, fused */}
             <BehavioralIndicators result={result}/>
-            <InfrastructureIntel result={result}/> {/* OSINT — now includes geopolitical context */}
+            <InfrastructureIntel result={result}/> {/* OSINT — includes geopolitical context */}
             <HoneypotActivity result={result}/>
             <SandboxBehavioral result={result}/>
-            <IOCPivot result={result}/>
             <EmailAnalysis result={result}/>
             <CrossRefs rs={rs || {}}/>
             <NetworkDetection result={result}/>
             <URLScanLive result={result}/>
 
-            <Card title="Geographic distribution" accent="#0fbcff" noPad>
+            <Card title="Graphs" accent="#0fbcff" noPad>
               <MapTab result={result}/>
-            </Card>
-
-            <Card title="Pivot graph" accent="#0fbcff" noPad>
-              <Box sx={{ p: '14px 16px' }}><PivotGraph result={result}/></Box>
+              <Box sx={{ p: '14px 16px', borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
+                <PivotGraph result={result}/>
+              </Box>
             </Card>
 
             <Detection result={result}/>          {/* Detection Rules — on-demand, at bottom */}
