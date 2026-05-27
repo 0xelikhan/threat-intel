@@ -20,7 +20,7 @@ import { alpha as muiAlpha, useTheme } from '@mui/material/styles';
 import {
   FileSearch, Copy, Check, Search, Download,
   ArrowUpRight, AlertTriangle, Shield, Play, Plus,
-  ThumbsUp, ThumbsDown, FileText, ChevronRight, RotateCcw, Mail,
+  ThumbsUp, ThumbsDown, FileText, ChevronRight, RotateCcw,
 } from 'lucide-react';
 
 // ─── verdict / severity color helper (uses theme tokens) ──────────────────────
@@ -1228,7 +1228,7 @@ function NotesAndRefinement({ result, onRefreshScan }) {
 
 
 // ─── Sticky header + section navigator ───────────────────────────────────────
-function StickyHeader({ result, scanning, onComposeEmail }) {
+function StickyHeader({ result, scanning }) {
   const theme = useTheme();
   const v = result?.verdict || 'UNKNOWN';
   const conf = result?.confidence || 0;
@@ -1272,16 +1272,6 @@ function StickyHeader({ result, scanning, onComposeEmail }) {
               analyzing…
             </Typography>
           </Stack>
-        )}
-        {result && onComposeEmail && (
-          <MuiButton
-            onClick={onComposeEmail}
-            size="small" variant="outlined"
-            startIcon={<Mail size={12}/>}
-            sx={{ ml: 'auto !important', textTransform: 'none', fontSize: 12, height: 26 }}
-          >
-            Compose email
-          </MuiButton>
         )}
       </Stack>
     </Box>
@@ -1369,7 +1359,7 @@ function AILoading({ text }) {
 
 
 // ─── Main FileScannerView ────────────────────────────────────────────────────
-export default function FileScannerView({ external, onScanFile, onScanHash, onScanUrl, onComposeEmail }) {
+export default function FileScannerView({ external, onScanFile, onScanHash, onScanUrl }) {
   const theme = useTheme();
   const [localResult, setLocalResult] = useState(null);
   const [localScanning, setLocalScanning] = useState(false);
@@ -1478,8 +1468,7 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
       minHeight: '100vh',
       display: 'flex', flexDirection: 'column',
     }}>
-      <StickyHeader result={result} scanning={scanning}
-        onComposeEmail={onComposeEmail ? () => onComposeEmail(result) : undefined}/>
+      <StickyHeader result={result} scanning={scanning}/>
 
       <Box sx={{ display: 'flex', flex: 1, p: '20px 24px' }}>
         <Box sx={{ flex: 1, minWidth: 0, maxWidth: 980 }}>

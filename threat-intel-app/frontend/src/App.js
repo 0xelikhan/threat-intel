@@ -761,7 +761,23 @@ function LogTranslation({ result, bare }) {
  * enumeration, VT graph relationships, MalwareBazaar similar samples, Google
  * Safe Browsing. Each IOC's `osint` payload renders as its own panel.
  */
-function InfrastructureIntel({ result }) {
+// Does this result have any OSINT/infrastructure content to show? Mirrors
+// InfrastructureIntel's render guard so the Triage wrapper can decide whether
+// to render the embedded "OSINT" section + label.
+function hasOsintContent(result) {
+  const enr = result?.enrichments || {};
+  const hasRows = ['ips', 'domains', 'hashes'].some(cat =>
+    Object.values(enr[cat] || {}).some(p => p?.osint && Object.keys(p.osint).length));
+  const gp = result?.geopolitical;
+  const hasGeo = !!(gp && !gp.error && (gp.countries?.length || gp.attribution));
+  const hasHoneypot = Object.values(enr.ips || {})
+    .some(p => p?.deception && (p.deception.flagged_count > 0 || p.deception.greynoise_riot?.is_known_good));
+  const hasNet = !!(result?.response_summary?.ja_fingerprints || []).length;
+  const hasUrlscan = !!(result?.iocs?.urls || []).length;
+  return hasRows || hasGeo || hasHoneypot || hasNet || hasUrlscan;
+}
+
+function InfrastructureIntel({ result, bare }) {
   const enr = result?.enrichments || {};
   const rows = [];
   for (const cat of ['ips', 'domains', 'hashes']) {
@@ -788,9 +804,8 @@ function InfrastructureIntel({ result }) {
   const divSx = (show) => ({ mt: show ? 2 : 0, pt: show ? 2 : 0,
     borderTop: show ? `1px solid ${muiAlpha('#ffffff', 0.08)}` : 'none' });
 
-  return (
-    <Card title="OSINT" accent="#0fbcff"
-      badge={`${rows.length} IOC${rows.length === 1 ? '' : 's'}`} defaultOpen={false}>
+  const body = (
+    <>
       <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
         Free OSINT — BGP ranking, DNS records, VT graph relationships,
         MalwareBazaar pivot, Google Safe Browsing. Surfaces infrastructure
@@ -939,6 +954,13 @@ function InfrastructureIntel({ result }) {
           <URLScanLive result={result} bare/>
         </Box>
       )}
+    </>
+  );
+  if (bare) return body;
+  return (
+    <Card title="OSINT" accent="#0fbcff"
+      badge={`${rows.length} IOC${rows.length === 1 ? '' : 's'}`} defaultOpen={false}>
+      {body}
     </Card>
   );
 }
@@ -1326,11 +1348,14 @@ function Triage({ result }) {
     (Object.keys(lt.extracted_fields || {}).length || (lt.anomalies || []).length));
   const sup = result?.suppressed_iocs || {};
   const hasSup = Object.values(sup).reduce((n, a) => n + (a?.length || 0), 0) > 0;
-  if (!hasLogs && !hasSup) return null;
+  const hasOsint = hasOsintContent(result);
+  if (!hasLogs && !hasSup && !hasOsint) return null;
   const Label = ({ children }) => (
     <Typography sx={{ fontSize: 11, fontWeight: 600, color: 'text.tertiary',
       textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.25 }}>{children}</Typography>
   );
+  const divSx = (show) => ({ mt: show ? 2 : 0, pt: show ? 2 : 0,
+    borderTop: show ? `1px solid ${muiAlpha('#ffffff', 0.08)}` : 'none' });
   return (
     <Card title="Triage" accent="#16AD34" defaultOpen={false}>
       {hasLogs && (
@@ -1340,10 +1365,15 @@ function Triage({ result }) {
         </>
       )}
       {hasSup && (
-        <Box sx={{ mt: hasLogs ? 2 : 0, pt: hasLogs ? 2 : 0,
-          borderTop: hasLogs ? `1px solid ${muiAlpha('#ffffff', 0.08)}` : 'none' }}>
+        <Box sx={divSx(hasLogs)}>
           <Label>Filtered as benign · MISP warninglists</Label>
           <SuppressedIOCs result={result} bare/>
+        </Box>
+      )}
+      {hasOsint && (
+        <Box sx={divSx(hasLogs || hasSup)}>
+          <Label>OSINT · infrastructure intel</Label>
+          <InfrastructureIntel result={result} bare/>
         </Box>
       )}
     </Card>
@@ -2959,14 +2989,9 @@ function Detection({ result }) {
   if (!tabs.length) {
     return (
       <Card title="Detection Rules" accent="#0fbcff">
-        <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
-          Generate a validated Sigma rule, a Microsoft Sentinel KQL analytics rule, and a
-          Splunk SPL query for this alert's IOCs and MITRE techniques — on demand, so
-          investigations stay fast.
-        </Typography>
         <MuiButton variant="contained" onClick={generate} disabled={loading}
           sx={{ textTransform: 'none' }}>
-          {loading ? 'Generating…' : 'Generate detection content'}
+          {loading ? 'Generating…' : 'Generate Detection Rules'}
         </MuiButton>
         {err && (
           <Typography sx={{ fontSize: 12, color: 'error.main', mt: 1 }}>{err}</Typography>
@@ -4197,15 +4222,12 @@ export default function App() {
         scanState={scanState}
         onHome={() => { clearScan(); setEmailState(null); setResult(null); setHomeNonce(n => n + 1); }}
         onOpenEmail={() => {
-          // Pre-populate from whatever's on screen: the file-scanner result
-          // wins if visible, otherwise the analysis result, otherwise blank.
-          const scanSummary = scanState?.result?.ai_analyst?.deep?.executive_summary
-            || scanState?.result?.ai_summary;
-          const ctx = scanSummary
-            ? { log: scanSummary }
-            : (result?.raw_input ? { log: result.raw_input } : { log: '' });
+          // The three workspaces (Analyze / File Analyzer / Email) are kept
+          // fully separate — opening Email clears any analysis or scan result
+          // and starts with a blank composer. Nothing carries over.
           clearScan();
-          setEmailState(ctx);
+          setResult(null);
+          setEmailState({ log: '', parsed: null });
         }}
         emailActive={!!emailState}
       />
@@ -4234,21 +4256,6 @@ export default function App() {
             onScanFile={scanFile}
             onScanHash={scanHash}
             onScanUrl={scanUrl}
-            onComposeEmail={(scanResult) => {
-              // Build a synthetic "alert log" that captures the scanner's key
-              // findings so the composer parser has something to extract from.
-              const lines = [];
-              if (scanResult?.filename)        lines.push(`AssetName: ${scanResult.filename}`);
-              if (scanResult?.verdict)        lines.push(`Verdict: ${scanResult.verdict}`);
-              if (scanResult?.hashes?.sha256) lines.push(`Hash: ${scanResult.hashes.sha256}`);
-              const cls = scanResult?.ai_analyst?.deep?.malware_classification?.category
-                       || scanResult?.ai_analyst?.triage?.classification;
-              if (cls)                        lines.push(`ThreatName: ${cls}`);
-              const summary = scanResult?.ai_analyst?.deep?.execution_narrative
-                          || scanResult?.ai_analyst?.triage?.summary;
-              if (summary)                    lines.push(`Message: ${summary}`);
-              setEmailState({ log: lines.join('\n'), parsed: null });
-            }}
           />
         </Box>
       )}
@@ -4311,9 +4318,8 @@ export default function App() {
             <GTI result={result}/>                {/* Investigation results + threat score + confidence (open) */}
             <AnalystSummary rs={rs || {}}/>        {/* Summary (open) */}
             <ChatWithRecon result={result}/>       {/* Ask RECON — probing questions */}
-            <Triage result={result}/>              {/* Logs + MISP-filtered IOCs, fused */}
+            <Triage result={result}/>              {/* Logs + MISP-filtered IOCs + OSINT, fused */}
             <Behavior result={result} rs={rs || {}}/> {/* TTPs + sandbox + cross-refs */}
-            <InfrastructureIntel result={result}/> {/* OSINT — geo + IP rep + JA3/JA4 + URLScan */}
             <EmailAnalysis result={result}/>
 
             <Card title="Graphs" accent="#0fbcff" noPad>
