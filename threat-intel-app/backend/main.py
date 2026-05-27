@@ -1313,23 +1313,47 @@ async def scan_hash(req: dict):
     except Exception:
         pass
 
-    # 2. TI sources by hash
+    # 2. No prior scan — query TI sources by hash and shape the result like a
+    #    scan (hashes + threat_intel + verdict) so the frontend renders it via the
+    #    existing FileIdentity / ThreatIntelSection / VerdictBanner components
+    #    instead of a blank report.
+    htype = "sha256" if len(h) == 64 else "sha1" if len(h) == 40 else "md5"
+    vt = mb = ha = {}
     try:
         import aiohttp
         async with aiohttp.ClientSession() as session:
             from intel.file_correlation import _vt_file, _malwarebazaar, _hybrid_analysis
-            vt, mb, ha = await asyncio.gather(
+            r_vt, r_mb, r_ha = await asyncio.gather(
                 _vt_file(session, h, config.get("VIRUSTOTAL_KEY", "")),
                 _malwarebazaar(session, h),
                 _hybrid_analysis(session, h, config.get("HYBRID_ANALYSIS_KEY", "")),
                 return_exceptions=True,
             )
-            out["sources"]["virustotal"]      = vt if not isinstance(vt, Exception) else {"error": str(vt)}
-            out["sources"]["malwarebazaar"]   = mb if not isinstance(mb, Exception) else {"error": str(mb)}
-            out["sources"]["hybrid_analysis"] = ha if not isinstance(ha, Exception) else {"error": str(ha)}
+            vt = r_vt if isinstance(r_vt, dict) else {}
+            mb = r_mb if isinstance(r_mb, dict) else {}
+            ha = r_ha if isinstance(r_ha, dict) else {}
     except Exception as e:
         out["error"] = str(e)
-    return out
+
+    threat_intel = {"virustotal": vt, "malwarebazaar": mb, "hybrid_analysis": ha}
+    vt_mal = vt.get("malicious") if isinstance(vt.get("malicious"), int) else 0
+    ha_verdict = (ha.get("verdict") or "").lower()
+    if mb.get("found") or vt_mal > 5 or ha_verdict == "malicious":
+        verdict = "MALICIOUS"
+    elif vt_mal >= 1 or ha_verdict in {"suspicious", "ambiguous"}:
+        verdict = "SUSPICIOUS"
+    else:
+        verdict = "UNKNOWN"
+    return {
+        "hash":         h,
+        "hashes":       {htype: h},
+        "filename":     f"hash lookup · {h[:16]}…",
+        "verdict":      verdict,
+        "threat_intel": threat_intel,
+        "sources":      threat_intel,   # also under 'sources' for API consumers
+        "hash_lookup":  True,
+        "from_cache":   False,
+    }
 
 
 @app.post("/api/scan/url")
