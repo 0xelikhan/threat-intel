@@ -31,14 +31,17 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # Container Apps deploys fail hard if these resource providers aren't
-      # registered on the subscription (this broke a prior run). Registration is
-      # idempotent and returns immediately when already registered, so it's safe
-      # to run every deploy — it self-heals if a provider ever gets dropped.
-      - name: Ensure required resource providers are registered
+      # Container Apps needs these providers registered on the subscription; an
+      # unregistered Microsoft.App broke a prior deploy. Best-effort only: the
+      # deploy service principal is RG-scoped and can't register subscription
+      # providers, so this NEVER fails the job — it self-heals if the SP is ever
+      # granted permission, and otherwise just warns (providers were registered
+      # once manually). Register manually if needed: az provider register -n Microsoft.App
+      - name: Ensure required resource providers are registered (best-effort)
         run: |
-          az provider register -n Microsoft.App --wait
-          az provider register -n Microsoft.OperationalInsights --wait
+          az provider register -n Microsoft.App --wait \
+            || echo "::warning::Microsoft.App not auto-registered (deploy SP lacks subscription register permission) — registered manually, so this is fine."
+          az provider register -n Microsoft.OperationalInsights --wait || true
 
       # Build in the cloud (ACR Tasks) — no Docker needed on the runner. The
       # build context is the threat-intel-app folder; the Dockerfile builds the
