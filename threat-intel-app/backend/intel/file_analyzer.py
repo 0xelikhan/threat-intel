@@ -220,44 +220,39 @@ def _entropy_band(e: float) -> Tuple[str, Optional[str]]:
 
 # ─── strings ───────────────────────────────────────────────────────────────────
 _PRINTABLE = set(range(0x20, 0x7F))
+# Cache compiled extractors per min_len. Matching with a C-level regex over the
+# raw bytes is orders of magnitude faster than a Python byte-by-byte loop — the
+# difference is seconds on a 50 MB sample. Output is identical: runs of printable
+# ASCII (≥ min_len), and UTF-16LE runs (printable byte followed by a NUL).
+_STRING_RES: Dict[int, Tuple] = {}
+
+
+def _string_extractors(min_len: int):
+    res = _STRING_RES.get(min_len)
+    if res is None:
+        ascii_re = re.compile(rb"[\x20-\x7e]{%d,}" % min_len)
+        utf16_re = re.compile(rb"(?:[\x20-\x7e]\x00){%d,}" % min_len)
+        res = (ascii_re, utf16_re)
+        _STRING_RES[min_len] = res
+    return res
 
 
 def _extract_strings(b: bytes, min_len: int = 6) -> Dict:
-    """Returns {ascii, unicode_le, total} — capped lists."""
-    ascii_hits: List[str] = []
-    buf = []
-    for byte in b:
-        if byte in _PRINTABLE:
-            buf.append(chr(byte))
-        else:
-            if len(buf) >= min_len:
-                ascii_hits.append("".join(buf))
-            buf.clear()
-    if len(buf) >= min_len:
-        ascii_hits.append("".join(buf))
+    """Returns {ascii, unicode, total} — capped lists."""
+    ascii_re, utf16_re = _string_extractors(min_len)
 
-    # UTF-16LE strings (common in Windows binaries)
-    uni_hits: List[str] = []
-    buf16 = []
-    i = 0
-    while i < len(b) - 1:
-        c = b[i]
-        nxt = b[i + 1]
-        if nxt == 0 and c in _PRINTABLE:
-            buf16.append(chr(c))
-            i += 2
-        else:
-            if len(buf16) >= min_len:
-                uni_hits.append("".join(buf16))
-            buf16.clear()
-            i += 1
-    if len(buf16) >= min_len:
-        uni_hits.append("".join(buf16))
+    ascii_matches = ascii_re.findall(b)
+    utf16_matches = utf16_re.findall(b)
+
+    # Decode only the strings we actually keep (after the cap), not every match.
+    ascii_hits = [m.decode("ascii", "replace") for m in ascii_matches[:3000]]
+    # UTF-16LE match is interleaved with NUL bytes — take every other byte.
+    uni_hits = [m[::2].decode("ascii", "replace") for m in utf16_matches[:1500]]
 
     return {
-        "ascii":   ascii_hits[:3000],
-        "unicode": uni_hits[:1500],
-        "total":   len(ascii_hits) + len(uni_hits),
+        "ascii":   ascii_hits,
+        "unicode": uni_hits,
+        "total":   len(ascii_matches) + len(utf16_matches),
     }
 
 
@@ -316,32 +311,87 @@ def _extract_iocs_from_text(text: str) -> Dict[str, List[str]]:
     }
 
 
-def _decode_base64_candidates(text: str, max_decodes: int = 25) -> List[str]:
-    """Try base64-decoding each long-enough b64-shaped run and return printable
-    results. Handles UTF-16LE (PowerShell -EncodedCommand) and UTF-8 bodies."""
-    out = []
+def _printable_ascii_ratio(s: str) -> float:
+    """Fraction of characters that are printable ASCII (0x20–0x7E) or common
+    whitespace (tab / newline / carriage-return). CJK and other non-ASCII code
+    points count as non-printable — that's what keeps mojibake out."""
+    if not s:
+        return 0.0
+    ok = sum(1 for c in s if 0x20 <= ord(c) <= 0x7E or c in "\t\n\r")
+    return ok / len(s)
+
+
+def _hex_dump(data: bytes, length: int = 64) -> str:
+    """`xxd`-style dump of the first `length` bytes: offset · hex · ASCII gutter."""
+    chunk = data[:length]
+    lines = []
+    for off in range(0, len(chunk), 16):
+        row = chunk[off:off + 16]
+        hex_cells = " ".join(f"{b:02x}" for b in row).ljust(47)
+        ascii_cell = "".join(chr(b) if 0x20 <= b <= 0x7E else "." for b in row)
+        lines.append(f"{off:08x}  {hex_cells}  {ascii_cell}")
+    return "\n".join(lines)
+
+
+def _render_decoded_bytes(raw: bytes) -> Optional[Tuple[str, Optional[str]]]:
+    """Decide how to present a chunk of decoded bytes.
+
+    Returns ``(display, scan_text)`` where:
+      • ``display``   — what the UI shows for this payload.
+      • ``scan_text`` — text to feed back into IOC extraction, or ``None``.
+
+    If the bytes decode to mostly-printable-ASCII text (>90%) we show the text
+    and scan it for IOCs. Otherwise the content is binary: we show a "binary
+    content detected" banner plus a hex dump of the first 64 bytes (instead of
+    rendering raw bytes as garbled CJK/mojibake), and return ``None`` for
+    scan_text so the hex dump is never mistaken for real strings.
+
+    Returns ``None`` entirely when there's nothing worth surfacing."""
+    if len(raw) < 4:
+        return None
+    # PowerShell -EncodedCommand is UTF-16LE; plain payloads are UTF-8/ASCII.
+    # Decode strictly (no errors="ignore") so binary can't be silently coerced
+    # into a short, falsely-"printable" string by dropping the bytes that fail.
+    for enc in ("utf-16le", "utf-8"):
+        try:
+            text = raw.decode(enc).strip()
+        except (UnicodeDecodeError, ValueError):
+            continue
+        if len(text) >= 4 and _printable_ascii_ratio(text) > 0.90:
+            return text[:800], text[:800]
+    # Non-printable → binary. Show a hex dump rather than garbled text.
+    shown = min(len(raw), 64)
+    banner = f"[binary content detected — {len(raw)} bytes, showing first {shown}]"
+    return f"{banner}\n{_hex_dump(raw, 64)}", None
+
+
+def _decode_base64_candidates(text: str, max_decodes: int = 25) -> List[Tuple[str, Optional[str]]]:
+    """base64-decode each long-enough b64-shaped run. Each element is
+    ``(display, scan_text)`` from :func:`_render_decoded_bytes` — printable
+    payloads render as text, binary payloads render as a hex dump."""
+    out: List[Tuple[str, Optional[str]]] = []
     for m in _RE_B64.findall(text)[:max_decodes]:
         pad = "=" * (-len(m) % 4)
-        for enc in ("utf-16le", "utf-8"):
-            try:
-                decoded = base64.b64decode(m + pad).decode(enc, errors="ignore").strip()
-                if len(decoded) > 8 and sum(1 for c in decoded if c.isprintable()) / max(len(decoded), 1) > 0.7:
-                    out.append(decoded[:800])
-                    break
-            except Exception:
-                continue
+        try:
+            raw = base64.b64decode(m + pad)
+        except (binascii.Error, ValueError):
+            continue
+        rendered = _render_decoded_bytes(raw)
+        if rendered:
+            out.append(rendered)
     return out
 
 
-def _decode_hex_candidates(text: str, max_decodes: int = 10) -> List[str]:
-    out = []
+def _decode_hex_candidates(text: str, max_decodes: int = 10) -> List[Tuple[str, Optional[str]]]:
+    out: List[Tuple[str, Optional[str]]] = []
     for m in _RE_HEX.findall(text)[:max_decodes]:
         try:
-            decoded = binascii.unhexlify(m).decode("utf-8", errors="ignore").strip()
-            if len(decoded) > 8 and sum(1 for c in decoded if c.isprintable()) / max(len(decoded), 1) > 0.7:
-                out.append(decoded[:800])
-        except Exception:
+            raw = binascii.unhexlify(m)
+        except (binascii.Error, ValueError):
             continue
+        rendered = _render_decoded_bytes(raw)
+        if rendered:
+            out.append(rendered)
     return out
 
 
@@ -350,15 +400,16 @@ def _all_iocs(strings_dict: Dict) -> Dict:
     joined = "\n".join(strings_dict.get("ascii", []) + strings_dict.get("unicode", []))
     iocs = _extract_iocs_from_text(joined)
 
-    decoded_b64 = _decode_base64_candidates(joined)
-    decoded_hex = _decode_hex_candidates(joined)
-    if decoded_b64 or decoded_hex:
-        secondary_text = "\n".join(decoded_b64 + decoded_hex)
-        secondary = _extract_iocs_from_text(secondary_text)
-        for k in iocs:
-            merged = set(iocs[k]) | set(secondary.get(k, []))
-            iocs[k] = sorted(merged)
-        iocs["decoded_payloads"] = (decoded_b64 + decoded_hex)[:10]
+    decoded = _decode_base64_candidates(joined) + _decode_hex_candidates(joined)
+    if decoded:
+        # Only re-scan the genuinely-decoded *text* for IOCs — never the binary
+        # hex-dump banners (their hex/ASCII gutter would create phantom IOCs).
+        scan_text = "\n".join(t for _, t in decoded if t)
+        if scan_text:
+            secondary = _extract_iocs_from_text(scan_text)
+            for k in iocs:
+                iocs[k] = sorted(set(iocs[k]) | set(secondary.get(k, [])))
+        iocs["decoded_payloads"] = [display for display, _ in decoded][:10]
     return iocs
 
 

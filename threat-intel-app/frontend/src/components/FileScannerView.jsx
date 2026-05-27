@@ -603,7 +603,11 @@ function StringsSection({ result }) {
                   <Typography sx={{ fontSize: 9, color: 'text.disabled',
                     textTransform: 'uppercase', minWidth: 36 }}>{item.t}</Typography>
                   <Typography sx={{ ...monoSx, fontSize: 11, color: 'text.primary',
-                    wordBreak: 'break-all' }}>{item.v}</Typography>
+                    // Decoded payloads can be a multi-line hex dump for binary
+                    // content — preserve newlines so the dump stays readable.
+                    ...(item.t === 'decoded'
+                      ? { whiteSpace: 'pre-wrap', overflowX: 'auto' }
+                      : { wordBreak: 'break-all' }) }}>{item.v}</Typography>
                   {item.verdict ? (
                     <MuiChip label={item.verdict} size="small" sx={{
                       height: 16, fontSize: 9,
