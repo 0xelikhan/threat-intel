@@ -1067,7 +1067,7 @@ def _summarize_ioc(per_source: dict) -> dict:
     return {"overall": overall, "counts": counts, "sources": sources}
 
 
-async def run_enrichment(state: dict) -> dict:
+async def run_enrichment(state: dict, on_partial=None) -> dict:
     from config import config
 
     keys = {
@@ -1093,20 +1093,40 @@ async def run_enrichment(state: dict) -> dict:
     iteration = state.get("iteration_count", 0)
     start = datetime.now(timezone.utc)
 
-    async with aiohttp.ClientSession() as session:
-        ip_res, dom_res, hash_res, url_res = await asyncio.gather(
-            asyncio.gather(*[enrich_ip(session, ip, keys)     for ip in iocs.get("ips", [])[:10]]),
-            asyncio.gather(*[enrich_domain(session, d, keys)  for d  in iocs.get("domains", [])[:10]]),
-            asyncio.gather(*[enrich_hash(session, h, keys)    for h  in iocs.get("hashes", [])[:10]]),
-            asyncio.gather(*[enrich_url(session, u, keys)     for u  in iocs.get("urls", [])[:5]]),
-        )
-
-    enrichments = {
-        "ips":     {ip: r for ip, r in zip(iocs.get("ips", []),     ip_res)},
-        "domains": {d:  r for d,  r in zip(iocs.get("domains", []), dom_res)},
-        "hashes":  {h:  r for h,  r in zip(iocs.get("hashes", []),  hash_res)},
-        "urls":    {u:  r for u,  r in zip(iocs.get("urls", []),    url_res)},
+    # Each IOC type is enriched concurrently. We track them as separate tasks so
+    # that — as each type finishes — we can stream a cumulative snapshot to the UI
+    # (via on_partial) instead of waiting for the slowest type to land everything
+    # at once. The final `enrichments` dict is identical either way.
+    enrichments = {"ips": {}, "domains": {}, "hashes": {}, "urls": {}}
+    type_iocs = {
+        "ips":     iocs.get("ips", [])[:10],
+        "domains": iocs.get("domains", [])[:10],
+        "hashes":  iocs.get("hashes", [])[:10],
+        "urls":    iocs.get("urls", [])[:5],
     }
+    _enrichers = {"ips": enrich_ip, "domains": enrich_domain,
+                  "hashes": enrich_hash, "urls": enrich_url}
+
+    async with aiohttp.ClientSession() as session:
+        tasks = {
+            cat: asyncio.ensure_future(
+                asyncio.gather(*[_enrichers[cat](session, v, keys) for v in vals]))
+            for cat, vals in type_iocs.items() if vals
+        }
+        task_to_cat = {t: cat for cat, t in tasks.items()}
+        pending = set(tasks.values())
+        while pending:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for t in done:
+                cat = task_to_cat[t]
+                enrichments[cat] = {v: r for v, r in zip(type_iocs[cat], t.result())}
+                if on_partial:
+                    # Cumulative snapshot — the frontend merges this into the result,
+                    # so each completed type fills its cards as soon as it's ready.
+                    try:
+                        await on_partial({"enrichments": {k: dict(v) for k, v in enrichments.items()}})
+                    except Exception:
+                        pass
 
     # ── Per-IOC verdict aggregation (spec §3 top-level summary) ────────────────
     verdicts = {"ips": {}, "domains": {}, "hashes": {}, "urls": {}}

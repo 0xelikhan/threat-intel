@@ -467,11 +467,21 @@ activity, FP probe, TP probe, context, lateral-movement check) to cover the full
 investigative surface."""
 
 
-async def run_investigation(state: dict) -> dict:
+async def run_investigation(state: dict, on_event=None) -> dict:
     from config import config
     from openai import AsyncAzureOpenAI, AsyncOpenAI
     import time
     _t_start = time.perf_counter()
+
+    async def _emit(entry: dict):
+        """Push a live trace entry to the streaming layer (best-effort).
+        Lets the UI show each tool call the AI makes as it happens, instead of
+        all at once when the (multi-roundtrip) investigation finally returns."""
+        if on_event:
+            try:
+                await on_event(entry)
+            except Exception:
+                pass
 
     enrichments = state.get("enrichments", {})
     trace = state.get("agent_trace", [])
@@ -701,7 +711,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                                 "summary":   summary,
                             })
                             # Append a trace entry so the UI shows the AI's tool calls live
-                            trace.append({
+                            tool_trace = {
                                 "agent":     "investigation",
                                 "type":      "tool_call",
                                 "tool":      tc.function.name,
@@ -709,7 +719,9 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                                 "summary":   summary,
                                 "iteration": iteration,
                                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                            })
+                            }
+                            trace.append(tool_trace)
+                            await _emit(tool_trace)
                             # Feed the tool result back into the conversation (cap size)
                             messages.append({
                                 "role":          "tool",
@@ -734,6 +746,18 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                         "explaining how their answers changed your conclusions:\n"
                         f"{qa}\n"
                     )
+
+                # Tool loop is done — the final structured-JSON synthesis is the
+                # single longest roundtrip. Emit a live ping so the pipeline shows
+                # forward progress instead of stalling on the spinner.
+                await _emit({
+                    "agent":     "investigation",
+                    "type":      "tool_call",
+                    "tool":      "synthesize",
+                    "args":      {},
+                    "summary":   "Correlating all signals into the final assessment…",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                })
 
                 messages.append({
                     "role": "user",

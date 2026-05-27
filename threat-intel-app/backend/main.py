@@ -278,6 +278,40 @@ def _strip(state: dict, run_id: str, label: str = "") -> dict:
     return out
 
 
+def _sse_event(kind: str, payload: dict, run_id: str, label: str = "") -> str:
+    """Format one streamed agent event as an SSE frame. `kind` is either
+    'trace' (→ agent_update, a single pipeline trace entry) or 'partial'
+    (→ partial_result, a result fragment the UI merges in)."""
+    if kind == "trace":
+        return f"data: {json.dumps({'event': 'agent_update', 'runId': run_id, 'trace': payload})}\n\n"
+    result = {**payload, "runId": run_id}
+    if label:
+        result["label"] = label
+    return f"data: {json.dumps({'event': 'partial_result', 'runId': run_id, 'result': result})}\n\n"
+
+
+async def _drain_events(task: "asyncio.Task", q: "asyncio.Queue", run_id: str, label: str = ""):
+    """Yield SSE frames for events a running agent `task` pushes onto `q` as
+    (kind, payload) tuples, until the task finishes — then flush whatever's left
+    queued. The agent runs concurrently with this drain, so its tool calls /
+    partial enrichments reach the browser the moment they happen instead of all
+    at once when the stage returns. The caller awaits the task afterwards to get
+    its return value (and surface any exception it raised)."""
+    while True:
+        getter = asyncio.ensure_future(q.get())
+        done, _pending = await asyncio.wait({getter, task}, return_when=asyncio.FIRST_COMPLETED)
+        if getter in done:
+            kind, payload = getter.result()
+            yield _sse_event(kind, payload, run_id, label)
+            continue
+        # Agent finished — stop waiting for more events and flush the backlog.
+        getter.cancel()
+        while not q.empty():
+            kind, payload = q.get_nowait()
+            yield _sse_event(kind, payload, run_id, label)
+        return
+
+
 async def _stream(raw_input: str, input_type: str, label: str = ""):
     """Walk the pipeline one agent at a time, emitting partial_result events after
     each stage so the UI populates progressively — extracted IOCs land immediately,
@@ -340,7 +374,15 @@ async def _stream(raw_input: str, input_type: str, label: str = ""):
         iocs = state.get("iocs", {}) or {}
         has_enrichable = any((iocs.get(k) or []) for k in ("ips", "domains", "hashes", "urls"))
         if has_enrichable:
-            state = await run_enrichment(state)
+            # Stream each IOC type's enrichment as it lands so cards fill
+            # progressively rather than all at once when the slowest type returns.
+            enr_q: asyncio.Queue = asyncio.Queue()
+            async def _on_enrich_partial(snap, _q=enr_q):
+                await _q.put(("partial", snap))
+            enr_task = asyncio.create_task(run_enrichment(state, on_partial=_on_enrich_partial))
+            async for frame in _drain_events(enr_task, enr_q, run_id, label):
+                yield frame
+            state = await enr_task
             # GTI scores depend on enrichment data
             state["gti_scores"] = compute_gti_scores(state.get("enrichments", {}))
             trace = state.get("agent_trace", [])
@@ -349,15 +391,21 @@ async def _stream(raw_input: str, input_type: str, label: str = ""):
             yield f"data: {json.dumps({'event': 'partial_result', 'runId': run_id, 'result': _strip(state, run_id, label)})}\n\n"
 
         # ── Stage 3: INVESTIGATION (AI correlation + tool-calling loop) ─────
-        # Snapshot trace length so we can emit each NEW entry the agent adds —
-        # the tool-calling investigation appends one entry per tool call so the
-        # UI shows the AI's reasoning live.
-        trace_before = len(state.get("agent_trace", []))
-        state = await run_investigation(state)
+        # Stream each tool call the AI makes the moment it happens (via on_event)
+        # so the analyst watches the investigation reason live, instead of seeing
+        # the whole multi-roundtrip stage land at once when it finally returns.
+        inv_q: asyncio.Queue = asyncio.Queue()
+        async def _on_inv_event(entry, _q=inv_q):
+            await _q.put(("trace", entry))
+        inv_task = asyncio.create_task(run_investigation(state, on_event=_on_inv_event))
+        async for frame in _drain_events(inv_task, inv_q, run_id, label):
+            yield frame
+        state = await inv_task
         trace = state.get("agent_trace", [])
-        for tr in trace[trace_before:]:
-            yield f"data: {json.dumps({'event': 'agent_update', 'runId': run_id, 'trace': tr})}\n\n"
-            await asyncio.sleep(0.02)
+        # The live stream above already sent the intermediate tool-call entries;
+        # emit just the final 'complete' investigation summary entry now.
+        if trace:
+            yield f"data: {json.dumps({'event': 'agent_update', 'runId': run_id, 'trace': trace[-1]})}\n\n"
         # Surface an in-flight response_summary now so the AI Assessment card lands
         # before the response stage runs — give the analyst the verdict ASAP.
         inv = state.get("investigation_result") or {}
@@ -515,7 +563,9 @@ async def _ai_gen(prompt: str) -> str:
     from openai import AsyncAzureOpenAI, AsyncOpenAI
     key = config.get("OPENAI_API_KEY")
     base_url = config.get("OPENAI_BASE_URL", "")
-    model = config.get("AI_MODEL", "gpt-4o-mini")
+    # Detection-content generation (Sigma/KQL/YARA) is a light, latency-sensitive
+    # task → use the fast model tier.
+    model = config.get_model(fast=True)
     if not key:
         return "# OpenAI API key not configured. Add it in Settings."
     try:
@@ -847,9 +897,10 @@ async def _chat_stream(run_id: str, user_msg: str):
     try:
         # Tool-calling loop — non-streamed for tool decisions, streamed for the final answer
         for iteration in range(4):
-            # First, a non-streaming call to decide if tools are needed
+            # First, a non-streaming call to decide if tools are needed.
+            # Chat is interactive → fast model tier for snappy replies.
             resp = await client.chat.completions.create(
-                model=config.get("AI_MODEL", "gpt-4o-mini"),
+                model=config.get_model(fast=True),
                 messages=messages,
                 tools=TOOL_SCHEMAS,
                 tool_choice="auto",
@@ -1120,7 +1171,10 @@ async def scan_file_v2(file: UploadFile = File(...)):
         pass
 
     from intel.file_analyzer import analyze_file
-    analysis = analyze_file(data, file.filename or "uploaded")
+    # Static analysis is CPU-bound (hashing, entropy, regex string extraction,
+    # YARA). Run it in a worker thread so a large upload doesn't block the event
+    # loop — keeps concurrent requests and SSE streams responsive during a scan.
+    analysis = await asyncio.to_thread(analyze_file, data, file.filename or "uploaded")
 
     # Stash the bytes on the result temporarily so yara_ai_gen can verify the
     # generated rule against the actual sample. Stripped before persistence.
@@ -1162,38 +1216,62 @@ async def scan_file_v2(file: UploadFile = File(...)):
 
 
 async def _finish_ai_in_background(sha256: str, file_bytes: bytes):
-    """Runs ai_yara + ai_summary + ai_analyst in parallel, then merges into
-    the persisted scan. Frontend polls GET /api/scan/{sha256} to pick up
-    the updated fields."""
+    """Runs the four AI workstreams concurrently and persists each the moment it
+    finishes — so the frontend poller (GET /api/scan/by-hash) surfaces cards
+    progressively: the fast triage verdict appears first, then the summary/YARA,
+    then the deep analyst report (itself ~2x faster now that it's split into two
+    parallel field-groups). Each stream fails open independently."""
     from intel.file_correlation import load_scan, append_scan_history
     from intel.yara_ai_gen import generate_yara_for_file
     from intel.file_ai_summary import summarize_file
-    from intel.file_ai_analyst import run_ai_pipeline
+    from intel.file_ai_analyst import triage_classify, analyze_deep, gather_comparative_context
     from intel.scanner_feedback import institutional_knowledge_prompt
 
     scan = load_scan(sha256)
     if not scan:
         return
-    # yara_ai_gen needs the bytes for match verification — re-attach briefly
+    # yara_ai_gen needs the bytes for match verification — re-attach briefly.
+    # Kept on the in-memory dict only; stripped from every persisted snapshot.
     scan["_file_bytes"] = file_bytes
+    scan.setdefault("ai_analyst", {})
     extra = institutional_knowledge_prompt(scan)
+    comparative = gather_comparative_context(scan)
 
-    ai_yara, ai_summary, ai_analyst = await asyncio.gather(
-        generate_yara_for_file(scan, _ai_gen),
-        summarize_file(scan, config),
-        run_ai_pipeline(scan, config, extra_context=extra),
-        return_exceptions=True,
-    )
+    def _persist():
+        append_scan_history({k: v for k, v in scan.items() if k != "_file_bytes"})
 
-    scan.pop("_file_bytes", None)
-    scan["ai_yara"] = ai_yara if not isinstance(ai_yara, Exception) else {"error": str(ai_yara)[:200]}
-    if ai_summary and not isinstance(ai_summary, Exception):
-        scan["ai_summary"] = ai_summary
-    scan["ai_analyst"] = ai_analyst if not isinstance(ai_analyst, Exception) else {"error": str(ai_analyst)[:200]}
-    if extra and isinstance(scan["ai_analyst"], dict):
-        scan["ai_analyst"]["institutional_knowledge_applied"] = True
+    def _val(r):
+        return {"error": str(r)[:200]} if isinstance(r, Exception) else r
+
+    tasks = {
+        asyncio.ensure_future(generate_yara_for_file(scan, _ai_gen)):  "ai_yara",
+        asyncio.ensure_future(summarize_file(scan, config)):           "ai_summary",
+        asyncio.ensure_future(triage_classify(scan, config)):          "triage",
+        asyncio.ensure_future(analyze_deep(scan, config,
+            comparative_context=comparative, extra_context=extra)):    "deep",
+    }
+    pending = set(tasks)
+    while pending:
+        done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+        for t in done:
+            kind = tasks[t]
+            val = _val(t.exception() or t.result())
+            if kind == "ai_yara":
+                scan["ai_yara"] = val
+            elif kind == "ai_summary":
+                if val and not isinstance(val, dict):  # summary is a plain string
+                    scan["ai_summary"] = val
+            elif kind == "triage":
+                scan["ai_analyst"]["triage"] = val
+            elif kind == "deep":
+                scan["ai_analyst"]["deep"] = val
+                if extra and isinstance(val, dict) and "error" not in val:
+                    scan["ai_analyst"]["institutional_knowledge_applied"] = True
+            _persist()   # progressive — each poll picks up whatever has landed
+
     scan["ai_pending"] = False
-    append_scan_history(scan)
+    scan.pop("_file_bytes", None)
+    _persist()
 
 
 @app.get("/api/scan/by-hash/{sha256}")
