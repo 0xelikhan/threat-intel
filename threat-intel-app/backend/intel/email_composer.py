@@ -1453,7 +1453,8 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         return {"error": "openai package not installed"}
 
     base_url = config.get("OPENAI_BASE_URL", "")
-    model    = config.get("AI_MODEL", "gpt-4o-mini")
+    # Short customer-facing email — light, latency-sensitive → fast model tier.
+    model    = config.get_model(fast=True)
     parsed   = parsed or {}
     options  = options or {}
 

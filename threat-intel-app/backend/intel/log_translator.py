@@ -95,7 +95,10 @@ async def translate_log(raw: str, config) -> Optional[Dict]:
             temperature=0.0,
             max_tokens=1200,
         )
-        out = json.loads(resp.choices[0].message.content or "{}")
+        # Lenient parse: a truncated translation keeps its completed fields
+        # rather than discarding the whole step (which gates IOC extraction).
+        from agents.investigation import _loads_lenient
+        out = _loads_lenient(resp.choices[0].message.content)
         # Defensive shape — ensure callers can always access expected keys
         return {
             "detected_format":    out.get("detected_format", "unknown"),

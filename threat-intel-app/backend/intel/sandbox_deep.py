@@ -216,7 +216,7 @@ def _normalize_hybrid(sha256: str, d: Dict, job_id: str) -> Dict:
     }
 
     # ── MITRE & verdict ──────────────────────────────────────────────────────
-    mitre = [t.get("technique") + " - " + t.get("name", "") for t in (d.get("mitre_attcks") or [])][:20]
+    mitre = [f"{t.get('technique') or ''} - {t.get('name') or ''}" for t in (d.get("mitre_attcks") or [])][:20]
     verdict = (d.get("verdict") or "").lower()
     verdict_norm = "MALICIOUS" if verdict in {"malicious", "suspicious"} else "UNKNOWN"
 

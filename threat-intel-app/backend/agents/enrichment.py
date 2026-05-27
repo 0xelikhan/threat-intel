@@ -139,7 +139,7 @@ def _p_ipinfo(r):
         return _err("ipinfo", r)
     return {"org": r.get("org"), "country": r.get("country"), "city": r.get("city"),
             "region": r.get("region"), "loc": r.get("loc"), "hostname": r.get("hostname"),
-            "asn": (r.get("org") or "").split(" ")[0] if r.get("org", "").startswith("AS") else None}
+            "asn": (r.get("org") or "").split(" ")[0] if (r.get("org") or "").startswith("AS") else None}
 
 
 def _p_gn(r):
@@ -1096,6 +1096,11 @@ def _summarize_ioc(per_source: dict) -> dict:
 
 async def run_enrichment(state: dict, on_partial=None) -> dict:
     from config import config
+
+    # No cross-investigation enrichment reuse: start every analysis with a clean
+    # cache so each run fetches fresh intel and never serves data saved from a
+    # previous investigation. (Within a single run, repeated IOCs still dedupe.)
+    _cache.clear()
 
     keys = {
         "VIRUSTOTAL_KEY":      config.get("VIRUSTOTAL_KEY"),
