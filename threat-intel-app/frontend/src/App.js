@@ -1564,7 +1564,7 @@ function GTI({ result }) {
 }
 
 /* ─── assessment ────────────────────────────────────────────────────────────── */
-function Assessment({ rs, result }) {
+function Assessment({ rs }) {   // currently unused — kept for reuse
   const lc = levelStyle[rs.threat_level] || levelStyle.INFORMATIONAL;
   return (
     <Card title="AI assessment" accent="#0fbcff" badge={rs.threat_level?.toLowerCase()}>
@@ -1713,16 +1713,6 @@ function Assessment({ rs, result }) {
         </Block>
       )}
 
-      {/* Ask RECON — fused into the assessment so follow-up Q&A lives with the verdict */}
-      {result?.runId && (
-        <Box sx={{ mt: 2.25, pt: 2, borderTop: `1px solid ${muiAlpha('#ffffff', 0.12)}` }}>
-          <Typography sx={{ fontSize: 11, fontWeight: 600, color: 'primary.main',
-            textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.25 }}>
-            Ask RECON
-          </Typography>
-          <ChatWithRecon result={result} bare/>
-        </Box>
-      )}
     </Card>
   );
 }
@@ -1744,7 +1734,7 @@ function AnalystSummary({ rs }) {
                   :                                '#E1B823';
 
   return (
-    <Card title="Analyst hand-off" accent="#0fbcff" badge={a.disposition?.toLowerCase()} defaultOpen>
+    <Card title="Summary" accent="#0fbcff" badge={a.disposition?.toLowerCase()} defaultOpen>
       {/* Disposition banner */}
       {a.disposition && (
         <MuiPaper elevation={0} sx={{
@@ -2188,7 +2178,7 @@ function ChatWithRecon({ result, bare }) {
   );
   if (bare) return body;
   return (
-    <Card title="Ask RECON" accent={accent} defaultOpen
+    <Card title="Ask RECON" accent={accent}
       badge={questions.length > 0
         ? `${questions.length} ${usingFallback ? 'starter questions' : 'suggested checks'}`
         : null}>
@@ -4097,10 +4087,10 @@ export default function App() {
                 they need (verdict + banners above stay visible). Keyed by run id
                 so each new investigation resets to collapsed. */}
             <CardDefaultOpenContext.Provider value={false} key={result.runId || 'detail'}>
-            {/* AI assessment (now with Ask RECON fused in) sits first so the
-                verdict + follow-up Q&A are the top collapsible card. Threat score
-                now carries the per-indicator confidence breakdown. */}
-            <Assessment rs={rs || {}} result={result}/>
+            {/* Ask RECON pinned first as its own card. The AI assessment card was
+                removed as redundant with the Analyst hand-off; Threat score now
+                carries the per-indicator confidence breakdown. */}
+            <ChatWithRecon result={result}/>
             <LogTranslation result={result}/>
             <SuppressedIOCs result={result}/>
             <BehavioralIndicators result={result}/>
@@ -4127,7 +4117,6 @@ export default function App() {
               <Box sx={{ p: '14px 16px' }}><PivotGraph result={result}/></Box>
             </Card>
 
-            <Enrichments enrichments={result.enrichments}/>
             <Report result={result}/>
             </CardDefaultOpenContext.Provider>
           </>
