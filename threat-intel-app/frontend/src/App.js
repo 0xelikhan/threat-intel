@@ -452,7 +452,7 @@ function ProcessTreeNode({ node, depth = 0 }) {
   );
 }
 
-function SandboxBehavioral({ result }) {
+function SandboxBehavioral({ result, bare }) {
   const hashes = result?.enrichments?.hashes || {};
   const rows = Object.entries(hashes)
     .map(([h, p]) => ({ hash: h, deep: p?.sandbox_deep }))
@@ -461,9 +461,8 @@ function SandboxBehavioral({ result }) {
 
   const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
 
-  return (
-    <Card title="Sandbox behavioral analysis · process tree + IOCs" accent="#EE3838"
-      badge={`${rows.length} sample${rows.length === 1 ? '' : 's'}`} defaultOpen={false}>
+  const body = (
+    <>
       {rows.map(({ hash, deep }) => (
         <Box key={hash} sx={{ mb: 2.5 }}>
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.25 }} flexWrap="wrap">
@@ -584,6 +583,13 @@ function SandboxBehavioral({ result }) {
           )}
         </Box>
       ))}
+    </>
+  );
+  if (bare) return body;
+  return (
+    <Card title="Sandbox behavioral analysis · process tree + IOCs" accent="#EE3838"
+      badge={`${rows.length} sample${rows.length === 1 ? '' : 's'}`} defaultOpen={false}>
+      {body}
     </Card>
   );
 }
@@ -593,16 +599,15 @@ function SandboxBehavioral({ result }) {
  * DShield SANS ISC, StopForumSpam, Emerging Threats blocklist, Project
  * Honeypot HTTP:BL. Each source returns flagged + summary.
  */
-function HoneypotActivity({ result }) {
+function HoneypotActivity({ result, bare }) {
   const ips = result?.enrichments?.ips || {};
   const rows = Object.entries(ips)
     .map(([ip, payload]) => ({ ip, dec: payload?.deception }))
     .filter(r => r.dec && (r.dec.flagged_count > 0 || r.dec.greynoise_riot?.is_known_good));
   if (!rows.length) return null;
 
-  return (
-    <Card title="Honeypot activity · deception intel" accent="#EE3838"
-      badge={`${rows.length} IP${rows.length === 1 ? '' : 's'} with hits`}>
+  const body = (
+    <>
       <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
         Cross-checked against GreyNoise RIOT, Shodan InternetDB, DShield SANS ISC,
         StopForumSpam, Emerging Threats compromised IPs, and Project Honeypot HTTP:BL.
@@ -653,6 +658,13 @@ function HoneypotActivity({ result }) {
           </MuiPaper>
         );
       })}
+    </>
+  );
+  if (bare) return body;
+  return (
+    <Card title="Honeypot activity · deception intel" accent="#EE3838"
+      badge={`${rows.length} IP${rows.length === 1 ? '' : 's'} with hits`}>
+      {body}
     </Card>
   );
 }
@@ -762,9 +774,19 @@ function InfrastructureIntel({ result }) {
   }
   const gp = result?.geopolitical;
   const hasGeo = !!(gp && !gp.error && (gp.countries?.length || gp.attribution));
-  if (!rows.length && !hasGeo) return null;
+  const hasHoneypot = Object.values(result?.enrichments?.ips || {})
+    .some(p => p?.deception && (p.deception.flagged_count > 0 || p.deception.greynoise_riot?.is_known_good));
+  const hasNet = !!(result?.response_summary?.ja_fingerprints || []).length;
+  const hasUrlscan = !!(result?.iocs?.urls || []).length;
+  if (!rows.length && !hasGeo && !hasHoneypot && !hasNet && !hasUrlscan) return null;
 
   const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
+  const Label = ({ children }) => (
+    <Typography sx={{ fontSize: 11, fontWeight: 600, color: 'text.tertiary',
+      textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.25 }}>{children}</Typography>
+  );
+  const divSx = (show) => ({ mt: show ? 2 : 0, pt: show ? 2 : 0,
+    borderTop: show ? `1px solid ${muiAlpha('#ffffff', 0.08)}` : 'none' });
 
   return (
     <Card title="OSINT" accent="#0fbcff"
@@ -894,13 +916,27 @@ function InfrastructureIntel({ result }) {
         </Box>
       ))}
       {hasGeo && (
-        <Box sx={{ mt: rows.length ? 2 : 0, pt: rows.length ? 2 : 0,
-          borderTop: rows.length ? `1px solid ${muiAlpha('#ffffff', 0.08)}` : 'none' }}>
-          <Typography sx={{ fontSize: 11, fontWeight: 600, color: 'text.tertiary',
-            textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.25 }}>
-            Geopolitical context
-          </Typography>
+        <Box sx={divSx(rows.length)}>
+          <Label>Geopolitical context</Label>
           <GeopoliticalContext result={result} bare/>
+        </Box>
+      )}
+      {hasHoneypot && (
+        <Box sx={divSx(rows.length || hasGeo)}>
+          <Label>IP reputation · deception networks</Label>
+          <HoneypotActivity result={result} bare/>
+        </Box>
+      )}
+      {hasNet && (
+        <Box sx={divSx(rows.length || hasGeo || hasHoneypot)}>
+          <Label>Network detection · JA3/JA4 C2 fingerprints</Label>
+          <NetworkDetection result={result} bare/>
+        </Box>
+      )}
+      {hasUrlscan && (
+        <Box sx={divSx(rows.length || hasGeo || hasHoneypot || hasNet)}>
+          <Label>Live URL detonation · URLScan.io</Label>
+          <URLScanLive result={result} bare/>
         </Box>
       )}
     </Card>
@@ -1024,7 +1060,7 @@ function ConfidenceBreakdown({ result, bare }) {
  * indicator carries the MITRE technique it represents plus a plain-English
  * reason it is suspicious.
  */
-function BehavioralIndicators({ result }) {
+function BehavioralIndicators({ result, bare }) {
   const bi = result?.behavioral_indicators || {};
   const cats = bi.categories || {};
   const total = bi.total || 0;
@@ -1042,9 +1078,8 @@ function BehavioralIndicators({ result }) {
     c2:          'C2 communication',
   };
 
-  return (
-    <Card title="Behavioral indicators · MITRE-mapped TTPs" accent="#B286FF"
-      badge={`${total} signals · ${(bi.techniques || []).length} techniques`}>
+  const body = (
+    <>
       <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
         Pattern-matched directly from the raw input — captures attacker tradecraft
         that wouldn't show up via IOC enrichment alone. Each hit is mapped to the
@@ -1121,6 +1156,63 @@ function BehavioralIndicators({ result }) {
           ))}
         </Box>
       ))}
+    </>
+  );
+  if (bare) return body;
+  return (
+    <Card title="Behavioral indicators · MITRE-mapped TTPs" accent="#B286FF"
+      badge={`${total} signals · ${(bi.techniques || []).length} techniques`}>
+      {body}
+    </Card>
+  );
+}
+
+/* ─── Behavior — fuses MITRE TTPs + sandbox detonation + TI cross-references ───
+ * One card for "what does this actually DO": pattern-matched tradecraft,
+ * sandbox process trees, and KEV/LOLBAS/atomic-test correlations.
+ */
+function Behavior({ result, rs }) {
+  const bi = result?.behavioral_indicators || {};
+  const hasBehavior = !!((bi.total || 0) || (bi.decoded_payloads || []).length);
+
+  const cr = rs?.cross_refs || {};
+  const hasCross = !!((cr.kev || []).length || (cr.lolbas || []).length ||
+    (rs?.atomic_examples || []).length || (cr.phishing_kits || []).length ||
+    (cr.loldrivers || []).length || (cr.rmm_abuse || []).length ||
+    (cr.suspicious_paths || []).length);
+
+  const hasSandbox = Object.values(result?.enrichments?.hashes || {})
+    .some(p => p?.sandbox_deep && p.sandbox_deep.process_tree);
+
+  if (!hasBehavior && !hasCross && !hasSandbox) return null;
+
+  const Label = ({ children }) => (
+    <Typography sx={{ fontSize: 11, fontWeight: 600, color: 'text.tertiary',
+      textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.25 }}>{children}</Typography>
+  );
+  const divSx = (show) => ({ mt: show ? 2 : 0, pt: show ? 2 : 0,
+    borderTop: show ? `1px solid ${muiAlpha('#ffffff', 0.08)}` : 'none' });
+
+  return (
+    <Card title="Behavior" accent="#B286FF" defaultOpen={false}>
+      {hasBehavior && (
+        <>
+          <Label>MITRE-mapped TTPs</Label>
+          <BehavioralIndicators result={result} bare/>
+        </>
+      )}
+      {hasSandbox && (
+        <Box sx={divSx(hasBehavior)}>
+          <Label>Sandbox detonation · process tree</Label>
+          <SandboxBehavioral result={result} bare/>
+        </Box>
+      )}
+      {hasCross && (
+        <Box sx={divSx(hasBehavior || hasSandbox)}>
+          <Label>Threat-intel cross-references</Label>
+          <CrossRefs rs={rs} bare/>
+        </Box>
+      )}
     </Card>
   );
 }
@@ -2620,7 +2712,7 @@ function CTIFramework({ rs }) {
 }
 
 /* ─── intel cross-references (KEV / LOLBAS / Atomic) ──────────────────────────── */
-function CrossRefs({ rs }) {
+function CrossRefs({ rs, bare }) {
   const cr = rs?.cross_refs || {};
   const atomic = rs?.atomic_examples || [];
   const kev = cr.kev || [];
@@ -2634,9 +2726,8 @@ function CrossRefs({ rs }) {
   const borderTop = (i) => i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none';
   const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
 
-  return (
-    <Card title="Threat intel cross-references" accent="#0fbcff"
-      badge={`${kev.length} KEV · ${lolbas.length} LOLBAS · ${kits.length} kit · ${atomic.length} TTP`}>
+  const body = (
+    <>
       {kits.length > 0 && (
         <Block title={`Phishing-kit fingerprints (${kits.length})`}>
           {kits.map((k, i) => (
@@ -2812,6 +2903,13 @@ function CrossRefs({ rs }) {
           ))}
         </Block>
       )}
+    </>
+  );
+  if (bare) return body;
+  return (
+    <Card title="Threat intel cross-references" accent="#0fbcff"
+      badge={`${kev.length} KEV · ${lolbas.length} LOLBAS · ${kits.length} kit · ${atomic.length} TTP`}>
+      {body}
     </Card>
   );
 }
@@ -2915,14 +3013,13 @@ function Detection({ result }) {
 }
 
 /* ─── JA3/JA4 network detection ──────────────────────────────────────────────── */
-function NetworkDetection({ result }) {
+function NetworkDetection({ result, bare }) {
   const fps = result?.response_summary?.ja_fingerprints || [];
   const sigma = result?.response_summary?.ja_sigma_snippet;
   const kql   = result?.response_summary?.ja_kql_snippet;
   if (!fps.length) return null;
-  return (
-    <Card title="Network detection · JA3 / JA4 fingerprints" accent="#B286FF"
-      badge={`${fps.length} C2 framework${fps.length === 1 ? '' : 's'}`} defaultOpen={false}>
+  const body = (
+    <>
       <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
         TLS handshake fingerprints for known C2 frameworks relevant to this alert. Hunt these
         in your Zeek / Suricata / EDR network logs to catch the C2 channel itself, not just the IOC.
@@ -2981,12 +3078,19 @@ function NetworkDetection({ result }) {
           <MuiCodeBlock maxHeight={200}>{kql}</MuiCodeBlock>
         </Box>
       )}
+    </>
+  );
+  if (bare) return body;
+  return (
+    <Card title="Network detection · JA3 / JA4 fingerprints" accent="#B286FF"
+      badge={`${fps.length} C2 framework${fps.length === 1 ? '' : 's'}`} defaultOpen={false}>
+      {body}
     </Card>
   );
 }
 
 /* ─── URLScan live submission ────────────────────────────────────────────────── */
-function URLScanLive({ result }) {
+function URLScanLive({ result, bare }) {
   const urls = result?.iocs?.urls || [];
   const [target, setTarget] = useState(urls[0] || '');
   const [submission, setSubmission] = useState(null);
@@ -3036,9 +3140,8 @@ function URLScanLive({ result }) {
   if (!urls.length) return null;
   const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
   const busy = submission?.state === 'submitting' || submission?.state === 'polling';
-  return (
-    <Card title="Live URL scan · URLScan.io" accent="#0fbcff" defaultOpen={false}
-      badge={`${urls.length} URL${urls.length === 1 ? '' : 's'} available`}>
+  const body = (
+    <>
       <Stack direction="row" spacing={1} sx={{ mb: 1.5 }}>
         <MuiTextField
           select
@@ -3166,6 +3269,13 @@ function URLScanLive({ result }) {
           </MuiPaper>
         );
       })()}
+    </>
+  );
+  if (bare) return body;
+  return (
+    <Card title="Live URL scan · URLScan.io" accent="#0fbcff" defaultOpen={false}
+      badge={`${urls.length} URL${urls.length === 1 ? '' : 's'} available`}>
+      {body}
     </Card>
   );
 }
@@ -4202,14 +4312,9 @@ export default function App() {
             <AnalystSummary rs={rs || {}}/>        {/* Summary (open) */}
             <ChatWithRecon result={result}/>       {/* Ask RECON — probing questions */}
             <Triage result={result}/>              {/* Logs + MISP-filtered IOCs, fused */}
-            <BehavioralIndicators result={result}/>
-            <InfrastructureIntel result={result}/> {/* OSINT — includes geopolitical context */}
-            <HoneypotActivity result={result}/>
-            <SandboxBehavioral result={result}/>
+            <Behavior result={result} rs={rs || {}}/> {/* TTPs + sandbox + cross-refs */}
+            <InfrastructureIntel result={result}/> {/* OSINT — geo + IP rep + JA3/JA4 + URLScan */}
             <EmailAnalysis result={result}/>
-            <CrossRefs rs={rs || {}}/>
-            <NetworkDetection result={result}/>
-            <URLScanLive result={result}/>
 
             <Card title="Graphs" accent="#0fbcff" noPad>
               <MapTab result={result}/>
