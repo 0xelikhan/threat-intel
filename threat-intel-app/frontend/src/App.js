@@ -3599,6 +3599,22 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
     onScanFile?.(file);
   }, [onScanFile]);
 
+  // Pivot scan — fired by PivotGraph when an analyst clicks a node and asks
+  // to investigate the neighbor. We seed the Analyze textarea with the IOC,
+  // scroll the sidebar input into view, and trigger the existing Analyze
+  // button so the AgentPipeline starts fresh — same flow as a manual paste.
+  useEffect(() => {
+    const handler = (e) => {
+      const ioc = e?.detail?.ioc;
+      if (!ioc) return;
+      setLogText(ioc);
+      try { document.querySelector('[data-recon-analyze]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch {}
+      setTimeout(() => document.querySelector('[data-recon-analyze]')?.click(), 50);
+    };
+    window.addEventListener('recon:pivot-scan', handler);
+    return () => window.removeEventListener('recon:pivot-scan', handler);
+  }, []);
+
   // Cmd/Ctrl+Enter triggers analysis via the AgentPipeline's button
   // Spec §9 keyboard shortcuts
   useEffect(() => {
@@ -4331,7 +4347,12 @@ export default function App() {
             <Card title="Graphs" accent="#0fbcff" noPad>
               <MapTab result={result}/>
               <Box sx={{ p: '14px 16px', borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
-                <PivotGraph result={result}/>
+                <PivotGraph
+                  result={result}
+                  onPivot={(ioc) => window.dispatchEvent(
+                    new CustomEvent('recon:pivot-scan', { detail: { ioc } })
+                  )}
+                />
               </Box>
             </Card>
 
