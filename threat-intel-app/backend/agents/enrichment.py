@@ -850,6 +850,18 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     if ck in _cache:
         return {**_cache[ck], "cached": True}
 
+    # WhoisXML API runs in parallel with the rest when the paid key is set.
+    # When it's not, we fall back to the free who-dat.as93.net endpoint at the
+    # same index. Whichever responds gets normalised into the `whois` slot.
+    _whoisxml_key = keys.get("WHOISXML_KEY", "")
+    if _whoisxml_key:
+        from intel.whois_lookup import lookup as _whoisxml_lookup
+        async def _whois_call():
+            return await _whoisxml_lookup(domain, _whoisxml_key, session)
+        _whois_coro = _whois_call()
+    else:
+        _whois_coro = _get(session, f"https://who-dat.as93.net/{domain}")
+
     results = await asyncio.gather(
         _get(session, f"https://www.virustotal.com/api/v3/domains/{domain}",
              headers={"x-apikey": keys.get("VIRUSTOTAL_KEY", "")}),
@@ -859,7 +871,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         _get(session, f"https://otx.alienvault.com/api/v1/indicators/domain/{domain}/general",
              headers={"X-OTX-API-KEY": keys.get("OTX_KEY", "")}),
         _get(session, f"https://crt.sh/?q=%25.{domain}&output=json"),
-        _get(session, f"https://who-dat.as93.net/{domain}"),
+        _whois_coro,
         _get(session, "https://pulsedive.com/api/info.php",
              params={"indicator": domain, "pretty": 1, "key": keys.get("PULSEDIVE_KEY", "")}),
         # Wayback Machine — free, no key, indicates if the domain ever had snapshots
@@ -868,7 +880,9 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         return_exceptions=True,
     )
 
-    whois_data = _p_whois(results[4])
+    # WhoisXML returns its own normalised dict; who-dat passes through _p_whois.
+    raw_whois = results[4]
+    whois_data = raw_whois if (_whoisxml_key and isinstance(raw_whois, dict)) else _p_whois(raw_whois)
     data = {
         "virustotal":      _p_vt_domain(results[0]),
         "urlscan":         _p_urlscan(results[1]),

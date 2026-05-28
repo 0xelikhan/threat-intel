@@ -1669,6 +1669,28 @@ function _ocSources(result, ioc, type) {
     out.push({ source: 'Spamhaus DBL', label: `${d.spamhaus_dbl.verdict || 'listed'}${d.spamhaus_dbl.code ? ` · ${d.spamhaus_dbl.code}` : ''}`, color: red });
   }
 
+  // WHOIS — registrar + age + registrant. Domain age is the single
+  // strongest FP-vs-real signal: < 30 d is highly suspicious, < 1 d is
+  // near-certain phishing/C2 staging. Show it color-coded by age band.
+  if (d.whois && typeof d.whois === 'object' && !d.whois.error) {
+    const w = d.whois;
+    const bits = [];
+    if (w.registrar) bits.push(w.registrar);
+    if (w.age_days != null) bits.push(`${w.age_days}d old`);
+    if (w.registrant_org) bits.push(w.registrant_org);
+    else if (w.registrant_country) bits.push(w.registrant_country);
+    if (w.privacy_protected) bits.push('privacy protected');
+    if (bits.length) {
+      const age = w.age_days;
+      const c = age == null ? tert
+              : age < 1   ? red
+              : age < 30  ? orange
+              : age < 180 ? yellow
+              :             green;
+      out.push({ source: 'WHOIS', label: bits.join(' · '), color: c });
+    }
+  }
+
   return out;
 }
 

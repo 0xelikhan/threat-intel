@@ -126,6 +126,14 @@ API_KEY_DEFINITIONS = {
         "placeholder": "PhishTank app key",
         "group": "API Keys"
     },
+    "WHOISXML_KEY": {
+        "label": "Whois XML API Key",
+        "description": "Domain WHOIS lookup: registrar, creation date, registrant. Strong FP signal for newly-registered domains.",
+        "required": False,
+        "url": "https://whoisxmlapi.com",
+        "placeholder": "at_... key",
+        "group": "API Keys"
+    },
     "SECURITYTRAILS_KEY": {
         "label": "SecurityTrails API Key",
         "description": "DNS history and subdomain enumeration. Free: 50/month.",
