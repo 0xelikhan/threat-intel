@@ -117,6 +117,581 @@ function SectionCard({ id, label, accent, children, sx, defaultPad = true }) {
 }
 
 
+// ─── 0. URL Reputation Report (URL scans only) ───────────────────────────────
+// Analyst-decision-first layout. Aggregate header tells you "should I clear
+// this" before the per-source detail. Sources are grouped by purpose
+// (Reputation / Identity / Infrastructure) so you scan top-down rather than
+// hunting through a flat list. Each source renders its actual fields in a
+// structured row layout — never a raw JSON dump.
+function _defangHost(h) {
+  return (h || '').replace(/\./g, '[.]');
+}
+function _defangUrl(u) {
+  if (!u) return '';
+  return u.replace(/^https?:\/\//i, m => m.toLowerCase().startsWith('https') ? 'hxxps://' : 'hxxp://')
+          .replace(/\./g, '[.]');
+}
+function _ageDaysFromIso(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d)) return null;
+  return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
+}
+function _formatDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+// One detail row inside a source card.
+function ReportField({ label, value, mono = false, color }) {
+  if (value == null || value === '') return null;
+  return (
+    <Box sx={{
+      display: 'grid', gridTemplateColumns: '140px 1fr',
+      gap: 1.25, alignItems: 'baseline', py: 0.375,
+    }}>
+      <Typography sx={{
+        fontSize: 10, color: 'text.tertiary', fontWeight: 600,
+        textTransform: 'uppercase', letterSpacing: '0.06em',
+      }}>{label}</Typography>
+      <Typography sx={{
+        fontSize: 12, color: color || 'text.primary',
+        wordBreak: 'break-all',
+        fontFamily: mono ? '"IBM Plex Mono", monospace' : undefined,
+      }}>{value}</Typography>
+    </Box>
+  );
+}
+
+// Compact accent strip + title + status pill at the top of each source card.
+function SourceHeader({ title, status, statusColor, count }) {
+  return (
+    <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+      <Box sx={{ width: 3, height: 14, backgroundColor: statusColor, borderRadius: 0.5 }}/>
+      <Typography sx={{
+        fontSize: 12, color: 'text.primary', fontWeight: 600,
+        textTransform: 'uppercase', letterSpacing: '0.06em',
+      }}>{title}</Typography>
+      {count != null && (
+        <Typography sx={{ fontSize: 11, color: 'text.disabled' }}>· {count}</Typography>
+      )}
+      <Box sx={{ ml: 'auto !important' }}>
+        <MuiChip
+          label={status}
+          size="small"
+          sx={{
+            height: 18, fontSize: 10, fontWeight: 600,
+            backgroundColor: muiAlpha(statusColor, 0.18),
+            color: statusColor,
+            borderRadius: '3px',
+            textTransform: 'uppercase', letterSpacing: '0.05em',
+          }}
+        />
+      </Box>
+    </Stack>
+  );
+}
+
+function SourceCard({ children, sx = {} }) {
+  return (
+    <MuiPaper elevation={0} sx={{
+      backgroundColor: '#0C1524',
+      border: `1px solid ${muiAlpha('#ffffff', 0.10)}`,
+      borderRadius: '4px',
+      p: '12px 14px',
+      ...sx,
+    }}>
+      {children}
+    </MuiPaper>
+  );
+}
+
+function GroupHeader({ children }) {
+  return (
+    <Typography sx={{
+      fontSize: 10, color: 'text.disabled', fontWeight: 600,
+      textTransform: 'uppercase', letterSpacing: '0.12em',
+      mb: 1.25, mt: 0.5,
+    }}>{children}</Typography>
+  );
+}
+
+function UrlReputationReport({ result }) {
+  const url    = result.source_url || '';
+  let host = '';
+  try { host = new URL(url).hostname; } catch { host = ''; }
+
+  const dom = result?.enrichments?.domains?.[host] || {};
+  const urlEnr = result?.enrichments?.urls?.[url] || {};
+
+  const vt          = dom.virustotal || urlEnr.virustotal || null;
+  const urlscan     = dom.urlscan    || urlEnr.urlscan    || null;
+  const whois       = dom.whois || null;
+  const crt         = dom.certTransparency || null;
+  const otx         = dom.otx || null;
+  const pulsedive   = dom.pulsedive || null;
+  const maltiverse  = dom.maltiverse || null;
+  const spamhaus    = dom.spamhaus_dbl || null;
+  const dnsRecords  = dom.osint?.dns_records || null;
+  const bgp         = dom.osint?.bgp_ranking || null;
+  const safeBrowse  = dom.osint?.google_safebrowsing || null;
+  const wayback     = dom.wayback || null;
+
+  // ── Aggregate verdict + top drivers ──────────────────────────────────────
+  // Counts a source as "responded" only when it returned data. Picks the
+  // 2-3 strongest drivers behind the verdict so the analyst sees the why
+  // without expanding anything.
+  const drivers = [];
+  let signalCount = 0;
+  if (vt && !vt.error) {
+    signalCount++;
+    const mal = vt.malicious ?? 0;
+    const susp = vt.suspicious ?? 0;
+    const total = (vt.harmless ?? 0) + (vt.undetected ?? 0) + mal + susp;
+    if (mal > 0) drivers.push({ text: `VirusTotal ${mal}/${total || '?'} flagged malicious`, weight: mal * 10, color: '#EE3838' });
+    else if (susp > 0) drivers.push({ text: `VirusTotal ${susp} engines suspicious`, weight: 5, color: '#E6700F' });
+    else if (total > 0) drivers.push({ text: `VirusTotal clean (0/${total})`, weight: -5, color: '#16AD34' });
+  }
+  if (otx && !otx.error && (otx.pulseCount > 0 || otx.pulse_count > 0)) {
+    signalCount++;
+    const c = otx.pulseCount ?? otx.pulse_count ?? 0;
+    drivers.push({ text: `OTX ${c} threat pulse${c === 1 ? '' : 's'}`, weight: c * 3, color: c >= 3 ? '#EE3838' : '#E6700F' });
+  }
+  if (spamhaus?.hit) {
+    signalCount++;
+    drivers.push({ text: `Spamhaus DBL listed (${spamhaus.verdict || 'malicious'})`, weight: 30, color: '#EE3838' });
+  }
+  if (maltiverse && !maltiverse.error) {
+    signalCount++;
+    if (/malicious/i.test(maltiverse.classification || '')) {
+      drivers.push({ text: `Maltiverse malicious${maltiverse.tag?.length ? ` (${maltiverse.tag.slice(0,2).join(', ')})` : ''}`, weight: 20, color: '#EE3838' });
+    }
+  }
+  if (safeBrowse?.verdict && safeBrowse.verdict !== 'CLEAN') {
+    signalCount++;
+    drivers.push({ text: `Google Safe Browsing: ${safeBrowse.verdict}`, weight: 25, color: '#EE3838' });
+  }
+  if (whois && !whois.error && whois.age_days != null) {
+    signalCount++;
+    if (whois.age_days < 1)   drivers.push({ text: `Domain registered today (${whois.age_days}d old)`, weight: 30, color: '#EE3838' });
+    else if (whois.age_days < 30) drivers.push({ text: `Newly-registered domain (${whois.age_days}d old)`, weight: 15, color: '#E6700F' });
+    else if (whois.age_days > 365 * 3) drivers.push({ text: `Long-established domain (${Math.floor(whois.age_days / 365)}y old)`, weight: -8, color: '#16AD34' });
+  }
+  if (urlscan) signalCount++;
+  if (crt && (crt.totalCerts || 0) > 0) signalCount++;
+  if (dnsRecords) signalCount++;
+  if (bgp) signalCount++;
+
+  const score = Math.max(0, Math.min(100, drivers.reduce((s, d) => s + d.weight, 0) + 50));
+  const verdict = score >= 65 ? { label: 'MALICIOUS',  color: '#EE3838' }
+               : score >= 35 ? { label: 'SUSPICIOUS', color: '#E6700F' }
+               : score >= 15 ? { label: 'WATCH',      color: '#E1B823' }
+               :                { label: 'CLEAN',      color: '#16AD34' };
+  const topDrivers = [...drivers].sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight)).slice(0, 3);
+
+  // ── helpers for per-source status pills ─────────────────────────────────
+  const sourceState = (data, malicious) => {
+    if (!data || data.error || (typeof data === 'object' && Object.keys(data).length === 0))
+      return { status: data?.error ? 'error' : 'no data', color: '#848592' };
+    if (malicious === true)  return { status: 'malicious', color: '#EE3838' };
+    if (malicious === false) return { status: 'clean',     color: '#16AD34' };
+    return { status: 'ok', color: '#0fbcff' };
+  };
+
+  // ── render ──────────────────────────────────────────────────────────────
+  return (
+    <Box>
+      {/* Headline panel */}
+      <MuiPaper elevation={0} sx={{
+        backgroundColor: '#09253d',
+        border: `1px solid ${muiAlpha(verdict.color, 0.35)}`,
+        borderLeft: `3px solid ${verdict.color}`,
+        borderRadius: '4px', p: '18px 20px', mb: 2,
+      }}>
+        <Stack direction="row" alignItems="center" spacing={2.5} sx={{ mb: drivers.length ? 2 : 0 }} flexWrap="wrap">
+          <Box>
+            <Typography sx={{ fontSize: 36, fontWeight: 700, color: verdict.color, lineHeight: 1,
+              fontFamily: '"IBM Plex Mono", monospace' }}>
+              {score}
+            </Typography>
+            <Typography sx={{ fontSize: 10, color: 'text.disabled', mt: 0.25,
+              textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              / 100
+            </Typography>
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
+              <Typography sx={{ fontSize: 18, fontWeight: 700, color: verdict.color,
+                letterSpacing: '0.04em' }}>
+                {verdict.label}
+              </Typography>
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
+                · {signalCount} source{signalCount === 1 ? '' : 's'} responded
+              </Typography>
+            </Stack>
+            <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 0.25 }}>
+              {host ? `${_defangHost(host)} · ` : ''}URL reputation
+            </Typography>
+            <Typography sx={{ ...monoSx, fontSize: 11, color: 'text.disabled',
+              wordBreak: 'break-all' }}>
+              {_defangUrl(url)}
+            </Typography>
+          </Box>
+        </Stack>
+        {topDrivers.length > 0 && (
+          <Box sx={{ pt: 1.5, borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
+            <Typography sx={{ fontSize: 10, color: 'text.disabled', fontWeight: 600,
+              textTransform: 'uppercase', letterSpacing: '0.08em', mb: 0.75 }}>
+              What drove the verdict
+            </Typography>
+            <Stack spacing={0.5}>
+              {topDrivers.map((d, i) => (
+                <Stack key={i} direction="row" alignItems="center" spacing={1}>
+                  <Box sx={{ width: 4, height: 4, borderRadius: 99, backgroundColor: d.color }}/>
+                  <Typography sx={{ fontSize: 12, color: 'text.primary' }}>{d.text}</Typography>
+                </Stack>
+              ))}
+            </Stack>
+          </Box>
+        )}
+      </MuiPaper>
+
+      {/* ── REPUTATION group ───────────────────────────────────────────── */}
+      <GroupHeader>Reputation</GroupHeader>
+      <Stack spacing={1.25} sx={{ mb: 2.5 }}>
+        {/* VirusTotal */}
+        <SourceCard>
+          {(() => {
+            const mal = vt?.malicious ?? 0;
+            const susp = vt?.suspicious ?? 0;
+            const harm = vt?.harmless ?? 0;
+            const undet = vt?.undetected ?? 0;
+            const total = mal + susp + harm + undet;
+            const st = sourceState(vt, mal > 0 ? true : total > 0 ? false : null);
+            return (
+              <>
+                <SourceHeader title="VirusTotal" status={total ? `${mal}/${total} flagged` : st.status}
+                  statusColor={st.color}/>
+                {vt && !vt.error && total > 0 && (
+                  <Box>
+                    <ReportField label="Detection ratio" value={`${mal + susp} / ${total}`} mono
+                      color={st.color}/>
+                    <ReportField label="Breakdown" mono
+                      value={`${mal} malicious · ${susp} suspicious · ${harm} harmless · ${undet} undetected`}/>
+                    {vt.reputation != null && <ReportField label="Community" mono
+                      value={String(vt.reputation)}/>}
+                    {vt.categories && Object.values(vt.categories).length > 0 && (
+                      <ReportField label="Categories"
+                        value={[...new Set(Object.values(vt.categories))].slice(0, 4).join(', ')}/>
+                    )}
+                    {vt.creation_date && (
+                      <ReportField label="VT first seen" value={_formatDate(
+                        typeof vt.creation_date === 'number'
+                          ? new Date(vt.creation_date * 1000).toISOString()
+                          : vt.creation_date)}/>
+                    )}
+                  </Box>
+                )}
+                {(!vt || vt.error || total === 0) && (
+                  <Typography sx={{ fontSize: 12, color: 'text.tertiary', fontStyle: 'italic' }}>
+                    {vt?.error ? `error: ${vt.error}` : 'No data returned for this URL.'}
+                  </Typography>
+                )}
+              </>
+            );
+          })()}
+        </SourceCard>
+
+        {/* OTX */}
+        <SourceCard>
+          {(() => {
+            const c = otx?.pulseCount ?? otx?.pulse_count ?? 0;
+            const st = sourceState(otx, c > 0 ? true : null);
+            const status = otx?.error ? 'error' : c > 0 ? `${c} pulses` : 'no pulses';
+            return (
+              <>
+                <SourceHeader title="AlienVault OTX" status={status} statusColor={st.color}/>
+                {c > 0 && (
+                  <Box>
+                    <ReportField label="Pulse count" value={`${c}`} mono color={st.color}/>
+                    {Array.isArray(otx.relatedPulses) && otx.relatedPulses.length > 0 && (
+                      <ReportField label="Recent pulses"
+                        value={otx.relatedPulses.slice(0, 3).join(' · ')}/>
+                    )}
+                  </Box>
+                )}
+                {c === 0 && !otx?.error && (
+                  <Typography sx={{ fontSize: 12, color: 'text.tertiary', fontStyle: 'italic' }}>
+                    No threat intelligence pulses found.
+                  </Typography>
+                )}
+              </>
+            );
+          })()}
+        </SourceCard>
+
+        {/* Maltiverse */}
+        <SourceCard>
+          {(() => {
+            const cls = maltiverse?.classification || '';
+            const isBad = /malicious|suspicious/i.test(cls);
+            const st = sourceState(maltiverse, isBad);
+            return (
+              <>
+                <SourceHeader title="Maltiverse" status={cls || st.status} statusColor={st.color}/>
+                {maltiverse && !maltiverse.error && cls && (
+                  <Box>
+                    <ReportField label="Classification" value={cls} color={st.color}/>
+                    {maltiverse.tag?.length > 0 && (
+                      <ReportField label="Tags" value={maltiverse.tag.slice(0, 6).join(', ')}/>
+                    )}
+                    {maltiverse.blacklist?.length > 0 && (
+                      <ReportField label="Blacklists"
+                        value={maltiverse.blacklist.slice(0, 4).join(', ')}/>
+                    )}
+                    {maltiverse.first_seen && (
+                      <ReportField label="First seen" value={_formatDate(maltiverse.first_seen)}/>
+                    )}
+                  </Box>
+                )}
+                {(!maltiverse || maltiverse.error) && (
+                  <Typography sx={{ fontSize: 12, color: 'text.tertiary', fontStyle: 'italic' }}>
+                    {maltiverse?.error ? `error: ${maltiverse.error}` : 'No data returned.'}
+                  </Typography>
+                )}
+              </>
+            );
+          })()}
+        </SourceCard>
+
+        {/* Spamhaus DBL */}
+        {spamhaus && (
+          <SourceCard>
+            <SourceHeader title="Spamhaus DBL" status={spamhaus.hit ? 'listed' : 'clean'}
+              statusColor={spamhaus.hit ? '#EE3838' : '#16AD34'}/>
+            {spamhaus.hit ? (
+              <Box>
+                <ReportField label="Verdict" value={spamhaus.verdict || 'listed'} color="#EE3838"/>
+                {spamhaus.code && <ReportField label="DNSBL code" value={spamhaus.code} mono/>}
+                {spamhaus.label && <ReportField label="Label" value={spamhaus.label}/>}
+              </Box>
+            ) : (
+              <Typography sx={{ fontSize: 12, color: 'text.tertiary', fontStyle: 'italic' }}>
+                Domain not on the Spamhaus blocklist.
+              </Typography>
+            )}
+          </SourceCard>
+        )}
+
+        {/* Pulsedive (only when something to show) */}
+        {pulsedive && !pulsedive.error && pulsedive.risk && pulsedive.risk !== 'none' && (
+          <SourceCard>
+            <SourceHeader title="Pulsedive" status={`risk ${pulsedive.risk}`}
+              statusColor={/critical|high/i.test(pulsedive.risk) ? '#EE3838'
+                : /medium|moderate/i.test(pulsedive.risk) ? '#E6700F' : '#E1B823'}/>
+            <ReportField label="Risk level" value={pulsedive.risk}/>
+            {pulsedive.threats?.length > 0 && (
+              <ReportField label="Threats" value={pulsedive.threats.slice(0, 4).join(', ')}/>
+            )}
+          </SourceCard>
+        )}
+
+        {/* Google Safe Browsing (only when something to show) */}
+        {safeBrowse?.verdict && (
+          <SourceCard>
+            <SourceHeader title="Google Safe Browsing" status={safeBrowse.verdict}
+              statusColor={safeBrowse.verdict === 'MALICIOUS' ? '#EE3838' : '#16AD34'}/>
+            <ReportField label="Verdict" value={safeBrowse.verdict}/>
+            {safeBrowse.threat_types?.length > 0 && (
+              <ReportField label="Threat types" value={safeBrowse.threat_types.join(', ')}/>
+            )}
+            <ReportField label="Matches" mono value={String(safeBrowse.match_count || 0)}/>
+          </SourceCard>
+        )}
+      </Stack>
+
+      {/* ── IDENTITY group ─────────────────────────────────────────────── */}
+      <GroupHeader>Identity</GroupHeader>
+      <Stack spacing={1.25} sx={{ mb: 2.5 }}>
+        {/* WHOIS — the big one. */}
+        <SourceCard>
+          {(() => {
+            const age = whois?.age_days;
+            const ageColor = age == null ? '#848592'
+              : age < 1   ? '#EE3838'
+              : age < 30  ? '#E6700F'
+              : age < 180 ? '#E1B823'
+              :             '#16AD34';
+            const st = whois && !whois.error
+              ? { status: age != null ? `${age}d old` : 'ok', color: ageColor }
+              : sourceState(whois, null);
+            return (
+              <>
+                <SourceHeader title="WHOIS" status={st.status} statusColor={st.color}/>
+                {whois && !whois.error ? (
+                  <Box>
+                    {whois.registrar && <ReportField label="Registrar" value={whois.registrar}/>}
+                    {whois.registrant_org && (
+                      <ReportField label="Registrant" value={whois.registrant_org}/>
+                    )}
+                    {whois.registrant_country && (
+                      <ReportField label="Country" value={whois.registrant_country} mono/>
+                    )}
+                    {whois.privacy_protected && (
+                      <ReportField label="Privacy" value="Redacted / withheld" color="#E1B823"/>
+                    )}
+                    {whois.created && (
+                      <ReportField label="Created"
+                        value={`${_formatDate(whois.created)}${age != null ? ` (${age}d ago)` : ''}`}
+                        color={ageColor}/>
+                    )}
+                    {whois.updated && (
+                      <ReportField label="Updated" value={_formatDate(whois.updated)}/>
+                    )}
+                    {whois.expires && (
+                      <ReportField label="Expires"
+                        value={`${_formatDate(whois.expires)}${whois.days_to_expiry != null ? ` (${whois.days_to_expiry}d)` : ''}`}/>
+                    )}
+                    {whois.registrant_email && (
+                      <ReportField label="Emails" value={whois.registrant_email} mono/>
+                    )}
+                    {whois.name_servers?.length > 0 && (
+                      <ReportField label="Name servers"
+                        value={whois.name_servers.join(' · ')} mono/>
+                    )}
+                    {whois.status?.length > 0 && (
+                      <ReportField label="Status" value={whois.status.slice(0, 3).join(' · ')} mono/>
+                    )}
+                  </Box>
+                ) : (
+                  <Typography sx={{ fontSize: 12, color: 'text.tertiary', fontStyle: 'italic' }}>
+                    {whois?.error ? `error: ${whois.error}` : 'No WHOIS data returned.'}
+                  </Typography>
+                )}
+              </>
+            );
+          })()}
+        </SourceCard>
+
+        {/* Certificate Transparency */}
+        {crt && (
+          <SourceCard>
+            <SourceHeader title="Certificate Transparency (crt.sh)"
+              status={`${crt.totalCerts || 0} cert${(crt.totalCerts || 0) === 1 ? '' : 's'}`}
+              statusColor="#0fbcff"
+              count={crt.subdomains?.length ? `${crt.subdomains.length} subdomains` : null}/>
+            {crt.subdomains?.length > 0 && (
+              <Box sx={{ mb: 1 }}>
+                <ReportField label="Subdomains" value={crt.subdomains.slice(0, 6).join(' · ')} mono/>
+              </Box>
+            )}
+            {Array.isArray(crt.recent) && crt.recent.length > 0 && (
+              <Box>
+                <Typography sx={{ fontSize: 10, color: 'text.disabled', fontWeight: 600,
+                  textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.5 }}>
+                  Recent certificates
+                </Typography>
+                {crt.recent.slice(0, 4).map((c, i) => (
+                  <Box key={i} sx={{ py: 0.5,
+                    borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.05)}` : 'none' }}>
+                    <Typography sx={{ ...monoSx, fontSize: 11, color: 'text.primary' }}>
+                      {c.name_value || c.common_name || '?'}
+                    </Typography>
+                    <Typography sx={{ fontSize: 10, color: 'text.tertiary' }}>
+                      {c.issuer_name && <>{c.issuer_name} · </>}
+                      {c.not_before && `from ${_formatDate(c.not_before)}`}
+                      {c.not_after  && ` · to ${_formatDate(c.not_after)}`}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </SourceCard>
+        )}
+
+        {/* Passive DNS (DNS records) */}
+        {dnsRecords?.total_records > 0 && (
+          <SourceCard>
+            <SourceHeader title="DNS Records"
+              status={`${dnsRecords.total_records} record${dnsRecords.total_records === 1 ? '' : 's'}`}
+              statusColor="#0fbcff"/>
+            {Object.entries(dnsRecords.records || {}).slice(0, 6).map(([rt, vals]) => (
+              <ReportField key={rt} label={rt} value={(vals || []).join(', ')} mono/>
+            ))}
+          </SourceCard>
+        )}
+
+        {/* Wayback archive presence */}
+        {wayback && (wayback.has_snapshots != null || wayback.first_snapshot) && (
+          <SourceCard>
+            <SourceHeader title="Wayback Machine"
+              status={wayback.has_snapshots ? `${wayback.snapshot_count || ''} snapshots`.trim() : 'no snapshots'}
+              statusColor={wayback.has_snapshots ? '#16AD34' : '#E6700F'}/>
+            {wayback.first_snapshot && (
+              <ReportField label="First snapshot" value={_formatDate(wayback.first_snapshot)}/>
+            )}
+            {wayback.last_snapshot && (
+              <ReportField label="Last snapshot" value={_formatDate(wayback.last_snapshot)}/>
+            )}
+          </SourceCard>
+        )}
+      </Stack>
+
+      {/* ── INFRASTRUCTURE group ───────────────────────────────────────── */}
+      {(urlscan || bgp) && (
+        <>
+          <GroupHeader>Infrastructure</GroupHeader>
+          <Stack spacing={1.25} sx={{ mb: 2.5 }}>
+            {/* URLScan.io */}
+            {urlscan && (
+              <SourceCard>
+                <SourceHeader title="URLScan.io"
+                  status={urlscan.total ? `${urlscan.total} scans` : 'no scans'}
+                  statusColor={urlscan.total ? '#0fbcff' : '#848592'}/>
+                {urlscan.total ? (
+                  <Box>
+                    {urlscan.last_scan_date && (
+                      <ReportField label="Last scan" value={_formatDate(urlscan.last_scan_date)}/>
+                    )}
+                    {urlscan.malicious != null && (
+                      <ReportField label="Malicious" value={String(urlscan.malicious)} mono
+                        color={urlscan.malicious > 0 ? '#EE3838' : '#16AD34'}/>
+                    )}
+                    {urlscan.last_scan_url && (
+                      <ReportField label="Report" value={urlscan.last_scan_url} mono/>
+                    )}
+                  </Box>
+                ) : (
+                  <Typography sx={{ fontSize: 12, color: 'text.tertiary', fontStyle: 'italic' }}>
+                    No scans found for this domain.
+                  </Typography>
+                )}
+              </SourceCard>
+            )}
+
+            {/* BGP ranking */}
+            {bgp && (
+              <SourceCard>
+                <SourceHeader title="BGP / ASN (CIRCL)"
+                  status={bgp.rank != null ? `rank ${bgp.rank}` : 'ok'}
+                  statusColor="#0fbcff"/>
+                {bgp.asn && <ReportField label="ASN" value={`AS${bgp.asn} · ${bgp.asn_description || ''}`}/>}
+                {bgp.country && <ReportField label="Country" value={bgp.country} mono/>}
+                {bgp.rank != null && (
+                  <ReportField label="Rank" value={`${bgp.rank} (lower = worse reputation)`} mono/>
+                )}
+              </SourceCard>
+            )}
+          </Stack>
+        </>
+      )}
+    </Box>
+  );
+}
+
+
 // ─── 1. AI Verdict Banner ─────────────────────────────────────────────────────
 function VerdictBanner({ result }) {
   const theme = useTheme();
@@ -1459,6 +2034,12 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
 
           {result && (
             <Stack spacing={3}>
+              {/* URL-scan reputation report renders FIRST and only when the
+                  result came from a URL scan (source_url populated). For
+                  file uploads, this is silent and the file-analysis stack
+                  is the whole show. */}
+              {result.source_url && <UrlReputationReport result={result}/>}
+
               <VerdictBanner result={result}/>
               <TechnicalAssessment result={result}/>
               <ExecutionNarrative result={result}/>
