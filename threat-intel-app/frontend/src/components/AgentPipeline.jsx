@@ -29,7 +29,18 @@ const LEVEL_COLOR = {
   INFORMATIONAL: 'severity.default',
 };
 
-export default function AgentPipeline({ logText, label, onComplete, onStart, onPartial }) {
+// Bare-URL detector: the analyst's input is JUST a URL (no surrounding log
+// text). When that's the case we route to onScanUrl (which hits
+// /api/scan/url -- downloads + file-scans the response body) instead of the
+// log-analysis pipeline. Multiline inputs, inputs with extra fields, and
+// "URL appears inside a log" cases all go through the normal analyze flow.
+const _URL_ONLY_RE = /^https?:\/\/[^\s'"<>`]+$/i;
+function isBareUrl(text) {
+  const trimmed = (text || '').trim();
+  return !!trimmed && !trimmed.includes('\n') && _URL_ONLY_RE.test(trimmed);
+}
+
+export default function AgentPipeline({ logText, label, onComplete, onStart, onPartial, onScanUrl }) {
   const [running, setRunning] = useState(false);
   const [trace, setTrace]     = useState([]);
   const [error, setError]     = useState(null);
@@ -37,8 +48,22 @@ export default function AgentPipeline({ logText, label, onComplete, onStart, onP
   const [current, setCurrent] = useState(null);
   const readerRef = useRef(null);
 
+  const inputIsUrl = isBareUrl(logText);
+
   const run = async () => {
     if (!logText?.trim()) return;
+    // Bare URL -> hand off to the URL scanner instead of the log-analysis
+    // pipeline. Same UX: clear prior pipeline trace, fire onStart so the
+    // parent dismisses any stale analyze result, then call onScanUrl which
+    // owns the file-scanner spinner / progress.
+    if (inputIsUrl && onScanUrl) {
+      try { readerRef.current?.cancel(); } catch {}
+      readerRef.current = null;
+      setTrace([]); setError(null); setDone(false); setCurrent(null);
+      onStart?.();
+      onScanUrl(logText.trim());
+      return;
+    }
     try { readerRef.current?.cancel(); } catch {}
     readerRef.current = null;
     onStart?.();
@@ -94,7 +119,9 @@ export default function AgentPipeline({ logText, label, onComplete, onStart, onP
 
   const reset = () => { setTrace([]); setError(null); setDone(false); setCurrent(null); };
   const canRun = !!logText?.trim() && !running;
-  const buttonLabel = error ? 'Retry analysis' : done ? 'Analyze again' : 'Analyze';
+  const buttonLabel = inputIsUrl
+    ? (error ? 'Retry scan' : done ? 'Scan again' : 'Scan URL')
+    : (error ? 'Retry analysis' : done ? 'Analyze again' : 'Analyze');
 
   return (
     <Box>
