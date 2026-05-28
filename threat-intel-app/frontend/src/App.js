@@ -1,8 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  Upload, ChevronDown, ChevronRight, Copy, Check, Printer, Search,
-  Activity, Database, Layers, Zap, Globe, Network, Shield, FileText,
-  ArrowUpRight, AlertCircle, X, FileSearch, Mail, Hash, Link2,
+  Copy, Printer, ArrowUpRight, AlertCircle, X, FileSearch, Mail, Link2,
 } from 'lucide-react';
 
 import MapTab            from './components/MapTab';
@@ -110,14 +108,6 @@ const verdictStyle = {
   UNDETECTED: t.fgDim,
 };
 
-const iocTypeStyle = {
-  ips:     { fg:'#60a5fa', label:'ip'     },
-  domains: { fg:'#34d399', label:'domain' },
-  hashes:  { fg:'#c084fc', label:'hash'   },
-  urls:    { fg:'#fb923c', label:'url'    },
-  emails:  { fg:'#f87171', label:'email'  },
-};
-
 /* ─── primitives ─────────────────────────────────────────────────────────────── */
 
 // Thin wrapper → MuiCard (renders via MUI Card + CardHeader, inherits OpenCTI theme).
@@ -132,17 +122,6 @@ function Card({ title, accent, children, defaultOpen, badge, noPad=false }) {
 }
 
 // Thin wrappers → MuiTag (renders via MUI Chip with alpha bg per OpenCTI's Tag.tsx)
-function Chip({ children, color=t.fgMute, soft, mono, size='sm' }) {
-  // mono prop preserved via sx override for code-style chips (rare)
-  return (
-    <MuiTag
-      label={children}
-      color={color}
-      sx={mono ? { fontFamily: '"IBM Plex Mono", monospace' } : undefined}
-    />
-  );
-}
-
 const Verdict = ({ verdict, size }) =>
   <MuiVerdictTag verdict={verdict} size={size}/>;
 
@@ -1167,103 +1146,6 @@ function AnalystNotes({ rs, bare }) {
   return <Card title="Analyst notes" accent="#0fbcff">{body}</Card>;
 }
 
-/* ─── clarifying questions (spec §5 — Phase 1 → Phase 2 re-analysis) ────────
- * When the AI flags critical unknowns it can't infer from enrichment, render
- * them as a form. Submitting POSTs to /api/analyze/clarify/{runId} which
- * re-runs the investigation with the analyst's answers appended.
- */
-function ClarifyingQuestions({ result, onResult }) {
-  const questions = result?.clarifying_questions || [];
-  const [answers, setAnswers]   = useState({});
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError]       = useState(null);
-
-  if (!questions.length) return null;
-
-  const submit = async () => {
-    const runId = result?.runId;
-    if (!runId) return;
-    const filled = Object.fromEntries(
-      Object.entries(answers).filter(([, v]) => (v || '').trim())
-    );
-    if (Object.keys(filled).length === 0) {
-      setError('Answer at least one question before re-running');
-      return;
-    }
-    setSubmitting(true); setError(null);
-    try {
-      const r = await fetch(`/api/analyze/clarify/${runId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answers: filled }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
-      onResult?.(d);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <Card title="AI needs more context · clarifying questions" accent="#E1B823"
-      badge={`${questions.length} questions`} defaultOpen>
-      <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
-        These answers would materially change the assessment. Fill in what you know
-        and submit to re-run the investigation with your context.
-      </Typography>
-      {questions.map((q, i) => {
-        const qText = typeof q === 'string' ? q : (q.question || `Question ${i + 1}`);
-        return (
-          <Box key={i} sx={{ mb: 1.5 }}>
-            <Typography sx={{ fontSize: 12, color: 'text.primary', mb: 0.5, fontWeight: 500 }}>
-              {qText}
-            </Typography>
-            {typeof q === 'object' && q.why_asking && (
-              <Typography sx={{ fontSize: 11, color: 'text.tertiary', mb: 0.75, fontStyle: 'italic' }}>
-                {q.why_asking}
-              </Typography>
-            )}
-            <MuiTextField
-              value={answers[qText] || ''}
-              onChange={e => setAnswers(a => ({ ...a, [qText]: e.target.value }))}
-              size="small"
-              fullWidth
-              placeholder="Your answer (plain text)"
-            />
-          </Box>
-        );
-      })}
-      {error && (
-        <Typography sx={{ color: 'error.main', fontSize: 12, mb: 1 }}>{error}</Typography>
-      )}
-      {result?.context_impact && (
-        <Box sx={{ mt: 1.5, p: 1.5,
-          backgroundColor: muiAlpha('#16AD34', 0.08),
-          border: `1px solid ${muiAlpha('#16AD34', 0.25)}`,
-          borderRadius: '4px',
-        }}>
-          <Typography sx={{ fontSize: 11, color: 'success.main', fontWeight: 600, mb: 0.5,
-            textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Context impact (re-analysis)
-          </Typography>
-          <Typography sx={{ fontSize: 12, color: 'text.primary', lineHeight: 1.6 }}>
-            {result.context_impact}
-          </Typography>
-        </Box>
-      )}
-      <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
-        <MuiButton variant="contained" size="small"
-          disabled={submitting} onClick={submit}>
-          {submitting ? 'Re-investigating…' : 'Re-run with my answers'}
-        </MuiButton>
-      </Stack>
-    </Card>
-  );
-}
-
 /* ─── suppressed IOCs (MISP warninglist matches) ─────────────────────────────
  * Spec §4 — show analysts exactly what was filtered out before enrichment so
  * they can spot false-negative filters (e.g., a Tor exit IP swallowed by a
@@ -1511,171 +1393,16 @@ const isAIFailureText = (v) => {
   catch { return false; }
 };
 
-
-/* ─── assessment ────────────────────────────────────────────────────────────── */
-function Assessment({ rs }) {   // currently unused — kept for reuse
-  const lc = levelStyle[rs.threat_level] || levelStyle.INFORMATIONAL;
-  return (
-    <Card title="AI assessment" accent="#0fbcff" badge={rs.threat_level?.toLowerCase()}>
-      <MuiPaper elevation={0} sx={{
-        backgroundColor: lc.bg,
-        border: `1px solid ${lc.line}`,
-        borderRadius: '4px', p: '14px 16px', mb: 1.75,
-      }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Box sx={{ width: 8, height: 8, borderRadius: 99, backgroundColor: lc.fg }}/>
-            <Typography sx={{ color: lc.fg, fontWeight: 600, fontSize: 13 }}>{rs.threat_level}</Typography>
-          </Box>
-          {typeof rs.confidence === 'number' && (
-            <Typography sx={{ fontSize: 12, color: 'text.tertiary' }}>
-              Confidence{' '}
-              <Box component="span" sx={{
-                color: rs.confidence >= 0.7 ? 'success.main'
-                     : rs.confidence >= 0.4 ? '#E1B823'
-                     : 'error.main',
-                fontWeight: 600,
-              }}>
-                {Math.round(rs.confidence * 100)}%
-              </Box>
-            </Typography>
-          )}
-        </Box>
-        <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.7 }}>{rs.summary}</Typography>
-      </MuiPaper>
-
-      {(() => {
-        const chain = (rs.chain_of_thought || []).filter(s => !isAIFailureText(s));
-        if (!chain.length) return null;
-        return (
-          <Block title="Reasoning chain">
-            {chain.map((s, i) => (
-              <Box component="li" key={i} sx={{
-                display: 'flex', gap: 1.25, py: 0.75,
-                borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
-                fontSize: 13, color: 'text.primary', lineHeight: 1.6,
-              }}>
-                <Box component="span" sx={{ color: 'primary.main', minWidth: 18,
-                  fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{i + 1}</Box>
-                <span>{s}</span>
-              </Box>
-            ))}
-          </Block>
-        );
-      })()}
-
-      {(() => {
-        const findings = (rs.key_findings || []).filter(f => !isAIFailureText(f));
-        if (!findings.length) return null;
-        return (
-          <Block title="Key findings">
-            {findings.map((f, i) => (
-              <Box component="li" key={i} sx={{
-                display: 'flex', gap: 1.25, py: 0.75,
-                borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
-                fontSize: 13, color: 'text.primary', lineHeight: 1.6,
-              }}>
-                <Box component="span" sx={{ color: 'warning.main', minWidth: 6 }}>›</Box>
-                <span>{f}</span>
-              </Box>
-            ))}
-          </Block>
-        );
-      })()}
-
-      {rs.ioc_assessments?.length > 0 && (
-        <Block title="Indicator verdicts">
-          {rs.ioc_assessments.map((a, i) => (
-            <Box component="li" key={i} sx={{
-              display: 'flex', gap: 1.25, py: 0.875,
-              borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
-              alignItems: 'flex-start',
-            }}>
-              <Box sx={{ minWidth: 90 }}><Verdict verdict={a.verdict} size="small"/></Box>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Box sx={{
-                  fontFamily: '"IBM Plex Mono", monospace', fontSize: 12,
-                  color: 'text.primary', wordBreak: 'break-all',
-                }}>{a.ioc}</Box>
-                {a.reason && (
-                  <Typography sx={{ fontSize: 12, color: 'text.tertiary',
-                    mt: 0.375, lineHeight: 1.5 }}>{a.reason}</Typography>
-                )}
-              </Box>
-            </Box>
-          ))}
-        </Block>
-      )}
-
-      {rs.mitre_techniques?.length > 0 && (
-        <Block title="MITRE ATT&CK">
-          <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
-            {rs.mitre_techniques.map((t_, i) => {
-              const id = t_.split(' ')[0];
-              return (
-                <MuiTag key={i} label={t_} color="#0fbcff"
-                  onClick={() => window.open(`https://attack.mitre.org/techniques/${id.includes('.') ? id.replace('.','/') : id}/`, '_blank')}
-                  sx={{ fontFamily: '"IBM Plex Mono", monospace' }}/>
-              );
-            })}
-          </Box>
-        </Block>
-      )}
-
-      {rs.matched_actors?.length > 0 && (
-        <Block title="Threat actor attribution">
-          {rs.matched_actors.slice(0, 5).map((a, i) => (
-            <Box key={i} sx={{
-              py: 1.25,
-              borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
-              display: 'grid', gridTemplateColumns: '1fr auto', gap: 1.5, alignItems: 'start',
-            }}>
-              <Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                  <Typography sx={{ fontSize: 13, color: 'text.primary', fontWeight: 600 }}>{a.name}</Typography>
-                  {a.mitre_id && <MuiTag label={a.mitre_id} color="#848592"
-                    sx={{ fontFamily: '"IBM Plex Mono", monospace' }}/>}
-                </Box>
-                {(a.origin || a.sponsor) && (
-                  <Typography sx={{ fontSize: 11, color: 'text.tertiary', mb: 0.5 }}>
-                    {[a.origin, a.sponsor].filter(Boolean).join(' · ')}
-                  </Typography>
-                )}
-                {a.aliases?.length > 0 && (
-                  <Typography sx={{ fontSize: 11, color: 'text.disabled', mb: 0.5 }}>
-                    aka {a.aliases.slice(0, 4).join(', ')}
-                  </Typography>
-                )}
-                {a.description && (
-                  <Typography sx={{ fontSize: 12, color: 'text.tertiary', lineHeight: 1.5, mt: 0.625 }}>
-                    {a.description.slice(0, 200)}{a.description.length > 200 ? '…' : ''}
-                  </Typography>
-                )}
-              </Box>
-              <Box sx={{ textAlign: 'right' }}>
-                <Typography sx={{ fontSize: 18, color: 'warning.main', fontWeight: 600,
-                  fontVariantNumeric: 'tabular-nums' }}>{a.score}%</Typography>
-                <Typography sx={{ fontSize: 10, color: 'text.disabled' }}>TTP match</Typography>
-              </Box>
-            </Box>
-          ))}
-        </Block>
-      )}
-
-    </Card>
-  );
-}
-
-// Thin wrapper → MuiBlock (renders MUI Box with subtle border + tertiary label)
+// Thin wrapper for MuiBlock (renders an MUI Box with subtle border + tertiary
+// label) used by several cards for in-card grouping.
 const Block = ({ title, children }) => (
   <MuiBlock title={title}>
     <Box component="ul" sx={{ margin:0, padding:0, listStyle:'none' }}>{children}</Box>
   </MuiBlock>
 );
 
-/* ─── analyst hand-off (disposition, clear/escalate, IR playbook) ──────────── */
-// Score → tier metadata. Brackets are the same as the legacy GTI card so
-// nothing shifts category, just rendered more prominently.
+// Per-IOC threat-score tier metadata. Brackets are the same as the legacy
+// GTI card so nothing shifts category, just rendered more prominently.
 const SCORE_TIERS = [
   { min: 85, name: 'CRITICAL',   color: '#EE3838' },
   { min: 65, name: 'HIGH',       color: '#E6700F' },
@@ -1683,13 +1410,13 @@ const SCORE_TIERS = [
   { min: 25, name: 'SUSPICIOUS', color: '#F59E0B' },
   { min: 0,  name: 'CLEAN',      color: '#16AD34' },
 ];
-const tierFor = (score) => SCORE_TIERS.find(t => (score || 0) >= t.min) || SCORE_TIERS[SCORE_TIERS.length - 1];
+const tierFor = (score) =>
+  SCORE_TIERS.find(t => (score || 0) >= t.min) || SCORE_TIERS[SCORE_TIERS.length - 1];
 
-// Threat-score block — the upgraded version of the old GTI/Investigation
-// card. One prominent dial showing the worst-scoring indicator, the tier
-// label embedded right below it, a per-tier distribution mini-chart so the
-// analyst can see at a glance "is this one bad IOC or a pattern", and a
-// compact per-indicator list sorted by score.
+// Threat-score block — one prominent dial showing the worst-scoring indicator,
+// a tier chip below it, a per-tier distribution mini-chart so the analyst sees
+// at a glance "one bad IOC vs a pattern", and a compact per-IOC list sorted
+// by score. Rendered inside the Summary card.
 function ThreatScore({ result }) {
   const gti = result?.gti_scores || {};
   const sorted = Object.entries(gti).sort(([,a],[,b]) => (b.score || 0) - (a.score || 0));
@@ -2003,7 +1730,6 @@ function ChatWithRecon({ result, bare }) {
   // hardcoded fallbacks here so the analyst only ever sees questions specific
   // to whatever they uploaded.
   const questions = (rs.probing_questions || []).filter(q => q && q.question);
-  const classification = rs.verdict_classification;
 
   // Load history when run changes
   useEffect(() => {
@@ -2137,23 +1863,12 @@ function ChatWithRecon({ result, bare }) {
   };
 
   if (!runId) return null;
-  const isAmbiguous = classification === 'AMBIGUOUS';
-  // All cards on the analyze view share the same cyan accent now —
-  // semantic colors have been retired in favour of one consistent look.
+  // All cards on the analyze view share the same cyan accent.
   const accent = '#0fbcff';
-  const banner = isAmbiguous
-    ? 'RECON needs more context to commit to a verdict — pick a question or ask anything'
-    : null;
 
   const body = (
     <>
-      {banner && (
-        <Typography sx={{ fontSize:12, color:'text.tertiary', mb:1.5, lineHeight:1.55 }}>
-          {banner}
-        </Typography>
-      )}
-
-      {/* Investigation-guidance question cards — always visible so the analyst
+      {/* Investigation-guidance question cards, always visible so the analyst
           can pick a new one mid-conversation. */}
       {questions.length > 0 && (
         <Box sx={{ mb:1.75 }}>
@@ -2163,7 +1878,7 @@ function ChatWithRecon({ result, bare }) {
               fontSize:11, color:'text.tertiary', fontWeight:500,
               textTransform:'uppercase', letterSpacing:'0.06em',
             }}>
-              {isAmbiguous ? 'Probing questions' : 'Things to verify · click — RECON asks, you answer'}
+              Things to verify, click and RECON asks, you answer
             </Typography>
           </Box>
           <Stack spacing={1}>
@@ -2362,45 +2077,6 @@ function ChatWithRecon({ result, bare }) {
   );
 }
 
-/* ─── IR playbook (NIST 800-61) ───────────────────────────────────────────────── */
-function IRPlaybook({ rs }) {
-  const p = rs?.analyst_summary?.ir_playbook;
-  if (!p) return null;
-  const phases = [
-    ['Identification', p.phase_identification, t.cy],
-    ['Containment',    p.phase_containment,    t.orange],
-    ['Eradication',    p.phase_eradication,    t.red],
-    ['Recovery',       p.phase_recovery,       t.green],
-    ['Lessons learned',p.phase_lessons,        t.purple],
-  ].filter(([, steps]) => steps?.length > 0);
-  if (!phases.length) return null;
-
-  return (
-    <Card title="Incident response playbook" accent="#0fbcff"
-      badge="NIST 800-61" defaultOpen={false}>
-      <Box sx={{
-        display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(280px, 1fr))', gap:1.25,
-      }}>
-        {phases.map(([label, steps, color]) => (
-          <MuiPaper key={label} elevation={0} sx={{
-            backgroundColor:'background.secondary',
-            border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-            borderLeft: `3px solid ${color}`,
-            borderRadius:'4px', p:'12px 14px',
-          }}>
-            <Typography sx={{ fontSize:12, fontWeight:600, color, mb:1,
-              textTransform:'uppercase', letterSpacing:'0.04em' }}>{label}</Typography>
-            <Box component="ol" sx={{ m:0, pl:2.25, fontSize:12,
-              color:'text.primary', lineHeight:1.7 }}>
-              {steps.map((s, i) => <li key={i} style={{ marginBottom:5 }}>{s}</li>)}
-            </Box>
-          </MuiPaper>
-        ))}
-      </Box>
-    </Card>
-  );
-}
-
 /* ─── email analysis (when input is an EML) ───────────────────────────────────── */
 function EmailAnalysis({ result }) {
   const e = result?.email_analysis;
@@ -2509,207 +2185,6 @@ function EmailAnalysis({ result }) {
               wordBreak: 'break-all', borderTop: borderTop(i),
             }}>{u}</Box>
           ))}
-        </Block>
-      )}
-    </Card>
-  );
-}
-
-/* ─── CTI framework analysis (Diamond Model / Kill Chain / Pyramid / Admiralty) ─── */
-function CTIFramework({ rs }) {
-  const dm = rs?.diamond_model || {};
-  const kc = rs?.kill_chain || {};
-  const pop = rs?.pyramid_of_pain || [];
-  const evid = rs?.evidence_ratings || [];
-  const hasAny = Object.keys(dm).length || Object.values(kc).some(v=>v) || pop.length || evid.length;
-  if (!hasAny) return null;
-
-  // Kill Chain stages in canonical order
-  const stages = [
-    ['reconnaissance',        'Reconnaissance'],
-    ['weaponization',         'Weaponization'],
-    ['delivery',              'Delivery'],
-    ['exploitation',          'Exploitation'],
-    ['installation',          'Installation'],
-    ['command_and_control',   'Command & Control'],
-    ['actions_on_objectives', 'Actions on Objectives'],
-  ];
-
-  // Pyramid of Pain colour scale — higher = more painful for attacker (better detection target)
-  const popOrder = ['TTPs', 'tools', 'host_artifacts', 'network', 'domains', 'ips', 'hashes'];
-  const popColor = { TTPs:t.red, tools:t.orange, host_artifacts:'#fb923c', network:t.yellow,
-                     domains:t.cy, ips:t.blue, hashes:t.fgMute };
-  const popMap = Object.fromEntries((pop || []).map(p => [p.level, p]));
-
-  // Admiralty code colour by source reliability letter
-  const admColor = { A:t.green, B:'#34d399', C:t.yellow, D:t.orange, E:t.red, F:t.fgMute };
-
-  const borderTop = (i) => i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none';
-  const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
-
-  return (
-    <Card title="CTI framework analysis" accent="#B286FF"
-      badge="Diamond · Kill Chain · Pyramid · Admiralty">
-
-      {/* ── Diamond Model ─── 4-vertex layout ────────────────────────────── */}
-      {Object.keys(dm).length > 0 && (
-        <Block title="Diamond Model · adversary, capability, infrastructure, victim">
-          <Box component="li" sx={{ listStyle: 'none', p: 0 }}>
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mt: 0.5 }}>
-              {[
-                ['adversary',      'Adversary',      '#EE3838'],
-                ['capability',     'Capability',     '#E6700F'],
-                ['infrastructure', 'Infrastructure', '#0fbcff'],
-                ['victim',         'Victim',         '#B286FF'],
-              ].map(([k, label, color]) => {
-                const v = dm[k] || {};
-                return (
-                  <MuiPaper key={k} elevation={0} sx={{
-                    backgroundColor: '#0C1524',
-                    border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-                    borderLeft: `3px solid ${color}`,
-                    borderRadius: '4px', p: '10px 12px',
-                  }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.75 }}>
-                      <Box component="span" sx={{ fontSize: 10, color, fontWeight: 600, letterSpacing: '0.05em' }}>
-                        {label.toUpperCase()}
-                      </Box>
-                      {v.confidence && <MuiTag label={v.confidence} color={color}/>}
-                    </Box>
-                    <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 500, mb: 0.5 }}>
-                      {v.value || '—'}
-                    </Typography>
-                    {v.rationale && (
-                      <Typography sx={{ fontSize: 11, color: 'text.tertiary', lineHeight: 1.55 }}>
-                        {v.rationale}
-                      </Typography>
-                    )}
-                  </MuiPaper>
-                );
-              })}
-            </Box>
-            {dm.meta_features && (dm.meta_features.phase || dm.meta_features.methodology) && (
-              <Box sx={{
-                mt: 1, fontSize: 11, color: 'text.tertiary', p: '6px 10px',
-                backgroundColor: '#070d19', borderRadius: '4px',
-                border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-              }}>
-                <Box component="span" sx={{ color: 'text.disabled' }}>meta:</Box> {dm.meta_features.phase || '—'}
-                {dm.meta_features.methodology && <> · {dm.meta_features.methodology}</>}
-              </Box>
-            )}
-          </Box>
-        </Block>
-      )}
-
-      {/* ── Kill Chain — horizontal stage strip ──────────────────────────── */}
-      {Object.values(kc).some(v => v) && (
-        <Block title="Cyber Kill Chain · Lockheed Martin 7-stage mapping">
-          <Box component="li" sx={{ listStyle: 'none', p: 0 }}>
-            <Box sx={{ display: 'flex', gap: 0.75, mt: 0.5, overflowX: 'auto' }}>
-              {stages.map(([key, label], i) => {
-                const evidence = kc[key];
-                const hit = evidence && evidence !== 'null' && evidence !== null;
-                return (
-                  <MuiPaper key={key} elevation={0} sx={{
-                    flex: '1 1 0', minWidth: 90,
-                    backgroundColor: hit ? muiAlpha('#E6700F', 0.08) : '#0C1524',
-                    border: `1px solid ${hit ? '#E6700F' : muiAlpha('#ffffff', 0.12)}`,
-                    borderTop: `3px solid ${hit ? '#E6700F' : muiAlpha('#ffffff', 0.12)}`,
-                    borderRadius: '4px', p: '8px 10px',
-                  }}>
-                    <Box sx={{
-                      fontSize: 10, color: hit ? 'warning.main' : 'text.disabled', fontWeight: 600,
-                      mb: 0.5, lineHeight: 1.3,
-                    }}>
-                      {String(i + 1).padStart(2, '0')} · {label}
-                    </Box>
-                    <Box sx={{
-                      fontSize: 10, color: hit ? 'text.primary' : muiAlpha('#ffffff', 0.25),
-                      lineHeight: 1.5,
-                    }}>
-                      {hit ? evidence : '—'}
-                    </Box>
-                  </MuiPaper>
-                );
-              })}
-            </Box>
-          </Box>
-        </Block>
-      )}
-
-      {/* ── Pyramid of Pain ──────────────────────────────────────────────── */}
-      {pop.length > 0 && (
-        <Block title="Pyramid of Pain · prioritize detections by attacker cost-to-change">
-          <Box component="li" sx={{ listStyle: 'none', p: 0 }}>
-            <Box sx={{ mt: 0.75 }}>
-              {popOrder.map((lvl, i) => {
-                const entry = popMap[lvl];
-                const indicators = entry?.indicators || [];
-                const hasInd = indicators.length > 0 && !(indicators.length === 1 && (!indicators[0] || indicators[0] === '<observed TTP>'));
-                const widthPct = 100 - (i * 12);
-                const color = popColor[lvl];
-                const labelMap = { TTPs: 'TTPs (months)', tools: 'Tools (months)',
-                                   host_artifacts: 'Host artifacts (weeks)', network: 'Network artifacts (days)',
-                                   domains: 'Domains (hours)', ips: 'IPs (minutes)', hashes: 'Hashes (seconds)' };
-                return (
-                  <Box key={lvl} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 0.375 }}>
-                    <Box sx={{
-                      width: `${widthPct}%`, maxWidth: 480, ml: 'auto', mr: 0,
-                      backgroundColor: hasInd ? muiAlpha(color, 0.12) : '#0C1524',
-                      border: `1px solid ${hasInd ? color : muiAlpha('#ffffff', 0.12)}`,
-                      borderRadius: '4px', p: '5px 10px',
-                      display: 'flex', justifyContent: 'space-between',
-                      alignItems: 'center', gap: 1,
-                    }}>
-                      <Box component="span" sx={{
-                        fontSize: 11, color: hasInd ? color : 'text.disabled',
-                        fontWeight: 600, whiteSpace: 'nowrap',
-                      }}>{labelMap[lvl]}</Box>
-                      {hasInd && (
-                        <Box component="span" sx={{
-                          fontSize: 10, color: 'text.primary', ...monoSx,
-                          textAlign: 'right', overflow: 'hidden',
-                          textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>
-                          {indicators.slice(0, 3).join(', ')}
-                        </Box>
-                      )}
-                    </Box>
-                  </Box>
-                );
-              })}
-            </Box>
-            <Typography sx={{ mt: 1, fontSize: 11, color: 'text.tertiary', fontStyle: 'italic' }}>
-              Focus detections on the top half (host artifacts, tools, TTPs) — they take attackers
-              weeks to months to replace; hashes/IPs they swap in seconds.
-            </Typography>
-          </Box>
-        </Block>
-      )}
-
-      {/* ── Admiralty Code — evidence reliability ratings ───────────────── */}
-      {evid.length > 0 && (
-        <Block title="Admiralty Code · NATO STANAG 2511 evidence reliability">
-          {evid.map((e, i) => {
-            const c = admColor[e.source_reliability?.[0]?.toUpperCase()] || '#848592';
-            return (
-              <Box component="li" key={i} sx={{
-                py: 0.875, listStyle: 'none', borderTop: borderTop(i),
-              }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.375 }}>
-                  <MuiTag label={e.rating || '?'} color={c}/>
-                  <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
-                    source={e.source_reliability || '?'} · cred={e.info_credibility || '?'}
-                  </Typography>
-                </Box>
-                <Typography sx={{ fontSize: 12, color: 'text.primary', mb: 0.25 }}>{e.evidence}</Typography>
-                {e.rationale && (
-                  <Typography sx={{ fontSize: 11, color: 'text.tertiary', lineHeight: 1.5 }}>{e.rationale}</Typography>
-                )}
-              </Box>
-            );
-          })}
         </Block>
       )}
     </Card>
@@ -3276,213 +2751,6 @@ function URLScanLive({ result, bare }) {
     <Card title="Live URL scan · URLScan.io" accent="#0fbcff" defaultOpen={false}
       badge={`${urls.length} URL${urls.length === 1 ? '' : 's'} available`}>
       {body}
-    </Card>
-  );
-}
-
-/* ─── enrichments ─────────────────────────────────────────────────────────────── */
-function Enrichments({ enrichments }) {
-  if (!enrichments || !Object.keys(enrichments).length) return null;
-  const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
-  return (
-    <Card title="Raw enrichment data" accent="#848592" defaultOpen={false}>
-      {Object.entries(enrichments).map(([iocType, iocMap]) =>
-        Object.entries(iocMap || {}).map(([ioc, data]) => (
-          <Box key={ioc} sx={{ mb: 2 }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-              <TypeTag type={iocType}/>
-              <Box component="span" sx={{
-                fontSize: 12, color: 'text.primary', ...monoSx, wordBreak: 'break-all',
-              }}>{ioc}</Box>
-            </Stack>
-            <Box sx={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-              gap: 0.75,
-            }}>
-              {Object.entries(data).filter(([k]) => k !== 'cached').map(([src, srcData]) => {
-                if (!srcData || typeof srcData !== 'object') return null;
-                const entries = Object.entries(srcData).filter(
-                  ([, v]) => v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && !v.length)
-                );
-                if (!entries.length) return null;
-                return (
-                  <MuiPaper key={src} elevation={0} sx={{
-                    backgroundColor: '#0C1524',
-                    border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-                    borderRadius: '4px', p: 1.25,
-                  }}>
-                    <Typography sx={{ fontSize: 11, color: 'primary.main', fontWeight: 600, mb: 0.75 }}>
-                      {src}
-                    </Typography>
-                    {entries.slice(0, 6).map(([k, v]) => (
-                      <Box key={k} sx={{
-                        display: 'flex', justifyContent: 'space-between',
-                        fontSize: 11, py: 0.25, gap: 1,
-                      }}>
-                        <Box component="span" sx={{ color: 'text.disabled', flexShrink: 0 }}>{k}</Box>
-                        <Box component="span" sx={{
-                          color: 'text.primary', textAlign: 'right',
-                          wordBreak: 'break-all', maxWidth: 140, ...monoSx,
-                        }}>
-                          {Array.isArray(v) ? v.slice(0, 4).join(', ') : String(v).slice(0, 80)}
-                        </Box>
-                      </Box>
-                    ))}
-                  </MuiPaper>
-                );
-              })}
-            </Box>
-          </Box>
-        ))
-      )}
-    </Card>
-  );
-}
-
-/* ─── report ──────────────────────────────────────────────────────────────────── */
-function Report({ result }) {
-  const ref = useRef(null);
-  const [analyst, setAnalyst] = useState('');
-  const [notes, setNotes]     = useState('');
-  if (!result) return null;
-  const rs   = result.response_summary || {};
-  const lc   = levelStyle[rs.threat_level] || levelStyle.INFORMATIONAL;
-  const ts   = rs.timestamp ? new Date(rs.timestamp) : new Date();
-  const iocs = result.iocs || {};
-  const total = Object.values(iocs).flat().length;
-
-  const print = () => {
-    const w = window.open('','_blank');
-    w.document.write(`<html><head><title>RECON Investigation Report</title>
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-      <style>body{font-family:Inter,system-ui,sans-serif;background:#0a0e16;color:#e8eaed;padding:48px;font-size:13px;line-height:1.7}
-      pre{background:#10141f;padding:14px;border-radius:6px;font-size:11px;white-space:pre-wrap;word-break:break-all;font-family:'JetBrains Mono',monospace}
-      table{border-collapse:collapse;width:100%}td,th{padding:6px 10px;text-align:left;border-bottom:1px solid rgba(255,255,255,0.06)}
-      @media print{body{background:#fff;color:#111;padding:24px}}
-      </style></head><body>${ref.current.innerHTML}</body></html>`);
-    w.document.close(); setTimeout(()=>w.print(),400);
-  };
-
-  return (
-    <Card title="Investigation report" accent="#B286FF" defaultOpen={false} badge={`${total} indicators`}>
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1.75 }}>
-        <MuiButton onClick={print} data-recon-print variant="outlined" size="small"
-          startIcon={<Printer size={12}/>} sx={{ color: '#B286FF', borderColor: muiAlpha('#B286FF', 0.4) }}>
-          Print / Save PDF
-        </MuiButton>
-      </Box>
-
-      <Box ref={ref} sx={{
-        backgroundColor: '#070d19',
-        border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-        borderRadius: '4px', p: 3.5,
-      }}>
-        <Box component="header" sx={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end',
-          mb: 2.75, pb: 2, borderBottom: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-        }}>
-          <Box>
-            <Typography component="h1" sx={{
-              fontSize: 20, color: 'text.primary', fontWeight: 700, letterSpacing: '-0.02em',
-            }}>Threat intelligence report</Typography>
-            <Typography sx={{ fontSize: 12, color: 'text.disabled', mt: 0.5 }}>RECON Platform</Typography>
-          </Box>
-          <Box sx={{ textAlign: 'right', fontSize: 12, color: 'text.tertiary' }}>
-            <Box sx={{ fontVariantNumeric: 'tabular-nums' }}>{ts.toLocaleDateString()}</Box>
-            <Box sx={{ fontVariantNumeric: 'tabular-nums' }}>{ts.toLocaleTimeString()}</Box>
-          </Box>
-        </Box>
-
-        <Box sx={{ mb: 2.25 }}>
-          <Typography component="label" sx={{
-            fontSize: 12, color: 'text.disabled', display: 'block', mb: 0.75,
-          }}>Analyst</Typography>
-          <MuiTextField value={analyst} onChange={e => setAnalyst(e.target.value)}
-            placeholder="Your name" size="small" fullWidth/>
-        </Box>
-
-        <MuiPaper elevation={0} sx={{
-          backgroundColor: lc.bg,
-          border: `1px solid ${lc.line}`,
-          borderRadius: '4px', p: '14px 16px', mb: 2.5,
-        }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box sx={{ width: 8, height: 8, borderRadius: 99, backgroundColor: lc.fg }}/>
-              <Typography sx={{ color: lc.fg, fontWeight: 600, fontSize: 13 }}>{rs.threat_level}</Typography>
-            </Box>
-            <Typography sx={{ fontSize: 12, color: 'text.tertiary' }}>
-              Confidence {Math.round((rs.confidence || 0) * 100)}%
-            </Typography>
-          </Box>
-          <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.7 }}>{rs.summary}</Typography>
-        </MuiPaper>
-
-        <Typography variant="h3" sx={{ fontSize:13, color:'text.tertiary', fontWeight:500, mb:1 }}>
-          Indicator inventory · {total}
-        </Typography>
-        <MuiTable size="small" sx={{ mb:2.5 }}>
-          <MuiTableHead>
-            <MuiTableRow>
-              {['Type','Indicator','Verdict','Reason'].map(h =>
-                <MuiTableCell key={h}>{h}</MuiTableCell>
-              )}
-            </MuiTableRow>
-          </MuiTableHead>
-          <MuiTableBody>
-            {Object.entries(iocs).flatMap(([type,list]) => (list||[]).map(ioc => {
-              const a = rs.ioc_assessments?.find(x => x.ioc === ioc);
-              return (
-                <MuiTableRow key={ioc} hover>
-                  <MuiTableCell><TypeTag type={type}/></MuiTableCell>
-                  <MuiTableCell sx={{ fontFamily:'"IBM Plex Mono", monospace',
-                    wordBreak:'break-all' }}>{ioc}</MuiTableCell>
-                  <MuiTableCell>{a && <Verdict verdict={a.verdict} size="small"/>}</MuiTableCell>
-                  <MuiTableCell sx={{ fontSize:11, color:'text.tertiary', maxWidth:240 }}>
-                    {a?.reason || ''}
-                  </MuiTableCell>
-                </MuiTableRow>
-              );
-            }))}
-          </MuiTableBody>
-        </MuiTable>
-
-        {rs.mitre_techniques?.length > 0 && (
-          <>
-            <Typography variant="h3" sx={{ fontSize:13, color:'text.tertiary', fontWeight:500, mb:1 }}>
-              MITRE ATT&amp;CK
-            </Typography>
-            <Box sx={{ display:'flex', gap:0.5, flexWrap:'wrap', mb:2.5 }}>
-              {rs.mitre_techniques.map((t_, i) => (
-                <MuiTag key={i} label={t_} color="#0fbcff"
-                  sx={{ fontFamily:'"IBM Plex Mono", monospace' }}/>
-              ))}
-            </Box>
-          </>
-        )}
-
-        {result.sigma_rule && (
-          <>
-            <Typography variant="h3" sx={{ fontSize:13, color:'text.tertiary', fontWeight:500, mb:1 }}>
-              Sigma detection rule
-            </Typography>
-            <Box sx={{ mb:2.5 }}>
-              <MuiCodeBlock maxHeight={200}>{result.sigma_rule}</MuiCodeBlock>
-            </Box>
-          </>
-        )}
-
-        <Box sx={{
-          borderTop: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-          pt: 1.75, mt: 2.5,
-          display: 'flex', justifyContent: 'space-between',
-          fontSize: 11, color: 'text.disabled',
-        }}>
-          <Box component="span" sx={{ fontVariantNumeric: 'tabular-nums' }}>{ts.toISOString()}</Box>
-          <Box component="span">Confidential — Internal use only</Box>
-        </Box>
-      </Box>
     </Card>
   );
 }
