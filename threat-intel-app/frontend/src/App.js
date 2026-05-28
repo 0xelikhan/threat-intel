@@ -1,12 +1,9 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, lazy, Suspense } from 'react';
 import {
   Copy, ArrowUpRight, AlertCircle, X, FileSearch, Mail,
 } from 'lucide-react';
 
-import MapTab            from './components/MapTab';
 import AgentPipeline     from './components/AgentPipeline';
-import FileScannerView   from './components/FileScannerView';
-import EmailComposerView from './components/EmailComposerView';
 
 // MUI-based primitives (adapted from OpenCTI's Tag.tsx + theme) — every chip,
 // card, code-block, copy button now renders through MUI components that inherit
@@ -43,6 +40,15 @@ import {
   CopyBtn    as MuiCopyBtn,
   CardDefaultOpenContext,
 } from './components/ui';
+
+// Code-split the three heaviest workspaces so they only load when the
+// analyst actually opens them. FileScannerView is the densest view in the
+// app (~600 lines + analyst-report sections), EmailComposerView pulls the
+// rendered-email iframe pipeline, and MapTab pulls Leaflet + its CSS.
+// Cuts the initial bundle the cold-load analyst pays for.
+const FileScannerView   = lazy(() => import('./components/FileScannerView'));
+const EmailComposerView = lazy(() => import('./components/EmailComposerView'));
+const MapTab            = lazy(() => import('./components/MapTab'));
 
 /* ─── design tokens — exact values from OpenCTI ThemeDark.ts ────────────────
  * Adapted from OpenCTI (AGPL-3.0). Every legacy inline-styled element now
@@ -3007,6 +3013,22 @@ function Empty() {
   return null;
 }
 
+// Suspense fallback for the lazy-loaded workspaces (FileScannerView,
+// EmailComposerView, MapTab). Keeps the layout stable while the chunk
+// loads — picks a sensible default height so the surrounding card doesn't
+// snap when the real component mounts.
+function LazyFallback({ height = 120 }) {
+  return (
+    <Box sx={{
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      height, color: 'text.tertiary', fontSize: 12,
+      fontFamily: '"IBM Plex Mono", monospace', letterSpacing: '0.06em',
+    }}>
+      loading…
+    </Box>
+  );
+}
+
 /* ─── IOC pivot (cross-run sightings) ────────────────────────────────────────── */
 function IOCPivot({ result }) {
   const pivots = result?.ioc_pivot || [];
@@ -3389,11 +3411,13 @@ export default function App() {
 
       {/* Main view priority: email composer > file scanner > analysis */}
       {emailState && (
-        <EmailComposerView
-          initialLog={emailState.log || ''}
-          initialParsed={emailState.parsed || null}
-          onClose={() => setEmailState(null)}
-        />
+        <Suspense fallback={<LazyFallback/>}>
+          <EmailComposerView
+            initialLog={emailState.log || ''}
+            initialParsed={emailState.parsed || null}
+            onClose={() => setEmailState(null)}
+          />
+        </Suspense>
       )}
       {!emailState && showScanner && (
         <Box sx={{ flex: 1, minWidth: 0, position: 'relative' }}>
@@ -3406,12 +3430,14 @@ export default function App() {
             }}>
             <X size={16}/>
           </MuiIconButton>
-          <FileScannerView
-            external={scanState}
-            onScanFile={scanFile}
-            onScanHash={scanHash}
-            onScanUrl={scanUrl}
-          />
+          <Suspense fallback={<LazyFallback/>}>
+            <FileScannerView
+              external={scanState}
+              onScanFile={scanFile}
+              onScanHash={scanHash}
+              onScanUrl={scanUrl}
+            />
+          </Suspense>
         </Box>
       )}
       {!emailState && !showScanner && (
@@ -3458,7 +3484,11 @@ export default function App() {
             <IOCPivot result={result}/>
             <BulkTable result={result}/>
             {(result?.iocs?.ips || []).length > 0 && (
-              <Card title="Geolocation" accent="#0fbcff" noPad><MapTab result={result}/></Card>
+              <Card title="Geolocation" accent="#0fbcff" noPad>
+                <Suspense fallback={<LazyFallback height={260}/>}>
+                  <MapTab result={result}/>
+                </Suspense>
+              </Card>
             )}
           </>
         )}
@@ -3486,7 +3516,9 @@ export default function App() {
             <EmailAnalysis result={result}/>
             {(result?.iocs?.ips || []).length > 0 && (
               <Card title="Geolocation" accent="#0fbcff" noPad>
-                <MapTab result={result}/>
+                <Suspense fallback={<LazyFallback height={260}/>}>
+                  <MapTab result={result}/>
+                </Suspense>
               </Card>
             )}
             <Detection result={result}/>
