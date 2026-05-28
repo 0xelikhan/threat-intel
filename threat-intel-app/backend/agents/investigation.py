@@ -871,23 +871,46 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                 # Probing questions get their OWN call so they always have token
                 # headroom — when bundled into the findings half they were the last
                 # field generated and got truncated away, leaving Ask RECON empty.
+                #
+                # Anchoring rule (the FORBID + REQUIRE pair) is what stops the AI
+                # from emitting the same 5-question template across investigations.
+                # Without it, low temperature + a generic prompt = same questions
+                # every run; with it, each question is forced to cite a specific
+                # IOC / username / process / field from THIS investigation, so the
+                # output is structurally unable to be templated.
                 probing_instr = (
                     "Now output ONLY the investigation's probing questions as strict JSON. "
                     "Produce 3-5 questions — mix surrounding-activity, false-positive probes, "
                     "true-positive probes, context, and lateral-movement checks. Each MUST be "
                     "specific and answerable by checking a SIEM/EDR/ticket or asking the customer.\n\n"
+                    "ANCHORING RULE — read carefully:\n"
+                    "Every question MUST reference at least ONE specific artefact from THIS "
+                    "investigation by name: an IOC value (IP/domain/hash/URL), a username/UPN, "
+                    "a hostname, a process name, a command-line fragment, a registry path, an "
+                    "alert/rule name, or a parsed field from the raw input. Never write a "
+                    "generic question that could apply to any alert.\n\n"
+                    "FORBIDDEN (too generic, do not produce):\n"
+                    "  * \"What did the user do before this alert?\"\n"
+                    "  * \"Has this hash appeared in other investigations?\"\n"
+                    "  * \"Is this activity expected?\"\n"
+                    "REQUIRED instead (cites specifics from THIS alert):\n"
+                    "  * \"What did <user 'jsmith@contoso.com'> do in the 30 minutes before "
+                    "the 14:02 UTC sign-in from 185.220.101.45?\"\n"
+                    "  * \"Has SHA256 7c2f… been seen on any other endpoint in the last 7 days?\"\n"
+                    "  * \"Is the parent process for powershell.exe -enc … expected to be "
+                    "msbuild.exe on host DESKTOP-04?\"\n\n"
                     "Output ONLY this key:\n"
                     "  probing_questions (array of {question, why_asking, if_yes_means, if_no_means}),\n"
                     "    where if_yes_means / if_no_means state the verdict path each answer points to.\n\n"
                     "No markdown fences, no commentary outside the JSON."
                 )
 
-                async def _synth(instruction: str, max_tokens: int):
+                async def _synth(instruction: str, max_tokens: int, temperature: float = 0.1):
                     resp = await client.chat.completions.create(
                         model=model,   # smart — quality-critical synthesis
                         messages=messages + [{"role": "user", "content": instruction}],
                         response_format={"type": "json_object"},
-                        temperature=0.1,
+                        temperature=temperature,
                         max_tokens=max_tokens,
                     )
                     # Lenient parse: even if the half is truncated, keep its
@@ -898,10 +921,16 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                 # the findings half (lists + CTI frameworks) is the heavy one.
                 # Both run concurrently, so wall-time ≈ the findings call, still
                 # faster than one complete ~3500-token single call.
+                #
+                # Probing questions get a higher temperature (0.55 vs 0.1) so
+                # surface wording varies between runs — combined with the
+                # evidence-anchoring rule in the prompt, this stops "second
+                # analysis hits the same probe template" by making each call
+                # structurally and stylistically unique.
                 part_a, part_b, part_c = await asyncio.gather(
                     _synth(verdict_instr, 1300),
                     _synth(findings_instr, 1900),
-                    _synth(probing_instr, 900),
+                    _synth(probing_instr, 1100, temperature=0.55),
                     return_exceptions=True,
                 )
                 result = {}
