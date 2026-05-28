@@ -46,14 +46,38 @@ jobs:
       # Build in the cloud (ACR Tasks) — no Docker needed on the runner. The
       # build context is the threat-intel-app folder; the Dockerfile builds the
       # React frontend and Python backend in one multi-stage image.
+      #
+      # Retry wrapper: ACR Tasks pulls the base images (node:20-alpine,
+      # python:3.11-slim) anonymously from Docker Hub, which periodically
+      # 429s with "toomanyrequests: You have reached your unauthenticated
+      # pull rate limit." The limit is per-IP and ACR cycles its egress
+      # IPs, so a 30s sleep + retry almost always wins. Three attempts
+      # (max ~75s of waits) before the job is allowed to fail.
       - name: Build and push image (ACR build)
         run: |
-          az acr build \
-            --registry ${{ secrets.ACR_NAME }} \
-            --image ${IMAGE_NAME}:${{ github.sha }} \
-            --image ${IMAGE_NAME}:latest \
-            --file threat-intel-app/Dockerfile \
-            threat-intel-app
+          set -e
+          ATTEMPTS=3
+          for i in $(seq 1 $ATTEMPTS); do
+            echo "::group::ACR build attempt $i/$ATTEMPTS"
+            if az acr build \
+                 --registry ${{ secrets.ACR_NAME }} \
+                 --image ${IMAGE_NAME}:${{ github.sha }} \
+                 --image ${IMAGE_NAME}:latest \
+                 --file threat-intel-app/Dockerfile \
+                 threat-intel-app; then
+              echo "::endgroup::"
+              echo "ACR build succeeded on attempt $i"
+              exit 0
+            fi
+            echo "::endgroup::"
+            if [ "$i" -lt "$ATTEMPTS" ]; then
+              SLEEP=$((i * 30))
+              echo "::warning::ACR build attempt $i failed (often Docker Hub anon pull rate-limit). Sleeping ${SLEEP}s before retry."
+              sleep $SLEEP
+            fi
+          done
+          echo "::error::ACR build failed after $ATTEMPTS attempts."
+          exit 1
 
       - name: Deploy to Azure Container Apps
         run: |
