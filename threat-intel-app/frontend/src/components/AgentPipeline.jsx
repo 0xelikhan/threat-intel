@@ -326,7 +326,7 @@ export default function AgentPipeline({ logText, label, onComplete, onStart, onP
             textTransform: 'none', height: 'auto', py: 0.75,
             '&:hover': { color: 'text.tertiary', backgroundColor: 'transparent' },
           }}>
-          Clear previous trace
+          Clear Previous Trace
         </Button>
       )}
     </Box>

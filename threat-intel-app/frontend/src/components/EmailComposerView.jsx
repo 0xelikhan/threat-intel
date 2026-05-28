@@ -11,15 +11,15 @@
  * log, generates a tailored body via OpenAI/Azure, and renders it through
  * the same signature pipeline as static composes.
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Stack, Typography, Paper as MuiPaper,
   Button as MuiButton, TextField as MuiTextField,
   IconButton as MuiIconButton, CircularProgress, Tooltip,
-  ToggleButton, ToggleButtonGroup, MenuItem,
+  ToggleButton, ToggleButtonGroup, MenuItem, Chip as MuiChip,
 } from '@mui/material';
 import { alpha as muiAlpha } from '@mui/material/styles';
-import { Mail, Copy, Check, Eye, RefreshCcw, AlertCircle, Sparkles } from 'lucide-react';
+import { Mail, Copy, Check, Eye, RefreshCcw, AlertCircle, Sparkles, Zap } from 'lucide-react';
 
 const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
 
@@ -32,6 +32,7 @@ const RESPONSE_OPTIONS = [
   { id: 'lock_account',                     label: 'Lock account' },
   { id: 'lock_account_and_revoke_session',  label: 'Lock account & revoke session' },
 ];
+const RESPONSE_LABEL = Object.fromEntries(RESPONSE_OPTIONS.map(r => [r.id, r.label]));
 
 
 function CopyBtn({ text, label = 'Copy', size = 'small' }) {
@@ -81,6 +82,12 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
   const [composing, setComposing]           = useState(false);
   const [composeError, setComposeError]     = useState(null);
   const [previewMode, setPreviewMode]       = useState('rendered');
+  // Auto-classification — populated as the analyst pastes. We track whether
+  // the dropdown has been touched so the auto-pick never overrides a manual
+  // choice the analyst made deliberately.
+  const [detected, setDetected]             = useState(null);   // {alert_type, alert_label, response_action}
+  const userPickedAction                    = useRef(false);
+  const parseTimer                          = useRef(null);
 
   const doCompose = useCallback(async () => {
     if (!rawLog.trim()) { setComposeError('Paste the alert log first'); return; }
@@ -111,6 +118,44 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
     }
   }, [rawLog, responseAction, initialParsed]);
 
+  // Debounced auto-classify: as the analyst pastes, hit /api/email/parse to
+  // learn the alert type + recommended response action. Pre-pick the dropdown
+  // unless the analyst has touched it themselves. Keeps the no-template flow
+  // truly one-click for the common case.
+  useEffect(() => {
+    if (parseTimer.current) clearTimeout(parseTimer.current);
+    if (!rawLog || rawLog.trim().length < 20) {
+      setDetected(null);
+      // Reset the touched flag so a fresh paste can auto-apply again.
+      userPickedAction.current = false;
+      return;
+    }
+    parseTimer.current = setTimeout(async () => {
+      try {
+        const r = await fetch('/api/email/parse', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ log_text: rawLog }),
+        });
+        if (!r.ok) return;
+        const p = await r.json();
+        const at = p.suggested_alert_type;
+        const ra = p.suggested_response_action;
+        if (!at) { setDetected(null); return; }
+        // Look up the human label from the backend roundtrip cost-free —
+        // fall back to the id when /api/email/templates hasn't been cached.
+        setDetected({
+          alert_type: at,
+          alert_label: (p._alert_label || at).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          response_action: ra || '',
+        });
+        if (ra && !userPickedAction.current) {
+          setResponseAction(ra);
+        }
+      } catch { /* parse failure is silent — analyst can still compose */ }
+    }, 400);
+    return () => { if (parseTimer.current) clearTimeout(parseTimer.current); };
+  }, [rawLog]);
+
   // Auto-compose once when a fresh log is handed in from another view
   useEffect(() => {
     if (initialLog && !composed && !composing) {
@@ -128,7 +173,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
       <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2.5 }}>
         <Mail size={20} color="#0fbcff"/>
         <Typography sx={{ fontSize: 18, fontWeight: 600, color: 'text.primary' }}>
-          Email
+          Email Composer
         </Typography>
         {onClose && (
           <MuiButton onClick={onClose} size="small" variant="text"
@@ -144,14 +189,46 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
         border: theme => `1px solid ${muiAlpha('#ffffff', 0.12)}`,
         borderRadius: '4px', p: 2, mb: 2,
       }}>
-        <SectionHeader title="1 · Raw alert log" badge="paste below"/>
+        <SectionHeader title="1 · Raw alert log"/>
         <MuiTextField
           value={rawLog}
           onChange={e => setRawLog(e.target.value)}
-          placeholder="Paste the raw alert log here. The AI parses key:value lines like 'RiskLevel: high', 'UserDisplayName: ...', 'IpAddress: ...' automatically."
           multiline minRows={6} maxRows={20} fullWidth
           InputProps={{ sx: { ...monoSx, fontSize: 12, lineHeight: 1.55 } }}
         />
+        {detected && (
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 1.25 }} flexWrap="wrap" useFlexGap>
+            <Zap size={12} color="#0fbcff"/>
+            <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>Detected</Typography>
+            <MuiChip
+              label={detected.alert_label}
+              size="small"
+              sx={{
+                height: 20, fontSize: 11,
+                backgroundColor: muiAlpha('#0fbcff', 0.16),
+                color: '#0fbcff', fontWeight: 500,
+                borderRadius: '3px',
+              }}
+            />
+            {detected.response_action && (
+              <>
+                <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
+                  → suggested:
+                </Typography>
+                <MuiChip
+                  label={RESPONSE_LABEL[detected.response_action] || detected.response_action}
+                  size="small"
+                  sx={{
+                    height: 20, fontSize: 11,
+                    backgroundColor: muiAlpha('#B286FF', 0.18),
+                    color: '#B286FF', fontWeight: 500,
+                    borderRadius: '3px',
+                  }}
+                />
+              </>
+            )}
+          </Stack>
+        )}
       </MuiPaper>
 
       {/* ─── 2 · Response action + compose button ───────────────────────── */}
@@ -160,18 +237,21 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
         border: theme => `1px solid ${muiAlpha('#ffffff', 0.12)}`,
         borderRadius: '4px', p: 2, mb: 2,
       }}>
-        <SectionHeader title="2 · Response action" badge="optional"/>
+        <SectionHeader title="2 · Response action"/>
 
         <Box sx={{ maxWidth: 360, mb: 2 }}>
           <MuiTextField
             select fullWidth size="small"
             value={responseAction}
-            onChange={e => setResponseAction(e.target.value)}
+            onChange={e => { userPickedAction.current = true; setResponseAction(e.target.value); }}
             InputProps={{ sx: { fontSize: 13 } }}
           >
             {RESPONSE_OPTIONS.map(r => (
               <MenuItem key={r.id || 'none'} value={r.id} sx={{ fontSize: 13 }}>
                 {r.label}
+                {detected?.response_action === r.id && r.id && (
+                  <Box component="span" sx={{ ml: 1, fontSize: 10, color: 'primary.main' }}>· auto</Box>
+                )}
               </MenuItem>
             ))}
           </MuiTextField>
