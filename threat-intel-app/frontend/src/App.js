@@ -1498,37 +1498,263 @@ function ThreatScore({ result }) {
         </Box>
       </Block>
 
-      {/* Per-indicator list */}
-      <Block title="Per-indicator score">
-        {sorted.map(([ioc, d], i) => {
-          const tr = tierFor(d.score);
-          return (
-            <Box key={ioc} sx={{
-              display: 'flex', gap: 1.5, alignItems: 'center', py: 0.875,
-              borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
-            }}>
-              <Dial score={d.score} color={tr.color} size={38}/>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography sx={{
-                  fontSize: 12, color: 'text.primary',
-                  fontFamily: '"IBM Plex Mono", monospace',
-                  wordBreak: 'break-all', mb: 0.25,
-                }}>
-                  {ioc.length > 58 ? ioc.slice(0, 55) + '…' : ioc}
-                </Typography>
-                {d.contributing_factors?.[0] && (
-                  <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
-                    {d.contributing_factors[0]}
-                  </Typography>
-                )}
-              </Box>
-              <Verdict verdict={d.verdict} size="small"/>
-            </Box>
-          );
-        })}
+      {/* Per-indicator list — click a row to expand the per-source breakdown
+          so the analyst sees WHICH TI source said what (VirusTotal ratio,
+          AbuseIPDB abuse %, Maltiverse classification + tags, GreyNoise
+          classification, OTX pulses, etc.) without leaving the Summary. */}
+      <Block title="Per-indicator score · click to expand sources">
+        <PerIndicatorList sorted={sorted} result={result}/>
       </Block>
     </>
   );
+}
+
+// Compact source-verdict row for the expanded view. One per TI source that
+// said something useful about this IOC.
+function SourceVerdict({ source, label, color = '#0fbcff' }) {
+  return (
+    <Box sx={{
+      display: 'grid', gridTemplateColumns: '100px 1fr',
+      gap: 1, py: 0.375, alignItems: 'baseline',
+    }}>
+      <Typography sx={{
+        fontSize: 10, color: 'text.tertiary',
+        textTransform: 'uppercase', letterSpacing: '0.06em',
+        fontWeight: 600,
+      }}>
+        {source}
+      </Typography>
+      <Typography sx={{
+        fontSize: 11, color, lineHeight: 1.5,
+        fontFamily: '"IBM Plex Mono", monospace',
+        wordBreak: 'break-all',
+      }}>
+        {label}
+      </Typography>
+    </Box>
+  );
+}
+
+// Pull a normalized list of {source, label, color} entries from the
+// per-IOC enrichment payload. Each TI source that returned something
+// useful contributes one row; sources that errored or had nothing to
+// say are skipped. The label is what the analyst reads at a glance.
+function _ocSources(result, ioc, type) {
+  const enr = result?.enrichments || {};
+  const bucket =
+      type === 'ip'     ? enr.ips
+    : type === 'domain' ? enr.domains
+    : type === 'hash'   ? enr.hashes
+    : type === 'url'    ? enr.urls
+    : null;
+  const d = bucket?.[ioc] || {};
+  const out = [];
+  const red = '#EE3838', orange = '#E6700F', yellow = '#E1B823',
+        green = '#16AD34', cyan = '#0fbcff', tert = '#848592';
+
+  // VirusTotal — show ratio + popular family/name when available.
+  if (d.virustotal && !d.virustotal.error) {
+    const v = d.virustotal;
+    const mal = v.malicious ?? 0;
+    const susp = v.suspicious ?? 0;
+    const total = (v.harmless ?? 0) + (v.undetected ?? 0) + mal + susp;
+    const flagged = mal + susp;
+    if (total) {
+      const c = mal >= 5 ? red : mal >= 1 ? orange : susp >= 3 ? yellow : green;
+      const extra = v.name ? ` · ${v.name}` : v.popular_family ? ` · ${v.popular_family}` : '';
+      out.push({ source: 'VirusTotal', label: `${flagged}/${total} flagged${extra}`, color: c });
+    } else if (v.reputation != null) {
+      out.push({ source: 'VirusTotal', label: `reputation ${v.reputation}`,
+                 color: v.reputation < 0 ? orange : tert });
+    }
+  }
+
+  // AbuseIPDB — abuse confidence %.
+  if (d.abuseipdb && !d.abuseipdb.error) {
+    const a = d.abuseipdb;
+    const score = a.abuseScore ?? a.abuse_confidence ?? null;
+    if (score != null) {
+      const c = score >= 75 ? red : score >= 25 ? orange : score > 0 ? yellow : green;
+      const reports = a.totalReports ? ` · ${a.totalReports} reports` : '';
+      out.push({ source: 'AbuseIPDB', label: `${score}% confidence${reports}`, color: c });
+    }
+  }
+
+  // OTX — pulse count + a top pulse name when present.
+  if (d.otx && !d.otx.error) {
+    const pulses = d.otx.pulseCount ?? d.otx.pulse_count ?? 0;
+    if (pulses > 0) {
+      const top = (d.otx.relatedPulses || d.otx.pulses || [])[0];
+      out.push({ source: 'OTX', label: `${pulses} pulse${pulses === 1 ? '' : 's'}${top ? ` · ${String(top).slice(0,60)}` : ''}`,
+                 color: pulses >= 5 ? red : pulses >= 1 ? orange : tert });
+    }
+  }
+
+  // GreyNoise — classification.
+  if (d.greynoise && !d.greynoise.error) {
+    const g = d.greynoise;
+    const cls = g.classification || g.label || (g.is_known_good ? 'benign' : '');
+    if (cls) {
+      const c = /malicious/i.test(cls) ? red
+              : /benign|known/i.test(cls) ? green
+              : /suspicious/i.test(cls) ? orange : tert;
+      const extra = g.name ? ` · ${g.name}` : '';
+      out.push({ source: 'GreyNoise', label: `${cls}${extra}`, color: c });
+    }
+  }
+
+  // Maltiverse — classification + tags.
+  if (d.maltiverse && !d.maltiverse.error) {
+    const m = d.maltiverse;
+    const cls = m.classification || '';
+    if (cls && cls !== 'neutral') {
+      const c = /malicious/i.test(cls) ? red
+              : /suspicious/i.test(cls) ? orange
+              : /benign/i.test(cls) ? green : tert;
+      const tags = (m.tag || []).slice(0, 3).join(', ');
+      out.push({ source: 'Maltiverse', label: `${cls}${tags ? ` · ${tags}` : ''}`, color: c });
+    }
+  }
+
+  // ThreatFox — malware family + first seen.
+  if (d.threatfox && !d.threatfox.error) {
+    const t = d.threatfox;
+    const malware = t.malware || t.malware_alias || '';
+    if (malware) {
+      const seen = t.first_seen ? ` · first seen ${String(t.first_seen).slice(0,10)}` : '';
+      out.push({ source: 'ThreatFox', label: `${malware}${seen}`, color: red });
+    }
+  }
+
+  // MalwareBazaar — file-family lookup (hashes).
+  if (d.malwarebazaar && !d.malwarebazaar.error) {
+    const mb = d.malwarebazaar;
+    const family = mb.malwareName || mb.signature || mb.malware_family || '';
+    if (family) out.push({ source: 'MalwareBazaar', label: family, color: red });
+  }
+
+  // URLScan — verdict + first scan.
+  if (d.urlscan && !d.urlscan.error) {
+    const u = d.urlscan;
+    const verdict = u.verdict || u.score_verdict || '';
+    if (verdict) {
+      const c = /malicious/i.test(verdict) ? red
+              : /suspicious/i.test(verdict) ? orange
+              : /benign|safe/i.test(verdict) ? green : tert;
+      out.push({ source: 'URLScan.io', label: verdict, color: c });
+    }
+  }
+
+  // Shodan — open ports / services for IPs.
+  if (d.shodan && !d.shodan.error) {
+    const s = d.shodan;
+    const ports = (s.ports || []).slice(0, 6).join(', ');
+    if (ports) out.push({ source: 'Shodan', label: `open ${ports}`, color: cyan });
+  }
+
+  // Pulsedive — risk level.
+  if (d.pulsedive && !d.pulsedive.error) {
+    const p = d.pulsedive;
+    const risk = p.risk || p.score_label || '';
+    if (risk && risk !== 'none') {
+      const c = /critical|high/i.test(risk) ? red
+              : /medium|moderate/i.test(risk) ? orange
+              : /low/i.test(risk) ? yellow : tert;
+      out.push({ source: 'Pulsedive', label: `risk ${risk}`, color: c });
+    }
+  }
+
+  // Spamhaus DBL — domain blocklist.
+  if (d.spamhaus_dbl?.hit) {
+    out.push({ source: 'Spamhaus DBL', label: `${d.spamhaus_dbl.verdict || 'listed'}${d.spamhaus_dbl.code ? ` · ${d.spamhaus_dbl.code}` : ''}`, color: red });
+  }
+
+  return out;
+}
+
+function PerIndicatorList({ sorted, result }) {
+  const [openIoc, setOpenIoc] = useState(null);
+  return sorted.map(([ioc, d], i) => {
+    const tr = tierFor(d.score);
+    const sources = _ocSources(result, ioc, d.type);
+    const expandable = sources.length > 0 || (d.contributing_factors || []).length > 1;
+    const open = openIoc === ioc;
+    return (
+      <Box key={ioc} sx={{
+        borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
+      }}>
+        <Box
+          onClick={() => expandable && setOpenIoc(open ? null : ioc)}
+          sx={{
+            display: 'flex', gap: 1.5, alignItems: 'center', py: 0.875,
+            cursor: expandable ? 'pointer' : 'default',
+            transition: 'background-color .12s',
+            '&:hover': expandable ? { backgroundColor: muiAlpha('#ffffff', 0.02) } : undefined,
+          }}
+        >
+          <Dial score={d.score} color={tr.color} size={38}/>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{
+              fontSize: 12, color: 'text.primary',
+              fontFamily: '"IBM Plex Mono", monospace',
+              wordBreak: 'break-all', mb: 0.25,
+            }}>
+              {ioc.length > 58 ? ioc.slice(0, 55) + '…' : ioc}
+            </Typography>
+            {d.contributing_factors?.[0] && (
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
+                {d.contributing_factors[0]}
+                {expandable && !open && (
+                  <Box component="span" sx={{ color: 'primary.main', ml: 0.75, fontSize: 10 }}>
+                    · {sources.length} source{sources.length === 1 ? '' : 's'}
+                  </Box>
+                )}
+              </Typography>
+            )}
+          </Box>
+          <Verdict verdict={d.verdict} size="small"/>
+        </Box>
+
+        {open && (
+          <Box sx={{
+            ml: '54px', mb: 1, mr: 1, p: '8px 12px',
+            backgroundColor: muiAlpha('#ffffff', 0.02),
+            border: `1px solid ${muiAlpha('#ffffff', 0.06)}`,
+            borderRadius: '4px',
+          }}>
+            {sources.length > 0 ? (
+              sources.map((s, j) => (
+                <SourceVerdict key={j} source={s.source} label={s.label} color={s.color}/>
+              ))
+            ) : (
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontStyle: 'italic' }}>
+                No source-level enrichment data available for this indicator.
+              </Typography>
+            )}
+            {(d.contributing_factors || []).length > 1 && (
+              <Box sx={{
+                mt: 1.25, pt: 1,
+                borderTop: `1px solid ${muiAlpha('#ffffff', 0.06)}`,
+              }}>
+                <Typography sx={{
+                  fontSize: 10, color: 'text.disabled',
+                  textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.5,
+                }}>
+                  All contributing factors
+                </Typography>
+                {d.contributing_factors.map((f, j) => (
+                  <Typography key={j} sx={{ fontSize: 11, color: 'text.tertiary',
+                    lineHeight: 1.5, py: 0.125 }}>
+                    · {f}
+                  </Typography>
+                ))}
+              </Box>
+            )}
+          </Box>
+        )}
+      </Box>
+    );
+  });
 }
 
 // Attribution chip — when the response agent matched threat-actor TTPs, show

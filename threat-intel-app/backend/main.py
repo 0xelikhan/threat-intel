@@ -1484,11 +1484,42 @@ async def scan_url_endpoint(req: dict):
         analysis["yara_matches"] = scan_combined(data)
     except Exception:
         pass
+    # Two parallel correlation passes:
+    #  (1) file_correlation runs hash-based lookups (VT/MalwareBazaar/Hybrid
+    #      Analysis on the downloaded content) and lands under threat_intel.
+    #  (2) url_enrichment runs URL + domain reputation (VT URL endpoint,
+    #      Maltiverse hostname, GreyNoise/AbuseIPDB/Shodan when the
+    #      hostname resolves to an IP, etc.) and lands under enrichments.
+    #      Without this, the AI summary cited "VirusTotal/Maltiverse" with no
+    #      actual data behind it because file_correlation only sees the
+    #      downloaded bytes, never the URL or hostname.
     try:
         from intel.file_correlation import correlate
         analysis["threat_intel"] = await correlate(analysis, config)
     except Exception as e:
         analysis["threat_intel"] = {"error": str(e)}
+    try:
+        import aiohttp
+        from urllib.parse import urlparse
+        from agents.enrichment import enrich_url as _enrich_url, enrich_domain as _enrich_domain
+        host = (urlparse(url).hostname or "").strip().lower()
+        keys = {k: config.get(k, "") for k in (
+            "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
+            "GREYNOISE_KEY", "SHODAN_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
+            "IPINFO_TOKEN",
+        )}
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as sess:
+            url_enr, dom_enr = await asyncio.gather(
+                _enrich_url(sess, url, keys),
+                _enrich_domain(sess, host, keys) if host else asyncio.sleep(0, result={}),
+                return_exceptions=True,
+            )
+        analysis["enrichments"] = {
+            "urls":    {url: url_enr if isinstance(url_enr, dict) else {}},
+            "domains": {host: dom_enr if (host and isinstance(dom_enr, dict)) else {}},
+        }
+    except Exception as e:
+        analysis["enrichments"] = {"error": str(e)}
     analysis["ai_pending"] = True
     analysis.pop("_file_bytes", None)
     try:

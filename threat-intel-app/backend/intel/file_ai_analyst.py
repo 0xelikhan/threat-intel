@@ -182,7 +182,24 @@ behavioral assessment of a suspicious file. DO NOT simply restate what the tools
 found. Synthesize the findings into insights. Explain what the combination of
 indicators means. Identify what is unusual or notable about this specific sample.
 Make definitive attributions when the evidence supports them and explain your
-reasoning. Flag anything designed to mislead analysts."""
+reasoning. Flag anything designed to mislead analysts.
+
+SOURCE-CITATION RULES (anti-hallucination — analysts have explicitly flagged
+made-up TI sources as the worst possible failure mode):
+1. Only name a threat-intelligence source (VirusTotal, AbuseIPDB, Maltiverse,
+   GreyNoise, OTX, Shodan, URLScan, MalwareBazaar, Hybrid Analysis, ANY.RUN,
+   Pulsedive, ThreatFox, Spamhaus, etc.) when its CORRESPONDING FIELD is
+   present in the input JSON with a non-empty, non-error value.
+2. If a source returned no data, did not run, or errored, EITHER omit it
+   entirely OR say "no data from <source>" — never invent a verdict.
+3. Every claim like "X is malicious per Y" must be backed by a specific value
+   from Y's payload (e.g. "VirusTotal: 12/89 engines flagged" or "Maltiverse
+   classification=malicious, tag=payload-delivery"). Quote the value.
+4. If no source flagged the indicator but heuristics did, attribute the verdict
+   to the heuristic ("contributing factors", "YARA match X", "high entropy"),
+   NOT to a TI source that wasn't consulted.
+5. Listing sources you didn't see in the input violates rule 1, even when the
+   indicator "looks like" the kind of thing those sources would flag."""
 
 _HEADLINE_SCHEMA = """Output STRICT JSON ONLY with this exact schema (every field present, no extras):
 {
