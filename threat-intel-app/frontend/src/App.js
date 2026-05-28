@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect, lazy, Suspense } from 'react';
 import {
-  Copy, ArrowUpRight, AlertCircle, X, FileSearch, Mail,
+  Copy, ArrowUpRight, AlertCircle, X, FileSearch, Mail, Activity,
 } from 'lucide-react';
 
 import AgentPipeline     from './components/AgentPipeline';
@@ -2757,7 +2757,7 @@ function URLScanLive({ result, bare }) {
  * Uses MUI Drawer with the OpenCTI nav width/styling, hosting the input area
  * (drop zone + textarea + AgentPipeline) and the extracted-IOCs panel.
  */
-function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanHash, onScanUrl, scanState, onHome, onOpenEmail, emailActive, authUser, onLogout }) {
+function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanHash, onScanUrl, scanState, onHome, onOpenEmail, emailActive, onOpenAnalyze, analyzeAvailable, analyzeActive, authUser, onLogout }) {
   const [logText, setLogText] = useState('');
   const [dragOver, setDragOver] = useState(false);
 
@@ -2894,6 +2894,42 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
           <Typography sx={{ color: 'error.main', fontSize: 11, mb: 1.25, mt: -0.5 }}>
             {scanState.error}
           </Typography>
+        )}
+
+        {/* Back-to-Analysis pill — only shown when there's a completed or
+            in-flight analysis AND the main view is currently taken over by
+            another workspace (Email or File Analyzer). Single click bounces
+            the analyst back to the analysis result without losing it. */}
+        {analyzeAvailable && !analyzeActive && (
+          <Box
+            onClick={() => onOpenAnalyze?.()}
+            sx={{
+              display: 'flex', alignItems: 'center', gap: 1.25,
+              p: '12px 14px',
+              backgroundColor: 'background.secondary',
+              border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+              borderRadius: '4px',
+              cursor: 'pointer',
+              mb: 1.25,
+              transition: 'all .15s',
+              '&:hover': {
+                borderColor: muiAlpha('#0fbcff', 0.5),
+                backgroundColor: muiAlpha('#0fbcff', 0.06),
+              },
+            }}
+          >
+            <Activity size={16} color="#0fbcff" style={{ flexShrink: 0 }}/>
+            <Typography sx={{
+              color: 'text.primary', fontSize: 12, fontWeight: 500,
+              flex: 1, minWidth: 0,
+            }}>
+              {scanState?.scanning ? 'Analysis (in progress)' : 'Analysis'}
+            </Typography>
+            <Typography sx={{ fontSize: 10, color: 'text.tertiary',
+              textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              open
+            </Typography>
+          </Box>
         )}
 
         {/* Email composer entry point — opens the dedicated composer view */}
@@ -3485,6 +3521,21 @@ function AppMain({ authUser, setAuthState }) {
           setEmailState({ log: '', parsed: null });
         }}
         emailActive={!!emailState}
+        // "Analysis" sidebar pill: available whenever there's an analyze
+        // result OR an analyze run is in flight (we still want the click
+        // to land you on the live progress). Active means the main view is
+        // currently rendering analysis (not email and not scanner), so the
+        // pill hides itself to avoid a no-op click.
+        analyzeAvailable={!!result}
+        analyzeActive={!emailState && !showScanner}
+        onOpenAnalyze={() => {
+          // Dismiss the email composer and the file scanner so the analyze
+          // view owns the main area again. The analysis result itself is
+          // preserved (it lives in `result`) so we just need to clear the
+          // overlays.
+          setEmailState(null);
+          clearScan();
+        }}
         authUser={authUser}
         onLogout={async () => {
           try {
