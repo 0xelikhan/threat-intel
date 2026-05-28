@@ -390,6 +390,10 @@ def parse_log(log_text: str) -> Dict:
     suggested = suggest_alert_type(log_text, out)
     if suggested:
         out["suggested_alert_type"] = suggested
+        out["_alert_label"] = ALERT_LABEL_BY_ID.get(suggested, suggested)
+        action = suggest_response_action(suggested)
+        if action:
+            out["suggested_response_action"] = action
     return out
 
 
@@ -496,6 +500,51 @@ def suggest_alert_type(log_text: str, parsed: Optional[Dict] = None) -> Optional
         if parsed.get("threat_name") or parsed.get("ep_admin_alert_title"):
             return "defender_detection"
     return None
+
+
+# Alert-type → recommended response action. Mirrors how a senior SOC analyst
+# would pre-pick the dropdown: ransomware/RDP-from-internet/vulnerable driver
+# → contain the host; identity-side risk → lock the account; defender tamper /
+# log clearing / privilege change → escalate to a human reviewer.
+_DEFAULT_RESPONSE_BY_ALERT = {
+    # Identity / cloud
+    "user_at_risk":                "lock_account",
+    "impossible_travel":           "lock_account_and_revoke_session",
+    "anonymized_ip":               "lock_account_and_revoke_session",
+    "password_spray":              "lock_account_and_revoke_session",
+    "unfamiliar_signin":           "lock_account",
+    "login_to_disabled_account":   "escalating",
+    "temporary_access_pass":       "escalating",
+    "creation_of_admin_account":   "escalating",
+    "privileged_role":             "escalating",
+    "forwarding_rule":             "lock_account_and_revoke_session",
+    # Endpoint — contain
+    "ransomware":                  "isolating",
+    "public_rdp_connection":       "isolating",
+    "vulnerable_driver":           "isolating",
+    "bitlocker_disable":           "isolating",
+    "uninstall_script_execution":  "isolating",
+    "disable_security_agent":      "isolating",
+    "sentinel_one_detection":      "isolating",
+    # Endpoint — escalate (needs review, not auto-containment)
+    "defender_detection":          "escalating",
+    "defender_exclusion_created":  "escalating",
+    "disable_protection":          "escalating",
+    "powershell_policy_bypass":    "escalating",
+    "reg_export":                  "escalating",
+    "enumeration":                 "escalating",
+    "user_added_to_local_admin":   "escalating",
+    "cleared_security_logs":       "escalating",
+}
+
+
+def suggest_response_action(alert_type: Optional[str]) -> Optional[str]:
+    """Map an alert-type id to the response-action id a SOC analyst would
+    usually pick. Returns ``None`` when there's no strong default — caller
+    should leave the dropdown empty rather than guess."""
+    if not alert_type:
+        return None
+    return _DEFAULT_RESPONSE_BY_ALERT.get(alert_type)
 
 
 # ─── parser helpers ────────────────────────────────────────────────────────────
@@ -967,6 +1016,52 @@ def _defang_if_iplike(v):
     if not v: return "N/A"
     s = str(v)
     return _defang_ip(s) if ("." in s or ":" in s) else s
+
+
+# Body-level IOC defanger — sanitizes a generated email body so URLs / IPs /
+# domains can't be clicked by the recipient. Applied AFTER the AI produces
+# the body so analysts don't have to defang by hand. Skip plain emails and
+# common non-IOC infra domains so recipient/sender addresses and references
+# to vendor URLs (microsoft.com, etc.) don't get mangled.
+_IOC_URL_RE    = re.compile(r"\bhttps?://[^\s<>'\"`]+", re.IGNORECASE)
+_IOC_IP_RE     = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+_IOC_DOMAIN_RE = re.compile(
+    r"(?<![@\w.-])"                                # not preceded by @ (skip emails) or a domain char
+    r"((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
+    r"(?:com|net|org|io|co|xyz|info|ru|cn|tk|top|click|pw|us|uk|de|fr|jp|cc|biz|online|site|shop|app|dev|me|tv|gov|edu))"
+    r"(?!\.?\w)",                                  # not a longer multi-level domain (sentence period OK)
+    re.IGNORECASE,
+)
+_DEFANG_SAFE_DOMAINS = {
+    "microsoft.com", "windows.com", "office.com", "office365.com",
+    "outlook.com", "live.com", "azure.com", "azureedge.net",
+    "google.com", "gmail.com", "apple.com", "icloud.com",
+    "schema.org", "w3.org",
+}
+
+
+def _defang_url(url: str) -> str:
+    # hxxp(s):// + every "." → "[.]" inside the rest
+    s = re.sub(r"^https://", "hxxps://", url, flags=re.IGNORECASE)
+    s = re.sub(r"^http://",  "hxxp://",  s,  flags=re.IGNORECASE)
+    # Defang dots only in the URL part (everything after the scheme://)
+    head, sep, tail = s.partition("://")
+    return f"{head}{sep}{tail.replace('.', '[.]')}" if sep else s.replace(".", "[.]")
+
+
+def _defang_body_iocs(text: str) -> str:
+    """Replace clickable IOCs in a body of text with their defanged forms.
+    Leaves email addresses and common safe vendor domains alone."""
+    if not text:
+        return text
+    out = _IOC_URL_RE.sub(lambda m: _defang_url(m.group(0)), text)
+    out = _IOC_IP_RE.sub(lambda m: m.group(0).replace(".", "[.]"), out)
+
+    def _maybe_defang_domain(m):
+        d = m.group(0)
+        return d if d.lower() in _DEFANG_SAFE_DOMAINS else d.replace(".", "[.]")
+    out = _IOC_DOMAIN_RE.sub(_maybe_defang_domain, out)
+    return out
 
 
 def _build_location_display(parsed):
@@ -1531,6 +1626,12 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
 
     if not body:
         return {"error": "AI returned empty body"}
+
+    # Defang URLs / IPs / domains the AI emitted so the recipient can't click
+    # a live IOC out of a security email. Opt-out via options.defang=false for
+    # internal-only audiences that already strip in their mail client.
+    if options.get("defang", True):
+        body = _defang_body_iocs(body)
 
     # Run the AI body through the same render pipeline so subject + signature
     # + HTML wrapping stay consistent with template-based composes.

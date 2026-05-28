@@ -980,11 +980,6 @@ function ConfidenceBreakdown({ result, bare }) {
 
   const body = (
     <>
-      <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
-        Each IOC gets a deterministic 0–100 score computed independently of the
-        AI assessment. Expand any row to see every contributing factor and the
-        evidence that triggered it.
-      </Typography>
       {sorted.map(({ ioc, type, score, verdict, factors }) => {
         const open = openIoc === ioc;
         const color = verdictColor[verdict] || '#848592';
@@ -1367,7 +1362,7 @@ function Triage({ result }) {
       )}
       {hasOsint && (
         <Box sx={divSx(hasLogs || hasSup)}>
-          <Label>OSINT · infrastructure intel</Label>
+          <Label>OSINT</Label>
           <InfrastructureIntel result={result} bare/>
         </Box>
       )}
@@ -3693,9 +3688,14 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
           onDrop={e => {
             e.preventDefault(); setDragOver(false);
             if (scanState?.scanning) return;
+            setLogText('');
             handleFile(e.dataTransfer.files[0]);
           }}
-          onClick={() => !scanState?.scanning && document.getElementById('sidebarFile').click()}
+          onClick={() => {
+            if (scanState?.scanning) return;
+            setLogText('');
+            document.getElementById('sidebarFile').click();
+          }}
           sx={{
             display: 'flex', alignItems: 'center', gap: 1.25,
             p: '12px 14px',
@@ -3733,7 +3733,7 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
 
         {/* Email composer entry point — opens the dedicated composer view */}
         <Box
-          onClick={() => onOpenEmail?.()}
+          onClick={() => { setLogText(''); onOpenEmail?.(); }}
           sx={{
             display: 'flex', alignItems: 'center', gap: 1.25,
             p: '12px 14px',
