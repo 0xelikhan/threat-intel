@@ -32,6 +32,7 @@ import {
   MenuItem       as MuiMenuItem,
   ToggleButton   as MuiToggleButton,
   ToggleButtonGroup as MuiToggleButtonGroup,
+  Tooltip,
 } from '@mui/material';
 import { alpha as muiAlpha } from '@mui/material/styles';
 import {
@@ -681,12 +682,9 @@ function LogTranslation({ result, bare }) {
   const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
   const body = (
     <>
-      {lt.normalized_summary && (
-        <Typography sx={{ fontSize: 12, color: 'text.primary', mb: 1.5,
-          lineHeight: 1.6, fontStyle: 'italic' }}>
-          {lt.normalized_summary}
-        </Typography>
-      )}
+      {/* normalized_summary moved to the top of the Summary card (Plain-English
+          summary block) so it's the first thing the analyst sees, not buried
+          inside the Triage > Logs sub-section. */}
       {Object.keys(fields).length > 0 && (
         <Box sx={{ mb: 1.5 }}>
           <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
@@ -1889,12 +1887,46 @@ function AnalystSummary({ result, rs }) {
                   :                                  '#E1B823';
   const summary = (rs?.summary || '').trim();
   const topActor = (rs?.matched_actors || [])[0];
+  // Plain-English summary from log_translator — written like an MDR analyst
+  // briefing note (what / context / verdict / recommendation). Top of the
+  // card so the analyst gets the human-readable read before the dial.
+  const plainEnglish = (result?.log_translation?.normalized_summary || '').trim();
 
   return (
     <Card title="Summary" accent="#0fbcff" badge={a?.disposition?.toLowerCase()} defaultOpen>
+      {plainEnglish && (
+        <Box sx={{ mb: 1.5 }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+            <Typography sx={{ fontSize: 10, color: 'text.tertiary', fontWeight: 600,
+              textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Plain-English summary
+            </Typography>
+            <Tooltip title="Copy to clipboard">
+              <MuiIconButton
+                size="small"
+                onClick={() => navigator.clipboard.writeText(plainEnglish)}
+                sx={{ p: 0.25, color: 'text.tertiary',
+                  '&:hover': { color: 'primary.main' } }}>
+                <Copy size={11}/>
+              </MuiIconButton>
+            </Tooltip>
+          </Stack>
+          <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.7,
+            whiteSpace: 'pre-wrap' }}>
+            {plainEnglish}
+          </Typography>
+        </Box>
+      )}
+
       {summary && (
         <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.7,
-          mb: 1.5, whiteSpace: 'pre-wrap' }}>
+          mb: 1.5, whiteSpace: 'pre-wrap',
+          // Subtle visual gap when the plain-English block sits above it.
+          ...(plainEnglish ? {
+            pt: 1.5,
+            borderTop: `1px solid ${muiAlpha('#ffffff', 0.06)}`,
+          } : {}),
+        }}>
           {summary}
         </Typography>
       )}
