@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 
 import MapTab            from './components/MapTab';
-import PivotGraph        from './components/PivotGraph';
 import AgentPipeline     from './components/AgentPipeline';
 import FileScannerView   from './components/FileScannerView';
 import EmailComposerView from './components/EmailComposerView';
@@ -1319,20 +1318,29 @@ function Triage({ result, rs }) {
     return <Box sx={sx}><Label>{label}</Label>{children}</Box>;
   };
 
+  // Section order mirrors a SOC/MDR analyst's mental walkthrough:
+  //  1. Normalise the raw log so the rest of the card has a shared baseline.
+  //  2. Did anything immediately match known-bad? (KEV / LOLBAS / kits)
+  //  3. What tradecraft is in play? + how to defend (TTPs + D3FEND).
+  //  4. Runtime behaviour if we have it (sandbox process tree).
+  //  5. Infrastructure context (OSINT — BGP, DNS, VT graph).
+  //  6. What did the FP filter strip? (MISP — audit trail, lowest urgency).
+  //  7. What to do next (AI recommended actions).
+  //  8. Senior-analyst context paragraph (analyst notes).
   return (
-    <Card title="Triage" accent="#16AD34" defaultOpen={false}>
+    <Card title="Triage" accent="#0fbcff" defaultOpen={false}>
       <Section show={hasLogs}     label="Log normalization">
         <LogTranslation result={result} bare/></Section>
-      <Section show={hasSup}      label="Filtered as benign · MISP warninglists">
-        <SuppressedIOCs result={result} bare/></Section>
-      <Section show={hasOsint}    label="OSINT">
-        <InfrastructureIntel result={result} bare/></Section>
+      <Section show={hasCross}    label="Threat-intel cross-references">
+        <CrossRefs rs={rs} bare/></Section>
       <Section show={hasBehavior} label="MITRE-mapped TTPs · D3FEND mitigations">
         <BehavioralIndicators result={result} bare/></Section>
       <Section show={hasSandbox}  label="Sandbox detonation · process tree">
         <SandboxBehavioral result={result} bare/></Section>
-      <Section show={hasCross}    label="Threat-intel cross-references">
-        <CrossRefs rs={rs} bare/></Section>
+      <Section show={hasOsint}    label="OSINT">
+        <InfrastructureIntel result={result} bare/></Section>
+      <Section show={hasSup}      label="Filtered as benign · MISP warninglists">
+        <SuppressedIOCs result={result} bare/></Section>
       <Section show={hasRec}      label="Recommended actions">
         <RecommendedActions rs={rs} bare/></Section>
       <Section show={hasNotes}    label="Analyst notes">
@@ -1900,7 +1908,7 @@ function AnalystSummary({ rs }) {
   const summary = (rs?.summary || '').trim();
 
   return (
-    <Card title="Summary" accent="#0fbcff" badge={a.disposition?.toLowerCase()} defaultOpen>
+    <Card title="Summary" accent="#B286FF" badge={a.disposition?.toLowerCase()} defaultOpen>
       {summary && (
         <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.7,
           mb: 1.5, whiteSpace: 'pre-wrap' }}>
@@ -2116,7 +2124,9 @@ function ChatWithRecon({ result, bare }) {
 
   if (!runId) return null;
   const isAmbiguous = classification === 'AMBIGUOUS';
-  const accent = isAmbiguous ? '#E6700F' : '#0fbcff';
+  // Standardized accent: purple = AI synthesis (default), orange when the AI
+  // is signalling it can't commit to a verdict and needs the analyst's input.
+  const accent = isAmbiguous ? '#E6700F' : '#B286FF';
   const banner = isAmbiguous
     ? 'RECON needs more context to commit to a verdict — pick a question or ask anything'
     : null;
@@ -2939,7 +2949,7 @@ function Detection({ result }) {
   // Nothing generated yet → show the on-demand generate button.
   if (!tabs.length) {
     return (
-      <Card title="Detection Rules" accent="#0fbcff">
+      <Card title="Detection Rules" accent="#16AD34">
         <MuiButton variant="contained" onClick={generate} disabled={loading}
           sx={{ textTransform: 'none' }}>
           {loading ? 'Generating…' : 'Generate Detection Rules'}
@@ -2954,7 +2964,7 @@ function Detection({ result }) {
   const cur = tabs.find(x => x.id === (active || tabs[0]?.id)) || tabs[0];
 
   return (
-    <Card title="Detection Rules" accent="#0fbcff" badge={`${tabs.length} platforms`}>
+    <Card title="Detection Rules" accent="#16AD34" badge={`${tabs.length} platforms`}>
       {mitre.length > 0 && (
         <Box sx={{ display:'flex', gap:0.75, flexWrap:'wrap', mb:1.75, alignItems:'center' }}>
           <Typography sx={{ fontSize:11, color:'text.tertiary' }}>Coverage:</Typography>
@@ -3548,22 +3558,6 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
     if (!file) return;
     onScanFile?.(file);
   }, [onScanFile]);
-
-  // Pivot scan — fired by PivotGraph when an analyst clicks a node and asks
-  // to investigate the neighbor. We seed the Analyze textarea with the IOC,
-  // scroll the sidebar input into view, and trigger the existing Analyze
-  // button so the AgentPipeline starts fresh — same flow as a manual paste.
-  useEffect(() => {
-    const handler = (e) => {
-      const ioc = e?.detail?.ioc;
-      if (!ioc) return;
-      setLogText(ioc);
-      try { document.querySelector('[data-recon-analyze]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch {}
-      setTimeout(() => document.querySelector('[data-recon-analyze]')?.click(), 50);
-    };
-    window.addEventListener('recon:pivot-scan', handler);
-    return () => window.removeEventListener('recon:pivot-scan', handler);
-  }, []);
 
   // Cmd/Ctrl+Enter triggers analysis via the AgentPipeline's button
   // Spec §9 keyboard shortcuts
@@ -4284,34 +4278,30 @@ export default function App() {
             <PreFlight result={result}/>
             <SignalBanners result={result}/>
             {/* Collapsible detail stack, keyed by run so each new investigation
-                resets to collapsed. Headline cards (Investigation results, Summary)
-                are open by default; the rest collapse. */}
+                resets to collapsed. Card order mirrors a SOC/MDR analyst's
+                actual triage flow: verdict first, then evidence, then the
+                outgoing artefacts (detection rules), then the interactive
+                follow-up tools (Geolocation, Ask RECON). */}
             <CardDefaultOpenContext.Provider value={false} key={result.runId || 'detail'}>
-            <GTI result={result}/>                {/* Investigation results + threat score + confidence (open) */}
-            <AnalystSummary rs={rs || {}}/>        {/* Summary (open) */}
-            <ChatWithRecon result={result}/>       {/* Ask RECON — probing questions */}
-            <Triage result={result} rs={rs || {}}/>  {/* Logs + IOCs + OSINT + TTPs + sandbox + cross-refs + AI actions/notes */}
+            {/* 1. VERDICT — "is this bad? should I escalate?" */}
+            <AnalystSummary rs={rs || {}}/>
+            {/* 2. EVIDENCE-AT-A-GLANCE — scores + top IOC */}
+            <GTI result={result}/>
+            {/* 3. DEEP DIVE — logs, IOC filtering, OSINT, TTPs, sandbox, cross-refs, AI actions/notes */}
+            <Triage result={result} rs={rs || {}}/>
+            {/* 4. CHANNEL-SPECIFIC — phishing/EML breakdown when applicable */}
             <EmailAnalysis result={result}/>
-
-            <Card title="Graphs" accent="#0fbcff" noPad>
-              {/* Map only renders when the investigation actually has IPs to
-                  plot. Skips an empty leaflet canvas for hash/log uploads. */}
-              {(result?.iocs?.ips || []).length > 0 && <MapTab result={result}/>}
-              <Box sx={{
-                p: '14px 16px',
-                borderTop: (result?.iocs?.ips || []).length > 0
-                  ? `1px solid ${muiAlpha('#ffffff', 0.08)}` : 'none',
-              }}>
-                <PivotGraph
-                  result={result}
-                  onPivot={(ioc) => window.dispatchEvent(
-                    new CustomEvent('recon:pivot-scan', { detail: { ioc } })
-                  )}
-                />
-              </Box>
-            </Card>
-
-            <Detection result={result}/>          {/* Detection Rules — on-demand, at bottom */}
+            {/* 5. OUTBOUND ARTEFACT — detection content to ship to SIEM */}
+            <Detection result={result}/>
+            {/* 6. CONTEXT — geographic distribution (only when IPs exist) */}
+            {(result?.iocs?.ips || []).length > 0 && (
+              <Card title="Geolocation" accent="#0fbcff" noPad>
+                <MapTab result={result}/>
+              </Card>
+            )}
+            {/* 7. INTERACTIVE — probing questions + chat, last so the analyst
+                has reviewed the evidence before opening a conversation. */}
+            <ChatWithRecon result={result}/>
             </CardDefaultOpenContext.Provider>
           </>
         )}
