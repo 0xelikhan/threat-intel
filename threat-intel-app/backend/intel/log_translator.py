@@ -46,12 +46,14 @@ Flag any field value that looks anomalous: base64-encoded data, unusually long
 strings, system process names in non-system paths, known malicious patterns,
 suspicious user agents, hex blobs, etc.
 
-Return strict JSON with these top-level keys:
+Return strict JSON with these top-level keys, IN THIS ORDER (so that if the
+generation gets truncated, the most important field — the analyst-facing
+summary — is already complete):
+  normalized_summary    — see "PLAIN-ENGLISH SUMMARY RULES" below
   detected_format       — short string e.g. "Sysmon EventID 1", "Zscaler proxy", "CEF/Suricata"
   confidence            — 0.0–1.0 confidence in the format detection
-  extracted_fields      — flat dict of {field_name: value}, no nesting
   anomalies             — list of {field, value, reason} for flagged values
-  normalized_summary    — see "PLAIN-ENGLISH SUMMARY RULES" below
+  extracted_fields      — flat dict of {field_name: value}, no nesting
 
 PLAIN-ENGLISH SUMMARY RULES (the normalized_summary field):
 This is the FIRST thing an analyst reads. Treat it like a senior MDR analyst
@@ -132,7 +134,12 @@ async def translate_log(raw: str, config) -> Optional[Dict]:
             ],
             response_format={"type": "json_object"},
             temperature=0.0,
-            max_tokens=600,   # normalized fields only — keeps this critical-path call fast
+            # Logs with deeply-nested fields (Entra impossible-travel has
+            # ~30 fields across FirstLogin/SecondLogin blocks) used to
+            # truncate the normalized_summary mid-write at 600 tokens.
+            # Bumped to 1800; combined with the field-ordering change above
+            # the summary survives even when extracted_fields balloons.
+            max_tokens=1800,
         )
         # Lenient parse: a truncated translation keeps its completed fields
         # rather than discarding the whole step (which gates IOC extraction).

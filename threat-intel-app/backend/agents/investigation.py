@@ -233,10 +233,15 @@ heavily toward CLEAR / BENIGN_FALSE_POSITIVE when they fit:
 
 
 # Map free-text triage labels + parsed Entra/Defender labels to the focus
-# bucket they should weight on. Substring match — first hit wins.
+# bucket they should weight on. Substring match — first hit wins. The
+# literal token "identity" is included so that run_investigation's
+# append-suffix path (alert_type = "phishing,identity") routes correctly
+# without needing each underlying needle to also be in alert_type.
 _TYPE_TO_FOCUS_HINT = {
     # identity bucket
+    "identity":          "identity",
     "impossible_travel": "identity",
+    "impossible travel": "identity",
     "user_at_risk":      "identity",
     "risky":             "identity",
     "anonymized_ip":     "identity",
@@ -250,18 +255,23 @@ _TYPE_TO_FOCUS_HINT = {
 
 def _get_type_focus(alert_type: str) -> str:
     """Return specialized guidance text for the alert type, or '' if generic.
-    First tries the direct substring match (phishing / malware / c2 / etc.),
-    then walks the indirect hint map for the more-fine-grained identity-side
-    labels that don't appear as keys in _TYPE_FOCUS."""
+
+    Resolution order matters here: the IDENTITY hint map runs FIRST so a
+    log that's both IOC-rich (e.g. has an email -> triage tags it
+    "phishing") AND identity-side (raw text contains "impossible travel")
+    pulls the identity focus block (which carries the domain-joined FP
+    bias) rather than the broader phishing block. Without this ordering
+    the substring match on "phishing" wins on the first loop and the
+    identity guidance never fires."""
     if not alert_type:
         return ""
     a = alert_type.lower()
-    for key, text in _TYPE_FOCUS.items():
-        if key in a:
-            return text
     for needle, focus_key in _TYPE_TO_FOCUS_HINT.items():
         if needle in a and focus_key in _TYPE_FOCUS:
             return _TYPE_FOCUS[focus_key]
+    for key, text in _TYPE_FOCUS.items():
+        if key in a:
+            return text
     return ""
 
 
