@@ -1049,6 +1049,31 @@ def _defang_url(url: str) -> str:
     return f"{head}{sep}{tail.replace('.', '[.]')}" if sep else s.replace(".", "[.]")
 
 
+# Em/en dashes are the single most reliable "this was AI-written" giveaway in
+# customer-facing email. The system prompt forbids them, but models still slip
+# them in, so we strip on the way out as a belt-and-braces guard. Replacement
+# rules picked for grammatical safety across the most common patterns:
+#   "...quickly — and as always..."        -> "...quickly, and as always..."   (clause join)
+#   "first IP 1.2.3.4 — clean reputation"  -> "first IP 1.2.3.4: clean ..."     (label + detail)
+#   "8–14 lines"                           -> "8 to 14 lines"                   (numeric range)
+#   "anti–virus"                           -> "anti-virus"                       (compound word)
+_EM_OR_EN = "[—–]"
+def _strip_em_dashes(text: str) -> str:
+    if not text:
+        return text
+    out = text
+    # Numeric range with en/em dash (no surrounding spaces): "8–14" -> "8 to 14".
+    out = re.sub(rf"(\d)\s*{_EM_OR_EN}\s*(\d)", r"\1 to \2", out)
+    # Space-padded dash separating clauses: " — " or " – " -> ", ".
+    out = re.sub(rf"\s+{_EM_OR_EN}\s+", ", ", out)
+    # Dash used inline with one-sided spacing (rarer): drop to comma + space.
+    out = re.sub(rf"\s+{_EM_OR_EN}", ",", out)
+    out = re.sub(rf"{_EM_OR_EN}\s+", ", ", out)
+    # Bare dash inside a word (compound) -> regular hyphen.
+    out = out.replace("—", "-").replace("–", "-")
+    return out
+
+
 def _defang_body_iocs(text: str) -> str:
     """Replace clickable IOCs in a body of text with their defanged forms.
     Leaves email addresses and common safe vendor domains alone."""
@@ -1511,6 +1536,10 @@ def _signature_plain(config) -> str:
 # Few-shot generator that produces a customer-facing email tailored to the
 # specific log content. Existing static templates serve as style/tone models.
 
+# Default inspiration set spanning identity and endpoint alert classes so the
+# AI sees both phrasing styles. When the analyst's log triggers a specific
+# detected alert type, the matching template is prepended to this list (same-
+# category siblings auto-included via _category_siblings).
 _AI_EXAMPLE_IDS = [
     "impossible_travel",
     "defender_detection",
@@ -1520,33 +1549,83 @@ _AI_EXAMPLE_IDS = [
 ]
 
 
-def _ai_example_block() -> str:
-    """Render 5 in-repo templates as few-shot examples (kept short for tokens)."""
+def _category_for(alert_id: str) -> str:
+    for aid, _label, cat in ALERT_TYPES:
+        if aid == alert_id:
+            return cat
+    return ""
+
+
+def _category_siblings(alert_id: str, k: int = 4) -> list:
+    """Up to k other alert ids in the same category — used so the inspiration
+    set leans toward the analyst's actual alert class. Skip the alert itself."""
+    cat = _category_for(alert_id)
+    if not cat:
+        return []
+    sibs = [aid for aid, _label, c in ALERT_TYPES if c == cat and aid != alert_id]
+    return sibs[:k]
+
+
+def _ai_example_block(priority_alert_type: str = "") -> str:
+    """Render in-repo templates as inspiration. When `priority_alert_type` is
+    set, lead with that template + same-category siblings so the AI's style
+    leans toward the analyst's actual alert. All examples are framed as
+    inspiration — the prompt explicitly tells the AI not to copy verbatim.
+
+    Always loads via `load_template` so analyst-edited templates flow through
+    too (not just the hardcoded _DEFAULT_TEMPLATES). That's the whole point:
+    when the team's wording norms or policy text changes, the templates
+    change and the AI naturally adapts."""
+    # Build the inspiration set: priority + same-category siblings + a couple
+    # of broad anchors so the model sees both identity and endpoint voices.
+    ids: list = []
+    if priority_alert_type and priority_alert_type in ALERT_LABEL_BY_ID:
+        ids.append(priority_alert_type)
+        for sib in _category_siblings(priority_alert_type, k=3):
+            if sib not in ids:
+                ids.append(sib)
+    # Top up with the broad anchor set so identity AND endpoint voices are in
+    # context even when the alert is in one category.
+    for fallback in _AI_EXAMPLE_IDS:
+        if fallback not in ids:
+            ids.append(fallback)
+        if len(ids) >= 6:
+            break
+
     parts = []
-    for aid in _AI_EXAMPLE_IDS:
-        body = _DEFAULT_TEMPLATES.get(aid, "")
+    for aid in ids:
+        body = load_template(aid)
         if not body:
             continue
-        parts.append(f"## Example — {ALERT_LABEL_BY_ID.get(aid, aid)}\n```\n{body[:1100]}\n```")
+        label = ALERT_LABEL_BY_ID.get(aid, aid)
+        parts.append(f"## Inspiration: {label}\n```\n{body[:1100]}\n```")
     return "\n\n".join(parts)
 
 
 _AI_SYSTEM = """You are a senior MDR security analyst drafting customer-facing
-email notifications about security alerts. Match the tone, structure, and
-specificity of the example templates: greet, summarize what happened, list
-relevant details as a short bullet block, state the action taken, then end.
+email notifications about security alerts. The example templates below are
+INSPIRATION ONLY: match their tone, voice, level of technical detail, and
+section ordering, but adapt the content to the specific evidence in the raw
+log at hand. Do NOT copy phrases verbatim. If the alert type is unfamiliar,
+synthesize a fresh template by combining the closest stylistic matches.
 
 Hard rules:
 - Output ONLY the email body. No subject line. No commentary.
 - Never invent values not present in the log. If a value is unknown, omit
   the field rather than writing "N/A".
 - Do NOT include a closing line like "If you have any questions, reach out
-  to..." — the analyst's signature handles that.
+  to..." (the analyst's signature handles that).
 - Do NOT include a signature block (no "Best regards," / name / title).
   The system appends one automatically.
 - Plain text only, no markdown formatting, no asterisks, no underscores.
-- Keep it concise — 8–14 lines including blank lines.
+- Keep it concise (8 to 14 lines including blank lines).
 - The first line should be a greeting (e.g. "Greetings,").
+- DASH RULES (this is how editors spot AI-written copy, so it matters):
+    * Do NOT use em dashes (the long dash). Use a comma, a colon, a period,
+      or rewrite the sentence so no dash is needed.
+    * Do NOT use en dashes (the medium dash).
+    * Hyphens are allowed only inside compound words (e.g. "in-flight",
+      "anti-virus", "two-factor"). Never as a sentence-level separator.
 """
 
 
@@ -1589,36 +1668,31 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
                 action_hint = f"\n\nAction we took: {rlabel}"
                 break
 
-    # Template-aware composition: when triage detected an alert type, lead the
-    # prompt with the matching customer-facing template so the AI's email
-    # follows the exact phrasing/structure SOC analysts ship for that alert
-    # class (instead of a generic email built from 5 mixed examples). The
-    # generic example block is kept as a fallback style reference.
+    # Template-aware inspiration: when triage detected an alert type, the
+    # matching template is included first in the inspiration set (plus same-
+    # category siblings via _category_siblings). The AI is told to use them
+    # as voice/structure inspiration and adapt to the actual log, not copy.
+    # When the alert type is unfamiliar (not in the catalog), the broad
+    # anchor set still surfaces both identity and endpoint voices so the AI
+    # can synthesize a fresh template by combining styles.
     detected_alert_type = parsed.get("suggested_alert_type") or options.get("alert_type") or ""
-    primary_template = ""
-    if detected_alert_type and detected_alert_type in ALERT_LABEL_BY_ID:
-        body = load_template(detected_alert_type)
-        if body:
-            primary_template = (
-                f"## PRIMARY template — this alert was classified as "
-                f"'{ALERT_LABEL_BY_ID[detected_alert_type]}'. Follow this template's "
-                f"structure, tone, and section ordering. Replace placeholders with the "
-                f"actual values from the raw log. Skip any section whose data isn't in "
-                f"the log rather than writing 'N/A'.\n"
-                f"```\n{body[:1800]}\n```\n\n"
-                f"## Reference templates (for style only — do NOT copy):\n"
-            )
+    classified_as = (f"This alert was classified as '{ALERT_LABEL_BY_ID[detected_alert_type]}'. "
+                     if detected_alert_type and detected_alert_type in ALERT_LABEL_BY_ID
+                     else "This alert type wasn't recognized by triage, so synthesize a fresh template "
+                          "using the closest stylistic matches below. ")
 
     user_prompt = (
-        f"{primary_template}"
-        f"{_ai_example_block()}\n\n"
+        f"{_ai_example_block(priority_alert_type=detected_alert_type)}\n\n"
         "## Now write an email for THIS alert\n"
-        f"Detected alert type: {ALERT_LABEL_BY_ID.get(detected_alert_type, 'unknown')}\n"
+        f"{classified_as}Use the inspiration above for voice and structure, "
+        "but write a fresh email adapted to the evidence in the raw log. Do not "
+        "copy any sentence verbatim from the examples.\n\n"
         "Raw log:\n```\n"
         f"{log_text[:5000]}\n```\n\n"
         f"Extracted fields:\n{parsed_block or '(none)'}"
         f"{action_hint}\n\n"
-        "Write the email body only. Plain text. No subject line. No signature."
+        "Write the email body only. Plain text. No subject line. No signature. "
+        "No em dashes or en dashes anywhere in the output."
     )
 
     try:
@@ -1648,6 +1722,11 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
 
     if not body:
         return {"error": "AI returned empty body"}
+
+    # Strip em/en dashes (belt-and-braces — the prompt also forbids them, but
+    # models still occasionally produce them and they're the #1 AI-giveaway in
+    # customer-facing email).
+    body = _strip_em_dashes(body)
 
     # Defang URLs / IPs / domains the AI emitted so the recipient can't click
     # a live IOC out of a security email. Opt-out via options.defang=false for
@@ -1805,8 +1884,8 @@ _DEFAULT_TEMPLATES: Dict[str, str] = {
         "from the IP {{Ip1}} which traces back to {{Ip1Location}} from {{Ip1isp}}. The "
         "second login originated from the IP {{Ip2}} which traces back to {{Ip2Location}} "
         "from {{Ip2isp}}.\n\n"
-        "First IP {{Ip1}} — {{Ip1VirusTotalAttackHistory}}\n"
-        "Second IP {{Ip2}} — {{Ip2VirusTotalAttackHistory}}\n\n"
+        "First IP {{Ip1}}: {{Ip1VirusTotalAttackHistory}}\n"
+        "Second IP {{Ip2}}: {{Ip2VirusTotalAttackHistory}}\n\n"
         "{{ResponseFooter}}\n\n"
         "If you have any questions or concerns, please reach out to {{TeamName}}.\n\n"
         "{{Signature}}\n"
