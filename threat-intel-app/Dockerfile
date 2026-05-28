@@ -18,17 +18,21 @@ WORKDIR /app
 
 # curl is needed at build time for the MITRE STIX fetch + at runtime for the
 # Dockerfile HEALTHCHECK. Both reasons → install once, keep installed.
+# Drop root user creation into the same layer so we can use --chown on
+# subsequent COPYs (avoids a separate chown -R layer that would duplicate
+# every file's metadata and bloat the image by ~13 MB).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+        curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --shell /usr/sbin/nologin --uid 10001 recon
 
 # Install Python deps in their own layer so source edits don't bust the
 # (slow) wheel-fetch cache.
-COPY backend/requirements.txt ./
+COPY --chown=recon:recon backend/requirements.txt ./
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-COPY backend/ ./backend/
+COPY --chown=recon:recon backend/ ./backend/
 
 # Fetch the MITRE ATT&CK STIX dataset at build time (~47 MB, not committed to
 # git). Powers the Threat Actors browser + technique/group lookups. Parsed once
@@ -40,16 +44,13 @@ RUN mkdir -p backend/intel/mitre \
          -o backend/intel/mitre/enterprise-attack.json \
          https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/enterprise-attack/enterprise-attack.json \
         || (echo "WARNING: MITRE ATT&CK STIX download failed; Threat Actors browser will be empty this build" \
-            && rm -f backend/intel/mitre/enterprise-attack.json))
+            && rm -f backend/intel/mitre/enterprise-attack.json)) \
+    && chown -R recon:recon backend/intel/mitre
 
-COPY --from=frontend-build /frontend/build ./frontend/build
+COPY --from=frontend-build --chown=recon:recon /frontend/build ./frontend/build
 
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data && chown recon:recon /app/data
 
-# Drop root so the container can't write outside /app or escalate via package
-# manager / SUID binaries if something goes sideways.
-RUN useradd --create-home --shell /usr/sbin/nologin --uid 10001 recon \
-    && chown -R recon:recon /app
 USER recon
 
 EXPOSE 8000
