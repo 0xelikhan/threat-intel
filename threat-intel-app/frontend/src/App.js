@@ -1809,6 +1809,71 @@ function ThreatScore({ result }) {
   );
 }
 
+// Attribution chip — when the response agent matched threat-actor TTPs, show
+// the canonical Microsoft name with origin + every alias the analyst might
+// see in vendor reports (CrowdStrike/FireEye/MITRE/Microsoft). Aliases hide
+// behind a click so the chip stays compact when there are 12 of them.
+function AttributionChip({ actor }) {
+  const [open, setOpen] = useState(false);
+  if (!actor) return null;
+  const display = actor.ms_name || actor.name;
+  const aliases = (actor.aliases || []).filter(a => a && a !== display);
+  return (
+    <Box sx={{
+      display: 'inline-flex', flexDirection: 'column', gap: 0.5,
+      backgroundColor: muiAlpha('#0fbcff', 0.08),
+      border: `1px solid ${muiAlpha('#0fbcff', 0.35)}`,
+      borderRadius: '4px', p: '8px 12px', mb: 1.5, maxWidth: '100%',
+    }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+        <Typography sx={{ fontSize: 10, color: 'text.tertiary', fontWeight: 600,
+          textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Possible attribution
+        </Typography>
+        <Typography sx={{ fontSize: 13, color: 'primary.main', fontWeight: 600 }}>
+          {display}
+        </Typography>
+        {actor.origin && (
+          <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>· {actor.origin}</Typography>
+        )}
+        {typeof actor.score === 'number' && (
+          <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
+            · {actor.score}% TTP overlap
+          </Typography>
+        )}
+        {aliases.length > 0 && (
+          <Box component="button" onClick={() => setOpen(o => !o)} sx={{
+            ml: 'auto', background: 'none', border: 'none', cursor: 'pointer',
+            color: 'text.tertiary', fontSize: 11, fontFamily: 'inherit',
+            '&:hover': { color: 'primary.main' },
+          }}>
+            {open ? 'hide' : `also known as · ${aliases.length}`}
+          </Box>
+        )}
+      </Box>
+      {open && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.25 }}>
+          {aliases.map(a => (
+            <Box key={a} sx={{
+              fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
+              color: 'text.primary',
+              backgroundColor: 'background.secondary',
+              border: `1px solid ${muiAlpha('#ffffff', 0.08)}`,
+              borderRadius: '3px', px: 0.875, py: '2px',
+            }}>{a}</Box>
+          ))}
+        </Box>
+      )}
+      {actor.matchedTechniques?.length > 0 && (
+        <Typography sx={{ fontSize: 10, color: 'text.disabled', mt: 0.25 }}>
+          matched on {actor.matchedTechniques.slice(0, 4).join(', ')}
+          {actor.matchedTechniques.length > 4 ? ` + ${actor.matchedTechniques.length - 4} more` : ''}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
 function AnalystSummary({ result, rs }) {
   const a = rs?.analyst_summary;
   // The Summary card is the new front-page for an investigation, so we show
@@ -1823,6 +1888,7 @@ function AnalystSummary({ result, rs }) {
                   : a?.disposition === 'ESCALATE' ? '#F14337'
                   :                                  '#E1B823';
   const summary = (rs?.summary || '').trim();
+  const topActor = (rs?.matched_actors || [])[0];
 
   return (
     <Card title="Summary" accent="#0fbcff" badge={a?.disposition?.toLowerCase()} defaultOpen>
@@ -1832,6 +1898,8 @@ function AnalystSummary({ result, rs }) {
           {summary}
         </Typography>
       )}
+
+      {topActor && <AttributionChip actor={topActor}/>}
 
       {hasDisposition && (
         <MuiPaper elevation={0} sx={{
