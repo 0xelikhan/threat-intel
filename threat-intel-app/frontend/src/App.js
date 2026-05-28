@@ -1514,224 +1514,6 @@ const isAIFailureText = (v) => {
 };
 
 
-function Overview({ result, bare }) {
-  const rs = result?.response_summary;
-  if (!rs) return null;
-  const lc = levelStyle[rs.threat_level] || levelStyle.INFORMATIONAL;
-  const total = Object.values(result.iocs||{}).flat().length;
-  const mitre = rs.mitre_techniques?.length || 0;
-  const conf  = Math.round((rs.confidence||0)*100);
-  const ts    = rs.timestamp ? new Date(rs.timestamp) : new Date();
-
-  const Metric = ({ label, value, color }) => (
-    <MuiPaper elevation={0} sx={{
-      flex: 1, p: '14px 16px',
-      border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-      borderRadius: '4px',
-    }}>
-      <Typography sx={{ color: 'text.tertiary', fontSize: 11, fontWeight: 500, mb: 0.75 }}>
-        {label}
-      </Typography>
-      <Typography sx={{
-        color: color || 'text.primary',
-        fontSize: 22, fontWeight: 600, lineHeight: 1.1,
-        fontVariantNumeric: 'tabular-nums',
-      }}>{value}</Typography>
-    </MuiPaper>
-  );
-
-  const metrics = (
-    <Box>
-      {rs.provisional && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25 }}>
-          <Box sx={{ width: 7, height: 7, borderRadius: 99, backgroundColor: '#E1B823',
-            animation: 'pulse 1.5s ease-in-out infinite' }}/>
-          <Typography sx={{ fontSize: 11, color: '#E1B823', fontWeight: 500 }}>
-            Preliminary verdict from enrichment — AI analysis in progress…
-          </Typography>
-        </Box>
-      )}
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1.25 }}>
-        <Metric label="Threat level" value={rs.threat_level} color={lc.fg}/>
-        <Metric label="Confidence" value={`${conf}%`}
-          color={conf >= 70 ? '#17AB1F' : conf >= 40 ? '#E1B823' : '#F14337'}/>
-        <Metric label="Indicators" value={total} color="#0fbcff"/>
-        <Metric label="MITRE TTPs" value={mitre} color="#B286FF"/>
-      </Box>
-    </Box>
-  );
-  if (bare) return metrics;
-  return (
-    <Box sx={{ mb: 1.75 }}>
-      <Box sx={{
-        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 1.25,
-      }}>
-        <Typography sx={{
-          fontSize: 18, fontWeight: 600, color: 'text.primary', letterSpacing: '-0.01em',
-        }}>
-          Investigation results
-        </Typography>
-        <Typography sx={{
-          fontSize: 12, color: 'text.tertiary', fontVariantNumeric: 'tabular-nums',
-        }}>
-          {ts.toLocaleString()}
-        </Typography>
-      </Box>
-      {metrics}
-    </Box>
-  );
-}
-
-/* ─── GTI ────────────────────────────────────────────────────────────────────── */
-function GTI({ result }) {
-  const gti = result?.gti_scores || {};
-  const sorted = Object.entries(gti).sort(([,a],[,b])=>b.score-a.score);
-  const top = sorted[0]?.[1];
-  const total = Object.values(result?.iocs||{}).flat().length;
-  // Fused headline card: shows investigation metrics + threat score; render
-  // whenever there's an investigation result, even if no GTI scores.
-  if (!sorted.length && !result?.response_summary) return null;
-
-  const dist = { critical:0, high:0, elevated:0, suspicious:0, clean:0 };
-  const distC = { critical:t.red, high:t.orange, elevated:t.yellow, suspicious:'#f59e0b', clean:t.green };
-  sorted.forEach(([,d]) => {
-    if (d.score>=85) dist.critical++;
-    else if (d.score>=65) dist.high++;
-    else if (d.score>=45) dist.elevated++;
-    else if (d.score>=25) dist.suspicious++;
-    else dist.clean++;
-  });
-
-  return (
-    <Card title="Investigation results" accent="#0fbcff" badge={top ? `${top.score}/100` : null} defaultOpen>
-      {/* Investigation metrics (threat level / confidence / indicators / MITRE) */}
-      <Overview result={result} bare/>
-
-      {sorted.length > 0 && (
-        <Typography sx={{ fontSize: 11, fontWeight: 600, color: 'text.tertiary',
-          textTransform: 'uppercase', letterSpacing: '0.06em', mt: 2.25, mb: 1.25,
-          pt: 2, borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
-          Threat score
-        </Typography>
-      )}
-      <Box sx={{
-        display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 3, mb: 2.25,
-        pb: 2, borderBottom: `1px solid ${muiAlpha('#ffffff', 0.06)}`,
-      }}>
-        {top && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.75 }}>
-            <Dial score={top.score} color={top.color} size={80}/>
-            <Box>
-              <Typography sx={{ fontSize: 11, color: 'text.tertiary', mb: 0.5 }}>
-                Highest scoring indicator
-              </Typography>
-              <Typography sx={{ fontSize: 18, fontWeight: 600, color: top.color, mb: 0.75 }}>
-                {top.label}
-              </Typography>
-              <Verdict verdict={top.verdict}/>
-            </Box>
-          </Box>
-        )}
-        <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <Typography sx={{ fontSize: 11, color: 'text.tertiary', mb: 1 }}>
-            Score distribution
-          </Typography>
-          {Object.entries(dist).map(([lbl, cnt]) => (
-            <Box key={lbl} sx={{ display: 'flex', gap: 1.25, alignItems: 'center', mb: 0.5 }}>
-              <Box sx={{ width: 72, fontSize: 11, color: 'text.tertiary', textTransform: 'capitalize' }}>
-                {lbl}
-              </Box>
-              <Box sx={{
-                flex: 1, backgroundColor: 'background.secondary',
-                borderRadius: 99, height: 6, overflow: 'hidden',
-              }}>
-                {cnt > 0 && (
-                  <Box sx={{
-                    width: `${Math.min(100, cnt * 16)}%`, height: '100%',
-                    backgroundColor: distC[lbl], borderRadius: 99,
-                    transition: 'width .4s',
-                  }}/>
-                )}
-              </Box>
-              <Box sx={{
-                width: 18, fontSize: 11,
-                color: cnt > 0 ? distC[lbl] : 'text.disabled',
-                fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums',
-              }}>{cnt}</Box>
-            </Box>
-          ))}
-        </Box>
-      </Box>
-
-      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mb: 2 }}>
-        <MuiPaper elevation={0} sx={{
-          display: 'flex', alignItems: 'center', gap: 0.875,
-          backgroundColor: 'background.secondary',
-          border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-          borderRadius: '4px', p: '6px 11px',
-        }}>
-          <Box sx={{ width: 6, height: 6, borderRadius: 99, backgroundColor: '#B286FF' }}/>
-          <Typography sx={{ fontSize: 11, color: 'text.primary', fontWeight: 500 }}>STIX 2.1</Typography>
-          <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>· {total} indicators</Typography>
-          {result?.runId && (
-            <Box component="a" href={`/api/export/stix/${result.runId}`} target="_blank" rel="noreferrer"
-              sx={{ color: '#B286FF', fontSize: 11, display: 'inline-flex',
-                alignItems: 'center', gap: 0.25, ml: 0.25 }}>
-              export <ArrowUpRight size={11}/>
-            </Box>
-          )}
-        </MuiPaper>
-        <MuiPaper elevation={0} sx={{
-          display: 'flex', alignItems: 'center', gap: 0.875,
-          backgroundColor: 'background.secondary',
-          border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-          borderRadius: '4px', p: '6px 11px',
-        }}>
-          <Box sx={{ width: 6, height: 6, borderRadius: 99, backgroundColor: 'primary.main' }}/>
-          <Typography sx={{ fontSize: 11, color: 'text.primary', fontWeight: 500 }}>TAXII feeds</Typography>
-          <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
-            · VT, AbuseIPDB, OTX, ThreatFox, MalwareBazaar, GreyNoise, URLScan, Shodan
-          </Typography>
-        </MuiPaper>
-      </Stack>
-
-      <Typography sx={{ fontSize: 11, color: 'text.tertiary', mb: 0.75 }}>Per-indicator score</Typography>
-      <MuiPaper elevation={0} sx={{
-        backgroundColor: 'background.secondary',
-        borderRadius: '4px',
-        border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-        overflow: 'hidden',
-      }}>
-        {sorted.map(([ioc, d], i) => (
-          <Box key={ioc} sx={{
-            display: 'flex', gap: 1.5, alignItems: 'center', p: '10px 14px',
-            borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
-          }}>
-            <Dial score={d.score} color={d.color} size={38}/>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography sx={{
-                fontSize: 12, color: 'text.primary',
-                fontFamily: '"IBM Plex Mono", monospace',
-                wordBreak: 'break-all', mb: 0.375,
-              }}>
-                {ioc.length > 58 ? ioc.slice(0, 55) + '…' : ioc}
-              </Typography>
-              <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
-                {d.label}
-                {d.contributing_factors?.slice(0, 1).map((f, i) =>
-                  <Box component="span" key={i} sx={{ color: 'text.disabled' }}> · {f}</Box>
-                )}
-              </Typography>
-            </Box>
-            <Verdict verdict={d.verdict} size="small"/>
-          </Box>
-        ))}
-      </MuiPaper>
-
-    </Card>
-  );
-}
-
 /* ─── assessment ────────────────────────────────────────────────────────────── */
 function Assessment({ rs }) {   // currently unused — kept for reuse
   const lc = levelStyle[rs.threat_level] || levelStyle.INFORMATIONAL;
@@ -1894,29 +1676,164 @@ const Block = ({ title, children }) => (
 );
 
 /* ─── analyst hand-off (disposition, clear/escalate, IR playbook) ──────────── */
-function AnalystSummary({ rs }) {
+// Score → tier metadata. Brackets are the same as the legacy GTI card so
+// nothing shifts category, just rendered more prominently.
+const SCORE_TIERS = [
+  { min: 85, name: 'CRITICAL',   color: '#EE3838' },
+  { min: 65, name: 'HIGH',       color: '#E6700F' },
+  { min: 45, name: 'ELEVATED',   color: '#E1B823' },
+  { min: 25, name: 'SUSPICIOUS', color: '#F59E0B' },
+  { min: 0,  name: 'CLEAN',      color: '#16AD34' },
+];
+const tierFor = (score) => SCORE_TIERS.find(t => (score || 0) >= t.min) || SCORE_TIERS[SCORE_TIERS.length - 1];
+
+// Threat-score block — the upgraded version of the old GTI/Investigation
+// card. One prominent dial showing the worst-scoring indicator, the tier
+// label embedded right below it, a per-tier distribution mini-chart so the
+// analyst can see at a glance "is this one bad IOC or a pattern", and a
+// compact per-indicator list sorted by score.
+function ThreatScore({ result }) {
+  const gti = result?.gti_scores || {};
+  const sorted = Object.entries(gti).sort(([,a],[,b]) => (b.score || 0) - (a.score || 0));
+  if (!sorted.length) return null;
+
+  const top = sorted[0][1];
+  const topTier = tierFor(top.score);
+  const dist = { CRITICAL: 0, HIGH: 0, ELEVATED: 0, SUSPICIOUS: 0, CLEAN: 0 };
+  sorted.forEach(([,d]) => { dist[tierFor(d.score).name] += 1; });
+  const maxBar = Math.max(1, ...Object.values(dist));
+
+  return (
+    <>
+      <Block title={`Threat score · ${sorted.length} indicators scored`}>
+        <Box sx={{
+          display: 'grid', gap: 2.5, alignItems: 'center',
+          gridTemplateColumns: { xs: '1fr', md: 'auto 1fr' },
+          py: 0.5,
+        }}>
+          {/* Big dial + tier label */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+            <Dial score={top.score} color={topTier.color} size={120}/>
+            <Box sx={{
+              px: 1.25, py: 0.25, borderRadius: '3px',
+              backgroundColor: muiAlpha(topTier.color, 0.18),
+              border: `1px solid ${muiAlpha(topTier.color, 0.4)}`,
+              fontSize: 11, fontWeight: 700, color: topTier.color,
+              letterSpacing: '0.1em', fontFamily: '"IBM Plex Mono", monospace',
+            }}>
+              {topTier.name}
+            </Box>
+            <Typography sx={{ fontSize: 10, color: 'text.disabled',
+              textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              worst indicator
+            </Typography>
+          </Box>
+
+          {/* Distribution bars + top-IOC reference */}
+          <Box>
+            <Typography sx={{ fontSize: 10, color: 'text.disabled',
+              textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
+              Tier distribution
+            </Typography>
+            {SCORE_TIERS.map(tr => (
+              <Box key={tr.name} sx={{
+                display: 'grid', gridTemplateColumns: '90px 1fr 24px',
+                gap: 1.25, alignItems: 'center', mb: 0.5,
+              }}>
+                <Typography sx={{ fontSize: 11, color: dist[tr.name] > 0 ? tr.color : 'text.disabled',
+                  fontWeight: dist[tr.name] > 0 ? 600 : 400 }}>
+                  {tr.name.charAt(0) + tr.name.slice(1).toLowerCase()}
+                </Typography>
+                <Box sx={{
+                  height: 6, borderRadius: 99, backgroundColor: 'background.secondary',
+                  overflow: 'hidden',
+                }}>
+                  {dist[tr.name] > 0 && (
+                    <Box sx={{
+                      width: `${(dist[tr.name] / maxBar) * 100}%`,
+                      height: '100%', backgroundColor: tr.color, borderRadius: 99,
+                      transition: 'width .35s',
+                    }}/>
+                  )}
+                </Box>
+                <Typography sx={{
+                  fontSize: 11, fontWeight: 600,
+                  color: dist[tr.name] > 0 ? tr.color : 'text.disabled',
+                  textAlign: 'right', fontVariantNumeric: 'tabular-nums',
+                }}>{dist[tr.name]}</Typography>
+              </Box>
+            ))}
+            <Box sx={{ mt: 1.5, pt: 1, borderTop: `1px solid ${muiAlpha('#ffffff', 0.06)}` }}>
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary', mb: 0.25 }}>
+                Highest-scoring indicator
+              </Typography>
+              <Typography sx={{ fontSize: 13, color: topTier.color, fontWeight: 600,
+                fontFamily: '"IBM Plex Mono", monospace', wordBreak: 'break-all' }}>
+                {top.label}
+              </Typography>
+            </Box>
+          </Box>
+        </Box>
+      </Block>
+
+      {/* Per-indicator list */}
+      <Block title="Per-indicator score">
+        {sorted.map(([ioc, d], i) => {
+          const tr = tierFor(d.score);
+          return (
+            <Box key={ioc} sx={{
+              display: 'flex', gap: 1.5, alignItems: 'center', py: 0.875,
+              borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
+            }}>
+              <Dial score={d.score} color={tr.color} size={38}/>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography sx={{
+                  fontSize: 12, color: 'text.primary',
+                  fontFamily: '"IBM Plex Mono", monospace',
+                  wordBreak: 'break-all', mb: 0.25,
+                }}>
+                  {ioc.length > 58 ? ioc.slice(0, 55) + '…' : ioc}
+                </Typography>
+                {d.contributing_factors?.[0] && (
+                  <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
+                    {d.contributing_factors[0]}
+                  </Typography>
+                )}
+              </Box>
+              <Verdict verdict={d.verdict} size="small"/>
+            </Box>
+          );
+        })}
+      </Block>
+    </>
+  );
+}
+
+function AnalystSummary({ result, rs }) {
   const a = rs?.analyst_summary;
-  if (!a || !a.disposition) return null;
+  // The Summary card is the new front-page for an investigation, so we show
+  // it whenever there's *any* AI output OR per-IOC scoring — not just when
+  // a disposition exists. The threat-score block carries the card when the
+  // AI hasn't returned a verdict yet.
+  const hasGti = !!result?.gti_scores && Object.keys(result.gti_scores).length > 0;
+  const hasDisposition = !!(a && a.disposition);
+  if (!hasGti && !hasDisposition) return null;
 
-  const dispColor = a.disposition === 'CLEAR'    ? '#17AB1F'
-                  : a.disposition === 'ESCALATE' ? '#F14337'
-                  :                                '#E1B823';
-
-  // 2-3 sentence AI narrative from the investigation — generated every run
-  // but not previously rendered anywhere. Sits above the disposition banner
-  // so the analyst gets the synthesis before the verdict.
+  const dispColor = a?.disposition === 'CLEAR'    ? '#17AB1F'
+                  : a?.disposition === 'ESCALATE' ? '#F14337'
+                  :                                  '#E1B823';
   const summary = (rs?.summary || '').trim();
 
   return (
-    <Card title="Summary" accent="#B286FF" badge={a.disposition?.toLowerCase()} defaultOpen>
+    <Card title="Summary" accent="#0fbcff" badge={a?.disposition?.toLowerCase()} defaultOpen>
       {summary && (
         <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.7,
           mb: 1.5, whiteSpace: 'pre-wrap' }}>
           {summary}
         </Typography>
       )}
-      {/* Disposition banner */}
-      {a.disposition && (
+
+      {hasDisposition && (
         <MuiPaper elevation={0} sx={{
           backgroundColor: 'background.secondary',
           border: `1px solid ${muiAlpha(dispColor, 0.25)}`,
@@ -1937,8 +1854,9 @@ function AnalystSummary({ rs }) {
         </MuiPaper>
       )}
 
-      {/* Clear justification */}
-      {a.clear_justification && (
+      {hasGti && <ThreatScore result={result}/>}
+
+      {a?.clear_justification && (
         <Block title="Why this can / cannot be cleared">
           <Typography component="li" sx={{ listStyle: 'none', py: 0.5, fontSize: 13,
             color: 'text.primary', lineHeight: 1.7 }}>
@@ -1947,8 +1865,7 @@ function AnalystSummary({ rs }) {
         </Block>
       )}
 
-      {/* Escalation steps */}
-      {a.escalation_steps?.length > 0 && a.disposition !== 'CLEAR' && (
+      {a?.escalation_steps?.length > 0 && a.disposition !== 'CLEAR' && (
         <Block title="If escalating · steps for Tier 2">
           {a.escalation_steps.map((s, i) => (
             <Box component="li" key={i} sx={{
@@ -1964,9 +1881,6 @@ function AnalystSummary({ rs }) {
           ))}
         </Block>
       )}
-
-      {/* Client notification email removed — pending integration of dedicated
-          email-generator repo from a fellow analyst. */}
     </Card>
   );
 }
@@ -2124,9 +2038,9 @@ function ChatWithRecon({ result, bare }) {
 
   if (!runId) return null;
   const isAmbiguous = classification === 'AMBIGUOUS';
-  // Standardized accent: purple = AI synthesis (default), orange when the AI
-  // is signalling it can't commit to a verdict and needs the analyst's input.
-  const accent = isAmbiguous ? '#E6700F' : '#B286FF';
+  // All cards on the analyze view share the same cyan accent now —
+  // semantic colors have been retired in favour of one consistent look.
+  const accent = '#0fbcff';
   const banner = isAmbiguous
     ? 'RECON needs more context to commit to a verdict — pick a question or ask anything'
     : null;
@@ -2402,7 +2316,7 @@ function EmailAnalysis({ result }) {
   const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
 
   return (
-    <Card title="Email analysis" accent="#E6700F" badge={`${e.attachments?.length || 0} attachments`}>
+    <Card title="Email analysis" accent="#0fbcff" badge={`${e.attachments?.length || 0} attachments`}>
       {/* Headers */}
       <MuiPaper elevation={0} sx={{
         backgroundColor: '#0C1524',
@@ -2949,7 +2863,7 @@ function Detection({ result }) {
   // Nothing generated yet → show the on-demand generate button.
   if (!tabs.length) {
     return (
-      <Card title="Detection Rules" accent="#16AD34">
+      <Card title="Detection Rules" accent="#0fbcff">
         <MuiButton variant="contained" onClick={generate} disabled={loading}
           sx={{ textTransform: 'none' }}>
           {loading ? 'Generating…' : 'Generate Detection Rules'}
@@ -2964,7 +2878,7 @@ function Detection({ result }) {
   const cur = tabs.find(x => x.id === (active || tabs[0]?.id)) || tabs[0];
 
   return (
-    <Card title="Detection Rules" accent="#16AD34" badge={`${tabs.length} platforms`}>
+    <Card title="Detection Rules" accent="#0fbcff" badge={`${tabs.length} platforms`}>
       {mitre.length > 0 && (
         <Box sx={{ display:'flex', gap:0.75, flexWrap:'wrap', mb:1.75, alignItems:'center' }}>
           <Typography sx={{ fontSize:11, color:'text.tertiary' }}>Coverage:</Typography>
@@ -4264,12 +4178,13 @@ export default function App() {
         {result && view === 'table' && (
           <>
             <PreFlight result={result}/>
-            <Overview result={result}/>
             <SignalBanners result={result}/>
             <SuppressedIOCs result={result}/>
             <IOCPivot result={result}/>
             <BulkTable result={result}/>
-            <Card title="Geographic distribution" accent="#0fbcff" noPad><MapTab result={result}/></Card>
+            {(result?.iocs?.ips || []).length > 0 && (
+              <Card title="Geolocation" accent="#0fbcff" noPad><MapTab result={result}/></Card>
+            )}
           </>
         )}
 
@@ -4283,25 +4198,23 @@ export default function App() {
                 outgoing artefacts (detection rules), then the interactive
                 follow-up tools (Geolocation, Ask RECON). */}
             <CardDefaultOpenContext.Provider value={false} key={result.runId || 'detail'}>
-            {/* 1. VERDICT — "is this bad? should I escalate?" */}
-            <AnalystSummary rs={rs || {}}/>
-            {/* 2. EVIDENCE-AT-A-GLANCE — scores + top IOC */}
-            <GTI result={result}/>
-            {/* 3. DEEP DIVE — logs, IOC filtering, OSINT, TTPs, sandbox, cross-refs, AI actions/notes */}
+            {/* Card order (analyst-flow):
+                1. Summary       — verdict + threat score (rolled-up GTI)
+                2. Ask RECON     — interactive probing questions
+                3. Triage        — deep evidence dive
+                4. Geolocation   — map (only when IPs are present)
+                5. Detection     — SIEM-ready rules
+                EmailAnalysis still slots in when an EML is present. */}
+            <AnalystSummary result={result} rs={rs || {}}/>
+            <ChatWithRecon result={result}/>
             <Triage result={result} rs={rs || {}}/>
-            {/* 4. CHANNEL-SPECIFIC — phishing/EML breakdown when applicable */}
             <EmailAnalysis result={result}/>
-            {/* 5. OUTBOUND ARTEFACT — detection content to ship to SIEM */}
-            <Detection result={result}/>
-            {/* 6. CONTEXT — geographic distribution (only when IPs exist) */}
             {(result?.iocs?.ips || []).length > 0 && (
               <Card title="Geolocation" accent="#0fbcff" noPad>
                 <MapTab result={result}/>
               </Card>
             )}
-            {/* 7. INTERACTIVE — probing questions + chat, last so the analyst
-                has reviewed the evidence before opening a conversation. */}
-            <ChatWithRecon result={result}/>
+            <Detection result={result}/>
             </CardDefaultOpenContext.Provider>
           </>
         )}
