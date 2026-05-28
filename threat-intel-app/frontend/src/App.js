@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  Copy, Printer, ArrowUpRight, AlertCircle, X, FileSearch, Mail, Link2,
+  Copy, Printer, ArrowUpRight, AlertCircle, X, FileSearch, Mail,
 } from 'lucide-react';
 
 import MapTab            from './components/MapTab';
@@ -2755,76 +2755,6 @@ function URLScanLive({ result, bare }) {
   );
 }
 
-/* ─── sidebar scanner input — unified pill with leading icon + submit ────── */
-function ScannerInput({ icon, placeholder, value, onChange, onSubmit, disabled, submitLabel, sx }) {
-  const trimmed = (value || '').trim();
-  const ready = !!trimmed && !disabled;
-  return (
-    <Box sx={{
-      display: 'flex', alignItems: 'stretch',
-      backgroundColor: 'background.secondary',
-      border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-      borderRadius: '4px',
-      overflow: 'hidden',
-      transition: 'border-color .15s',
-      '&:focus-within': { borderColor: 'primary.main' },
-      ...sx,
-    }}>
-      <Box sx={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        px: 1, color: ready ? 'primary.main' : 'text.tertiary',
-        transition: 'color .15s',
-      }}>
-        {icon}
-      </Box>
-      <Box component="input" type="text"
-        value={value}
-        disabled={disabled}
-        onChange={e => onChange(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === 'Enter' && trimmed) onSubmit(trimmed);
-        }}
-        placeholder={placeholder}
-        sx={{
-          flex: 1, minWidth: 0,
-          backgroundColor: 'transparent',
-          border: 'none',
-          color: 'text.primary',
-          p: '8px 4px 8px 0',
-          fontFamily: '"IBM Plex Mono", monospace',
-          fontSize: 11,
-          outline: 'none',
-          '&::placeholder': { color: 'text.tertiary' },
-          '&:disabled': { opacity: 0.5 },
-        }}
-      />
-      <Box component="button"
-        disabled={!ready}
-        onClick={() => onSubmit(trimmed)}
-        sx={{
-          backgroundColor: ready ? muiAlpha('#0fbcff', 0.12) : 'transparent',
-          borderLeft: `1px solid ${muiAlpha('#ffffff', 0.08)}`,
-          border: 'none',
-          borderLeftStyle: 'solid',
-          borderLeftWidth: '1px',
-          borderLeftColor: muiAlpha('#ffffff', 0.08),
-          color: ready ? 'primary.main' : 'text.tertiary',
-          fontSize: 11, fontWeight: 600,
-          px: 1.5,
-          cursor: ready ? 'pointer' : 'default',
-          textTransform: 'uppercase', letterSpacing: '0.05em',
-          transition: 'all .15s',
-          '&:hover:not(:disabled)': {
-            backgroundColor: muiAlpha('#0fbcff', 0.2),
-          },
-        }}>
-        {submitLabel}
-      </Box>
-    </Box>
-  );
-}
-
-
 /* ─── sidebar ─────────────────────────────────────────────────────────────────
  * Adapted from OpenCTI (AGPL-3.0) — LeftBar.jsx pattern.
  * Uses MUI Drawer with the OpenCTI nav width/styling, hosting the input area
@@ -2833,8 +2763,6 @@ function ScannerInput({ icon, placeholder, value, onChange, onSubmit, disabled, 
 function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanHash, onScanUrl, scanState, onHome, onOpenEmail, emailActive }) {
   const [logText, setLogText] = useState('');
   const [dragOver, setDragOver] = useState(false);
-  const [hashInput, setHashInput] = useState('');
-  const [urlInput, setUrlInput]   = useState('');
 
   const handleFile = useCallback(file => {
     if (!file) return;
@@ -2899,8 +2827,6 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
       <Box
         onClick={() => {
           setLogText('');
-          setHashInput('');
-          setUrlInput('');
           setDragOver(false);
           onHome?.();
         }}
@@ -3004,7 +2930,7 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
         <Box sx={{ position: 'relative', mb: 1.25 }}>
           <Box component="textarea"
             value={logText} onChange={e=>setLogText(e.target.value)}
-            placeholder="Paste to Analyze"
+            placeholder="Paste log, IOCs, or a URL"
             sx={{
               width: '100%',
               backgroundColor: 'background.secondary',
@@ -3034,24 +2960,15 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
           )}
         </Box>
 
-        {/* Hash / URL input groups — unified pill with leading icon + inline
-            submit button. Button glows primary when input is non-empty. */}
-        {/* Hash lookup removed — paste hashes into Analyze (same enrichment). */}
-        <ScannerInput
-          icon={<Link2 size={13}/>}
-          placeholder="Scan URL"
-          value={urlInput}
-          onChange={setUrlInput}
-          onSubmit={(v) => { onScanUrl?.(v); setUrlInput(''); }}
-          disabled={scanState?.scanning}
-          submitLabel="Fetch"
-          sx={{ mb: 1.25 }}
-        />
+        {/* Hash + URL lookups now live inside the Analyze textarea — the
+            AgentPipeline button detects a bare URL and routes to
+            /api/scan/url, otherwise it runs the log-analysis pipeline. */}
 
         <AgentPipeline logText={logText} label=""
           onComplete={onResult}
           onPartial={onPartialResult}
-          onStart={()=>onResult(null)}/>
+          onStart={()=>onResult(null)}
+          onScanUrl={(url) => { onScanUrl?.(url); setLogText(''); }}/>
 
         {/* Extracted indicators */}
         {hasIOCs && (
@@ -3322,7 +3239,7 @@ export default function App() {
   const [webhooks, setWebhooks] = useState({});
   // Bumped on "go home" (logo) to remount the Sidebar — this clears its local
   // input state AND the AgentPipeline's internal trace/pipeline, which would
-  // otherwise linger under the Scan URL input after returning home.
+  // otherwise linger under the Analyze input after returning home.
   const [homeNonce, setHomeNonce] = useState(0);
   const rs = result?.response_summary;
 
