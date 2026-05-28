@@ -5,7 +5,7 @@
  */
 import React, { useState, useRef } from 'react';
 import {
-  Box, Stack, Typography, Button, IconButton,
+  Box, Typography, Button,
   alpha,
 } from '@mui/material';
 import {
@@ -19,15 +19,6 @@ const AGENTS = [
   { id: 'investigation', icon: Activity, label: 'Investigation' },
   { id: 'response',      icon: Shield,   label: 'Response'      },
 ];
-
-// Severity tier → theme palette key (mirrors theme.js palette.severity)
-const LEVEL_COLOR = {
-  CRITICAL:      'severity.critical',
-  HIGH:          'severity.high',
-  MEDIUM:        'severity.medium',
-  LOW:           'severity.low',
-  INFORMATIONAL: 'severity.default',
-};
 
 // Bare-URL detector: the analyst's input is JUST a URL (no surrounding log
 // text). When that's the case we route to onScanUrl (which hits

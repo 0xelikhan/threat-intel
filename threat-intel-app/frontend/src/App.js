@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  Copy, Printer, ArrowUpRight, AlertCircle, X, FileSearch, Mail,
+  Copy, ArrowUpRight, AlertCircle, X, FileSearch, Mail,
 } from 'lucide-react';
 
 import MapTab            from './components/MapTab';
@@ -1382,16 +1382,6 @@ function SignalBanners({ result }) {
     </Stack>
   );
 }
-
-/* ─── overview metrics ───────────────────────────────────────────────────────── */
-// Matches every variant of the boilerplate the backend emits when the AI
-// call fails or no OpenAI key is configured. Used to suppress entire UI
-// sections that would otherwise just display these placeholder strings.
-const AI_FAILURE_TEXT = /(openai\s*key\s*not\s*configured|review\s*enrichment\s*data\s*manually|automated\s*ai\s*analysis\s*unavailable|configure\s*openai)/i;
-const isAIFailureText = (v) => {
-  try { return AI_FAILURE_TEXT.test(String(v ?? '')); }
-  catch { return false; }
-};
 
 // Thin wrapper for MuiBlock (renders an MUI Box with subtle border + tertiary
 // label) used by several cards for in-card grouping.
@@ -2930,7 +2920,7 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
         <Box sx={{ position: 'relative', mb: 1.25 }}>
           <Box component="textarea"
             value={logText} onChange={e=>setLogText(e.target.value)}
-            placeholder="Paste log, IOCs, or a URL"
+            placeholder="Paste to Analyze"
             sx={{
               width: '100%',
               backgroundColor: 'background.secondary',

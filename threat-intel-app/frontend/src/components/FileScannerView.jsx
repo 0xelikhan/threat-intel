@@ -121,7 +121,6 @@ function SectionCard({ id, label, accent, children, sx, defaultPad = true }) {
 function VerdictBanner({ result }) {
   const theme = useTheme();
   const v = result.verdict || 'UNKNOWN';
-  const conf = result.confidence || 0;
   const triage = result.ai_analyst?.triage;
   const deep = result.ai_analyst?.deep;
   const cls = deep?.malware_classification?.category || triage?.classification || 'Unknown';
@@ -1192,7 +1191,7 @@ function NotesAndRefinement({ result, onRefreshScan }) {
 function StickyHeader({ result, scanning }) {
   const theme = useTheme();
   const v = result?.verdict || 'UNKNOWN';
-  const conf = result?.confidence || 0;
+  const conf = Math.round((result?.confidence || 0) * 100);
   const cls = result?.ai_analyst?.deep?.malware_classification?.category
            || result?.ai_analyst?.triage?.classification;
   const c = verdictColor(theme, v);
@@ -1321,7 +1320,6 @@ function AILoading({ text }) {
 
 // ─── Main FileScannerView ────────────────────────────────────────────────────
 export default function FileScannerView({ external, onScanFile, onScanHash, onScanUrl }) {
-  const theme = useTheme();
   const [localResult, setLocalResult] = useState(null);
   const [localScanning, setLocalScanning] = useState(false);
   const [localStep, setLocalStep] = useState(0);

@@ -16,7 +16,7 @@
  * Inline-styled legacy components keep working — only MUI components inherit.
  */
 
-import { createTheme, alpha } from '@mui/material/styles';
+import { createTheme } from '@mui/material/styles';
 
 // ─── Hex → rgba helper (matches OpenCTI's hexToRGB) ─────────────────────────
 const hexToRGB = (hex, opacity = 1) => {

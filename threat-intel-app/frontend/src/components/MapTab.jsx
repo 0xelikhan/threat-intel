@@ -66,7 +66,7 @@ export default function MapTab({ result }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersRef = useRef([]);
-  const [selectedIP, setSelectedIP] = useState(null);
+  const [, setSelectedIP] = useState(null);
   const [leafletReady, setLeafletReady] = useState(false);
 
   useEffect(() => {
