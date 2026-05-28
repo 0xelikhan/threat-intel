@@ -195,16 +195,6 @@ export default function LoginPage({ onAuthed }) {
             </MuiButton>
           </Stack>
         </Box>
-
-        {/* Footer marker */}
-        <Typography sx={{
-          textAlign: 'center', mt: 3.5,
-          fontSize: 10, color: 'text.disabled',
-          letterSpacing: '0.12em', textTransform: 'uppercase',
-          fontFamily: '"IBM Plex Mono", monospace',
-        }}>
-          v3.0
-        </Typography>
       </MuiPaper>
     </Box>
   );
