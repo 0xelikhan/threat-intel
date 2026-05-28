@@ -197,17 +197,71 @@ Exploitation-specific FALSE POSITIVES to explicitly rule out:
   • Security researcher traffic with documented scope
   • Auto-generated exploit signatures from threat feeds (informational, not active)
 """,
+
+    "identity": """
+═══════════════════════════════════════════════════════════════════════════════════
+IDENTITY / IMPOSSIBLE-TRAVEL / RISKY-SIGN-IN FOCUS — weight these signals heaviest
+═══════════════════════════════════════════════════════════════════════════════════
+Priority signals (check in this order):
+  1. MFA satisfaction on the suspicious sign-in (passed MFA = high confidence the
+     human typed the right code; failed/skipped MFA = real concern)
+  2. Source IP reputation (AbuseIPDB / Tor exit / known anonymizer / commercial VPN)
+  3. Source ASN class: residential / mobile / corporate vs commercial-anonymiser
+  4. Session conditional-access policy outcome (grant / block / interrupt)
+  5. Was a domain-joined endpoint (asset_name field) tied to the sign-in?
+  6. Prior baseline for the user: usual country, ASN, device, hours
+  7. Post-sign-in activity (mailbox-rule changes, mass downloads, OAuth grants)
+
+Identity / impossible-travel FALSE POSITIVES to explicitly rule out and weight
+heavily toward CLEAR / BENIGN_FALSE_POSITIVE when they fit:
+  • **Domain-joined asset present (asset_name populated)** — when a managed or
+    Hybrid Azure AD-joined endpoint is tied to the sign-in, this is most often
+    a FALSE POSITIVE. The alert measures time-distance between login locations,
+    so it fires when a corporate VPN egress sits far from the actual user, when
+    split-tunneling routes some traffic out of region, or when the geolocation
+    database is just wrong. State this reasoning explicitly in
+    false_positive_check and lean the disposition toward CLEAR unless the
+    sign-in fails MFA, the source IP is a known anonymizer/Tor, or post-login
+    activity is anomalous.
+  • Commercial VPN clients the user installed for personal browsing
+  • Mobile carrier roaming to a regional egress (common with international travel)
+  • iCloud Private Relay / similar privacy-preserving relays
+  • Misattributed geolocation on a residential CGNAT block
+  • Just-In-Time admin access from an OOB management network
+""",
+}
+
+
+# Map free-text triage labels + parsed Entra/Defender labels to the focus
+# bucket they should weight on. Substring match — first hit wins.
+_TYPE_TO_FOCUS_HINT = {
+    # identity bucket
+    "impossible_travel": "identity",
+    "user_at_risk":      "identity",
+    "risky":             "identity",
+    "anonymized_ip":     "identity",
+    "unfamiliar_sign":   "identity",
+    "password_spray":    "identity",
+    "forwarding_rule":   "identity",
+    "creation_of_admin": "identity",
+    "privileged_role":   "identity",
 }
 
 
 def _get_type_focus(alert_type: str) -> str:
-    """Return specialized guidance text for the alert type, or '' if generic."""
+    """Return specialized guidance text for the alert type, or '' if generic.
+    First tries the direct substring match (phishing / malware / c2 / etc.),
+    then walks the indirect hint map for the more-fine-grained identity-side
+    labels that don't appear as keys in _TYPE_FOCUS."""
     if not alert_type:
         return ""
     a = alert_type.lower()
     for key, text in _TYPE_FOCUS.items():
         if key in a:
             return text
+    for needle, focus_key in _TYPE_TO_FOCUS_HINT.items():
+        if needle in a and focus_key in _TYPE_FOCUS:
+            return _TYPE_FOCUS[focus_key]
     return ""
 
 
@@ -532,6 +586,22 @@ async def run_investigation(state: dict, on_event=None) -> dict:
     trace = state.get("agent_trace", [])
     triage_score = state.get("triage_score", 0.0)
     alert_type = next((t.get("alert_type", "unknown") for t in trace if t.get("agent") == "triage"), "unknown")
+    # Triage's derive_alert_type is IOC-based (phishing/malware/c2/...). It
+    # doesn't see identity-side Entra ID signals like "impossible_travel" or
+    # "risky sign-in" in the raw log. Sniff those here so _get_type_focus
+    # can inject the identity focus block (asset_name -> domain-joined FP
+    # bias, etc.) — appended, not overwritten, so any existing IOC-side
+    # routing still applies.
+    _raw = (state.get("raw_input") or "").lower()
+    _identity_signals = (
+        "impossible travel", "impossibletravel", "risky sign-in", "risky signin",
+        "risky sign in", "riskysignin", "risky state", "riskystate",
+        "anonymizedipaddress", "unfamiliarsignin", "unfamiliar sign", "password spray",
+        "passwordspray", "forwardingsmtp", "forwarding rule", "inboxrule",
+        "creation of admin", "privileged role",
+    )
+    if any(s in _raw for s in _identity_signals) and "identity" not in alert_type.lower():
+        alert_type = f"{alert_type},identity" if alert_type and alert_type != "unknown" else "identity"
     cross_refs = state.get("cross_refs", {})
     email_analysis = state.get("email_analysis") or {}
     enrichments_full = state.get("enrichments", {})
