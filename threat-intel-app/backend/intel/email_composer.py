@@ -1018,11 +1018,21 @@ def _defang_if_iplike(v):
     return _defang_ip(s) if ("." in s or ":" in s) else s
 
 
-# Body-level IOC defanger — sanitizes a generated email body so URLs / IPs /
-# domains can't be clicked by the recipient. Applied AFTER the AI produces
-# the body so analysts don't have to defang by hand. Skip plain emails and
-# common non-IOC infra domains so recipient/sender addresses and references
-# to vendor URLs (microsoft.com, etc.) don't get mangled.
+# Body-level IOC defanger — sanitizes a generated email body so raw IOCs
+# (IPs the analyst pulled from a SIEM, attacker C2 domains, etc.) can't be
+# clicked by the recipient. Three rules govern what we touch:
+#   * Raw IPs                  -> always defanged (almost always IOCs in this
+#                                  context; no legitimate reason to ship a
+#                                  raw IPv4 in a client email).
+#   * Domains / URL hostnames  -> defanged only when the registrable domain
+#                                  isn't on the safe-list below. Subdomains
+#                                  of safe-listed domains (support.microsoft
+#                                  .com, learn.microsoft.com, etc.) inherit
+#                                  the safe-list status.
+#   * Email addresses          -> never defanged (recipient/sender refs).
+# The safe-list is the union of: Microsoft / Google / Apple infrastructure,
+# vendor KB and reference URLs we routinely link to, security-research / CTI
+# portals analysts cite by name, and standards bodies.
 _IOC_URL_RE    = re.compile(r"\bhttps?://[^\s<>'\"`]+", re.IGNORECASE)
 _IOC_IP_RE     = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 _IOC_DOMAIN_RE = re.compile(
@@ -1033,20 +1043,65 @@ _IOC_DOMAIN_RE = re.compile(
     re.IGNORECASE,
 )
 _DEFANG_SAFE_DOMAINS = {
-    "microsoft.com", "windows.com", "office.com", "office365.com",
-    "outlook.com", "live.com", "azure.com", "azureedge.net",
-    "google.com", "gmail.com", "apple.com", "icloud.com",
-    "schema.org", "w3.org",
+    # Microsoft surface (KB, learn, support, docs, telemetry)
+    "microsoft.com", "msft.net", "windows.com", "office.com", "office365.com",
+    "outlook.com", "live.com", "azure.com", "azureedge.net", "msftncsi.com",
+    "msauth.net", "msftauth.net", "msidentity.com", "windowsupdate.com",
+    # Google / Apple infra
+    "google.com", "gstatic.com", "googleapis.com", "googleusercontent.com",
+    "gmail.com", "apple.com", "icloud.com",
+    # Standards / web platform
+    "schema.org", "w3.org", "iana.org", "ietf.org",
+    # CVE / vuln databases
+    "nist.gov", "nvd.nist.gov", "cve.org", "cve.mitre.org",
+    "mitre.org", "attack.mitre.org", "d3fend.mitre.org",
+    "cisa.gov", "first.org", "cert.org", "cert.eu", "ncsc.gov.uk", "cyber.gov.au",
+    # Security vendors analysts reference by name in client comms
+    "virustotal.com", "abuseipdb.com", "alienvault.com", "otx.alienvault.com",
+    "urlscan.io", "shodan.io", "censys.io", "greynoise.io", "abuse.ch",
+    "threatfox.abuse.ch", "bazaar.abuse.ch", "malwarebazaar.com",
+    "spamhaus.org", "phishtank.com",
+    # AV / EDR vendors (often linked in detection writeups)
+    "crowdstrike.com", "sentinelone.com", "trendmicro.com", "kaspersky.com",
+    "sophos.com", "eset.com", "mandiant.com", "fireeye.com", "symantec.com",
+    "broadcom.com", "paloaltonetworks.com", "unit42.paloaltonetworks.com",
+    # Misc reference / docs
+    "github.com", "githubusercontent.com", "stackoverflow.com",
 }
 
 
+def _registrable_domain(host: str) -> str:
+    """Return the last two labels of a hostname (rough effective-TLD strip).
+    Good enough for safe-list matching: support.microsoft.com -> microsoft.com,
+    learn.microsoft.com -> microsoft.com, github.io -> github.io. Doesn't try
+    to handle gov.uk-style two-part TLDs because none of the safe-listed
+    entries use them; if one is ever added, special-case it here."""
+    host = (host or "").lower().split(":", 1)[0]  # drop :port if present
+    parts = host.strip(".").split(".")
+    return ".".join(parts[-2:]) if len(parts) >= 2 else host
+
+
+def _is_safe_host(host: str) -> bool:
+    """True when the host (or its registrable parent) is on the safe-list."""
+    if not host:
+        return False
+    h = host.lower()
+    return h in _DEFANG_SAFE_DOMAINS or _registrable_domain(h) in _DEFANG_SAFE_DOMAINS
+
+
 def _defang_url(url: str) -> str:
-    # hxxp(s):// + every "." → "[.]" inside the rest
-    s = re.sub(r"^https://", "hxxps://", url, flags=re.IGNORECASE)
-    s = re.sub(r"^http://",  "hxxp://",  s,  flags=re.IGNORECASE)
-    # Defang dots only in the URL part (everything after the scheme://)
-    head, sep, tail = s.partition("://")
-    return f"{head}{sep}{tail.replace('.', '[.]')}" if sep else s.replace(".", "[.]")
+    """Defang an http(s):// URL UNLESS its hostname is a safe-listed vendor.
+    Leaves the full URL intact for Microsoft KB, MITRE ATT&CK, VirusTotal,
+    etc. — clicking those is desirable, not dangerous."""
+    # Extract hostname (between :// and the next /, ?, or end).
+    m = re.match(r"^(https?)://([^/?#\s]+)(.*)$", url, re.IGNORECASE)
+    if not m:
+        return url
+    scheme, host, rest = m.group(1), m.group(2), m.group(3)
+    if _is_safe_host(host):
+        return url
+    new_scheme = "hxxps" if scheme.lower() == "https" else "hxxp"
+    return f"{new_scheme}://{host.replace('.', '[.]')}{rest.replace('.', '[.]')}"
 
 
 # Em/en dashes are the single most reliable "this was AI-written" giveaway in
@@ -1076,7 +1131,14 @@ def _strip_em_dashes(text: str) -> str:
 
 def _defang_body_iocs(text: str) -> str:
     """Replace clickable IOCs in a body of text with their defanged forms.
-    Leaves email addresses and common safe vendor domains alone."""
+    Rules in priority order:
+      1. URLs whose hostname is safe-listed -> left intact (vendor KB, MITRE,
+         CVE, VirusTotal, etc.).
+      2. Raw IPv4 -> always defanged.
+      3. Bare domains whose registrable parent is safe-listed -> left intact;
+         everything else gets dots replaced with [.].
+      4. Email addresses are never touched (the lookbehind in the domain
+         regex skips anything preceded by @)."""
     if not text:
         return text
     out = _IOC_URL_RE.sub(lambda m: _defang_url(m.group(0)), text)
@@ -1084,7 +1146,7 @@ def _defang_body_iocs(text: str) -> str:
 
     def _maybe_defang_domain(m):
         d = m.group(0)
-        return d if d.lower() in _DEFANG_SAFE_DOMAINS else d.replace(".", "[.]")
+        return d if _is_safe_host(d) else d.replace(".", "[.]")
     out = _IOC_DOMAIN_RE.sub(_maybe_defang_domain, out)
     return out
 
