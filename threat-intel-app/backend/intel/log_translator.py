@@ -51,7 +51,44 @@ Return strict JSON with these top-level keys:
   confidence            — 0.0–1.0 confidence in the format detection
   extracted_fields      — flat dict of {field_name: value}, no nesting
   anomalies             — list of {field, value, reason} for flagged values
-  normalized_summary    — one-paragraph plain-English description of what the log shows
+  normalized_summary    — see "PLAIN-ENGLISH SUMMARY RULES" below
+
+PLAIN-ENGLISH SUMMARY RULES (the normalized_summary field):
+This is the FIRST thing an analyst reads. Treat it like a senior MDR analyst
+briefing a teammate or writing a one-paragraph ticket note — Microsoft-Copilot-
+for-Security style. It must be 3–4 short sentences and follow this exact
+structure:
+
+  1. WHAT HAPPENED — describe the activity in plain English, naming the real
+     actors (process, user, host, target) but converting technical fields into
+     readable prose. Translate process names + command lines into intent
+     ("ran reg.exe to export a registry key", not "Process Path: reg.exe").
+  2. CONTEXT — say what this kind of activity is commonly used for so the
+     analyst has a baseline ("This is typical of security-hardening or
+     maintenance scripts that back up the registry before changes").
+  3. VERDICT — state whether the action was permitted/blocked/anomalous and
+     whether the surrounding signals look benign, suspicious, or malicious.
+  4. RECOMMENDATION — close with one short sentence: either "No further
+     action required unless this is unexpected" / "Verify with the asset
+     owner before clearing" / "Escalate — see [specific signal]".
+
+Do NOT just restate field values. Do NOT list bullet points. Do NOT say
+"the log shows" or "this event indicates" — write it as an analyst note to
+another analyst. Lead with the action, not with metadata.
+
+GOOD example:
+  "The host executed reg.exe under the SYSTEM account to export the
+   acomservice service key into a backup file under
+   C:\\ProgramData\\Security\\UnquotedPathFix. This pattern is typical of
+   automated security-hardening or maintenance routines that snapshot the
+   registry before applying configuration changes. The action was permitted
+   and no malicious indicators surfaced. No further action is required
+   unless this change is unexpected to your team."
+
+BAD example (don't do this — just restates fields):
+  "The log shows reg.exe ran with command line 'export ... acomservice ...'
+   under user NT AUTHORITY\\SYSTEM. Process Path was c:\\windows\\system32
+   \\reg.exe. The Effective Action was None."
 
 No markdown fences. No commentary outside the JSON.
 """
