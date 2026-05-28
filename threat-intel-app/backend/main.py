@@ -15,11 +15,13 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks, R
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
 
 from config import config, API_KEY_DEFINITIONS, FREE_APIS
 from agents.orchestrator import run_pipeline
 from intel.taxii_poller import poll_all_feeds, parse_misp_csv, parse_misp_json
+from intel.auth import auth_configured, verify_credentials, current_user
 from gti_score import compute_gti_scores, get_highest_score
 
 app = FastAPI(title="Threat Intelligence Platform", version="3.0.0",
@@ -28,10 +30,44 @@ app = FastAPI(title="Threat Intelligence Platform", version="3.0.0",
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
+# Signed HTTP-only session cookie. Secret comes from AUTH_SESSION_SECRET, which
+# is a Container App secret bound to env at startup. A development fallback
+# lets the app boot locally without the secret, but every login attempt will
+# fail closed because auth_configured() also checks for username + hash.
+_SESSION_SECRET = os.environ.get("AUTH_SESSION_SECRET") or "dev-only-not-for-production"
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=_SESSION_SECRET,
+    session_cookie="recon_session",
+    same_site="strict",
+    https_only=True,  # cookie only flows over HTTPS — fine in prod (Container Apps), still required locally if using https proxy
+    max_age=60 * 60 * 12,  # 12 h
+)
+
 # Spec §9 platform hardening — security headers + 10MB body limit + audit log
 from intel.security import SecurityHeadersMiddleware, AuditMiddleware
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(AuditMiddleware)
+
+
+# Auth gate — everything under /api/* requires a session EXCEPT:
+#   * /api/health        — needed by the Docker HEALTHCHECK and the deploy probe
+#   * /api/auth/*        — login / logout / me; you can't log in if login is gated
+#   * /api/docs, /api/openapi.json — FastAPI's own doc routes
+# Static frontend assets (everything not under /api) are served unauthenticated
+# so the LoginPage can render. The LoginPage POSTs to /api/auth/login and the
+# rest of the app waits behind that wall.
+_PUBLIC_PREFIXES = ("/api/auth/", "/api/health", "/api/docs", "/api/openapi.json")
+
+
+@app.middleware("http")
+async def _auth_gate(request: Request, call_next):
+    path = request.url.path
+    if not path.startswith("/api/") or path.startswith(_PUBLIC_PREFIXES) or path == "/api/health":
+        return await call_next(request)
+    if current_user(request.session):
+        return await call_next(request)
+    return JSONResponse({"detail": "auth required"}, status_code=401)
 
 
 @app.on_event("startup")
@@ -191,6 +227,42 @@ async def health():
         "webhooks":        _webhooks_available(),
         "intel_layer":     _intel_status(),
     }
+
+
+# ─── Auth ────────────────────────────────────────────────────────────────────
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/api/auth/login")
+async def auth_login(req: LoginRequest, request: Request):
+    """Validate credentials and start a signed-cookie session. 503 when the
+    operator hasn't wired up AUTH_USERNAME / AUTH_PASSWORD_HASH yet (so an
+    empty deployment doesn't silently 401 forever)."""
+    if not auth_configured():
+        raise HTTPException(503, "authentication is not configured on this deployment")
+    if not verify_credentials(req.username, req.password):
+        raise HTTPException(401, "invalid credentials")
+    request.session["auth_user"] = req.username.strip()
+    return {"ok": True, "user": req.username.strip()}
+
+
+@app.post("/api/auth/logout")
+async def auth_logout(request: Request):
+    """Clear the session cookie. Safe to call when not logged in."""
+    request.session.clear()
+    return {"ok": True}
+
+
+@app.get("/api/auth/me")
+async def auth_me(request: Request):
+    """Frontend uses this on app mount to decide whether to render LoginPage
+    or the main app. 200 + user when authed, 401 otherwise."""
+    user = current_user(request.session)
+    if not user:
+        raise HTTPException(401, "not authenticated")
+    return {"user": user}
 
 
 def _check_ioc_pivot(iocs: dict, current_run_id: str) -> list[dict]:

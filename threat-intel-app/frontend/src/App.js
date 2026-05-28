@@ -49,6 +49,7 @@ import {
 const FileScannerView   = lazy(() => import('./components/FileScannerView'));
 const EmailComposerView = lazy(() => import('./components/EmailComposerView'));
 const MapTab            = lazy(() => import('./components/MapTab'));
+const LoginPage         = lazy(() => import('./components/LoginPage'));
 
 /* ─── design tokens — exact values from OpenCTI ThemeDark.ts ────────────────
  * Adapted from OpenCTI (AGPL-3.0). Every legacy inline-styled element now
@@ -2756,7 +2757,7 @@ function URLScanLive({ result, bare }) {
  * Uses MUI Drawer with the OpenCTI nav width/styling, hosting the input area
  * (drop zone + textarea + AgentPipeline) and the extracted-IOCs panel.
  */
-function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanHash, onScanUrl, scanState, onHome, onOpenEmail, emailActive }) {
+function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanHash, onScanUrl, scanState, onHome, onOpenEmail, emailActive, authUser, onLogout }) {
   const [logText, setLogText] = useState('');
   const [dragOver, setDragOver] = useState(false);
 
@@ -3004,6 +3005,32 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
         )}
       </Box>
 
+      {/* Signed-in footer — username + Logout. Pinned to the bottom of the
+          sidebar so it doesn't scroll out of reach when the IOC list is long. */}
+      {authUser && (
+        <Box sx={{
+          borderTop: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+          p: '10px 14px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexShrink: 0,
+        }}>
+          <Typography sx={{
+            fontSize: 11, color: 'text.tertiary',
+            fontFamily: '"IBM Plex Mono", monospace',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {authUser}
+          </Typography>
+          <Box component="button" onClick={onLogout} sx={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'text.tertiary', fontSize: 11, fontFamily: 'inherit',
+            textTransform: 'uppercase', letterSpacing: '0.06em',
+            '&:hover': { color: 'primary.main' },
+          }}>
+            Logout
+          </Box>
+        </Box>
+      )}
     </MuiDrawer>
   );
 }
@@ -3246,6 +3273,57 @@ function SendToWebhook({ result, available }) {
 
 /* ─── app ─────────────────────────────────────────────────────────────────────── */
 export default function App() {
+  // Auth gate: 'checking' on mount while /api/auth/me resolves, then
+  // 'in' (render the app) or 'out' (render LoginPage). Any subsequent 401
+  // from a fetch flips this back to 'out' via window['recon:401'].
+  const [authState, setAuthState] = useState('checking');
+  const [authUser,  setAuthUser]  = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!alive) return;
+        if (d?.user) { setAuthUser(d.user); setAuthState('in'); }
+        else { setAuthState('out'); }
+      })
+      .catch(() => alive && setAuthState('out'));
+    // Global 401 -> bounce to login. Any fetch that hits an auth-protected
+    // endpoint with a stale cookie can dispatch this event to log the user
+    // out without each call site needing its own handler.
+    const onUnauth = () => { setAuthUser(null); setAuthState('out'); };
+    window.addEventListener('recon:unauthenticated', onUnauth);
+    return () => { alive = false; window.removeEventListener('recon:unauthenticated', onUnauth); };
+  }, []);
+
+  const onAuthed = useCallback((user) => {
+    setAuthUser(user);
+    setAuthState('in');
+  }, []);
+
+  if (authState === 'checking') {
+    return (
+      <Box sx={{ minHeight: '100vh', backgroundColor: 'background.default',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: 'text.tertiary', fontSize: 12, letterSpacing: '0.06em',
+        fontFamily: '"IBM Plex Mono", monospace' }}>
+        loading…
+      </Box>
+    );
+  }
+  if (authState === 'out') {
+    return (
+      <Suspense fallback={<LazyFallback height={300}/>}>
+        <LoginPage onAuthed={onAuthed}/>
+      </Suspense>
+    );
+  }
+
+  return <AppMain authUser={authUser} setAuthState={setAuthState}/>;
+}
+
+function AppMain({ authUser, setAuthState }) {
   const [result, setResult] = useState(null);
   const [view, setView] = useState('detail'); // 'detail' | 'table'
   const [webhooks, setWebhooks] = useState({});
@@ -3407,6 +3485,13 @@ export default function App() {
           setEmailState({ log: '', parsed: null });
         }}
         emailActive={!!emailState}
+        authUser={authUser}
+        onLogout={async () => {
+          try {
+            await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+          } catch { /* logout is best-effort — even if the request fails, we drop client-side */ }
+          setAuthState('out');
+        }}
       />
 
       {/* Main view priority: email composer > file scanner > analysis */}
