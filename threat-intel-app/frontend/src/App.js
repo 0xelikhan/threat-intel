@@ -1072,6 +1072,42 @@ function ConfidenceBreakdown({ result, bare }) {
  * indicator carries the MITRE technique it represents plus a plain-English
  * reason it is suspicious.
  */
+// MITRE ATT&CK technique → plain-English defensive counter-measure (D3FEND-
+// flavoured). Indexed by the technique IDs behavior_extractor.py actually
+// emits, so every TTP we render can carry a "what do I do about it" line —
+// closes the gap that made the old Behavior tab feel observational-only.
+const D3FEND_MITIGATIONS = {
+  'T1059.001':     'PowerShell Constrained Language Mode, AMSI, ScriptBlock logging (4104).',
+  'T1059.005':     'Disable Windows Script Host for non-admins; block .vbs/.js execution by file association.',
+  'T1564.003':     'Alert on PowerShell launched with -WindowStyle Hidden / -NonInteractive flags.',
+  'T1105':         'Egress filtering, DNS sinkholing; block known C2 IPs at the perimeter.',
+  'T1562.001':     'Defender Tamper Protection; alert on Set-MpPreference / Add-MpPreference exclusion creation.',
+  'T1620':         'WDAC to block reflective DLL loading; alert on .NET Assembly.Load from PowerShell.',
+  'T1140':         'Sysmon EventID 7 + YARA on staging dirs; alert on decoded strings matching MZ headers.',
+  'T1197':         'Audit Microsoft-Windows-Bits-Client/Operational EventID 59; alert on bitsadmin /transfer from user processes.',
+  'T1218.005':     'WDAC block on mshta.exe; alert when parent is not explorer.exe.',
+  'T1218.010':     'WDAC block on regsvr32 with /i:http* (squiblydoo); alert on remote scrObj usage.',
+  'T1218.011':     'Alert when rundll32 invokes a non-system DLL or unsigned path.',
+  'T1053.005':     'Audit TaskScheduler/Operational EventID 106/200; alert on tasks created by non-admin users.',
+  'T1047':         'Enable WMI-Activity tracing; alert on `wmic process call create` from a cmd.exe parent.',
+  'T1127.001':     'WDAC to block MSBuild for non-developer users.',
+  'T1218.004':     'WDAC to block InstallUtil for non-admin users.',
+  'T1547.001':     'Periodic Run-key audit; alert on HKCU/HKLM Run additions.',
+  'T1543.003':     'Audit service-create (EventID 7045); alert on non-vendor binPath values.',
+  'T1546.003':     'Audit WMI permanent event subscriptions; alert on EventConsumer creation.',
+  'T1021.002':     'Disable lateral SMB where possible; alert on admin-share access from non-admin hosts.',
+  'T1569.002':     'Alert on PSEXESVC service install; block PsExec via AppLocker for non-admins.',
+  'T1135':         'Alert on network-share enumeration patterns; restrict null SMB sessions.',
+  'T1003.001':     'Credential Guard + RunAsPPL on LSASS; alert on LSASS handle access from non-system processes.',
+  'T1003.002':     'Alert on `reg save` of SAM/SECURITY hives; restrict registry-hive backup permissions.',
+  'T1003.003':     'Alert on NTDS.dit copy via VSS shadow outside the DC backup window.',
+  'T1003.006':     'Audit DRSReplicateNCChanges; alert on DCSync sources that aren\'t DCs.',
+  'T1568.002':     'Block dynamic-DNS providers via DNS filtering; alert on DGA-like beaconing patterns.',
+  'T1071.001':     'TLS-inspecting egress proxy; alert on non-browser User-Agents to web endpoints.',
+  'T1071.004':     'DNS tunneling detection — alert on long sub-domains with high entropy.',
+  'T1571':         'Egress filtering; alert on outbound to non-standard ports (4444/8080/1080/8888/9001/9050).',
+};
+
 function BehavioralIndicators({ result, bare }) {
   const bi = result?.behavioral_indicators || {};
   const cats = bi.categories || {};
@@ -1164,6 +1200,20 @@ function BehavioralIndicators({ result, bare }) {
                 p: '4px 8px',
                 wordBreak: 'break-all',
               }}>{h.match}</Box>
+              {D3FEND_MITIGATIONS[h.mitre] && (
+                <Stack direction="row" alignItems="flex-start" spacing={0.75} sx={{
+                  mt: 0.75, pt: 0.75,
+                  borderTop: `1px dashed ${muiAlpha('#ffffff', 0.08)}`,
+                }}>
+                  <Box component="span" sx={{
+                    fontSize: 9, color: 'success.main', fontWeight: 700,
+                    letterSpacing: '0.08em', mt: '2px',
+                  }}>D3FEND</Box>
+                  <Typography sx={{ fontSize: 11, color: 'text.tertiary', lineHeight: 1.5 }}>
+                    {D3FEND_MITIGATIONS[h.mitre]}
+                  </Typography>
+                </Stack>
+              )}
             </MuiPaper>
           ))}
         </Box>
@@ -1179,54 +1229,51 @@ function BehavioralIndicators({ result, bare }) {
   );
 }
 
-/* ─── Behavior — fuses MITRE TTPs + sandbox detonation + TI cross-references ───
- * One card for "what does this actually DO": pattern-matched tradecraft,
- * sandbox process trees, and KEV/LOLBAS/atomic-test correlations.
- */
-function Behavior({ result, rs }) {
-  const bi = result?.behavioral_indicators || {};
-  const hasBehavior = !!((bi.total || 0) || (bi.decoded_payloads || []).length);
-
-  const cr = rs?.cross_refs || {};
-  const hasCross = !!((cr.kev || []).length || (cr.lolbas || []).length ||
-    (rs?.atomic_examples || []).length || (cr.phishing_kits || []).length ||
-    (cr.loldrivers || []).length || (cr.rmm_abuse || []).length ||
-    (cr.suspicious_paths || []).length);
-
-  const hasSandbox = Object.values(result?.enrichments?.hashes || {})
-    .some(p => p?.sandbox_deep && p.sandbox_deep.process_tree);
-
-  if (!hasBehavior && !hasCross && !hasSandbox) return null;
-
-  const Label = ({ children }) => (
-    <Typography sx={{ fontSize: 11, fontWeight: 600, color: 'text.tertiary',
-      textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.25 }}>{children}</Typography>
-  );
-  const divSx = (show) => ({ mt: show ? 2 : 0, pt: show ? 2 : 0,
-    borderTop: show ? `1px solid ${muiAlpha('#ffffff', 0.08)}` : 'none' });
-
-  return (
-    <Card title="Behavior" accent="#B286FF" defaultOpen={false}>
-      {hasBehavior && (
-        <>
-          <Label>MITRE-mapped TTPs</Label>
-          <BehavioralIndicators result={result} bare/>
-        </>
-      )}
-      {hasSandbox && (
-        <Box sx={divSx(hasBehavior)}>
-          <Label>Sandbox detonation · process tree</Label>
-          <SandboxBehavioral result={result} bare/>
+// Recommended actions from the AI investigation — flat list of imperative
+// strings. Restored after being dropped in c56e28b — Behavior was left as
+// pure observation with no "so what." Filters out the well-known fallback
+// strings the backend emits when the AI call fails so we don't render
+// useless placeholders ("Review enrichment data manually." etc.).
+const _AI_FALLBACK_ACTIONS = new Set([
+  'Review enrichment data manually.',
+  'Configure OpenAI API key for AI analysis.',
+]);
+function RecommendedActions({ rs, bare }) {
+  const items = (rs?.recommended_actions || [])
+    .filter(a => typeof a === 'string' && a.trim() && !_AI_FALLBACK_ACTIONS.has(a.trim()));
+  if (!items.length) return null;
+  const body = (
+    <Box component="ol" sx={{ pl: 0, m: 0, listStyle: 'none' }}>
+      {items.map((a, i) => (
+        <Box component="li" key={i} sx={{
+          display: 'flex', gap: 1.25, py: 0.75,
+          borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
+          fontSize: 13, color: 'text.primary', lineHeight: 1.6,
+        }}>
+          <Box component="span" sx={{ color: 'success.main', minWidth: 18,
+            fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{i + 1}</Box>
+          <span>{a}</span>
         </Box>
-      )}
-      {hasCross && (
-        <Box sx={divSx(hasBehavior || hasSandbox)}>
-          <Label>Threat-intel cross-references</Label>
-          <CrossRefs rs={rs} bare/>
-        </Box>
-      )}
-    </Card>
+      ))}
+    </Box>
   );
+  if (bare) return body;
+  return <Card title="Recommended actions" accent="#16AD34">{body}</Card>;
+}
+
+// Senior-analyst context paragraph. Stored as a string on rs.analyst_notes
+// per investigation.py:865 — render as a soft prose block, not a textarea.
+function AnalystNotes({ rs, bare }) {
+  const notes = (rs?.analyst_notes || '').trim();
+  if (!notes) return null;
+  const body = (
+    <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.7,
+      whiteSpace: 'pre-wrap', fontStyle: 'italic',
+      borderLeft: `2px solid ${muiAlpha('#0fbcff', 0.5)}`, pl: 1.5, py: 0.5,
+    }}>{notes}</Typography>
+  );
+  if (bare) return body;
+  return <Card title="Analyst notes" accent="#0fbcff">{body}</Card>;
 }
 
 /* ─── clarifying questions (spec §5 — Phase 1 → Phase 2 re-analysis) ────────
@@ -1331,41 +1378,71 @@ function ClarifyingQuestions({ result, onResult }) {
  * they can spot false-negative filters (e.g., a Tor exit IP swallowed by a
  * datacenter list).
  */
-// Triage: log normalization + MISP-warninglist false-positive filtering, fused.
-function Triage({ result }) {
+// Triage: log normalization + MISP-warninglist false-positive filtering +
+// OSINT + behavioral signals + AI recommendations, all in one card. Folded
+// here because the standalone Behavior card hid itself in too many cases —
+// keeping the content in a section the analyst will actually open makes the
+// TTPs / cross-refs / sandbox findings discoverable.
+function Triage({ result, rs }) {
   const lt = result?.log_translation;
   const hasLogs = !!(lt && !lt.error &&
     (Object.keys(lt.extracted_fields || {}).length || (lt.anomalies || []).length));
   const sup = result?.suppressed_iocs || {};
   const hasSup = Object.values(sup).reduce((n, a) => n + (a?.length || 0), 0) > 0;
   const hasOsint = hasOsintContent(result);
-  if (!hasLogs && !hasSup && !hasOsint) return null;
+
+  const bi = result?.behavioral_indicators || {};
+  const hasBehavior = !!((bi.total || 0) || (bi.decoded_payloads || []).length);
+  const cr = rs?.cross_refs || {};
+  const hasCross = !!((cr.kev || []).length || (cr.lolbas || []).length ||
+    (rs?.atomic_examples || []).length || (cr.phishing_kits || []).length ||
+    (cr.loldrivers || []).length || (cr.rmm_abuse || []).length ||
+    (cr.suspicious_paths || []).length);
+  const hasSandbox = Object.values(result?.enrichments?.hashes || {})
+    .some(p => p?.sandbox_deep && p.sandbox_deep.process_tree);
+
+  const recActions = (rs?.recommended_actions || [])
+    .filter(a => typeof a === 'string' && a.trim() && !_AI_FALLBACK_ACTIONS.has(a.trim()));
+  const hasRec = recActions.length > 0;
+  const hasNotes = !!(rs?.analyst_notes || '').trim();
+
+  if (!hasLogs && !hasSup && !hasOsint && !hasBehavior
+      && !hasCross && !hasSandbox && !hasRec && !hasNotes) return null;
+
   const Label = ({ children }) => (
     <Typography sx={{ fontSize: 11, fontWeight: 600, color: 'text.tertiary',
       textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.25 }}>{children}</Typography>
   );
-  const divSx = (show) => ({ mt: show ? 2 : 0, pt: show ? 2 : 0,
-    borderTop: show ? `1px solid ${muiAlpha('#ffffff', 0.08)}` : 'none' });
+  // `prevShown` tracks whether *any* section above has rendered, so the divider
+  // is correctly drawn (or omitted) without a manual cascade for each section.
+  let prevShown = false;
+  const divSx = () => ({ mt: prevShown ? 2 : 0, pt: prevShown ? 2 : 0,
+    borderTop: prevShown ? `1px solid ${muiAlpha('#ffffff', 0.08)}` : 'none' });
+  const Section = ({ show, label, children }) => {
+    if (!show) return null;
+    const sx = divSx();
+    prevShown = true;
+    return <Box sx={sx}><Label>{label}</Label>{children}</Box>;
+  };
+
   return (
     <Card title="Triage" accent="#16AD34" defaultOpen={false}>
-      {hasLogs && (
-        <>
-          <Label>Log normalization</Label>
-          <LogTranslation result={result} bare/>
-        </>
-      )}
-      {hasSup && (
-        <Box sx={divSx(hasLogs)}>
-          <Label>Filtered as benign · MISP warninglists</Label>
-          <SuppressedIOCs result={result} bare/>
-        </Box>
-      )}
-      {hasOsint && (
-        <Box sx={divSx(hasLogs || hasSup)}>
-          <Label>OSINT</Label>
-          <InfrastructureIntel result={result} bare/>
-        </Box>
-      )}
+      <Section show={hasLogs}     label="Log normalization">
+        <LogTranslation result={result} bare/></Section>
+      <Section show={hasSup}      label="Filtered as benign · MISP warninglists">
+        <SuppressedIOCs result={result} bare/></Section>
+      <Section show={hasOsint}    label="OSINT">
+        <InfrastructureIntel result={result} bare/></Section>
+      <Section show={hasBehavior} label="MITRE-mapped TTPs · D3FEND mitigations">
+        <BehavioralIndicators result={result} bare/></Section>
+      <Section show={hasSandbox}  label="Sandbox detonation · process tree">
+        <SandboxBehavioral result={result} bare/></Section>
+      <Section show={hasCross}    label="Threat-intel cross-references">
+        <CrossRefs rs={rs} bare/></Section>
+      <Section show={hasRec}      label="Recommended actions">
+        <RecommendedActions rs={rs} bare/></Section>
+      <Section show={hasNotes}    label="Analyst notes">
+        <AnalystNotes rs={rs} bare/></Section>
     </Card>
   );
 }
@@ -4340,13 +4417,18 @@ export default function App() {
             <GTI result={result}/>                {/* Investigation results + threat score + confidence (open) */}
             <AnalystSummary rs={rs || {}}/>        {/* Summary (open) */}
             <ChatWithRecon result={result}/>       {/* Ask RECON — probing questions */}
-            <Triage result={result}/>              {/* Logs + MISP-filtered IOCs + OSINT, fused */}
-            <Behavior result={result} rs={rs || {}}/> {/* TTPs + sandbox + cross-refs */}
+            <Triage result={result} rs={rs || {}}/>  {/* Logs + IOCs + OSINT + TTPs + sandbox + cross-refs + AI actions/notes */}
             <EmailAnalysis result={result}/>
 
             <Card title="Graphs" accent="#0fbcff" noPad>
-              <MapTab result={result}/>
-              <Box sx={{ p: '14px 16px', borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
+              {/* Map only renders when the investigation actually has IPs to
+                  plot. Skips an empty leaflet canvas for hash/log uploads. */}
+              {(result?.iocs?.ips || []).length > 0 && <MapTab result={result}/>}
+              <Box sx={{
+                p: '14px 16px',
+                borderTop: (result?.iocs?.ips || []).length > 0
+                  ? `1px solid ${muiAlpha('#ffffff', 0.08)}` : 'none',
+              }}>
                 <PivotGraph
                   result={result}
                   onPivot={(ioc) => window.dispatchEvent(
