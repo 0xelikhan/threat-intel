@@ -692,6 +692,63 @@ function UrlReputationReport({ result }) {
 }
 
 
+// Collapsible wrapper that pulls the malware-analysis sections together when
+// a URL scan downloaded something with file-level signal (YARA hit, TI hit,
+// or AI verdict MALICIOUS/SUSPICIOUS). Lets the analyst decide whether to
+// dive into the downloaded-payload detail without forcing it on every URL.
+function UrlFileAnalysisExpander({ result, onRefreshScan, autoOpen = false }) {
+  const [open, setOpen] = useState(autoOpen);
+  return (
+    <MuiPaper elevation={0} sx={{
+      backgroundColor: 'background.paper',
+      border: `1px solid ${muiAlpha('#ffffff', 0.10)}`,
+      borderRadius: '4px', overflow: 'hidden',
+    }}>
+      <Box onClick={() => setOpen(o => !o)} sx={{
+        display: 'flex', alignItems: 'center', gap: 1.25, p: '12px 16px',
+        cursor: 'pointer',
+        '&:hover': { backgroundColor: muiAlpha('#ffffff', 0.02) },
+      }}>
+        <Box sx={{ width: 3, height: 14, backgroundColor: '#E6700F', borderRadius: 0.5 }}/>
+        <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 600,
+          textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Downloaded payload analysis
+        </Typography>
+        <Typography sx={{ fontSize: 11, color: 'text.tertiary', ml: 'auto !important' }}>
+          {result.verdict || 'analysis'} · click to {open ? 'collapse' : 'expand'}
+        </Typography>
+        <ChevronRight size={14} color="#848592" style={{
+          transition: 'transform .15s',
+          transform: open ? 'rotate(90deg)' : 'none',
+        }}/>
+      </Box>
+      {open && (
+        <Box sx={{ p: '12px 16px 16px',
+          borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
+          <Stack spacing={2.25}>
+            <VerdictBanner result={result}/>
+            <TechnicalAssessment result={result}/>
+            <ExecutionNarrative result={result}/>
+            <KeyFindings result={result}/>
+            <FileIdentity result={result}/>
+            <ThreatIntelSection result={result}/>
+            <CapabilitiesSection result={result}/>
+            <StringsSection result={result}/>
+            <YaraSection result={result}/>
+            <FormatSection result={result}/>
+            <Anomalies result={result}/>
+            <DetectionContent result={result}/>
+            <HuntingLeads result={result}/>
+            <ActionsSection result={result}/>
+            <NotesAndRefinement result={result} onRefreshScan={onRefreshScan}/>
+          </Stack>
+        </Box>
+      )}
+    </MuiPaper>
+  );
+}
+
+
 // ─── 1. AI Verdict Banner ─────────────────────────────────────────────────────
 function VerdictBanner({ result }) {
   const theme = useTheme();
@@ -2032,31 +2089,53 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
             </Box>
           )}
 
-          {result && (
-            <Stack spacing={3}>
-              {/* URL-scan reputation report renders FIRST and only when the
-                  result came from a URL scan (source_url populated). For
-                  file uploads, this is silent and the file-analysis stack
-                  is the whole show. */}
-              {result.source_url && <UrlReputationReport result={result}/>}
+          {result && (() => {
+            // URL scan branch — render the dedicated reputation report.
+            // The downloaded payload's malware-analysis sections only render
+            // when there's a real reason to look at them (YARA matched, AI
+            // verdict is MALICIOUS/SUSPICIOUS, or threat-intel cross-refs
+            // fired on the file hash). Otherwise the analyst gets a clean
+            // URL-reputation view with no irrelevant file-analysis chrome.
+            // Toggle below lets them surface the file detail when curious.
+            const isUrlScan = !!result.source_url;
+            const yaraHits = (result.yara_matches || []).filter(m => m && !m.error).length;
+            const ti = result.threat_intel || {};
+            const tiHits = ['virustotal','malwarebazaar','hybrid_analysis','anyrun']
+              .some(k => ti[k]?.found);
+            const fileHasSignal = yaraHits > 0 || tiHits
+              || ['MALICIOUS','SUSPICIOUS'].includes(result.verdict);
 
-              <VerdictBanner result={result}/>
-              <TechnicalAssessment result={result}/>
-              <ExecutionNarrative result={result}/>
-              <KeyFindings result={result}/>
-              <FileIdentity result={result}/>
-              <ThreatIntelSection result={result}/>
-              <CapabilitiesSection result={result}/>
-              <StringsSection result={result}/>
-              <YaraSection result={result}/>
-              <FormatSection result={result}/>
-              <Anomalies result={result}/>
-              <DetectionContent result={result}/>
-              <HuntingLeads result={result}/>
-              <ActionsSection result={result}/>
-              <NotesAndRefinement result={result} onRefreshScan={onRefreshScan}/>
-            </Stack>
-          )}
+            if (isUrlScan) {
+              return (
+                <Stack spacing={3}>
+                  <UrlReputationReport result={result}/>
+                  {fileHasSignal && (
+                    <UrlFileAnalysisExpander result={result} onRefreshScan={onRefreshScan}
+                      autoOpen={['MALICIOUS','SUSPICIOUS'].includes(result.verdict)}/>
+                  )}
+                </Stack>
+              );
+            }
+            return (
+              <Stack spacing={3}>
+                <VerdictBanner result={result}/>
+                <TechnicalAssessment result={result}/>
+                <ExecutionNarrative result={result}/>
+                <KeyFindings result={result}/>
+                <FileIdentity result={result}/>
+                <ThreatIntelSection result={result}/>
+                <CapabilitiesSection result={result}/>
+                <StringsSection result={result}/>
+                <YaraSection result={result}/>
+                <FormatSection result={result}/>
+                <Anomalies result={result}/>
+                <DetectionContent result={result}/>
+                <HuntingLeads result={result}/>
+                <ActionsSection result={result}/>
+                <NotesAndRefinement result={result} onRefreshScan={onRefreshScan}/>
+              </Stack>
+            );
+          })()}
         </Box>
 
         {result && (
