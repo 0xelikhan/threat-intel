@@ -14,6 +14,42 @@ const S = {
 };
 
 // ─── DECODER SUITE ──────────────────────────────────────────────────────────────
+
+// Render decoded bytes either as text (if >90% printable ASCII) or as a hex
+// dump banner — keeps binary payloads from rendering as Chinese / mojibake.
+// Tries UTF-16LE first (PowerShell -EncodedCommand bodies), then UTF-8 strictly
+// so failures fall through to the hex-dump branch rather than being coerced.
+function renderDecodedBytes(bytes) {
+  const printableRatio = (s) => {
+    if (!s) return 0;
+    let ok = 0;
+    for (let i = 0; i < s.length; i++) {
+      const code = s.charCodeAt(i);
+      if ((code >= 0x20 && code <= 0x7E) || code === 0x09 || code === 0x0A || code === 0x0D) ok++;
+    }
+    return ok / s.length;
+  };
+  const tryDecode = (label) => {
+    try {
+      const text = new TextDecoder(label, { fatal: true }).decode(bytes).trim();
+      if (text.length >= 4 && printableRatio(text) > 0.90) return text;
+    } catch { /* fatal decode failed → not this encoding */ }
+    return null;
+  };
+  const asText = tryDecode('utf-16le') || tryDecode('utf-8');
+  if (asText) return asText;
+
+  const limit = Math.min(bytes.length, 64);
+  const lines = [];
+  for (let off = 0; off < limit; off += 16) {
+    const row = bytes.slice(off, off + 16);
+    const hex = Array.from(row).map(b => b.toString(16).padStart(2, '0')).join(' ').padEnd(47);
+    const ascii = Array.from(row).map(b => (b >= 0x20 && b <= 0x7E) ? String.fromCharCode(b) : '.').join('');
+    lines.push(`${off.toString(16).padStart(8, '0')}  ${hex}  ${ascii}`);
+  }
+  return `[binary content detected — ${bytes.length} bytes, showing first ${limit}]\n${lines.join('\n')}`;
+}
+
 function DecoderTool() {
   const [input, setInput] = useState('');
   const [output, setOutput] = useState('');
@@ -22,11 +58,22 @@ function DecoderTool() {
 
   const operations = {
     base64: {
-      decode: (v) => { try { return atob(v.trim()); } catch { throw new Error('Invalid Base64'); } },
+      decode: (v) => {
+        let bin;
+        try { bin = atob(v.trim()); } catch { throw new Error('Invalid Base64'); }
+        const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+        return renderDecodedBytes(bytes);
+      },
       encode: (v) => btoa(v)
     },
     hex: {
-      decode: (v) => { const clean = v.replace(/\s/g, ''); if (!/^[0-9a-fA-F]+$/.test(clean) || clean.length % 2) throw new Error('Invalid hex'); return clean.match(/.{2}/g).map(b => String.fromCharCode(parseInt(b, 16))).join(''); },
+      decode: (v) => {
+        const clean = v.replace(/\s/g, '');
+        if (!/^[0-9a-fA-F]+$/.test(clean) || clean.length % 2) throw new Error('Invalid hex');
+        const bytes = new Uint8Array(clean.length / 2);
+        for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(clean.substr(i * 2, 2), 16);
+        return renderDecodedBytes(bytes);
+      },
       encode: (v) => Array.from(v).map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join(' ')
     },
     url: {
