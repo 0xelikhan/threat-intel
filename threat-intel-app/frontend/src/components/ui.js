@@ -19,7 +19,6 @@ import {
   CardContent,
   Chip as MuiChip,
   Box,
-  Stack,
   Typography,
   IconButton,
   Tooltip,
@@ -142,7 +141,6 @@ export const Card = ({
 }) => {
   const ctxDefaultOpen = React.useContext(CardDefaultOpenContext);
   const [open, setOpen] = useState(defaultOpen ?? ctxDefaultOpen);
-  const theme = useTheme();
   return (
     <MuiCard
       sx={{
@@ -218,7 +216,6 @@ export const Block = ({ title, children, accent }) => {
 
 // ─── Row — flex row with subtle top divider, used inside Blocks ─────────────
 export const Row = ({ children, sx = {} }) => {
-  const theme = useTheme();
   return (
     <Box sx={{
       display: 'flex', gap: 1, padding: '5px 0',

@@ -15,7 +15,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Stack, Typography, Paper as MuiPaper,
   Button as MuiButton, TextField as MuiTextField,
-  IconButton as MuiIconButton, CircularProgress, Tooltip,
+  CircularProgress,
   ToggleButton, ToggleButtonGroup, MenuItem, Chip as MuiChip,
 } from '@mui/material';
 import { alpha as muiAlpha } from '@mui/material/styles';
@@ -32,7 +32,6 @@ const RESPONSE_OPTIONS = [
   { id: 'lock_account',                     label: 'Lock account' },
   { id: 'lock_account_and_revoke_session',  label: 'Lock account & revoke session' },
 ];
-const RESPONSE_LABEL = Object.fromEntries(RESPONSE_OPTIONS.map(r => [r.id, r.label]));
 
 
 function CopyBtn({ text, label = 'Copy', size = 'small' }) {

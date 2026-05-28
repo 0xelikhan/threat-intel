@@ -1,11 +1,44 @@
+# Heavy / vendored — never ship to the build context.
 vendor
 backend/venv
 backend\venv
 frontend/node_modules
 frontend\node_modules
+
+# Build outputs — regenerated inside the image.
+frontend/build
+frontend\build
+
+# Python bytecode and runtime caches.
 backend/__pycache__
 **/__pycache__
 **/*.pyc
+**/*.pyo
+
+# Runtime data — written into /app/data inside the container, not from local dev.
+backend/data
+backend\data
+backend/intel/email_templates
+backend\intel\email_templates
+
+# MITRE ATT&CK STIX is curl'd fresh during the image build; local copy is ~47 MB
+# and would double the upload context for no benefit.
+backend/intel/mitre
+backend\intel\mitre
+
+# Tooling, secrets, IDE config, docs.
 .git
+.gitignore
 .github
+.vscode
+.idea
+.env
+.env.*
+*.log
 docs
+README.md
+LICENSE
+
+# OS junk.
+.DS_Store
+Thumbs.db
