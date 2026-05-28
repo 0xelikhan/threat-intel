@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks, R
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
 
@@ -30,6 +31,44 @@ app = FastAPI(title="Threat Intelligence Platform", version="3.0.0",
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
+# Auth gate — everything under /api/* requires a session EXCEPT:
+#   * /api/health        — needed by the Docker HEALTHCHECK and the deploy probe
+#   * /api/auth/*        — login / logout / me; you can't log in if login is gated
+#   * /api/docs, /api/openapi.json — FastAPI's own doc routes
+# Static frontend assets (everything not under /api) are served unauthenticated
+# so the LoginPage can render. The LoginPage POSTs to /api/auth/login and the
+# rest of the app waits behind that wall.
+#
+# Implementation note: this MUST be a class-based middleware added *before*
+# SessionMiddleware so it ends up INNER to it in the dispatch chain. ASGI
+# middleware order is "last added = outermost = runs first," so adding the
+# gate first means SessionMiddleware wraps around it and populates
+# request.session before the gate inspects it. The earlier @app.middleware
+# decorator put the gate outermost, and request.session blew up with an
+# AssertionError because Session hadn't run yet.
+_PUBLIC_PREFIXES = ("/api/auth/", "/api/health", "/api/docs", "/api/openapi.json")
+
+
+class AuthGateMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if not path.startswith("/api/") or path.startswith(_PUBLIC_PREFIXES):
+            return await call_next(request)
+        if current_user(request.session):
+            return await call_next(request)
+        return JSONResponse({"detail": "auth required"}, status_code=401)
+
+
+# Order matters — last add_middleware is OUTERMOST (runs first per request).
+# Goal: SessionMiddleware sits OUTSIDE AuthGate so session is populated by
+# the time the gate inspects it.
+app.add_middleware(AuthGateMiddleware)
+
+# Spec §9 platform hardening — security headers + 10MB body limit + audit log
+from intel.security import SecurityHeadersMiddleware, AuditMiddleware
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(AuditMiddleware)
+
 # Signed HTTP-only session cookie. Secret comes from AUTH_SESSION_SECRET, which
 # is a Container App secret bound to env at startup. A development fallback
 # lets the app boot locally without the secret, but every login attempt will
@@ -40,34 +79,9 @@ app.add_middleware(
     secret_key=_SESSION_SECRET,
     session_cookie="recon_session",
     same_site="strict",
-    https_only=True,  # cookie only flows over HTTPS — fine in prod (Container Apps), still required locally if using https proxy
+    https_only=True,
     max_age=60 * 60 * 12,  # 12 h
 )
-
-# Spec §9 platform hardening — security headers + 10MB body limit + audit log
-from intel.security import SecurityHeadersMiddleware, AuditMiddleware
-app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(AuditMiddleware)
-
-
-# Auth gate — everything under /api/* requires a session EXCEPT:
-#   * /api/health        — needed by the Docker HEALTHCHECK and the deploy probe
-#   * /api/auth/*        — login / logout / me; you can't log in if login is gated
-#   * /api/docs, /api/openapi.json — FastAPI's own doc routes
-# Static frontend assets (everything not under /api) are served unauthenticated
-# so the LoginPage can render. The LoginPage POSTs to /api/auth/login and the
-# rest of the app waits behind that wall.
-_PUBLIC_PREFIXES = ("/api/auth/", "/api/health", "/api/docs", "/api/openapi.json")
-
-
-@app.middleware("http")
-async def _auth_gate(request: Request, call_next):
-    path = request.url.path
-    if not path.startswith("/api/") or path.startswith(_PUBLIC_PREFIXES) or path == "/api/health":
-        return await call_next(request)
-    if current_user(request.session):
-        return await call_next(request)
-    return JSONResponse({"detail": "auth required"}, status_code=401)
 
 
 @app.on_event("startup")
