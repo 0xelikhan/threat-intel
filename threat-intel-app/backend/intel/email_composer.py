@@ -1657,7 +1657,8 @@ def _category_siblings(alert_id: str, k: int = 4) -> list:
     return sibs[:k]
 
 
-def _ai_example_block(priority_alert_type: str = "") -> str:
+def _ai_example_block(priority_alert_type: str = "",
+                      context_substitutions: dict | None = None) -> str:
     """Render in-repo templates as inspiration. When `priority_alert_type` is
     set, lead with that template + same-category siblings so the AI's style
     leans toward the analyst's actual alert. All examples are framed as
@@ -1666,7 +1667,17 @@ def _ai_example_block(priority_alert_type: str = "") -> str:
     Always loads via `load_template` so analyst-edited templates flow through
     too (not just the hardcoded _DEFAULT_TEMPLATES). That's the whole point:
     when the team's wording norms or policy text changes, the templates
-    change and the AI naturally adapts."""
+    change and the AI naturally adapts.
+
+    `context_substitutions` is an optional {{placeholder}} -> value map for
+    CONTEXTUAL placeholders that carry semantic content the AI should
+    actually pick up (e.g. {{DomainJoinedNote}} on impossible-travel when
+    the alert has an asset_name). Without substitution the AI would see
+    the raw "{{DomainJoinedNote}}" token in the inspiration and either
+    ignore it or echo it verbatim. With substitution it sees the paragraph
+    in the template and naturally adopts the voice/content. Trivial
+    placeholders ({{Ip1}}, {{UserDisplayName}}, etc.) are scrubbed at the
+    end so the AI doesn't see template-syntax noise either way."""
     # Build the inspiration set: priority + same-category siblings + a couple
     # of broad anchors so the model sees both identity and endpoint voices.
     ids: list = []
@@ -1683,14 +1694,52 @@ def _ai_example_block(priority_alert_type: str = "") -> str:
         if len(ids) >= 6:
             break
 
+    subs = context_substitutions or {}
     parts = []
     for aid in ids:
         body = load_template(aid)
         if not body:
             continue
+        # Apply contextual substitutions first so semantic placeholders
+        # (e.g. {{DomainJoinedNote}}) become the actual paragraph the AI
+        # should pick up. Empty values drop the placeholder entirely.
+        for key, val in subs.items():
+            body = body.replace(key, val or "")
+        # Collapse the gap left by an empty contextual substitution so the
+        # inspiration doesn't show two blank lines in a row.
+        body = re.sub(r"\n{3,}", "\n\n", body)
+        # Scrub remaining {{Placeholder}} tokens so the AI doesn't echo
+        # template syntax. <field-name> reads to the model as a natural
+        # "fill in the alert's value here" hint without leaking literal
+        # curly braces into the output.
+        body = re.sub(r"\{\{(\w+)\}\}",
+                      lambda m: f"<{m.group(1).lower()}>", body)
         label = ALERT_LABEL_BY_ID.get(aid, aid)
         parts.append(f"## Inspiration: {label}\n```\n{body[:1100]}\n```")
     return "\n\n".join(parts)
+
+
+def _ai_context_substitutions(parsed: dict, options: dict) -> dict:
+    """Build the {{placeholder}} -> value map for contextual content that
+    needs to land in the AI-generated email when the underlying log has
+    the right fields. Add new ones here as they're introduced."""
+    subs: dict = {}
+    asset = (options or {}).get("asset_name") or (parsed or {}).get("asset_name") or ""
+    if asset:
+        # Same explainer paragraph the static template uses. Centralised in
+        # _build_replacement_map; pulling it from there avoids two copies
+        # drifting out of sync.
+        subs["{{DomainJoinedNote}}"] = (
+            "When domain-joined assets trigger \"impossible travel\" alerts in systems "
+            "like Microsoft Entra ID Protection, it is usually caused by cloud "
+            "proxies/VPNs, split-tunneling, or inaccurate geolocation databases. "
+            "Even securely managed or Hybrid Azure AD-joined devices can generate "
+            "these false-positive anomalies if network traffic routing masks the "
+            "actual location of the physical machine."
+        )
+    else:
+        subs["{{DomainJoinedNote}}"] = ""
+    return subs
 
 
 _AI_SYSTEM = """You are a senior MDR security analyst drafting customer-facing
@@ -1772,12 +1821,30 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
                      else "This alert type wasn't recognized by triage, so synthesize a fresh template "
                           "using the closest stylistic matches below. ")
 
+    # Contextual placeholders that carry actual content (currently
+    # {{DomainJoinedNote}} for impossible-travel-with-asset). These get
+    # substituted into the inspiration templates BEFORE the AI sees them,
+    # so the AI naturally picks the paragraph up as part of the alert
+    # class's voice. An additional MUST-INCLUDE rule for any non-empty
+    # substitution makes sure the paragraph survives even if the model
+    # tries to compress.
+    context_subs = _ai_context_substitutions(parsed, options)
+    inspiration  = _ai_example_block(priority_alert_type=detected_alert_type,
+                                     context_substitutions=context_subs)
+    must_include = "\n".join(
+        f"- Must include this paragraph (verbatim or lightly rephrased): {v}"
+        for v in context_subs.values() if v
+    )
+    must_include_block = (f"\n\nADDITIONAL RULES FOR THIS ALERT:\n{must_include}\n"
+                          if must_include else "")
+
     user_prompt = (
-        f"{_ai_example_block(priority_alert_type=detected_alert_type)}\n\n"
+        f"{inspiration}\n\n"
         "## Now write an email for THIS alert\n"
         f"{classified_as}Use the inspiration above for voice and structure, "
         "but write a fresh email adapted to the evidence in the raw log. Do not "
-        "copy any sentence verbatim from the examples.\n\n"
+        "copy any sentence verbatim from the examples."
+        f"{must_include_block}\n\n"
         "Raw log:\n```\n"
         f"{log_text[:5000]}\n```\n\n"
         f"Extracted fields:\n{parsed_block or '(none)'}"
