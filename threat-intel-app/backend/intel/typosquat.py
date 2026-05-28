@@ -30,19 +30,53 @@ def _root_label(domain: str) -> str:
     return parts[-2] if len(parts) >= 2 else (parts[0] if parts else "")
 
 
+# Digit/punct -> visually-similar letter map for homoglyph normalisation.
+# Used before similarity so paypa1 / g00gle / app1e / micros0ft / mlcrosoft
+# all reduce to their target brand before measurement, otherwise a 1-char
+# swap on a short brand (paypal -> paypa1) drops below the 0.85 ratio
+# threshold purely because of string length.
+_HOMOGLYPH_MAP = str.maketrans({
+    "0": "o", "1": "l", "3": "e", "4": "a", "5": "s",
+    "6": "b", "7": "t", "8": "b", "9": "g",
+    "|": "l", "!": "i",
+})
+
+
+def _homoglyph_normalise(s: str) -> str:
+    return s.translate(_HOMOGLYPH_MAP)
+
+
 def _ratio(a: str, b: str) -> float:
-    """Simple normalized Damerau-Levenshtein-ish similarity (no extra dep)."""
+    """Order-aware similarity using SequenceMatcher (Ratcliff-Obershelp).
+    Previous implementation was set-overlap on the character SETS, which
+    flagged `blockmultifamily` as `bankofamerica` (set overlap 0.67)
+    because they share many letters regardless of order. SequenceMatcher
+    requires matching *subsequences*, so visually distinct labels score
+    appropriately low even when they share a vocabulary.
+
+    Inputs are first homoglyph-normalised (0->o, 1->l, etc.) so digit-for-
+    letter swaps register. The score returned is the MAX of the raw and
+    normalised ratios so we never miss a real similarity by normalising."""
     a, b = a.lower(), b.lower()
     if not a or not b:
         return 0.0
-    # quick wins
     if a == b:
         return 1.0
     if a in b or b in a:
         return 0.85
-    # crude char-overlap score
-    common = sum(1 for c in set(a) if c in b)
-    return common / max(len(set(a)), len(set(b)))
+    from difflib import SequenceMatcher
+    raw  = SequenceMatcher(None, a, b).ratio()
+    norm = SequenceMatcher(None, _homoglyph_normalise(a), _homoglyph_normalise(b)).ratio()
+    return max(raw, norm)
+
+
+# Threshold tuned against the new metric. 0.85 produces few false
+# positives ("paypa1" -> "paypal" 0.91, "g00gle" -> "google" 0.92,
+# "blockmultifamily" -> "bankofamerica" 0.21 -> not flagged). At the
+# old 0.6 threshold the new metric is still much tighter than the old
+# one, but 0.85 avoids the borderline near-matches that don't actually
+# read as visually deceptive.
+_BRAND_SIMILARITY_THRESHOLD = 0.85
 
 
 def looks_like_brand(domain: str) -> dict | None:
@@ -57,7 +91,7 @@ def looks_like_brand(domain: str) -> dict | None:
         if brand in label and label != brand:
             return {"brand": brand, "score": 0.95, "method": "substring"}
         r = _ratio(label, brand)
-        if r > 0.6 and (not best or r > best["score"]):
+        if r >= _BRAND_SIMILARITY_THRESHOLD and (not best or r > best["score"]):
             best = {"brand": brand, "score": round(r, 2), "method": "similarity"}
     return best
 
