@@ -1227,6 +1227,25 @@ def _build_replacement_map(parsed, options, signature_html, ip1, ip2):
     )
     ip1 = ip1 or {}
     ip2 = ip2 or {}
+    # Domain-joined explainer — only present when the parsed log has an
+    # asset_name (e.g. a hybrid-AAD-joined endpoint surfaced in the alert).
+    # Renders as a standalone paragraph that explains why this class of
+    # alert is usually a false positive on managed devices, so the analyst
+    # doesn't have to type the same context every time. Empty string when
+    # asset_name is missing — the post-render blank-line collapse in
+    # compose()/compose_ai() flattens the stray "{{DomainJoinedNote}}\n\n"
+    # gap so absent-asset emails don't show an empty paragraph.
+    domain_joined_note = ""
+    if asset:
+        domain_joined_note = (
+            "When domain-joined assets trigger \"impossible travel\" alerts in systems "
+            "like Microsoft Entra ID Protection, it is usually caused by cloud "
+            "proxies/VPNs, split-tunneling, or inaccurate geolocation databases. "
+            "Even securely managed or Hybrid Azure AD-joined devices can generate "
+            "these false-positive anomalies if network traffic routing masks the "
+            "actual location of the physical machine."
+        )
+
     return {
         "{{TeamName}}":            options.get("team_name") or "the MDR analyst team",
         "{{FromAddress}}":         options.get("from_address") or "",
@@ -1234,6 +1253,7 @@ def _build_replacement_map(parsed, options, signature_html, ip1, ip2):
         "{{Ip2}}":                 _defang_if_iplike(ip2.get("ip_address")),
         "{{AlertType}}":           ALERT_LABEL_BY_ID.get(options.get("alert_type", ""), ""),
         "{{AssetName}}":           _value_or_na(asset),
+        "{{DomainJoinedNote}}":    domain_joined_note,
         "{{Organization}}":        _value_or_na(org),
         "{{Id}}":                  parsed.get("id", ""),
         "{{RequestId}}":           parsed.get("request_id", ""),
@@ -1527,6 +1547,10 @@ def compose(alert_type: str, parsed: Dict, options: Dict, config,
     text = _strip_em_dashes(text)
     html = _strip_em_dashes(html)
     subject = _strip_em_dashes(subject)
+    # Collapse 3+ consecutive newlines down to a single blank line so empty
+    # conditional placeholders ({{DomainJoinedNote}} etc.) don't leave a
+    # double-spaced gap when they render as "".
+    text = re.sub(r"\n{3,}", "\n\n", text)
     return {"subject": subject, "text": text, "html": html, "template_used": alert_type}
 
 
@@ -1824,6 +1848,10 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     text = _strip_em_dashes(text)
     html = _strip_em_dashes(html)
     subject = _strip_em_dashes(subject)
+    # Collapse 3+ consecutive newlines down to a single blank line so empty
+    # conditional placeholders ({{DomainJoinedNote}} etc.) don't leave a
+    # double-spaced gap when they render as "".
+    text = re.sub(r"\n{3,}", "\n\n", text)
     return {"subject": subject, "text": text, "html": html, "template_used": "ai_generated"}
 
 
@@ -1958,6 +1986,7 @@ _DEFAULT_TEMPLATES: Dict[str, str] = {
         "from {{Ip2isp}}.\n\n"
         "First IP {{Ip1}}: {{Ip1VirusTotalAttackHistory}}\n"
         "Second IP {{Ip2}}: {{Ip2VirusTotalAttackHistory}}\n\n"
+        "{{DomainJoinedNote}}\n\n"
         "{{ResponseFooter}}\n\n"
         "If you have any questions or concerns, please reach out to {{TeamName}}.\n\n"
         "{{Signature}}\n"
