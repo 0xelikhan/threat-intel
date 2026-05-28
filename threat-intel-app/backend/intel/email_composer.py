@@ -1589,9 +1589,31 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
                 action_hint = f"\n\nAction we took: {rlabel}"
                 break
 
+    # Template-aware composition: when triage detected an alert type, lead the
+    # prompt with the matching customer-facing template so the AI's email
+    # follows the exact phrasing/structure SOC analysts ship for that alert
+    # class (instead of a generic email built from 5 mixed examples). The
+    # generic example block is kept as a fallback style reference.
+    detected_alert_type = parsed.get("suggested_alert_type") or options.get("alert_type") or ""
+    primary_template = ""
+    if detected_alert_type and detected_alert_type in ALERT_LABEL_BY_ID:
+        body = load_template(detected_alert_type)
+        if body:
+            primary_template = (
+                f"## PRIMARY template — this alert was classified as "
+                f"'{ALERT_LABEL_BY_ID[detected_alert_type]}'. Follow this template's "
+                f"structure, tone, and section ordering. Replace placeholders with the "
+                f"actual values from the raw log. Skip any section whose data isn't in "
+                f"the log rather than writing 'N/A'.\n"
+                f"```\n{body[:1800]}\n```\n\n"
+                f"## Reference templates (for style only — do NOT copy):\n"
+            )
+
     user_prompt = (
+        f"{primary_template}"
         f"{_ai_example_block()}\n\n"
         "## Now write an email for THIS alert\n"
+        f"Detected alert type: {ALERT_LABEL_BY_ID.get(detected_alert_type, 'unknown')}\n"
         "Raw log:\n```\n"
         f"{log_text[:5000]}\n```\n\n"
         f"Extracted fields:\n{parsed_block or '(none)'}"
