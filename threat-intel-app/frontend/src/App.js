@@ -3405,10 +3405,12 @@ function AppMain({ authUser, setAuthState }) {
 
   const _runScan = useCallback(async (fetchFn) => {
     // Any new scan immediately switches the main view to the scanner —
-    // clear analyze + email state so the user lands on the action they
-    // just triggered, not whatever was on screen before.
+    // clear the email composer so the new action owns the canvas. The
+    // analyze result is intentionally PRESERVED so the analyst can
+    // return to it via the "Analysis" sidebar pill while the scan runs.
+    // A fresh Analyze run wipes the prior result through AgentPipeline's
+    // onStart hook below, so we never accumulate stale state.
     setEmailState(null);
-    setResult(null);
     setScanState({ scanning: true, result: null, error: null, progressStep: 0 });
     startScanProgress();
     try {
@@ -3513,11 +3515,13 @@ function AppMain({ authUser, setAuthState }) {
         scanState={scanState}
         onHome={() => { clearScan(); setEmailState(null); setResult(null); setHomeNonce(n => n + 1); }}
         onOpenEmail={() => {
-          // The three workspaces (Analyze / File Analyzer / Email) are kept
-          // fully separate — opening Email clears any analysis or scan result
-          // and starts with a blank composer. Nothing carries over.
+          // Open the email composer with a blank slate. The analyze
+          // result is intentionally PRESERVED so the analyst can come
+          // back to it via the "Analysis" sidebar pill — only a fresh
+          // Analyze run wipes the prior result (via AgentPipeline's
+          // onStart hook). The scanner gets dismissed because it doesn't
+          // share state with anything else.
           clearScan();
-          setResult(null);
           setEmailState({ log: '', parsed: null });
         }}
         emailActive={!!emailState}
