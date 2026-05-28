@@ -960,112 +960,6 @@ function InfrastructureIntel({ result, bare }) {
   );
 }
 
-/* ─── transparent confidence breakdown (spec §2) ──────────────────────────────
- * Per-IOC deterministic score independent of the AI assessment. Renders a
- * visual bar + verdict chip + expandable list of every contributing factor.
- */
-function ConfidenceBreakdown({ result, bare }) {
-  const scores = result?.confidence_scores || {};
-  const [openIoc, setOpenIoc] = useState(null);
-  const ids = Object.keys(scores).filter(k => k && !k.startsWith('_'));
-  if (!ids.length) return null;
-
-  const verdictColor = {
-    CRITICAL: '#EE3838', HIGH: '#E6700F', MEDIUM: '#E1B823',
-    LOW: '#0fbcff', CLEAN: '#16AD34',
-  };
-  const sorted = ids
-    .map(k => ({ ioc: k, ...scores[k] }))
-    .sort((a, b) => (b.score || 0) - (a.score || 0));
-
-  const body = (
-    <>
-      {sorted.map(({ ioc, type, score, verdict, factors }) => {
-        const open = openIoc === ioc;
-        const color = verdictColor[verdict] || '#848592';
-        return (
-          <MuiPaper key={ioc} elevation={0} sx={{
-            backgroundColor: '#0C1524',
-            border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-            borderLeft: `3px solid ${color}`,
-            borderRadius: '4px', mb: 0.75,
-          }}>
-            <Box
-              onClick={() => setOpenIoc(open ? null : ioc)}
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: 'auto 1fr auto auto auto',
-                gap: 1.5, p: '10px 12px', cursor: 'pointer',
-                alignItems: 'center',
-              }}
-            >
-              <TypeTag type={type === 'hash' ? 'hashes' : type === 'ip' ? 'ips' : 'domains'}/>
-              <Box sx={{
-                fontFamily: '"IBM Plex Mono", monospace', fontSize: 12,
-                color: 'text.primary', wordBreak: 'break-all', overflow: 'hidden',
-              }}>{ioc}</Box>
-              <Box sx={{ width: 120, height: 6, backgroundColor: '#070d19', borderRadius: 3, overflow: 'hidden' }}>
-                <Box sx={{
-                  width: `${score}%`, height: '100%', backgroundColor: color,
-                  transition: 'width .25s',
-                }}/>
-              </Box>
-              <Typography sx={{
-                fontSize: 13, fontWeight: 600, color, minWidth: 32,
-                fontVariantNumeric: 'tabular-nums', textAlign: 'right',
-              }}>{score}</Typography>
-              <MuiTag label={verdict} color={color}/>
-            </Box>
-            {open && (
-              <Box sx={{ borderTop: `1px solid ${muiAlpha('#ffffff', 0.06)}`, p: '8px 12px' }}>
-                {(factors || []).length === 0 && (
-                  <Typography sx={{ fontSize: 12, color: 'text.tertiary' }}>
-                    No contributing factors — score derived entirely from neutral signals.
-                  </Typography>
-                )}
-                {(factors || []).map((f, i) => (
-                  <Box key={i} sx={{
-                    display: 'grid', gridTemplateColumns: '1fr auto',
-                    gap: 1, py: 0.625,
-                    borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.04)}` : 'none',
-                  }}>
-                    <Box>
-                      <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 500 }}>
-                        {f.factor}
-                        <Box component="span" sx={{
-                          ml: 1, fontSize: 10, color: 'text.disabled',
-                          textTransform: 'uppercase', letterSpacing: '0.05em',
-                        }}>{f.category}</Box>
-                      </Typography>
-                      <Typography sx={{ fontSize: 11, color: 'text.tertiary',
-                        fontFamily: '"IBM Plex Mono", monospace', mt: 0.25,
-                        wordBreak: 'break-all',
-                      }}>{f.evidence}</Typography>
-                    </Box>
-                    <Typography sx={{
-                      fontSize: 13, fontWeight: 600,
-                      color: f.points > 0 ? 'warning.main' : 'success.main',
-                      fontVariantNumeric: 'tabular-nums',
-                      whiteSpace: 'nowrap',
-                    }}>{f.points > 0 ? `+${f.points}` : f.points}</Typography>
-                  </Box>
-                ))}
-              </Box>
-            )}
-          </MuiPaper>
-        );
-      })}
-    </>
-  );
-  if (bare) return body;
-  return (
-    <Card title="Confidence breakdown · transparent scoring" accent="#0fbcff"
-      badge={`${ids.length} scored`}>
-      {body}
-    </Card>
-  );
-}
-
 /* ─── behavioral indicators (spec §1) ────────────────────────────────────────
  * Pattern-matched TTPs extracted from the raw input — PowerShell tradecraft,
  * LOLBin abuse, persistence, lateral movement, credential access, C2. Each
@@ -1826,15 +1720,6 @@ function GTI({ result }) {
         ))}
       </MuiPaper>
 
-      {Object.keys(result?.confidence_scores || {}).filter(k => k && !k.startsWith('_')).length > 0 && (
-        <Box sx={{ mt: 2.25, pt: 2, borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
-          <Typography sx={{ fontSize: 11, fontWeight: 600, color: 'text.tertiary',
-            textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.25 }}>
-            Per-indicator confidence breakdown
-          </Typography>
-          <ConfidenceBreakdown result={result} bare/>
-        </Box>
-      )}
     </Card>
   );
 }
@@ -2009,8 +1894,19 @@ function AnalystSummary({ rs }) {
                   : a.disposition === 'ESCALATE' ? '#F14337'
                   :                                '#E1B823';
 
+  // 2-3 sentence AI narrative from the investigation — generated every run
+  // but not previously rendered anywhere. Sits above the disposition banner
+  // so the analyst gets the synthesis before the verdict.
+  const summary = (rs?.summary || '').trim();
+
   return (
     <Card title="Summary" accent="#0fbcff" badge={a.disposition?.toLowerCase()} defaultOpen>
+      {summary && (
+        <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.7,
+          mb: 1.5, whiteSpace: 'pre-wrap' }}>
+          {summary}
+        </Typography>
+      )}
       {/* Disposition banner */}
       {a.disposition && (
         <MuiPaper elevation={0} sx={{
@@ -2068,23 +1964,6 @@ function AnalystSummary({ rs }) {
 }
 
 /* ─── Chat with RECON · conversational follow-up on the investigation ───────── */
-// Evergreen investigation prompts shown when the backend didn't return any
-// AI-generated probing_questions. Same shape as the AI ones so the click-to-
-// ask handler treats them identically.
-const FALLBACK_QUESTIONS = [
-  { question: "Are there other endpoints or accounts showing the same behavior right now?",
-    why_asking: "Single-host detections are usually FP; a pattern across multiple hosts points to active intrusion." },
-  { question: "What did this user / process do in the 30 minutes before this alert fired?",
-    why_asking: "Preceding activity often reveals the initial access vector and intent." },
-  { question: "Has this user, host, or IOC appeared in any prior investigation in the last 90 days?",
-    why_asking: "Repeat sightings imply long-dwell or a recurring TTP from the same actor." },
-  { question: "Is the observed activity consistent with this user's normal role and working hours?",
-    why_asking: "Out-of-baseline activity (timezone, app, command) is the strongest signal of compromise vs. expected admin work." },
-  { question: "What persistence, lateral-movement, or exfil indicators showed up after this event?",
-    why_asking: "Confirms whether the alert is isolated or part of an active kill-chain in progress." },
-];
-
-
 function ChatWithRecon({ result, bare }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput]       = useState('');
@@ -2096,14 +1975,12 @@ function ChatWithRecon({ result, bare }) {
 
   const runId = result?.runId;
   const rs    = result?.response_summary || {};
-  // Use the AI-generated probing questions when the investigation produced
-  // any; otherwise fall back to a generic-but-evergreen set so the analyst
-  // always has clickable starting points (helps when the AI omits the field).
-  // Ask RECON only surfaces probing questions that carry an if-yes / if-no
-  // verdict path (the actionable ones). Plain clarifying questions and the
-  // generic fallback set are intentionally omitted.
-  const questions = (rs.probing_questions || []).filter(q => q && (q.if_yes_means || q.if_no_means));
-  const usingFallback = false;
+  // Surface every AI-generated probing question the investigation produced —
+  // don't drop the plain ones for lacking if_yes/if_no metadata; the render
+  // below already hides those chips when they're missing. We keep zero
+  // hardcoded fallbacks here so the analyst only ever sees questions specific
+  // to whatever they uploaded.
+  const questions = (rs.probing_questions || []).filter(q => q && q.question);
   const classification = rs.verdict_classification;
 
   // Load history when run changes
@@ -2262,9 +2139,7 @@ function ChatWithRecon({ result, bare }) {
               fontSize:11, color:'text.tertiary', fontWeight:500,
               textTransform:'uppercase', letterSpacing:'0.06em',
             }}>
-              {usingFallback
-                ? 'Investigation starting points · click one to ask RECON'
-                : (isAmbiguous ? 'Probing questions' : 'Things to verify · click — RECON asks, you answer')}
+              {isAmbiguous ? 'Probing questions' : 'Things to verify · click — RECON asks, you answer'}
             </Typography>
           </Box>
           <Stack spacing={1}>
@@ -2457,9 +2332,7 @@ function ChatWithRecon({ result, bare }) {
   if (bare) return body;
   return (
     <Card title="Ask RECON" accent={accent}
-      badge={questions.length > 0
-        ? `${questions.length} ${usingFallback ? 'starter questions' : 'suggested checks'}`
-        : null}>
+      badge={questions.length > 0 ? `${questions.length} suggested checks` : null}>
       {body}
     </Card>
   );
