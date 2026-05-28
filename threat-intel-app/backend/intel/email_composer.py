@@ -1460,6 +1460,11 @@ def compose(alert_type: str, parsed: Dict, options: Dict, config,
     html = _strip_closing_block_html(html)
     text = _inject_closing_text(text, _signature_plain(config))
     html = _inject_closing_html(html, signature_html)
+    # Last-pass dash strip — catches anything injected after the AI body
+    # was first sanitized (closing statement, signature line, future templates).
+    text = _strip_em_dashes(text)
+    html = _strip_em_dashes(html)
+    subject = _strip_em_dashes(subject)
     return {"subject": subject, "text": text, "html": html, "template_used": alert_type}
 
 
@@ -1476,7 +1481,7 @@ _CLOSING_RE = re.compile(
 _CLOSING_STATEMENT = (
     "We'll continue monitoring your environment for any related activity. "
     "If this activity looks unfamiliar or unauthorized, please contact us right "
-    "away so we can act quickly — and as always, we're here for any questions."
+    "away so we can act quickly, and as always, we're here for any questions."
 )
 
 
@@ -1752,6 +1757,11 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     html = _strip_closing_block_html(html)
     text = _inject_closing_text(text, _signature_plain(config))
     html = _inject_closing_html(html, signature_html)
+    # Last-pass dash strip — catches anything injected after the AI body
+    # was first sanitized (closing statement, signature line, future templates).
+    text = _strip_em_dashes(text)
+    html = _strip_em_dashes(html)
+    subject = _strip_em_dashes(subject)
     return {"subject": subject, "text": text, "html": html, "template_used": "ai_generated"}
 
 
