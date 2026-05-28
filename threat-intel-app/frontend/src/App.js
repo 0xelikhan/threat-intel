@@ -1541,10 +1541,15 @@ function SourceVerdict({ source, label, color = '#0fbcff' }) {
 // say are skipped. The label is what the analyst reads at a glance.
 function _ocSources(result, ioc, type) {
   const enr = result?.enrichments || {};
+  // Backend emits ioc_type as 'ip' | 'domain' | 'url' | 'file' (file for
+  // hashes — historical name). The enrichment buckets are plural; map
+  // each ioc_type to its bucket. Falls through to a no-op for unknown
+  // types so the row stays clickable-but-empty rather than crashing.
   const bucket =
       type === 'ip'     ? enr.ips
     : type === 'domain' ? enr.domains
     : type === 'hash'   ? enr.hashes
+    : type === 'file'   ? enr.hashes
     : type === 'url'    ? enr.urls
     : null;
   const d = bucket?.[ioc] || {};
@@ -1698,7 +1703,9 @@ function PerIndicatorList({ sorted, result }) {
   const [openIoc, setOpenIoc] = useState(null);
   return sorted.map(([ioc, d], i) => {
     const tr = tierFor(d.score);
-    const sources = _ocSources(result, ioc, d.type);
+    // Backend field is `ioc_type`; tolerate `type` as a fallback for any
+    // older runs cached in memory before this commit.
+    const sources = _ocSources(result, ioc, d.ioc_type || d.type);
     const expandable = sources.length > 0 || (d.contributing_factors || []).length > 1;
     const open = openIoc === ioc;
     return (
