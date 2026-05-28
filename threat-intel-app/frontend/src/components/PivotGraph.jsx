@@ -229,8 +229,12 @@ function buildGraph(result) {
 }
 
 
+// IOC node types — these are the ones a pivot scan makes sense for. Clusters
+// (country/registrar/OTX pulse) and actors aren't IOCs themselves.
+const PIVOTABLE_TYPES = new Set(['ip', 'domain', 'hash', 'url', 'email']);
+
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────────
-export default function PivotGraph({ result }) {
+export default function PivotGraph({ result, onPivot }) {
   const svgRef = useRef(null);
   const simRef = useRef(null);
   const [selected, setSelected] = useState(null);
@@ -567,6 +571,33 @@ export default function PivotGraph({ result }) {
           {selected.reason && (
             <div style={{ marginTop: '10px', fontSize: '12px', color: '#718096', borderTop: '1px solid #1e3a5f', paddingTop: '10px' }}>
               {selected.reason}
+            </div>
+          )}
+          {/* Pivot-and-investigate — the reason this graph earns its keep.
+              Clicking sends the IOC value back to the sidebar Analyze flow
+              so the analyst can run a fresh investigation on a neighbor
+              without retyping or copy-pasting. */}
+          {PIVOTABLE_TYPES.has(selected.type) && onPivot && (
+            <div style={{ marginTop: '12px', borderTop: '1px solid #1e3a5f', paddingTop: '10px' }}>
+              <button
+                onClick={() => {
+                  const value = selected.fullUrl || selected.fullHash || selected.id;
+                  onPivot(value, selected.type);
+                  setSelected(null);
+                }}
+                style={{
+                  background: '#1a3a6e', border: '1px solid #4a9eff',
+                  color: '#74c0fc', padding: '6px 14px', borderRadius: '4px',
+                  cursor: 'pointer', fontSize: '11px', letterSpacing: '1px',
+                  fontFamily: 'Courier New', textTransform: 'uppercase',
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                }}
+              >
+                → Pivot scan this {selected.type}
+              </button>
+              <div style={{ marginTop: '6px', fontSize: '10px', color: '#4a5568' }}>
+                Sends the IOC to Analyze and starts a fresh investigation.
+              </div>
             </div>
           )}
           {selected.matchedTechniques?.length > 0 && (
