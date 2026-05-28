@@ -90,7 +90,7 @@ export default function LoginPage({ onAuthed }) {
       }}>
         {/* Logo — significantly larger than before so it owns the upper half
             of the card. Soft cyan drop-shadow ties it to the background glow. */}
-        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3.5 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4.5 }}>
           <Box component="img" src="/logo.png" alt="RECON"
             sx={{
               width: '100%',
@@ -99,16 +99,6 @@ export default function LoginPage({ onAuthed }) {
               filter: 'drop-shadow(0 0 28px rgba(15, 188, 255, 0.45))',
             }}/>
         </Box>
-
-        {/* Tagline */}
-        <Typography sx={{
-          textAlign: 'center', mb: 4,
-          fontSize: 11, color: 'text.tertiary',
-          letterSpacing: '0.22em', textTransform: 'uppercase',
-          fontWeight: 500,
-        }}>
-          Threat Intelligence Platform
-        </Typography>
 
         {/* Form */}
         <Box component="form" onSubmit={submit}>
