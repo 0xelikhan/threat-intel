@@ -72,7 +72,12 @@ class EnrichIOCSkill(Skill):
             "GREYNOISE_KEY", "SHODAN_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
             "IPINFO_TOKEN", "WHOISXML_KEY", "CROWDSEC_KEY", "PHISHTANK_KEY",
         )}
-        async with aiohttp.ClientSession() as session:
+        # Share the enrichment module's process-wide TCP/DNS pool so
+        # individual skill calls benefit from the same warm sockets
+        # as the full pipeline.
+        async with aiohttp.ClientSession(
+            connector=_enr._get_connector(), connector_owner=False
+        ) as session:
             if ioc_type == "ip":
                 data = await _enr.enrich_ip(session, ioc_value, keys)
             elif ioc_type in ("domain", "hostname"):

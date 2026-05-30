@@ -1,18 +1,70 @@
 """
 Enrichment Agent — all API keys read from config at call time.
 Zero AI tokens — pure parallel HTTP calls.
+
+Concurrency model:
+* `_SEMAPHORE` caps the number of in-flight HTTP requests across the
+  whole process. Default 10; tunable via ENRICH_CONCURRENCY env var.
+  Prevents the fan-out from saturating downstream rate limits when
+  several investigations run in parallel.
+* `_get_connector()` returns a single process-wide TCPConnector. Every
+  ClientSession we open passes connector_owner=False so they share the
+  TCP/DNS pool but don't close the connector when the session exits.
+  ttl_dns_cache=300 saves a DNS round trip per source on repeat calls.
+* `_TIMEOUT` (aiohttp.ClientTimeout) is the *transport* timeout —
+  protects against slow body reads. `_PER_SOURCE_TIMEOUT` wraps the
+  whole `_get`/`_post` with asyncio.wait_for so a hung TLS handshake
+  or parser deadlock also returns rather than stalling the gather.
+* MISP warninglist filtering happens in triage (agents/triage.py) BEFORE
+  this module is called, so known-clean IOCs never reach enrichment.
 """
 
 import asyncio
 import hashlib
+import os
 from datetime import datetime, timezone
 
 import aiohttp
 
-TIMEOUT = aiohttp.ClientTimeout(total=10)
+# Transport timeout (aiohttp-internal — covers connect + read body).
+_TIMEOUT = aiohttp.ClientTimeout(total=10)
+# Outer safety-net timeout (wraps the whole call, including parsing).
+_PER_SOURCE_TIMEOUT = float(os.getenv("ENRICH_SOURCE_TIMEOUT_S", "12"))
+# Cap on in-flight HTTP fan-out — protects downstream rate limits and
+# our own event loop from a thousand simultaneous sockets.
+_SEMAPHORE = asyncio.Semaphore(int(os.getenv("ENRICH_CONCURRENCY", "10")))
+# Backwards-compat alias — older code in this module imports TIMEOUT.
+TIMEOUT = _TIMEOUT
+
 _cache: dict = {}
 _tor_nodes: set = set()
 _tor_fetched: float = 0.0
+
+# Process-wide connector singleton — see module docstring.
+_CONNECTOR: "aiohttp.TCPConnector | None" = None
+
+
+def _get_connector() -> aiohttp.TCPConnector:
+    """Lazy-create the shared TCPConnector. Recreated if the previous
+    one was closed (e.g. after a Hot reload in dev)."""
+    global _CONNECTOR
+    if _CONNECTOR is None or _CONNECTOR.closed:
+        _CONNECTOR = aiohttp.TCPConnector(
+            limit=int(os.getenv("ENRICH_POOL_LIMIT", "100")),
+            limit_per_host=int(os.getenv("ENRICH_POOL_PER_HOST", "10")),
+            ttl_dns_cache=300,
+            enable_cleanup_closed=True,
+        )
+    return _CONNECTOR
+
+
+async def close_connector() -> None:
+    """Close the shared connector. Called from the FastAPI lifespan
+    shutdown hook so we don't leak sockets on graceful exit."""
+    global _CONNECTOR
+    if _CONNECTOR is not None and not _CONNECTOR.closed:
+        await _CONNECTOR.close()
+    _CONNECTOR = None
 
 
 def _ck(ioc_type: str, value: str) -> str:
@@ -20,17 +72,32 @@ def _ck(ioc_type: str, value: str) -> str:
 
 
 async def _get(session, url, **kw):
-    try:
-        async with session.get(url, timeout=TIMEOUT, **kw) as r:
+    """Issue one GET inside the global semaphore, bounded by the per-source
+    safety timeout. Never raises — always returns a dict (with `error` key
+    on failure) so callers can rely on a uniform shape."""
+    async def _do():
+        async with session.get(url, timeout=_TIMEOUT, **kw) as r:
             return await r.json() if "json" in r.content_type else {"raw": await r.text()}
+    try:
+        async with _SEMAPHORE:
+            return await asyncio.wait_for(_do(), timeout=_PER_SOURCE_TIMEOUT)
+    except asyncio.TimeoutError:
+        return {"error": f"source timed out after {_PER_SOURCE_TIMEOUT:.0f}s"}
     except Exception as e:
         return {"error": str(e)}
 
 
 async def _post(session, url, **kw):
-    try:
-        async with session.post(url, timeout=TIMEOUT, **kw) as r:
+    """POST variant of `_get` — same semaphore, same timeout discipline,
+    same never-raise contract."""
+    async def _do():
+        async with session.post(url, timeout=_TIMEOUT, **kw) as r:
             return await r.json() if "json" in r.content_type else {"raw": await r.text()}
+    try:
+        async with _SEMAPHORE:
+            return await asyncio.wait_for(_do(), timeout=_PER_SOURCE_TIMEOUT)
+    except asyncio.TimeoutError:
+        return {"error": f"source timed out after {_PER_SOURCE_TIMEOUT:.0f}s"}
     except Exception as e:
         return {"error": str(e)}
 
@@ -1153,7 +1220,12 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
     _enrichers = {"ips": enrich_ip, "domains": enrich_domain,
                   "hashes": enrich_hash, "urls": enrich_url}
 
-    async with aiohttp.ClientSession() as session:
+    # Share the process-wide TCP/DNS pool. connector_owner=False keeps the
+    # connector alive after this session closes so the next investigation
+    # reuses the same warm sockets.
+    async with aiohttp.ClientSession(
+        connector=_get_connector(), connector_owner=False
+    ) as session:
         tasks = {
             cat: asyncio.ensure_future(
                 asyncio.gather(*[_enrichers[cat](session, v, keys) for v in vals]))
