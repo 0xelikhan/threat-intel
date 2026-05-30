@@ -95,6 +95,21 @@ def test_summary_tor_exit_does_not_count_as_flag():
 
 
 # ─── Prompt wording regression ───────────────────────────────────────────────
+def test_prompt_rebuts_cloud_provider_false_positive():
+    """User-reported false positive: 'IP resolves to AWS, which is often
+    associated with malicious activity'. AWS / Azure / GCP / Cloudflare host
+    the majority of legitimate internet traffic; flagging them by attribution
+    alone is a guaranteed alert-on-everything pattern. PRINCIPLE 1 must call
+    this out explicitly."""
+    p = investigation.PROMPT
+    assert "AWS" in p and "Azure" in p and "GCP" in p
+    # The prompt must explicitly rule out the failing phrasing pattern
+    # (matched with whitespace-tolerant regex because of the line wrap).
+    assert re.search(
+        r"often\s+associated\s+with\s+malicious\s+activity", p, re.IGNORECASE,
+    ), "PRINCIPLE 1 must forbid the exact phrasing pattern the user reported"
+
+
 def test_prompt_explains_oauth2_authorize_is_normal():
     """OAuth2:Authorize is the standard SSO authorization-code flow —
     the AI must NOT call it 'credential harvesting' without additional

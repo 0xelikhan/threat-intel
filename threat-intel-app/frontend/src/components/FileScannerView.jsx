@@ -17,6 +17,7 @@ import {
   TableRow, TableCell, Tooltip, LinearProgress, CircularProgress,
 } from '@mui/material';
 import { alpha as muiAlpha, useTheme } from '@mui/material/styles';
+import { Skeleton, SkeletonFileScanner } from './Skeleton';
 import {
   FileSearch, Copy, Check, Search, Download,
   ArrowUpRight, AlertTriangle, Shield, Play, Plus,
@@ -1859,7 +1860,12 @@ function StickyHeader({ result, scanning }) {
         )}
         {scanning && (
           <Stack direction="row" alignItems="center" spacing={0.75}>
-            <CircularProgress size={12} sx={{ color: 'primary.main' }}/>
+            {/* Pulsing dot replaces the centered spinner — RECON no-spinner rule */}
+            <Box sx={{
+              width: 8, height: 8, borderRadius: 99,
+              backgroundColor: 'primary.main',
+              animation: 'pulse 1.2s ease-in-out infinite',
+            }}/>
             <Typography sx={{ fontSize: 11, color: 'primary.main', fontWeight: 500 }}>
               analyzing…
             </Typography>
@@ -1938,14 +1944,24 @@ function ProgressTimeline({ progressStep }) {
   );
 }
 
-// AI loading row used inside cards that are still waiting on the AI pipeline
+// AI loading row used inside cards still waiting on the AI pipeline.
+// Renders shimmer text lines instead of a spinner so the analyst sees
+// the shape of what's about to land.
 function AILoading({ text }) {
   return (
-    <Stack direction="row" alignItems="center" spacing={1.25}
-      sx={{ py: 1, color: 'text.tertiary', fontSize: 12, fontStyle: 'italic' }}>
-      <CircularProgress size={12} sx={{ color: 'primary.main' }}/>
-      <span>{text || 'Working…'}</span>
-    </Stack>
+    <Box sx={{ py: 0.5 }}>
+      {text && (
+        <Typography sx={{ fontSize: 11, color: 'text.tertiary',
+          fontStyle: 'italic', mb: 0.75, letterSpacing: '0.02em' }}>
+          {text}
+        </Typography>
+      )}
+      <Stack spacing={0.75}>
+        <Skeleton width="88%" height={11}/>
+        <Skeleton width="74%" height={11} delayMs={120}/>
+        <Skeleton width="62%" height={11} delayMs={240}/>
+      </Stack>
+    </Box>
   );
 }
 
@@ -2070,6 +2086,12 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
 
           {/* Live progress timeline while scanning */}
           {scanning && <ProgressTimeline progressStep={progressStep}/>}
+
+          {/* Layout-matching skeleton while scanning is running but no result
+              has yet populated. Once the backend persists the initial scan
+              record, the real cards take over. Replaces the prior centered
+              "no result yet" empty state during the scanning window. */}
+          {scanning && !result && <SkeletonFileScanner/>}
 
           {/* Error display */}
           {error && (

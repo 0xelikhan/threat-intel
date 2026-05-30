@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { SkeletonHistoryRows } from './Skeleton';
 
 const LEVEL_COLORS = {
   CRITICAL: '#ff2d2d', HIGH: '#ff8c00', MEDIUM: '#ffd700',
@@ -49,7 +50,7 @@ function HistoryPanel({ onSelect, currentRunId }) {
       </div>
 
       <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
-        {loading && <div style={{ padding: '16px', color: '#4a5568', fontSize: '12px' }}>Loading...</div>}
+        {loading && <SkeletonHistoryRows count={5}/>}
         {!loading && history.length === 0 && (
           <div style={{ padding: '16px', color: '#4a5568', fontSize: '12px' }}>No analyses yet. Run something.</div>
         )}

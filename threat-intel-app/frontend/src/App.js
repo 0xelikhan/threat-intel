@@ -6,6 +6,9 @@ import {
 import AgentPipeline     from './components/AgentPipeline';
 import ErrorBoundary     from './components/ErrorBoundary';
 import ToastHost         from './components/Toast';
+import {
+  SkeletonLazyFallback, SkeletonAnalyze, SkeletonFileScanner,
+} from './components/Skeleton';
 
 // MUI-based primitives (adapted from OpenCTI's Tag.tsx + theme) — every chip,
 // card, code-block, copy button now renders through MUI components that inherit
@@ -3220,7 +3223,7 @@ function URLScanLive({ result, bare }) {
  * Uses MUI Drawer with the OpenCTI nav width/styling, hosting the input area
  * (drop zone + textarea + AgentPipeline) and the extracted-IOCs panel.
  */
-function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanHash, onScanUrl, scanState, onHome, onOpenEmail, emailActive, onOpenAnalyze, analyzeAvailable, analyzeActive, authUser, onLogout }) {
+function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScanFile, onScanHash, onScanUrl, scanState, onHome, onOpenEmail, emailActive, onOpenAnalyze, analyzeAvailable, analyzeActive, authUser, onLogout }) {
   const [logText, setLogText] = useState('');
   const [dragOver, setDragOver] = useState(false);
 
@@ -3461,9 +3464,9 @@ function Sidebar({ onResult, onPartialResult, currentResult, onScanFile, onScanH
             /api/scan/url, otherwise it runs the log-analysis pipeline. */}
 
         <AgentPipeline logText={logText} label=""
-          onComplete={onResult}
-          onPartial={onPartialResult}
-          onStart={()=>onResult(null)}
+          onComplete={(r) => { onAnalyzing?.(false); onResult(r); }}
+          onPartial={(p) => { onAnalyzing?.(false); onPartialResult(p); }}
+          onStart={() => { onResult(null); onAnalyzing?.(true); }}
           onScanUrl={(url) => { onScanUrl?.(url); setLogText(''); }}/>
 
         {/* Extracted indicators */}
@@ -3540,19 +3543,12 @@ function Empty() {
 }
 
 // Suspense fallback for the lazy-loaded workspaces (FileScannerView,
-// EmailComposerView, MapTab). Keeps the layout stable while the chunk
-// loads — picks a sensible default height so the surrounding card doesn't
-// snap when the real component mounts.
+// EmailComposerView, MapTab). Renders a layout-matching skeleton card
+// instead of a centered "loading…" so the surrounding layout stays put
+// AND the analyst sees that something is loading where the real chunk
+// will mount. Per the no-spinner rule, this is now a shimmer-card.
 function LazyFallback({ height = 120 }) {
-  return (
-    <Box sx={{
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      height, color: 'text.tertiary', fontSize: 12,
-      fontFamily: '"IBM Plex Mono", monospace', letterSpacing: '0.06em',
-    }}>
-      loading…
-    </Box>
-  );
+  return <SkeletonLazyFallback height={height}/>;
 }
 
 /* ─── IOC pivot (cross-run sightings) ────────────────────────────────────────── */
@@ -3802,12 +3798,17 @@ export default function App() {
   }, []);
 
   if (authState === 'checking') {
+    // Auth probe is sub-200ms in steady state; render a minimal skeleton
+    // outline instead of a centered "loading…" so first paint matches the
+    // shell layout the analyst will see post-auth.
     return (
       <Box sx={{ minHeight: '100vh', backgroundColor: 'background.default',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'text.tertiary', fontSize: 12, letterSpacing: '0.06em',
-        fontFamily: '"IBM Plex Mono", monospace' }}>
-        loading…
+        p: 3, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        <SkeletonLazyFallback height={48} label="auth"/>
+        <Box sx={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 2 }}>
+          <SkeletonLazyFallback height={420}/>
+          <SkeletonLazyFallback height={420}/>
+        </Box>
       </Box>
     );
   }
@@ -3838,6 +3839,10 @@ export default function App() {
 
 function AppMain({ authUser, setAuthState }) {
   const [result, setResult] = useState(null);
+  // True between AgentPipeline onStart and the first onPartial / onComplete.
+  // Drives the SkeletonAnalyze layout in the main view so analysts see WHERE
+  // results will land while waiting on the first stream event.
+  const [analyzing, setAnalyzing] = useState(false);
   const [view, setView] = useState('detail'); // 'detail' | 'table'
   const [webhooks, setWebhooks] = useState({});
   // Bumped on "go home" (logo) to remount the Sidebar — this clears its local
@@ -3985,6 +3990,7 @@ function AppMain({ authUser, setAuthState }) {
           setResult(r);
         }}
         onPartialResult={mergePartial}
+        onAnalyzing={setAnalyzing}
         currentResult={result}
         onScanFile={scanFile}
         onScanHash={scanHash}
@@ -4095,7 +4101,11 @@ function AppMain({ authUser, setAuthState }) {
           </Stack>
         )}
 
-        {!result && <Empty/>}
+        {/* Layout-matching skeleton while the analyze pipeline is running and
+            no partial result has merged yet. Once the first partial arrives,
+            the real cards take over instantly via mergePartial. */}
+        {!result && analyzing && <SkeletonAnalyze/>}
+        {!result && !analyzing && <Empty/>}
 
         {result && view === 'table' && (
           <>

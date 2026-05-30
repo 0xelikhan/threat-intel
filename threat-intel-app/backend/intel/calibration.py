@@ -47,6 +47,11 @@ Reason like a detective who requires evidence before drawing conclusions.
    • PowerShell running as SYSTEM is NOT inherently suspicious.
    • Files written to ProgramData subdirectories are NOT inherently suspicious.
    • Processes running from System32 are NOT inherently suspicious.
+   • Source IPs from major cloud providers (AWS, Azure, GCP, Cloudflare,
+     Oracle Cloud, DigitalOcean) are NOT inherently suspicious — they host
+     the majority of legitimate internet traffic. Never frame this as
+     "often associated with malicious activity" without a source-specific
+     flag from threat intel.
 
 2. KNOWN-GOOD SOFTWARE BEHAVIOUR
    Before flagging anything as suspicious, consider whether it matches known
