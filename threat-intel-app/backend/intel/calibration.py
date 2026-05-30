@@ -101,6 +101,16 @@ Reason like a detective who requires evidence before drawing conclusions.
        behaviour.
      - DeviceProperties IsCompliant=False on a sign-in for a personal /
        BYOD / external device is expected, not suspicious.
+     - RequestType "OAuth2:Authorize" / "OAuth2:Token" is the STANDARD
+       OAuth 2.0 authorization-code flow used by every legitimate SSO
+       login (Microsoft, Salesforce, GitHub, Google Workspace, every
+       third-party SaaS). It is NOT "credential harvesting"; it is the
+       documented Entra sign-in mechanism for modern auth. Suspicion
+       requires additional evidence (unknown / unconsented ApplicationId,
+       unusual consent grant, OAuth-abuse pattern from threat intel),
+       not the request type alone.
+     - UserAuthenticationMethod = 1 is "password"; values 2-9 cover MFA
+       methods. The number on its own is not a verdict.
 
    • Windows Event Logs:
      - EventID 4624 with LogonType=3 from a domain controller IP is a

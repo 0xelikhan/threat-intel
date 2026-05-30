@@ -1935,6 +1935,21 @@ function AnalystSummary({ result, rs }) {
         </MuiPaper>
       )}
 
+      {/* Enrichment-summary header — empirical baseline computed server-side,
+          shown as the FIRST line so analysts see the source counts before
+          reading any AI interpretation. */}
+      {rs?.enrichment_summary?.line && (
+        <Box sx={{
+          mb: 1.5, p: '8px 12px', borderRadius: '4px',
+          backgroundColor: muiAlpha('#0fbcff', 0.06),
+          border: `1px solid ${muiAlpha('#0fbcff', 0.18)}`,
+          fontFamily: '"IBM Plex Mono", monospace',
+          fontSize: 12, color: 'text.primary', lineHeight: 1.5,
+        }}>
+          {rs.enrichment_summary.line}
+        </Box>
+      )}
+
       {/* Why this rating — transparent enumeration of the evidence points the
           AI used to set the threat level. Calibration fix from S8: if this
           block is empty or only lists benign indicators, the threat level
@@ -1946,6 +1961,17 @@ function AnalystSummary({ result, rs }) {
           basis={rs?.assessment_basis || []}
           fpCheck={rs?.false_positive_check}
           aiUnavailable={rs?.ai_unavailable}
+        />
+      )}
+
+      {/* PRINCIPLE 7 — Confirmed facts vs analyst assessment. Rendered as
+          two distinct sections so analysts can tell evidence from inference
+          at a glance. Both are valuable; readers should never have to guess
+          which is which. */}
+      {(rs?.confirmed_facts?.length > 0 || rs?.analysis_assessment?.length > 0) && (
+        <ConfirmedVsAnalysis
+          confirmed={rs?.confirmed_facts || []}
+          analysis={rs?.analysis_assessment || []}
         />
       )}
 
@@ -2078,6 +2104,73 @@ function WhyThisRating({ threatLevel, basis, fpCheck, aiUnavailable }) {
     </Box>
   );
 }
+
+/* ─── Confirmed vs Analysis — PRINCIPLE 7 two-tier split
+       Confirmed = statements directly traceable to enrichment data
+       Analysis  = analyst inferences clearly labeled as assessment
+       Rendered as two visually distinct sections so analysts know exactly
+       what is evidence and what is interpretation.                       */
+function ConfirmedVsAnalysis({ confirmed, analysis }) {
+  const hasConfirmed = Array.isArray(confirmed) && confirmed.filter(Boolean).length > 0;
+  const hasAnalysis  = Array.isArray(analysis)  && analysis.filter(Boolean).length > 0;
+  if (!hasConfirmed && !hasAnalysis) return null;
+
+  const Section = ({ title, color, items, label }) => (
+    <Box sx={{ mt: 1, p: '10px 12px', borderRadius: '4px',
+      backgroundColor: muiAlpha(color, 0.05),
+      border: `1px solid ${muiAlpha(color, 0.22)}`,
+      borderLeft: `3px solid ${color}` }}>
+      <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.75 }}>
+        <Box sx={{ width: 5, height: 5, borderRadius: 99, backgroundColor: color }}/>
+        <Typography sx={{ fontSize: 11, fontWeight: 700, color,
+          textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+          {title}
+        </Typography>
+        {label && (
+          <Typography sx={{ fontSize: 10, color: 'text.tertiary', fontStyle: 'italic' }}>
+            · {label}
+          </Typography>
+        )}
+      </Stack>
+      <Stack spacing={0.5} component="ul" sx={{ m: 0, pl: 2.25, listStyle: 'none' }}>
+        {items.map((item, i) => (
+          <Typography
+            key={i}
+            component="li"
+            sx={{ fontSize: 12.5, color: 'text.primary', lineHeight: 1.55,
+              position: 'relative',
+              '&::before': {
+                content: '"›"', color, position: 'absolute', left: -14, fontWeight: 700,
+              } }}>
+            {String(item)}
+          </Typography>
+        ))}
+      </Stack>
+    </Box>
+  );
+
+  return (
+    <Box sx={{ mb: 1.5 }}>
+      {hasConfirmed && (
+        <Section
+          title="Confirmed"
+          color="#17AB1F"
+          items={confirmed.filter(Boolean)}
+          label="directly supported by enrichment data"
+        />
+      )}
+      {hasAnalysis && (
+        <Section
+          title="Analysis"
+          color="#E1B823"
+          items={analysis.filter(Boolean)}
+          label="analyst assessment, not confirmed fact"
+        />
+      )}
+    </Box>
+  );
+}
+
 
 /* ─── Chat with RECON · conversational follow-up on the investigation ───────── */
 function ChatWithRecon({ result, bare }) {

@@ -52,6 +52,14 @@ class InvestigateSkill(Skill):
             "clarifying_questions":  "list",
             "confidence":            "float",
             "probing_questions":     "list",
+            # Two-tier output per PRINCIPLE 7 — confirmed facts vs analyst
+            # assessment, separated so callers know which is evidence and
+            # which is inference.
+            "confirmed_facts":       "list",
+            "analysis_assessment":   "list",
+            # Server-computed enrichment baseline — {returned_count, total_count,
+            # flagged_count, flagged_iocs, flagged_per_ioc, line}.
+            "enrichment_summary":    "dict",
             "raw":                   "dict",
         }
 
@@ -97,6 +105,9 @@ class InvestigateSkill(Skill):
             "clarifying_questions": result.get("clarifying_questions") or [],
             "confidence":           float(result.get("confidence") or 0.0),
             "probing_questions":    result.get("probing_questions") or [],
+            "confirmed_facts":      result.get("confirmed_facts") or [],
+            "analysis_assessment":  result.get("analysis_assessment") or [],
+            "enrichment_summary":   result.get("enrichment_summary") or {},
             "raw":                  result,
         }
 
