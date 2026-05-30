@@ -2566,6 +2566,18 @@ async def taxii_feeds():
 
 
 # ─── FRONTEND ─────────────────────────────────────────────────────────────────────
+# index.html MUST be served with no-cache headers — it references
+# fingerprinted chunk filenames (e.g. /static/js/633.{hash}.chunk.js) and a
+# stale cached index pointing at chunk hashes the new deployment no longer
+# has produces a "Loading chunk N failed" crash for every analyst with an
+# open tab during the redeploy. Static chunk files keep their long-term
+# cache because their filename changes on every build.
+_INDEX_NOCACHE_HEADERS = {
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "Pragma":        "no-cache",
+    "Expires":       "0",
+}
+
 if FRONTEND_BUILD.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND_BUILD / "static")), name="static")
 
@@ -2577,11 +2589,15 @@ if FRONTEND_BUILD.exists():
         if full_path:
             asset = FRONTEND_BUILD / full_path
             if asset.is_file() and asset.resolve().is_relative_to(FRONTEND_BUILD.resolve()):
+                # Top-level index.html (when requested by name) also gets the
+                # no-cache headers; other named assets keep default caching.
+                if asset.name == "index.html":
+                    return FileResponse(str(asset), headers=_INDEX_NOCACHE_HEADERS)
                 return FileResponse(str(asset))
-        # Otherwise fall back to SPA index
+        # Otherwise fall back to SPA index — never cached.
         idx = FRONTEND_BUILD / "index.html"
         if idx.exists():
-            return FileResponse(str(idx))
+            return FileResponse(str(idx), headers=_INDEX_NOCACHE_HEADERS)
         raise HTTPException(404, "Frontend not built. Run: cd frontend && npm run build")
 
 
