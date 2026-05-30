@@ -1725,7 +1725,16 @@ def _ai_context_substitutions(parsed: dict, options: dict) -> dict:
     the right fields. Add new ones here as they're introduced."""
     subs: dict = {}
     asset = (options or {}).get("asset_name") or (parsed or {}).get("asset_name") or ""
-    if asset:
+    # Many SIEMs (Microsoft Entra ID exports, for example) populate the
+    # AssetName field with the literal string "Unknown" / "-" / "N/A" when
+    # the asset is NOT domain-joined. Treat those as absent — otherwise the
+    # domain-joined explainer paragraph injects on every impossible-travel
+    # alert regardless of whether either login was on a managed device.
+    asset_norm = asset.strip().lower() if isinstance(asset, str) else ""
+    is_real_asset = asset_norm and asset_norm not in {
+        "unknown", "-", "n/a", "na", "none", "null", "(empty)", "",
+    }
+    if is_real_asset:
         # Same explainer paragraph the static template uses. Centralised in
         # _build_replacement_map; pulling it from there avoids two copies
         # drifting out of sync.
