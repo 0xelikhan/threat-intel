@@ -13,6 +13,7 @@ back to no summary rather than blocking the response.
 
 from __future__ import annotations
 import json
+import os
 from typing import Optional, Dict
 
 
@@ -115,41 +116,29 @@ around it.
 
 
 async def summarize_file(analysis: Dict, config) -> Optional[str]:
-    key = config.get("OPENAI_API_KEY")
-    if not key:
+    """2-3 sentence file analysis summary. Provider-agnostic via providers/."""
+    if not (config.get("OPENAI_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")):
         return None
-    try:
-        from openai import AsyncAzureOpenAI, AsyncOpenAI
-    except ImportError:
-        return None
-    base_url = config.get("OPENAI_BASE_URL", "")
+    from providers import get_provider
+    provider = get_provider()
     # Short 2-3 sentence summary — light, latency-sensitive → fast model tier.
-    model    = config.get_model(fast=True)
-    try:
-        if "openai.azure.com" in base_url:
-            client = AsyncAzureOpenAI(
-                api_key=key,
-                azure_endpoint=base_url.rstrip("/"),
-                api_version="2024-02-01",
-            )
-        else:
-            client = AsyncOpenAI(api_key=key, base_url=base_url or "https://api.openai.com/v1")
-        resp = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content":
-                    "## File analysis (compressed)\n"
-                    f"{json.dumps(_compress_for_prompt(analysis), indent=2)[:6000]}\n"
-                },
-            ],
-            temperature=0.2,
-            max_tokens=200,
-        )
-        text = (resp.choices[0].message.content or "").strip()
-        # Strip any stray quotation marks the model added despite instructions
-        if text.startswith('"') and text.endswith('"') and len(text) > 2:
-            text = text[1:-1].strip()
-        return text or None
-    except Exception:
+    model = config.get_model(fast=True) if hasattr(config, "get_model") else None
+    resp = await provider.complete(
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content":
+                "## File analysis (compressed)\n"
+                f"{json.dumps(_compress_for_prompt(analysis), indent=2)[:6000]}\n"
+            },
+        ],
+        temperature=0.2,
+        max_tokens=200,
+        model=model,
+    )
+    if resp.error:
         return None
+    text = (resp.message or "").strip()
+    # Strip any stray quotation marks the model added despite instructions
+    if text.startswith('"') and text.endswith('"') and len(text) > 2:
+        text = text[1:-1].strip()
+    return text or None

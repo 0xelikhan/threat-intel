@@ -578,7 +578,6 @@ investigative surface."""
 
 async def run_investigation(state: dict, on_event=None) -> dict:
     from config import config
-    from openai import AsyncAzureOpenAI, AsyncOpenAI
     import time
     _t_start = time.perf_counter()
 
@@ -733,20 +732,8 @@ async def run_investigation(state: dict, on_event=None) -> dict:
     openai_key = config.get("OPENAI_API_KEY")
     if openai_key:
         try:
-            base_url = config.get("OPENAI_BASE_URL", "")
-            if "openai.azure.com" in base_url:
-                client = AsyncAzureOpenAI(
-                    api_key=openai_key,
-                    azure_endpoint=base_url.rstrip("/"),
-                    api_version="2024-02-01",
-                    timeout=45.0, max_retries=1,   # cap tail latency under throttling
-                )
-            else:
-                client = AsyncOpenAI(
-                    api_key=openai_key,
-                    base_url=base_url or "https://api.openai.com/v1",
-                    timeout=45.0, max_retries=1,
-                )
+            from providers import get_provider
+            provider = get_provider()
 
             # ════════════════════════════════════════════════════════════════════
             # ITERATIVE TOOL-CALLING LOOP
@@ -814,7 +801,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                 # and the final synthesis runs regardless after the loop.
                 max_iterations = 2
                 for iteration in range(max_iterations):
-                    resp = await client.chat.completions.create(
+                    resp = await provider.complete(
                         model=fast_model,   # tool-selection roundtrip → fast tier
                         messages=messages,
                         tools=TOOL_SCHEMAS,
@@ -822,35 +809,36 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                         temperature=0.1,
                         max_tokens=800,
                     )
-                    msg = resp.choices[0].message
-                    # If the model called tools, execute them and append results
-                    if msg.tool_calls:
+                    if resp.error:
+                        raise RuntimeError(resp.error)
+                    # Normalised tool_calls are list[{id, name, arguments(dict)}].
+                    # When tools fired, re-encode them as OpenAI message shape for
+                    # the next round-trip (the provider's `messages` param accepts
+                    # this directly for OpenAI/Azure; other providers translate).
+                    if resp.tool_calls:
                         messages.append({
                             "role":      "assistant",
-                            "content":   msg.content or "",
-                            "tool_calls": [{"id": tc.id, "type": "function",
-                                            "function": {"name": tc.function.name,
-                                                         "arguments": tc.function.arguments}}
-                                           for tc in msg.tool_calls],
+                            "content":   resp.message or "",
+                            "tool_calls": [{"id": tc["id"], "type": "function",
+                                            "function": {"name": tc["name"],
+                                                         "arguments": json.dumps(tc["arguments"])}}
+                                           for tc in resp.tool_calls],
                         })
 
                         # Execute this iteration's tool calls CONCURRENTLY — they're
                         # independent and some do network I/O, so running them in
                         # parallel instead of one-await-at-a-time is a large speedup.
                         async def _run_tool(tc):
-                            try:
-                                args = json.loads(tc.function.arguments)
-                            except Exception:
-                                args = {}
-                            res = await execute_tool(tc.function.name, args, config)
+                            args = tc.get("arguments") or {}
+                            res = await execute_tool(tc["name"], args, config)
                             return tc, args, res
 
-                        outcomes = await asyncio.gather(*[_run_tool(tc) for tc in msg.tool_calls])
+                        outcomes = await asyncio.gather(*[_run_tool(tc) for tc in resp.tool_calls])
                         for tc, args, tool_result in outcomes:
-                            summary = _summarize_for_trace(tc.function.name, tool_result)
+                            summary = _summarize_for_trace(tc["name"], tool_result)
                             tool_call_log.append({
                                 "iteration": iteration,
-                                "tool":      tc.function.name,
+                                "tool":      tc["name"],
                                 "args":      args,
                                 "summary":   summary,
                             })
@@ -858,7 +846,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                             tool_trace = {
                                 "agent":     "investigation",
                                 "type":      "tool_call",
-                                "tool":      tc.function.name,
+                                "tool":      tc["name"],
                                 "args":      args,
                                 "summary":   summary,
                                 "iteration": iteration,
@@ -869,7 +857,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                             # Feed the tool result back into the conversation (cap size)
                             messages.append({
                                 "role":          "tool",
-                                "tool_call_id":  tc.id,
+                                "tool_call_id":  tc["id"],
                                 "content":       json.dumps(tool_result, default=str)[:2500],
                             })
                         # Continue the loop — AI may call more tools
@@ -986,16 +974,18 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                 )
 
                 async def _synth(instruction: str, max_tokens: int, temperature: float = 0.1):
-                    resp = await client.chat.completions.create(
+                    resp = await provider.complete(
                         model=model,   # smart — quality-critical synthesis
                         messages=messages + [{"role": "user", "content": instruction}],
                         response_format={"type": "json_object"},
                         temperature=temperature,
                         max_tokens=max_tokens,
                     )
+                    if resp.error:
+                        return {}
                     # Lenient parse: even if the half is truncated, keep its
                     # completed fields rather than discarding the whole half.
-                    return _loads_lenient(resp.choices[0].message.content)
+                    return _loads_lenient(resp.message)
 
                 # Generous per-half budgets so the full schema isn't truncated —
                 # the findings half (lists + CTI frameworks) is the heavy one.
@@ -1027,7 +1017,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                 print(f"[investigation] TOOL-CALLING FAILED, falling back: {e}")
                 traceback.print_exc()
                 tool_call_log.append({"tool": "_fallback", "summary": f"tool-calling failed: {str(e)[:120]}"})
-                resp = await client.chat.completions.create(
+                resp = await provider.complete(
                     model=config.get_model(),   # smart
                     messages=[{"role": "user", "content": PROMPT.format(
                         raw_input=(state.get("raw_input") or "")[:2000],
@@ -1040,7 +1030,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                     temperature=0.1,
                     response_format={"type": "json_object"},
                 )
-                result = _loads_lenient(resp.choices[0].message.content)
+                result = {} if resp.error else _loads_lenient(resp.message)
 
         except Exception as outer_e:
             import traceback

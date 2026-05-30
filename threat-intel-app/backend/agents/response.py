@@ -125,60 +125,54 @@ def validate_sigma_rule(yaml_content: str) -> tuple[bool, str]:
 
 
 def _make_client(config):
-    from openai import AsyncAzureOpenAI, AsyncOpenAI
-    key = config.get("OPENAI_API_KEY")
-    base_url = config.get("OPENAI_BASE_URL", "")
-    if not key:
+    """Returns the configured LLMProvider, or None when no AI key is set.
+    Kept for backwards compat — the function name is a holdover; it now
+    returns an LLMProvider, not an SDK client."""
+    if not config.get("OPENAI_API_KEY"):
         return None
-    if "openai.azure.com" in base_url:
-        return AsyncAzureOpenAI(
-            api_key=key,
-            azure_endpoint=base_url.rstrip("/"),
-            api_version="2024-02-01",
-            timeout=45.0, max_retries=1,   # cap tail latency under throttling
-        )
-    return AsyncOpenAI(api_key=key, base_url=base_url or "https://api.openai.com/v1",
-                       timeout=45.0, max_retries=1)
+    try:
+        from providers import get_provider
+        return get_provider()
+    except Exception:
+        return None
 
 
 async def _ai_call(prompt: str, config, max_tokens: int = 1500) -> str:
-    client = _make_client(config)
-    if not client:
+    provider = _make_client(config)
+    if not provider:
         return "# OpenAI API key not configured"
-    try:
-        resp = await client.chat.completions.create(
-            # Detection-content generation (Sigma/KQL) + templated hand-off →
-            # fast model tier. The response stage runs these concurrently, so the
-            # slowest call bounds the stage; keeping all of them fast is what
-            # actually shortens it.
-            model=config.get_model(fast=True),
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens,
-            temperature=0.1,
-        )
-        return resp.choices[0].message.content.strip()
-    except Exception as e:
-        return f"# AI generation failed: {e}"
+    resp = await provider.complete(
+        # Detection-content generation (Sigma/KQL) + templated hand-off →
+        # fast model tier. The response stage runs these concurrently, so the
+        # slowest call bounds the stage; keeping all of them fast is what
+        # actually shortens it.
+        model=config.get_model(fast=True),
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=max_tokens,
+        temperature=0.1,
+    )
+    if resp.error:
+        return f"# AI generation failed: {resp.error}"
+    return (resp.message or "").strip()
 
 
 async def _ai_call_json(prompt: str, config, max_tokens: int = 1400) -> dict:
-    client = _make_client(config)
-    if not client:
+    provider = _make_client(config)
+    if not provider:
         return {}
-    try:
-        resp = await client.chat.completions.create(
-            model=config.get_model(fast=True),
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens,
-            temperature=0.1,
-            response_format={"type": "json_object"},
-        )
-        # Truncation-tolerant parse so a capped response keeps its completed
-        # fields instead of returning {} (lets us run a tighter token budget).
-        from agents.investigation import _loads_lenient
-        return _loads_lenient(resp.choices[0].message.content)
-    except Exception:
+    resp = await provider.complete(
+        model=config.get_model(fast=True),
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=max_tokens,
+        temperature=0.1,
+        response_format={"type": "json_object"},
+    )
+    if resp.error:
         return {}
+    # Truncation-tolerant parse so a capped response keeps its completed
+    # fields instead of returning {} (lets us run a tighter token budget).
+    from agents.investigation import _loads_lenient
+    return _loads_lenient(resp.message)
 
 
 async def run_response(state: dict) -> dict:

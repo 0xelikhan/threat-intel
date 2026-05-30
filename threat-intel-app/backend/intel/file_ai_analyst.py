@@ -65,20 +65,15 @@ DETECTION_DIFFICULTY = ["Easy", "Moderate", "Difficult", "Very Difficult"]
 
 # ─── OpenAI client (Azure-aware) ──────────────────────────────────────────────
 def _client(config, fast: bool = False):
-    key = config.get("OPENAI_API_KEY")
-    if not key:
+    # Returns (provider, model) — provider is an LLMProvider from providers/.
+    # None, None when no AI key is configured (caller short-circuits).
+    if not config.get("OPENAI_API_KEY"):
         return None, None
     try:
-        from openai import AsyncAzureOpenAI, AsyncOpenAI
-    except ImportError:
+        from providers import get_provider
+        return get_provider(), config.get_model(fast=fast)
+    except Exception:
         return None, None
-    base_url = config.get("OPENAI_BASE_URL", "")
-    # Triage is latency-sensitive → fast model; the deep pass → smart model.
-    model    = config.get_model(fast=fast)
-    if "openai.azure.com" in base_url:
-        return AsyncAzureOpenAI(api_key=key, azure_endpoint=base_url.rstrip("/"),
-                                api_version="2024-02-01"), model
-    return AsyncOpenAI(api_key=key, base_url=base_url or "https://api.openai.com/v1"), model
 
 
 # ─── Phase 1 — rapid triage classification ─────────────────────────────────────
@@ -128,11 +123,11 @@ def _triage_context(analysis: Dict) -> Dict:
 
 async def triage_classify(analysis: Dict, config) -> Optional[Dict]:
     """Phase 1 — fast classification badge for the UI."""
-    client, model = _client(config, fast=True)
-    if not client:
+    provider, model = _client(config, fast=True)
+    if not provider:
         return None
     try:
-        resp = await client.chat.completions.create(
+        resp = await provider.complete(
             model=model,
             messages=[
                 {"role": "system", "content": _TRIAGE_SYSTEM},
@@ -143,8 +138,10 @@ async def triage_classify(analysis: Dict, config) -> Optional[Dict]:
             temperature=0.0,
             max_tokens=200,
         )
+        if resp.error:
+            return None
         from agents.investigation import _loads_lenient
-        parsed = _loads_lenient(resp.choices[0].message.content)
+        parsed = _loads_lenient(resp.message)
         cls = parsed.get("classification") or "Unknown Malware"
         # Defensive — coerce to a known label
         if cls not in CLASSIFICATIONS:
@@ -362,7 +359,7 @@ def _safe_normalize_deep(out: Dict) -> Dict:
     }
 
 
-async def _deep_group(client, model, system_msg: str, user_msg: str,
+async def _deep_group(provider, model, system_msg: str, user_msg: str,
                       max_tokens: int = 2600) -> Dict:
     """Generate one field-group of the deep report. Tolerates truncation via a
     lenient parse (a cut-off response keeps its completed fields instead of
@@ -370,7 +367,7 @@ async def _deep_group(client, model, system_msg: str, user_msg: str,
     merges + normalizes whatever comes back."""
     from agents.investigation import _loads_lenient
     try:
-        resp = await client.chat.completions.create(
+        resp = await provider.complete(
             model=model,
             messages=[
                 {"role": "system", "content": system_msg},
@@ -380,7 +377,9 @@ async def _deep_group(client, model, system_msg: str, user_msg: str,
             temperature=0.15,
             max_tokens=max_tokens,
         )
-        return _loads_lenient(resp.choices[0].message.content)
+        if resp.error:
+            return {}
+        return _loads_lenient(resp.message)
     except Exception:
         return {}
 
@@ -395,8 +394,8 @@ async def analyze_deep(analysis: Dict, config,
     versus a single ~2800-token generation while keeping every field. Each group
     retries once on malformed JSON; whichever fields come back are merged and
     normalized, so a partial failure degrades gracefully rather than erroring."""
-    client, model = _client(config)   # smart model — this is the deep reasoning pass
-    if not client:
+    provider, model = _client(config)   # smart model — this is the deep reasoning pass
+    if not provider:
         return None
 
     ctx = _deep_context(analysis, comparative_context)
@@ -405,8 +404,8 @@ async def analyze_deep(analysis: Dict, config,
         user_msg += "\n\n## Additional context\n" + extra_context[:2000]
 
     headline, structured = await asyncio.gather(
-        _deep_group(client, model, _DEEP_PERSONA + "\n\n" + _HEADLINE_SCHEMA, user_msg),
-        _deep_group(client, model, _DEEP_PERSONA + "\n\n" + _STRUCTURED_SCHEMA, user_msg),
+        _deep_group(provider, model, _DEEP_PERSONA + "\n\n" + _HEADLINE_SCHEMA, user_msg),
+        _deep_group(provider, model, _DEEP_PERSONA + "\n\n" + _STRUCTURED_SCHEMA, user_msg),
         return_exceptions=True,
     )
 
