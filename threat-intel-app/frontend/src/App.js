@@ -1557,6 +1557,7 @@ function _ocSources(result, ioc, type) {
     : type === 'file'   ? enr.hashes
     : type === 'url'    ? enr.urls
     : type === 'email'  ? enr.emails
+    : type === 'cve'    ? enr.cves
     : null;
   const d = bucket?.[ioc] || {};
   const out = [];
@@ -1746,6 +1747,91 @@ function _ocSources(result, ioc, type) {
         source: 'Criminal IP',
         label: `inbound ${inb || '?'} · outbound ${outb || '?'}${flags.length ? ` · ${flags.join(', ')}` : ''}`,
         color: c,
+      });
+    }
+  }
+
+  // URLhaus URL hit — abuse.ch malware-distribution database.
+  if (d.urlhaus_url && !d.urlhaus_url.error) {
+    const u = d.urlhaus_url;
+    out.push({
+      source: 'URLhaus',
+      label: `${u.threat || 'malware-distribution'}${u.url_status ? ` · ${u.url_status}` : ''}`,
+      color: red,
+    });
+  }
+
+  // URLhaus payload hit — same database, payload (hash) endpoint.
+  if (d.urlhaus_payload && !d.urlhaus_payload.error) {
+    const u = d.urlhaus_payload;
+    out.push({
+      source: 'URLhaus payload',
+      label: `${u.signature || 'malware'}${u.url_count ? ` · ${u.url_count} URLs` : ''}`,
+      color: red,
+    });
+  }
+
+  // CIRCL hashlookup — known-good (NIST NSRL) file detection.
+  if (d.circl_hashlookup && !d.circl_hashlookup.error) {
+    const h = d.circl_hashlookup;
+    if (h.verdict === 'CLEAN') {
+      out.push({
+        source: 'CIRCL hashlookup',
+        label: `known-good${h.ProductName ? ` · ${h.ProductName}` : ''}${h.FileName ? ` · ${h.FileName}` : ''}`,
+        color: green,
+      });
+    } else if (h.trust != null) {
+      out.push({
+        source: 'CIRCL hashlookup',
+        label: `trust ${h.trust}${h.FileName ? ` · ${h.FileName}` : ''}`,
+        color: tert,
+      });
+    }
+  }
+
+  // NVD CVE — score + severity + description summary.
+  if (d.nvd && !d.nvd.error && d.nvd.found) {
+    const n = d.nvd;
+    const score = n.cvss_v3_score;
+    const sev = (n.cvss_v3_severity || '').toUpperCase();
+    const c = sev === 'CRITICAL' ? red
+            : sev === 'HIGH'     ? orange
+            : sev === 'MEDIUM'   ? yellow
+            :                       tert;
+    out.push({
+      source: 'NVD',
+      label: `CVSS ${score ?? '?'} ${sev || 'unrated'}${n.affected_products?.length ? ` · ${n.affected_products.slice(0,2).join(', ')}` : ''}`,
+      color: c,
+    });
+  }
+
+  // EPSS — exploitation probability percentile.
+  if (d.epss && !d.epss.error && d.epss.found) {
+    const e = d.epss;
+    const c = e.score >= 0.7 ? red
+            : e.score >= 0.1 ? orange
+            :                   tert;
+    out.push({
+      source: 'EPSS',
+      label: `${e.score_pct ?? 0}% probability · ${e.percentile_pct ?? 0} percentile`,
+      color: c,
+    });
+  }
+
+  // CISA KEV — actively exploited check.
+  if (d.cisa_kev && !d.cisa_kev.error) {
+    const k = d.cisa_kev;
+    if (k.in_kev) {
+      out.push({
+        source: 'CISA KEV',
+        label: `ACTIVELY EXPLOITED · added ${k.date_added || '?'}${k.ransomware_use ? ' · ransomware use' : ''}`,
+        color: red,
+      });
+    } else {
+      out.push({
+        source: 'CISA KEV',
+        label: 'not in KEV catalog',
+        color: green,
       });
     }
   }

@@ -102,6 +102,26 @@ def _src_flagged_malicious(src_name: str, payload: Any) -> bool:
         # Only flag when the prior scan explicitly classified it malicious;
         # "found=True with no malicious verdict" is informational, not bad.
         return bool(p.get("malicious")) or int(p.get("score") or 0) >= 50
+    # ── CVE enrichment sources ───────────────────────────────────────────────
+    if s == "cisa_kev":
+        # KEV match is the strongest CVE signal — CISA only adds entries
+        # with confirmed in-the-wild exploitation.
+        return bool(p.get("in_kev"))
+    if s == "nvd":
+        # CVSS HIGH / CRITICAL counts as a flagged source; MEDIUM / LOW
+        # is informational only.
+        sev = (p.get("cvss_v3_severity") or "").upper()
+        return sev in ("CRITICAL", "HIGH")
+    if s == "epss":
+        # EPSS >= 0.7 probability is "highly likely to be exploited in
+        # the next 30 days" — flag-worthy on its own.
+        try:
+            return float(p.get("score") or 0.0) >= 0.7
+        except (TypeError, ValueError):
+            return False
+    if s in ("urlhaus_url", "urlhaus_payload", "urlhaus"):
+        # Any URLhaus hit is a confirmed malware-distribution observation.
+        return True
     # Default: payload had explicit malicious=True / verdict==malicious
     return (
         p.get("malicious") is True

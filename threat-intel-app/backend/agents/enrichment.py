@@ -1118,21 +1118,62 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         return {**_cache[ck], "cached": True}
 
     hybrid_key = keys.get("HYBRID_ANALYSIS_KEY", "")
+    abusech_key = keys.get("ABUSECH_AUTH_KEY", "")
     is_sha256 = len(hash_val) == 64
+
+    # ── CIRCL hashlookup SHORT-CIRCUIT ────────────────────────────────────────
+    # Run CIRCL FIRST as a single synchronous-ish step. If it returns a
+    # known-good (NIST NSRL / trusted-software) match we short-circuit
+    # the rest of the hash fan-out: no need to spend API quota on VT /
+    # MB / ThreatFox / etc. for a file CIRCL has already vouched for.
+    hl_url = (f"https://hashlookup.circl.lu/lookup/sha256/{hash_val}" if is_sha256
+              else f"https://hashlookup.circl.lu/lookup/md5/{hash_val}")
+    hl = await _get(session, hl_url)
+    known_good = (
+        isinstance(hl, dict) and not hl.get("error")
+        and bool(hl.get("hashlookup:trust"))
+        and not (hl.get("KnownMalicious") or hl.get("hashlookup:malicious"))
+    )
+    if known_good:
+        data = {"circl_hashlookup": {
+            "FileName":     hl.get("FileName"),
+            "FileSize":     hl.get("FileSize"),
+            "ProductName":  hl.get("ProductName"),
+            "ProductCode":  hl.get("ProductCode"),
+            "OpSystemCode": hl.get("OpSystemCode"),
+            "trust":        hl.get("hashlookup:trust"),
+            "verdict":      "CLEAN",
+            "summary":      (f"Known-good file: {hl.get('FileName') or '?'}"
+                             + (f" ({hl.get('ProductName')})"
+                                if hl.get("ProductName") else "")),
+        }, "_short_circuited": True}
+        _cache[ck] = data
+        return data
+
+    # abuse.ch endpoints — pass the Auth-Key header when configured.
+    # MalwareBazaar / ThreatFox / URLhaus all use the same key. Anonymous
+    # requests have been rate-limited / soft-blocked since mid-2024.
+    _ac_headers = {"Auth-Key": abusech_key} if abusech_key else {}
 
     tasks = [
         _post(session, "https://mb-api.abuse.ch/api/v1/",
               data=f"query=get_info&hash={hash_val}",
-              headers={"Content-Type": "application/x-www-form-urlencoded"}),
+              headers={"Content-Type": "application/x-www-form-urlencoded",
+                       **_ac_headers}),
         _post(session, "https://threatfox-api.abuse.ch/api/v1/",
-              json={"query": "search_hash", "hash": hash_val}),
+              json={"query": "search_hash", "hash": hash_val},
+              headers=_ac_headers),
         _get(session, f"https://www.virustotal.com/api/v3/files/{hash_val}",
              headers={"x-apikey": keys.get("VIRUSTOTAL_KEY", "")}),
         _get(session, f"https://otx.alienvault.com/api/v1/indicators/file/{hash_val}/general",
              headers={"X-OTX-API-KEY": keys.get("OTX_KEY", "")}),
-        # CIRCL hashlookup — known-legitimate file detection (no key needed)
-        _get(session, f"https://hashlookup.circl.lu/lookup/sha256/{hash_val}") if is_sha256
-            else _get(session, f"https://hashlookup.circl.lu/lookup/md5/{hash_val}"),
+        # URLhaus payload lookup — confirms whether the hash is on the
+        # URLhaus malware-distribution payload database. Returns malware
+        # family + first seen.
+        _post(session, "https://urlhaus-api.abuse.ch/v1/payload/",
+              data=f"sha256_hash={hash_val}" if is_sha256 else f"md5_hash={hash_val}",
+              headers={"Content-Type": "application/x-www-form-urlencoded",
+                       **_ac_headers}),
         # Hybrid Analysis — search by hash for prior sandbox detonations
         _post(session, "https://www.hybrid-analysis.com/api/v2/search/hash",
               data=f"hash={hash_val}",
@@ -1148,18 +1189,35 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         "virustotal":    _p_vt_file(results[2]),
         "otx":           _p_otx(results[3]),
     }
-    # CIRCL hashlookup — if present and KnownGood, this overrides everything as CLEAN
-    hl = results[4]
-    if not isinstance(hl, Exception) and isinstance(hl, dict) and not hl.get("error"):
-        known = hl.get("KnownMalicious") or hl.get("hashlookup:trust")
+    # URLhaus payload — surface only when the hash actually appears in
+    # the database; the "not found" response is informational, not bad.
+    uh = results[4]
+    if isinstance(uh, dict) and not uh.get("error"):
+        query_status = (uh.get("query_status") or "").lower()
+        if query_status == "ok":
+            data["urlhaus_payload"] = {
+                "file_type":      uh.get("file_type"),
+                "signature":      uh.get("signature"),
+                "first_seen":     uh.get("firstseen"),
+                "last_seen":      uh.get("lastseen"),
+                "url_count":      uh.get("url_count"),
+                "verdict":        "MALICIOUS",
+                "summary":        (f"URLhaus payload hit: {uh.get('signature') or 'unknown family'}, "
+                                   f"distributed across {uh.get('url_count') or '?'} URLs"),
+            }
+    # CIRCL hashlookup — we already ran it above. Re-record the data here
+    # so the per-source UI shows it alongside everything else (the value
+    # is the "trust score below threshold" branch, since the known-good
+    # branch returned early above).
+    if isinstance(hl, dict) and not hl.get("error"):
         data["circl_hashlookup"] = {
             "FileName":      hl.get("FileName"),
             "FileSize":      hl.get("FileSize"),
             "ProductName":   hl.get("ProductName"),
             "trust":         hl.get("hashlookup:trust"),
-            "verdict":       "CLEAN" if (hl.get("hashlookup:trust") and not known) else None,
+            "verdict":       None,
         }
-    # Hybrid Analysis
+    # Hybrid Analysis (index shifted to 5 after URLhaus payload insertion)
     if hybrid_key and not isinstance(results[5], Exception):
         ha = _p_hybrid(results[5])
         if "error" not in ha:
@@ -1225,6 +1283,42 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
     return data
 
 
+# ─── CVE enrichment (per-CVE NVD + EPSS + live CISA KEV) ─────────────────────
+async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
+    """Per-CVE live API enrichment. Runs NVD + EPSS + CISA KEV concurrently;
+    KEV uses the once-per-investigation in-memory cache so the catalog is
+    only downloaded once per run no matter how many CVEs are in the alert."""
+    ck = _ck("cve", cve_id.upper())
+    if ck in _cache:
+        return {**_cache[ck], "cached": True}
+
+    try:
+        from intel.cve_enrichment import nvd_cve, epss, cisa_kev_check
+    except Exception as e:
+        return {"error": f"cve_enrichment unavailable: {e}"}
+
+    nvd_r, epss_r, kev_r = await asyncio.gather(
+        nvd_cve(session, cve_id),
+        epss(session, cve_id),
+        cisa_kev_check(session, cve_id),
+        return_exceptions=True,
+    )
+
+    data: dict = {}
+    nvd = _ok_dict(nvd_r)
+    if nvd:
+        data["nvd"] = nvd
+    ep = _ok_dict(epss_r)
+    if ep:
+        data["epss"] = ep
+    kev = _ok_dict(kev_r)
+    if kev:
+        data["cisa_kev"] = kev
+
+    _cache[ck] = data
+    return data
+
+
 async def enrich_url(session, url: str, keys: dict) -> dict:
     ck = _ck("url", url)
     if ck in _cache:
@@ -1243,10 +1337,25 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
     except Exception:
         _us_co = _skip()
 
+    abusech_key = keys.get("ABUSECH_AUTH_KEY", "")
+    _ac_headers = {"Auth-Key": abusech_key} if abusech_key else {}
+
     results = await asyncio.gather(
         _get(session, f"https://www.virustotal.com/api/v3/urls/{url_b64}",
              headers={"x-apikey": keys.get("VIRUSTOTAL_KEY", "")}),
         _us_co,
+        # URLhaus URL endpoint — direct lookup against the abuse.ch
+        # malware-distribution URL database. Returns hosting status,
+        # threat, malware family, tags, payload hashes.
+        _post(session, "https://urlhaus-api.abuse.ch/v1/url/",
+              data=f"url={url}",
+              headers={"Content-Type": "application/x-www-form-urlencoded",
+                       **_ac_headers}),
+        # ThreatFox URL search — confirms whether the URL is on the
+        # ThreatFox IOC database.
+        _post(session, "https://threatfox-api.abuse.ch/api/v1/",
+              json={"query": "search_ioc", "search_term": url},
+              headers=_ac_headers),
         return_exceptions=True,
     )
 
@@ -1259,6 +1368,30 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
     us = _ok_dict(results[1])
     if us:
         data["urlscan_screenshot"] = us
+    # URLhaus URL hit — only attach when the URL is actually in the
+    # database (query_status == "ok").
+    uh = results[2]
+    if isinstance(uh, dict) and not uh.get("error") and \
+            (uh.get("query_status") or "").lower() == "ok":
+        data["urlhaus_url"] = {
+            "url_status":   uh.get("url_status"),       # online | offline | unknown
+            "threat":       uh.get("threat"),            # malware_download / etc.
+            "tags":         (uh.get("tags") or [])[:8],
+            "first_seen":   uh.get("date_added"),
+            "last_seen":    uh.get("last_online"),
+            "host":         uh.get("host"),
+            "payload_count": len(uh.get("payloads") or []),
+            "verdict":      "MALICIOUS",
+            "summary":      (f"URLhaus hit: {uh.get('threat') or 'malware-distribution'}"
+                             + (f" ({uh.get('url_status')})" if uh.get("url_status") else "")),
+        }
+    # ThreatFox URL search — same parser as the hash variant.
+    tf_url = results[3]
+    if isinstance(tf_url, dict) and not tf_url.get("error"):
+        tf_parsed = _p_tf(tf_url)
+        if not tf_parsed.get("error"):
+            data["threatfox"] = tf_parsed
+
     _cache[ck] = data
     return data
 
@@ -1363,6 +1496,10 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
         "DEHASHED_KEY":        config.get("DEHASHED_KEY"),
         "INTELX_KEY":          config.get("INTELX_KEY"),
         "CRIMINAL_IP_KEY":     config.get("CRIMINAL_IP_KEY"),
+        # abuse.ch unified key — unlocks the authenticated endpoints for
+        # MalwareBazaar, ThreatFox, and URLhaus (anonymous calls have
+        # been rate-limited / soft-blocked since mid-2024).
+        "ABUSECH_AUTH_KEY":    config.get("ABUSECH_AUTH_KEY"),
     }
 
     iocs = state.get("iocs", {})
@@ -1374,7 +1511,8 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
     # that — as each type finishes — we can stream a cumulative snapshot to the UI
     # (via on_partial) instead of waiting for the slowest type to land everything
     # at once. The final `enrichments` dict is identical either way.
-    enrichments = {"ips": {}, "domains": {}, "hashes": {}, "urls": {}, "emails": {}}
+    enrichments = {"ips": {}, "domains": {}, "hashes": {}, "urls": {},
+                   "emails": {}, "cves": {}}
     type_iocs = {
         "ips":     iocs.get("ips", [])[:10],
         "domains": iocs.get("domains", [])[:10],
@@ -1384,10 +1522,14 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
         # leaks, IntelX dark-web/paste-site matches. Capped at 5 per
         # investigation since each email triggers 3 API calls.
         "emails":  iocs.get("emails", [])[:5],
+        # CVE enrichment — NVD detail + EPSS exploitation probability +
+        # live CISA KEV check. KEV catalog is downloaded once per run
+        # via the cve_enrichment._kev_cache singleton.
+        "cves":    iocs.get("cves", [])[:8],
     }
     _enrichers = {"ips": enrich_ip, "domains": enrich_domain,
                   "hashes": enrich_hash, "urls": enrich_url,
-                  "emails": enrich_email}
+                  "emails": enrich_email, "cves": enrich_cve}
 
     # Share the process-wide TCP/DNS pool. connector_owner=False keeps the
     # connector alive after this session closes so the next investigation
