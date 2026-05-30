@@ -198,57 +198,74 @@ async def run_response(state: dict) -> dict:
         "email_auth":           rs_email.get("auth_results", {})    if rs_email else {},
     }
 
+    # Calibration baked into the disposition prompt — same evidence-required
+    # standard the investigation agent applies. Prevents the analyst summary
+    # from disagreeing with the calibrated investigation verdict.
+    from intel.calibration import CALIBRATION_PRINCIPLES as _CAL
     analyst_prompt = f"""You are a senior MDR analyst (5+ years, T2/T3 escalation lead) writing the
 final INTERNAL DISPOSITION for a SOC investigation (for the next-tier analyst / shift
-lead). Be CONCISE throughout — tight sentences, no padding; keep each list to its most
-important 2-3 items.
+lead). Be CONCISE throughout. Tight sentences, no padding; keep each list to its
+most important 2-3 items.
 
-You must base every claim on SPECIFIC evidence from the investigation. Do not invent.
-Do not be vague. "Suspicious activity detected" is FORBIDDEN — say what activity,
-on what indicator, with what corroborating evidence.
+You must base every claim on SPECIFIC evidence from the investigation. Do not
+invent. Do not be vague. "Suspicious activity detected" is FORBIDDEN. Say what
+activity, on what indicator, with what corroborating evidence.
 
-═══════════════════════════════════════════════════════════════════════════════════
-INPUT — investigation evidence pack
-═══════════════════════════════════════════════════════════════════════════════════
+{_CAL}
+
+══════════════════════════════════════════════════════════════════════════════════
+INPUT - investigation evidence pack
+══════════════════════════════════════════════════════════════════════════════════
 Threat Level (AI verdict)  : {threat_level}
-Confidence (0–1)           : {state.get('confidence', 0.0)}
+Confidence (0-1)           : {state.get('confidence', 0.0)}
 One-line summary           : {summary}
 MITRE techniques mapped    : {mitre_str}
 
 Evidence pack:
 {json.dumps(evidence_pack, indent=2)[:3500]}
 
-═══════════════════════════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════════════════════════
 DISPOSITION DECISION TREE
-═══════════════════════════════════════════════════════════════════════════════════
-  • CLEAR    → only if you can cite a specific reason it's benign
-                 (GreyNoise=benign, MISP warning list match, well-known infrastructure,
-                  legitimate corporate service, etc.) AND confidence is high.
-  • MONITOR  → suspicious but not actionable yet; specify the trigger that would escalate.
-  • ESCALATE → real-world threat with corroborating evidence; give concrete next steps.
+══════════════════════════════════════════════════════════════════════════════════
+  * CLEAR    -> only if you can cite a specific reason it is benign
+                  (known-good library hit, GreyNoise=benign, MISP warninglist
+                   match, well-known infrastructure, legitimate corporate
+                   service, clean hash across every TI source, scheduled
+                   vendor maintenance). When the threat_level above is
+                   INFORMATIONAL/LOW and the evidence supports benign,
+                   default to CLEAR.
+  * MONITOR  -> suspicious but not actionable yet; specify the trigger that
+                  would escalate.
+  * ESCALATE -> real-world threat with concrete corroborating evidence (at
+                  least one item from the EVIDENCE STANDARD above); give
+                  concrete next steps.
 
-═══════════════════════════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════════════════════════
 RESPOND with this EXACT JSON (no markdown fences, no commentary):
-═══════════════════════════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════════════════════════
 {{
   "disposition":        "ESCALATE|CLEAR|MONITOR",
-  "disposition_reason": "<2-3 sentences. Cite at least TWO specific evidence items
-                          from the pack (e.g. 'EPSS 94% on the matched KEV CVE',
-                          'domain registered 4h ago + EvilProxy URL pattern',
-                          'GreyNoise tags this IP as known benign scanner').
+  "disposition_reason": "<2-3 sentences. Cite at least TWO specific evidence
+                          items from the pack (e.g. 'EPSS 94% on the matched
+                          KEV CVE', 'domain registered 4h ago + EvilProxy URL
+                          pattern', 'process matches Dell SupportAssist known-
+                          good pattern + hash clean across all sources').
                           Must support the disposition choice.>",
-  "clear_justification":"<If CLEAR: cite the specific signal that makes this benign.
-                          If MONITOR/ESCALATE: state 'Not a false positive:' then explain
-                          why benign-signal hypotheses were ruled out.>",
+  "clear_justification":"<If CLEAR: cite the specific signal that makes this
+                          benign. If MONITOR/ESCALATE: state 'Not a false
+                          positive:' then explain why benign-signal hypotheses
+                          were ruled out.>",
   "escalation_steps":   [
-    "<concrete step — e.g. 'Query Entra ID sign-in logs for user X 24h back'>",
+    "<concrete step (only when ESCALATE) - e.g. 'Query Entra ID sign-in logs
+      for user X 24h back'>",
     "<another>",
     "<another>"
   ]
 }}
 
-Remember: every disposition_reason and clear_justification claim must trace back to
-the evidence pack. No generic phrasing."""
+Every disposition_reason and clear_justification claim must trace back to the
+evidence pack. No generic phrasing. No hedging with 'potential misuse' when
+the evidence points to benign activity."""
 
     # Detection content (Sigma/KQL/multi-SIEM) is generated ON DEMAND from the UI
     # via /api/detection — it's the slowest part of this stage and isn't needed on

@@ -1743,30 +1743,139 @@ def _ai_context_substitutions(parsed: dict, options: dict) -> dict:
 
 
 _AI_SYSTEM = """You are a senior MDR security analyst drafting customer-facing
-email notifications about security alerts. The example templates below are
-INSPIRATION ONLY: match their tone, voice, level of technical detail, and
-section ordering, but adapt the content to the specific evidence in the raw
-log at hand. Do NOT copy phrases verbatim. If the alert type is unfamiliar,
-synthesize a fresh template by combining the closest stylistic matches.
+email notifications. The example templates below are INSPIRATION ONLY for tone
+and voice — DO NOT copy them; adapt the content to the specific evidence in
+the raw log at hand.
 
-Hard rules:
-- Output ONLY the email body. No subject line. No commentary.
-- Never invent values not present in the log. If a value is unknown, omit
-  the field rather than writing "N/A".
-- Do NOT include a closing line like "If you have any questions, reach out
-  to..." (the analyst's signature handles that).
-- Do NOT include a signature block (no "Best regards," / name / title).
-  The system appends one automatically.
-- Plain text only, no markdown formatting, no asterisks, no underscores.
-- Keep it concise (8 to 14 lines including blank lines).
-- The first line should be a greeting (e.g. "Greetings,").
-- DASH RULES (this is how editors spot AI-written copy, so it matters):
-    * Do NOT use em dashes (the long dash). Use a comma, a colon, a period,
-      or rewrite the sentence so no dash is needed.
-    * Do NOT use en dashes (the medium dash).
-    * Hyphens are allowed only inside compound words (e.g. "in-flight",
-      "anti-virus", "two-factor"). Never as a sentence-level separator.
+REQUIRED STRUCTURE — the body must contain EXACTLY these four parts in order,
+each as one or more flowing paragraphs (NEVER as a bulleted list, NEVER as
+numbered steps, NEVER with dashes for items):
+
+  1. DETAILS paragraph(s) — what happened. State the facts from the log in
+     plain language. Include the specific affected user / host / IP / file /
+     timeframe when present. One to two paragraphs.
+
+  2. ACTION TAKEN paragraph — what we (the MDR team) did about it. When the
+     response action is provided, describe it naturally. When no action was
+     taken yet, say plainly what we are doing next.
+
+  3. RECOMMENDED NEXT STEPS paragraph(s) — the AI-generated remediation
+     and investigation guidance. This MUST be embedded directly into the
+     body as flowing prose, NOT as bullets or numbered steps. Two to four
+     sentences for low-severity events; one to two paragraphs for genuine
+     incidents. SKIP this section entirely when the email is a clearing
+     notification or the alert is plainly a false positive — don't pad it
+     with generic advice.
+
+  4. CLOSING sentence — one short courtesy line (e.g. "Please reach out if
+     you need anything further from us."). The signature is appended
+     automatically, so do NOT write a closing salutation or name block.
+
+CALIBRATION — do NOT over-state the threat:
+* If the evidence shows a clean hash, a known vendor maintenance pattern,
+  expected service-account activity, or a recognised legitimate process,
+  say so explicitly in the DETAILS paragraph and skew the ACTION TAKEN +
+  NEXT STEPS toward verification rather than containment.
+* Only describe an event as a confirmed threat when concrete evidence
+  supports it (known-bad hash, named malware family, malicious infrastructure
+  callout, lateral movement, credential access, confirmed unauthorized access).
+  Suspicious-LOOKING activity without one of these is "we observed X — based
+  on the context this appears consistent with legitimate activity, but we
+  recommend Y to confirm."
+
+HARD RULES — no exceptions:
+* Output the email body ONLY. No subject line. No commentary outside the body.
+* Never invent values not in the log. If a value is unknown, omit it.
+* NO bullet points. NO numbered lists. NO dash-prefixed items. Paragraphs only.
+* NO em dashes. NO en dashes. Hyphens allowed only inside compound words
+  (in-flight, anti-virus, two-factor) — never as a sentence-level separator.
+* Plain text only — no markdown, no asterisks for emphasis, no underscores.
+* NO redundant phrases. Strip filler: "I am writing to inform you that",
+  "Please be advised that", "It has come to our attention that", "At this
+  time we have", "Going forward", "Should you have any further questions
+  or concerns please do not hesitate to". Replace with the direct statement.
+* NO signature block. NO "Best regards" / name / title — the system appends
+  the signature automatically.
+* First line should be a brief greeting (e.g. "Greetings,").
+* Keep the whole body tight — 12 to 22 lines INCLUDING blank lines between
+  paragraphs. Genuine incidents may run longer; routine notifications stay
+  short.
+
+NEVER:
+* Tell the customer to "monitor for similar activity" without naming what
+  specifically to watch for.
+* Reassure with "no action is required on your end" if you have ALSO listed
+  next steps for them — pick one.
+* Repeat the alert details a second time after the DETAILS paragraph.
 """
+
+
+_LIST_MARKER_RE = re.compile(r"^[\s]*(?:[-•*]|\d{1,2}[.)])\s+", re.MULTILINE)
+
+
+def _strip_list_markers(body: str) -> str:
+    """Convert any bullet / numbered-list lines back into flowing prose.
+    Groups of adjacent list lines become one paragraph joined by '. '.
+    Safety-net against models that ignore the no-bullets instruction."""
+    if not body:
+        return body
+    lines = body.split("\n")
+    out: list[str] = []
+    buf: list[str] = []
+    for line in lines:
+        if _LIST_MARKER_RE.match(line):
+            cleaned = _LIST_MARKER_RE.sub("", line, count=1).strip()
+            if cleaned:
+                # Drop trailing period to avoid ".." when joining.
+                cleaned = cleaned.rstrip(". ")
+                buf.append(cleaned)
+        else:
+            if buf:
+                out.append(". ".join(buf) + ".")
+                buf = []
+            out.append(line)
+    if buf:
+        out.append(". ".join(buf) + ".")
+    return "\n".join(out)
+
+
+# Redundant filler phrases the AI keeps reaching for in customer email even
+# after the prompt forbids them. Each (pattern, replacement) pair runs case-
+# insensitively over the body once.
+_FILLER_SUBS = [
+    (re.compile(r"\bI am writing to inform you (?:that\s+)?", re.IGNORECASE), ""),
+    (re.compile(r"\bI'?m writing to (?:let you know|inform you)(?:\s+that)?\s+", re.IGNORECASE), ""),
+    (re.compile(r"\bPlease be (?:advised|informed)(?:\s+that)?\s+", re.IGNORECASE), ""),
+    (re.compile(r"\bIt has come to our attention that\s+", re.IGNORECASE), ""),
+    (re.compile(r"\bAt this (?:time|point)(?:\s+we have)?\s*,?\s*", re.IGNORECASE), ""),
+    (re.compile(r"\bGoing forward,?\s*", re.IGNORECASE), ""),
+    (re.compile(
+        r"\bShould you have any (?:further\s+)?questions or concerns,?\s*"
+        r"please do not hesitate to (?:contact|reach out to)\s+(?:us|me)\.?",
+        re.IGNORECASE), ""),
+    (re.compile(r"\bIf you have any questions(?:\s+or concerns)?\s*,\s*"
+                r"please do not hesitate to (?:contact|reach out to)\s+us\.?",
+                re.IGNORECASE), ""),
+    (re.compile(r"\bWe wanted to (?:reach out|let you know)(?:\s+to inform you)?\s+", re.IGNORECASE), ""),
+    (re.compile(r"\bRest assured\s*,?\s*", re.IGNORECASE), ""),
+    # Collapse any "Greetings," repeated after the scrub removed lead-in text.
+    (re.compile(r"^[\s]*,\s*", re.MULTILINE), ""),
+]
+
+
+def _strip_filler_phrases(body: str) -> str:
+    """Apply the filler regex list; collapse the multiple blank lines the
+    removals leave behind."""
+    if not body:
+        return body
+    out = body
+    for pat, repl in _FILLER_SUBS:
+        out = pat.sub(repl, out)
+    # Collapse 3+ blank lines down to one
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    # Collapse runs of spaces left by mid-sentence removals
+    out = re.sub(r" {2,}", " ", out)
+    return out.strip()
 
 
 async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
@@ -1835,16 +1944,21 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     user_prompt = (
         f"{inspiration}\n\n"
         "## Now write an email for THIS alert\n"
-        f"{classified_as}Use the inspiration above for voice and structure, "
-        "but write a fresh email adapted to the evidence in the raw log. Do not "
-        "copy any sentence verbatim from the examples."
+        f"{classified_as}Use the inspiration above for voice ONLY — write a "
+        "fresh email adapted to the evidence in the raw log. Do not copy any "
+        "sentence verbatim from the examples. Follow the four-part structure "
+        "from your system instructions (DETAILS, ACTION TAKEN, RECOMMENDED "
+        "NEXT STEPS, CLOSING) as flowing paragraphs — no bullets, no lists."
         f"{must_include_block}\n\n"
         "Raw log:\n```\n"
         f"{log_text[:5000]}\n```\n\n"
         f"Extracted fields:\n{parsed_block or '(none)'}"
         f"{action_hint}\n\n"
-        "Write the email body only. Plain text. No subject line. No signature. "
-        "No em dashes or en dashes anywhere in the output."
+        "Produce the email body only. Paragraphs only. No bullets, no lists, "
+        "no em/en dashes. Embed the next-steps guidance directly into the "
+        "prose — do not label it 'Recommended Next Steps:' or render it as "
+        "a list. Skip the next-steps paragraph entirely if the email is a "
+        "clearing notification."
     )
 
     from providers import get_provider
@@ -1868,6 +1982,13 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     # models still occasionally produce them and they're the #1 AI-giveaway in
     # customer-facing email).
     body = _strip_em_dashes(body)
+    # Belt-and-braces bullet/list stripper. The prompt forbids bullets, but
+    # the model still occasionally produces them. Convert leading "- ", "• ",
+    # "* ", or "N. " markers at the start of lines into flowing prose by
+    # joining adjacent list lines into one paragraph separated by ". ".
+    body = _strip_list_markers(body)
+    # Filler-phrase scrub — the prompt forbids these, this is the safety-net.
+    body = _strip_filler_phrases(body)
 
     # Defang URLs / IPs / domains the AI emitted so the recipient can't click
     # a live IOC out of a security email. Opt-out via options.defang=false for
