@@ -98,9 +98,38 @@ def safe_data_path(path: str, root: Optional[Path] = None) -> Optional[Path]:
 
 
 # ─── audit log ────────────────────────────────────────────────────────────────
+# Redaction-safe by construction: every string value in `fields` is passed
+# through the redactor before it reaches disk. That means an analyst-pasted
+# IOC, customer log line, or accidentally-included credential never ends up
+# in audit.log — only the typed placeholders survive. The redaction-rejected
+# case still logs the request envelope (path / status / client) so we have
+# a trail, just with the body replaced by a marker.
+_REDACT_AUDIT_FIELDS = {"error", "body", "log", "raw", "input", "message"}
+
+
+def _redact_audit_value(field: str, value):
+    """Apply the redactor to a single audit-field value when it's a string and
+    the field name is in the sensitive set. Non-string types pass through."""
+    if not isinstance(value, str) or not value:
+        return value
+    if field not in _REDACT_AUDIT_FIELDS:
+        return value
+    try:
+        from intel.redactor import redact as _redact
+        out = _redact(value)
+        return out.redacted
+    except Exception:
+        # Fail-closed for audit too — if redaction can't run, drop the value
+        # rather than logging the raw string.
+        return "{{REDACTOR_UNAVAILABLE}}"
+
+
 def audit_log(event: str, **fields) -> None:
-    """Append a structured JSON line to backend/data/audit.log."""
-    rec = {"ts": datetime.now(timezone.utc).isoformat(), "event": event, **fields}
+    """Append a structured JSON line to backend/data/audit.log. String values
+    on sensitive field names (error/body/log/raw/input/message) are
+    redactor-rewritten before write so secrets in error traces don't leak."""
+    safe = {k: _redact_audit_value(k, v) for k, v in fields.items()}
+    rec = {"ts": datetime.now(timezone.utc).isoformat(), "event": event, **safe}
     try:
         with open(_AUDIT_LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, default=str) + "\n")
