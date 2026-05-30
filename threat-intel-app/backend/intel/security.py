@@ -4,7 +4,7 @@ Platform hardening helpers — spec §9.
 Provides:
   - security_headers_middleware: ASGI middleware that adds CSP, X-Frame-Options,
     X-Content-Type-Options, X-XSS-Protection, Referrer-Policy, Permissions-Policy
-    headers to every response, plus a 10MB request body limit (413 on exceed).
+    headers to every response, plus a request body size cap (413 on exceed).
   - safe_data_path(path, root): resolves a user-supplied path inside the data
     directory and refuses to escape it (path traversal guard).
   - audit_log(event, **fields): appends a structured JSON line to
@@ -39,8 +39,8 @@ logger = logging.getLogger(__name__)
 _DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 _DATA_DIR.mkdir(parents=True, exist_ok=True)
 _AUDIT_LOG = _DATA_DIR / "audit.log"
-_MAX_BODY = 10 * 1024 * 1024   # 10MB
-_MAX_FILE = 10 * 1024 * 1024
+_MAX_BODY = 50 * 1024 * 1024   # 50 MB — matches the File Analyzer drop-zone copy
+_MAX_FILE = 50 * 1024 * 1024
 
 
 # ─── env helpers ───────────────────────────────────────────────────────────────
@@ -69,10 +69,13 @@ SECURITY_HEADERS = {
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
-        # 10MB request body limit (spec §9)
+        # Request body size cap. Matches the File Analyzer drop-zone copy.
         cl = request.headers.get("content-length")
         if cl and cl.isdigit() and int(cl) > _MAX_BODY:
-            return JSONResponse({"detail": "request body too large (max 10MB)"}, status_code=413)
+            return JSONResponse(
+                {"detail": f"request body too large (max {_MAX_BODY // (1024*1024)}MB)"},
+                status_code=413,
+            )
         response: Response = await call_next(request)
         for k, v in SECURITY_HEADERS.items():
             response.headers[k] = v
@@ -237,7 +240,7 @@ def security_self_check(config) -> dict:
          "detail": "CSP/X-Frame/X-Content-Type/Referrer-Policy set on every response"},
         {"name": "Audit log writable",     "pass": _AUDIT_LOG.parent.exists(),
          "detail": str(_AUDIT_LOG)},
-        {"name": "10MB request body limit","pass": True,
+        {"name": "Request body size cap",  "pass": True,
          "detail": f"Enforced by SecurityHeadersMiddleware at {_MAX_BODY // (1024*1024)}MB"},
     ]
     return {

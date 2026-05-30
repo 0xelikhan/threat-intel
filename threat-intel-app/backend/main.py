@@ -64,7 +64,7 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
 # the time the gate inspects it.
 app.add_middleware(AuthGateMiddleware)
 
-# Spec §9 platform hardening — security headers + 10MB body limit + audit log
+# Spec §9 platform hardening — security headers + body size cap + audit log
 from intel.security import SecurityHeadersMiddleware, AuditMiddleware
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(AuditMiddleware)
