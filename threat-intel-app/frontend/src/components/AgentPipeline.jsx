@@ -186,13 +186,6 @@ function AgentPipeline({ logText, label, onComplete, onStart, onPartial, onScanU
                       fontWeight: ok || active ? 500 : 400,
                     }}>{agent.label}</Typography>
                   </Box>
-                  {idx < AGENTS.length - 1 && (
-                    <Box sx={{
-                      flex: 1, height: '1.5px', mx: 0.5, mb: '14px',
-                      backgroundColor: ok ? '#17AB1F' : alpha('#ffffff', 0.06),
-                      transition: 'background-color .3s',
-                    }}/>
-                  )}
                 </React.Fragment>
               );
             })}
