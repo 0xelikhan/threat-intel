@@ -339,10 +339,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
         border: theme => `1px solid ${muiAlpha('#ffffff', 0.12)}`,
         borderRadius: '4px', p: 2, mb: 2,
       }}>
-        <SectionHeader
-          title="AI Remediation reference"
-          badge="see what the email body is built from"
-        />
+        <SectionHeader title="AI Remediation"/>
         <Stack direction="row" spacing={1} alignItems="center"
           flexWrap="wrap" useFlexGap sx={{ mb: remediation ? 1.5 : 0 }}>
           <MuiButton
@@ -374,16 +371,6 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
             </Stack>
           )}
         </Stack>
-
-        {!remediation && !remLoading && (
-          <Typography sx={{ fontSize: 11, color: 'text.tertiary',
-            fontStyle: 'italic', mt: 1 }}>
-            The email body is generated with the investigation and remediation
-            guidance woven in as flowing prose. Click the button above to see
-            the structured source the AI is reasoning from — useful for
-            understanding why a recommendation appears in the email.
-          </Typography>
-        )}
 
         {remediation && _REM_SECTIONS.map(s => {
           const v = remediation[s.key];
