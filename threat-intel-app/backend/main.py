@@ -545,7 +545,8 @@ async def _stream(raw_input: str, input_type: str, label: str = ""):
 
         # ── Stage 2: ENRICHMENT (skip when no enrichable IOCs) ──────────────
         iocs = state.get("iocs", {}) or {}
-        has_enrichable = any((iocs.get(k) or []) for k in ("ips", "domains", "hashes", "urls"))
+        has_enrichable = any((iocs.get(k) or []) for k in
+                             ("ips", "domains", "hashes", "urls", "emails", "cves"))
         if has_enrichable:
             # Stream each IOC type's enrichment as it lands so cards fill
             # progressively rather than all at once when the slowest type returns.

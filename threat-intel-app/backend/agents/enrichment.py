@@ -1558,10 +1558,17 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
                         pass
 
     # ── Per-IOC verdict aggregation (spec §3 top-level summary) ────────────────
-    verdicts = {"ips": {}, "domains": {}, "hashes": {}, "urls": {}}
+    # Derive the verdicts dict shape from enrichments.keys() so adding a
+    # new IOC bucket (emails, cves, ...) above can't crash this loop with
+    # KeyError on the new bucket name. Was hardcoded to the original four
+    # buckets — broke every analysis whose log contained an email or CVE
+    # IOC until this fix.
+    verdicts = {cat: {} for cat in enrichments.keys()}
     overall = {"MALICIOUS": 0, "SUSPICIOUS": 0, "CLEAN": 0, "UNKNOWN": 0}
     for cat, items in enrichments.items():
         for ioc, payload in items.items():
+            if not isinstance(payload, dict):
+                continue
             s = _summarize_ioc(payload)
             verdicts[cat][ioc] = s
             overall[s["overall"]] = overall.get(s["overall"], 0) + 1
