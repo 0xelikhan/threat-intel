@@ -22,11 +22,14 @@ Public API:
 """
 
 from __future__ import annotations
+import logging
 import re
 import time
 import threading
 from pathlib import Path
 from typing import List, Tuple, Dict
+
+_log = logging.getLogger("recon.yara_custom")
 
 _CUSTOM_DIR = Path(__file__).resolve().parent / "yara_rules"
 _CUSTOM_DIR.mkdir(parents=True, exist_ok=True)
@@ -214,7 +217,7 @@ def start_hot_reload():
                 return
             with _LOCK:
                 _STATE["compiled"] = None
-            print(f"[yara] custom rule change: {event.src_path} — reloading on next scan")
+            _log.info("custom rule change: %s — reloading on next scan", event.src_path)
 
     obs = Observer()
     obs.schedule(_H(), str(_CUSTOM_DIR), recursive=False)

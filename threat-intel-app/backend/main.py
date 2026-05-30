@@ -14,6 +14,9 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from fastapi.responses import JSONResponse as _JSONResponse
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -29,6 +32,17 @@ from gti_score import compute_gti_scores, get_highest_score
 app = FastAPI(title="Threat Intelligence Platform", version="3.0.0",
               docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json")
 
+# Structured logging + per-request UUID. Configured before anything else
+# touches logging so the first log line carries the right format.
+from intel.observability import (
+    configure_logging,
+    RequestIDMiddleware,
+    error_envelope,
+)
+configure_logging()
+import logging as _logging
+_log = _logging.getLogger("recon.main")
+
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
@@ -38,6 +52,35 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"],
 # minimum_size=1024 skips tiny payloads where the gzip framing overhead
 # would actually grow the response.
 app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+# Per-request UUID — outermost so every log line in every handler
+# carries the same rid. Echoed back as X-Request-ID for client tooling.
+app.add_middleware(RequestIDMiddleware)
+
+
+# Global error envelope — additive. The existing `detail` key (which the
+# React frontend reads via `err.detail || err.error`) is preserved; new
+# fields (`error_code`, `details`, `request_id`, `ts`) are stacked on.
+@app.exception_handler(StarletteHTTPException)
+async def _http_exc_handler(_request, exc: StarletteHTTPException):
+    body = error_envelope(
+        detail=str(exc.detail) if exc.detail is not None else "HTTP error",
+        code=f"http_{exc.status_code}",
+        status=exc.status_code,
+    )
+    headers = dict(exc.headers or {})
+    return _JSONResponse(body, status_code=exc.status_code, headers=headers)
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_exc_handler(_request, exc: RequestValidationError):
+    body = error_envelope(
+        detail="Request validation failed",
+        code="validation_error",
+        extras={"errors": exc.errors()[:10]},
+        status=422,
+    )
+    return _JSONResponse(body, status_code=422)
 
 # Auth gate — everything under /api/* requires a session EXCEPT:
 #   * /api/health        — needed by the Docker HEALTHCHECK and the deploy probe
@@ -113,9 +156,9 @@ async def _kick_prewarm():
                 return True
             ok = await asyncio.to_thread(_run)
             dt = time.perf_counter() - t0
-            print(f"[recon] pre-warm {name}: {'OK' if ok else 'skip'} ({dt:.1f}s)")
+            _log.info("pre-warm %s: %s (%.1fs)", name, "OK" if ok else "skip", dt)
         except Exception as e:
-            print(f"[recon] pre-warm {name}: skip ({e})")
+            _log.warning("pre-warm %s: skip (%s)", name, e)
 
     async def _warm_all():
         # Light modules first so they're ready almost immediately,
@@ -147,7 +190,7 @@ async def _kick_prewarm():
                 cache_for(ns).set("__warmed__", True)
         except Exception:
             pass
-        print("[recon] all intel pre-warm tasks complete")
+        _log.info("all intel pre-warm tasks complete")
 
     asyncio.create_task(_warm_all())
 
@@ -158,11 +201,11 @@ async def _kick_prewarm():
             "FRESHRSS_URL":     config.get("FRESHRSS_URL", ""),
             "FRESHRSS_API_KEY": config.get("FRESHRSS_API_KEY", ""),
         }))
-        print("[recon] feed aggregator polling loop scheduled")
+        _log.info("feed aggregator polling loop scheduled")
     except Exception as e:
-        print(f"[recon] feed aggregator NOT started: {e}")
+        _log.warning("feed aggregator NOT started: %s", e)
 
-    print("[recon] startup: pre-warm scheduled in background, accepting requests now")
+    _log.info("startup: pre-warm scheduled in background, accepting requests now")
 
 
 @app.on_event("shutdown")
@@ -253,6 +296,11 @@ async def health():
         cache_block = _cache_stats()
     except Exception as e:
         cache_block = {"error": str(e)}
+    try:
+        from intel.circuit_breaker import get_breaker as _get_breaker
+        breaker_block = _get_breaker().stats()
+    except Exception as e:
+        breaker_block = {"error": str(e)}
     return {
         "status":          "ready" if config.is_configured() else "setup_required",
         "version":         "3.0.0",
@@ -267,6 +315,7 @@ async def health():
         "webhooks":        _webhooks_available(),
         "intel_layer":     _intel_status(),
         "cache":           cache_block,
+        "circuit_breaker": breaker_block,
     }
 
 

@@ -5,8 +5,11 @@ Reads AI config at call time from config manager.
 
 import asyncio
 import json
+import logging
 import re as _re
 from datetime import datetime, timezone
+
+_log = logging.getLogger("recon.investigation")
 
 
 def _loads_lenient(text: str) -> dict:
@@ -1014,7 +1017,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
             except Exception as e:
                 # Tool-calling path failed — fall back to the original single-shot prompt
                 import traceback
-                print(f"[investigation] TOOL-CALLING FAILED, falling back: {e}")
+                _log.warning("TOOL-CALLING FAILED, falling back: %s", e)
                 traceback.print_exc()
                 tool_call_log.append({"tool": "_fallback", "summary": f"tool-calling failed: {str(e)[:120]}"})
                 resp = await provider.complete(
@@ -1034,7 +1037,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
 
         except Exception as outer_e:
             import traceback
-            print(f"[investigation] OUTER FAILURE: {outer_e}")
+            _log.error("OUTER FAILURE: %s", outer_e)
             traceback.print_exc()
             result = None
 

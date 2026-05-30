@@ -59,21 +59,58 @@ class OpenAIProvider(LLMProvider):
         max_tokens:  Optional[int] = None,
         **kwargs,
     ) -> LLMResponse:
+        # The OpenAI SDK is constructed with max_retries=1, so 429 and
+        # 5xx already get one automatic retry with backoff. The extra
+        # work here is producing a clearer message on auth errors so
+        # the analyst sees actionable feedback ("check your API key in
+        # settings") instead of the raw SDK traceback.
+        import asyncio as _asyncio
         client, model = self._client_and_model(kwargs.get("model"))
-        try:
-            req: dict = {
-                "model":       model,
-                "messages":    messages,
-                "temperature": temperature,
-            }
-            if max_tokens:           req["max_tokens"]      = max_tokens
-            if tools:                req["tools"]           = tools
-            if "tool_choice" in kwargs: req["tool_choice"] = kwargs["tool_choice"]
-            if "response_format" in kwargs:
-                req["response_format"] = kwargs["response_format"]
-            resp = await client.chat.completions.create(**req)
-        except Exception as e:
-            return LLMResponse(model=model, provider=self.name, error=str(e)[:300])
+        req: dict = {
+            "model":       model,
+            "messages":    messages,
+            "temperature": temperature,
+        }
+        if max_tokens:           req["max_tokens"]      = max_tokens
+        if tools:                req["tools"]           = tools
+        if "tool_choice" in kwargs: req["tool_choice"] = kwargs["tool_choice"]
+        if "response_format" in kwargs:
+            req["response_format"] = kwargs["response_format"]
+
+        # Manual rate-limit retry on top of the SDK's built-in (the
+        # built-in's backoff is opaque; on 429 we want a deterministic
+        # 2-second wait + one retry per the spec).
+        last_err: Optional[Exception] = None
+        for attempt in (0, 1):
+            try:
+                resp = await client.chat.completions.create(**req)
+                break
+            except Exception as e:
+                last_err = e
+                msg = str(e).lower()
+                # 401 / 403 / invalid_api_key — no point retrying.
+                if any(s in msg for s in ("invalid_api_key", "incorrect api key",
+                                          "invalid authentication", "401", "403",
+                                          "unauthorized", "permission")):
+                    return LLMResponse(
+                        model=model, provider=self.name,
+                        error="LLM authentication failed — check your API key in /settings",
+                    )
+                # Rate limit — wait then retry once.
+                if attempt == 0 and any(s in msg for s in ("rate limit", "429", "too many requests")):
+                    await _asyncio.sleep(2.0)
+                    continue
+                # 5xx server error — retry once immediately.
+                if attempt == 0 and any(s in msg for s in ("500", "502", "503", "504",
+                                                            "internal server", "bad gateway",
+                                                            "service unavailable", "gateway timeout")):
+                    continue
+                # Anything else — give up after this attempt.
+                return LLMResponse(model=model, provider=self.name, error=str(e)[:300])
+        else:
+            # Both attempts exhausted with retryable errors.
+            return LLMResponse(model=model, provider=self.name,
+                               error=str(last_err)[:300] if last_err else "unknown error")
 
         choice = resp.choices[0] if resp.choices else None
         if not choice:

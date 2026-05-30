@@ -21,10 +21,15 @@ Concurrency model:
 
 import asyncio
 import hashlib
+import logging
 import os
 from datetime import datetime, timezone
 
 import aiohttp
+
+from intel.circuit_breaker import get_breaker, host_of
+
+_log = logging.getLogger("recon.enrichment")
 
 # Transport timeout (aiohttp-internal — covers connect + read body).
 _TIMEOUT = aiohttp.ClientTimeout(total=10)
@@ -73,32 +78,67 @@ def _ck(ioc_type: str, value: str) -> str:
 
 async def _get(session, url, **kw):
     """Issue one GET inside the global semaphore, bounded by the per-source
-    safety timeout. Never raises — always returns a dict (with `error` key
-    on failure) so callers can rely on a uniform shape."""
+    safety timeout, gated by the per-host circuit breaker. Never raises —
+    always returns a dict (with `error` key on failure) so callers rely on
+    a uniform shape."""
+    breaker = get_breaker()
+    host = host_of(url)
+    if host and breaker.is_open(host):
+        _log.debug("circuit open — skipping %s", host)
+        return {"error": f"circuit open for {host}", "skipped": True}
+
     async def _do():
         async with session.get(url, timeout=_TIMEOUT, **kw) as r:
             return await r.json() if "json" in r.content_type else {"raw": await r.text()}
     try:
         async with _SEMAPHORE:
-            return await asyncio.wait_for(_do(), timeout=_PER_SOURCE_TIMEOUT)
+            result = await asyncio.wait_for(_do(), timeout=_PER_SOURCE_TIMEOUT)
+        # Treat dicts that already carry an `error` key as a soft failure
+        # — these come from APIs that return 200 with a JSON error body.
+        if host:
+            if isinstance(result, dict) and "error" in result and not isinstance(result.get("error"), bool):
+                breaker.record_failure(host)
+            else:
+                breaker.record_success(host)
+        return result
     except asyncio.TimeoutError:
+        if host:
+            breaker.record_failure(host)
         return {"error": f"source timed out after {_PER_SOURCE_TIMEOUT:.0f}s"}
     except Exception as e:
+        if host:
+            breaker.record_failure(host)
         return {"error": str(e)}
 
 
 async def _post(session, url, **kw):
     """POST variant of `_get` — same semaphore, same timeout discipline,
-    same never-raise contract."""
+    same circuit breaker, same never-raise contract."""
+    breaker = get_breaker()
+    host = host_of(url)
+    if host and breaker.is_open(host):
+        _log.debug("circuit open — skipping %s", host)
+        return {"error": f"circuit open for {host}", "skipped": True}
+
     async def _do():
         async with session.post(url, timeout=_TIMEOUT, **kw) as r:
             return await r.json() if "json" in r.content_type else {"raw": await r.text()}
     try:
         async with _SEMAPHORE:
-            return await asyncio.wait_for(_do(), timeout=_PER_SOURCE_TIMEOUT)
+            result = await asyncio.wait_for(_do(), timeout=_PER_SOURCE_TIMEOUT)
+        if host:
+            if isinstance(result, dict) and "error" in result and not isinstance(result.get("error"), bool):
+                breaker.record_failure(host)
+            else:
+                breaker.record_success(host)
+        return result
     except asyncio.TimeoutError:
+        if host:
+            breaker.record_failure(host)
         return {"error": f"source timed out after {_PER_SOURCE_TIMEOUT:.0f}s"}
     except Exception as e:
+        if host:
+            breaker.record_failure(host)
         return {"error": str(e)}
 
 
