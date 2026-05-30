@@ -150,3 +150,127 @@ def test_capitalisation_after_team_rewrite():
     body = "Our MDR team cleared the notification."
     out = _strip_filler_phrases(body)
     assert out.startswith("The notification was cleared")
+
+
+# ─── robotic phrase scrubs ───────────────────────────────────────────────────
+def test_indicates_that_rewrite():
+    body = "The error code indicates that the account is disabled."
+    out = _strip_filler_phrases(body)
+    assert "indicates that" not in out.lower()
+    assert "means" in out.lower()
+
+
+def test_associated_with_this_event_stripped():
+    body = "The user agent associated with this event was BAV2ROPC."
+    out = _strip_filler_phrases(body)
+    assert "associated with this event" not in out.lower()
+
+
+def test_in_terms_of_stripped():
+    body = "In terms of remediation, reset the password."
+    out = _strip_filler_phrases(body)
+    assert "in terms of" not in out.lower()
+    assert "reset the password" in out.lower()
+
+
+def test_ensure_that_stripped():
+    body = "Ensure that MFA is enforced on the account."
+    out = _strip_filler_phrases(body)
+    assert "ensure that" not in out.lower()
+    assert "MFA is enforced" in out
+
+
+def test_consider_whether_becomes_check_whether():
+    body = "Consider whether the account should be re-enabled."
+    out = _strip_filler_phrases(body)
+    assert "consider whether" not in out.lower()
+    assert "check whether" in out.lower()
+
+
+def test_may_be_necessary_becomes_is_needed():
+    body = "No further action may be necessary."
+    out = _strip_filler_phrases(body)
+    assert "may be necessary" not in out.lower()
+    assert "is needed" in out.lower()
+
+
+def test_to_enhance_detection_capabilities_replaced():
+    body = "To enhance detection capabilities, enable additional logging."
+    out = _strip_filler_phrases(body)
+    assert "to enhance detection capabilities" not in out.lower()
+    assert "to catch repeats" in out.lower()
+
+
+def test_user_agent_identified_for_this_request():
+    body = "The user agent identified for this request was BAV2ROPC and the authentication method utilized was OAuth2."
+    out = _strip_filler_phrases(body)
+    assert "user agent identified for this request" not in out.lower()
+    assert "authentication method utilized" not in out.lower()
+    assert "User agent: BAV2ROPC" in out
+    assert "Auth: OAuth2" in out
+
+
+def test_two_adjacent_closing_sentences_both_stripped():
+    """The lookbehind fix — both back-to-back closing-courtesy sentences
+    must be removed, not just the first."""
+    body = ("Some real content here. "
+            "We will continue monitoring your environment for any related activity. "
+            "If this activity looks unfamiliar or unauthorized, please contact us "
+            "right away so we can act quickly, and as always, we are here for any "
+            "questions.")
+    out = _strip_filler_phrases(body)
+    assert "continue monitoring" not in out.lower()
+    assert "please contact us" not in out.lower()
+    assert "here for any questions" not in out.lower()
+    assert "Some real content here" in out
+
+
+def test_closing_courtesy_at_top_of_body():
+    """The lookbehind doesn't cover position 0 — verify the
+    top-of-body closing-courtesy strip catches it."""
+    body = "Please contact us if you have questions. The real content follows."
+    out = _strip_filler_phrases(body)
+    assert "Please contact us" not in out
+    assert "The real content follows" in out
+
+
+def test_for_any_related_activity_stripped():
+    body = "We monitor for any related activity in the environment."
+    out = _strip_filler_phrases(body)
+    assert "for any related activity" not in out.lower()
+
+
+def test_robotic_email_sample_user_complained_about():
+    """Integration test — the exact robotic sample the user pasted must
+    come out without the worst offenders."""
+    bad = (
+        "The user agent identified for this request was BAV2ROPC, and the "
+        "authentication method utilized was OAuth2:Token. The error "
+        "associated with this event indicates that the account is disabled. "
+        "If the account is re-enabled, ensure that MFA is enforced. "
+        "In terms of remediation, consider whether the account should be "
+        "removed. To enhance detection capabilities, consider implementing "
+        "additional logging. We will continue monitoring your environment "
+        "for any related activity. If this activity looks unfamiliar or "
+        "unauthorized, please contact us right away so we can act quickly, "
+        "and as always, we are here for any questions."
+    )
+    out = _strip_filler_phrases(bad)
+    for forbidden in (
+        "user agent identified for this request",
+        "authentication method utilized",
+        "associated with this event",
+        "indicates that",
+        "ensure that",
+        "in terms of",
+        "consider whether",
+        "to enhance detection capabilities",
+        "continue monitoring",
+        "for any related activity",
+        "please contact us",
+        "right away",
+        "act quickly",
+        "as always",
+        "here for any questions",
+    ):
+        assert forbidden not in out.lower(), f"still present: {forbidden!r}\n---\n{out}"

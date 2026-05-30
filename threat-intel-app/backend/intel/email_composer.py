@@ -1754,67 +1754,75 @@ def _ai_context_substitutions(parsed: dict, options: dict) -> dict:
 _AI_SYSTEM = """You are a senior security analyst writing the body of a
 customer-facing notification about a security alert. Write the way an
 experienced practitioner would explain the situation to a peer at the
-customer site: direct, technical, informative. The example templates below
-are INSPIRATION ONLY for tone — do NOT copy them; adapt the content to the
-specific evidence in the raw log.
+customer site: direct, technical, informative, SCANNABLE. The example
+templates below are INSPIRATION ONLY for tone — do NOT copy them.
 
-THE BODY HAS EXACTLY TWO SECTIONS, in flowing prose (NEVER bullets, never
-numbered lists, never dash-prefixed items):
+THE BODY HAS EXACTLY TWO SECTIONS:
 
-  1. DETAILS. The parsed facts from the log: what triggered, on which user
-     / host / IP / process / file / hash / domain / mailbox, at what time,
-     with what surrounding context. Include the technical specifics that
-     matter (process tree, command line excerpt, hash, source location,
-     auth-event details, EDR rule that fired, signal types). State what the
-     activity actually was, not just that an alert fired. If a response
-     action was already taken, mention it briefly in the same flow as a
-     statement of fact (e.g. "The account was disabled at 14:02 UTC").
-     One to two paragraphs.
+──────────────────────────────────────────────────────────────────────────
+SECTION 1 — DETAILS (structured facts block, NOT prose narration)
+──────────────────────────────────────────────────────────────────────────
+Render the parsed facts as a clean block of labelled lines, one fact per
+line, in this format:
 
-  2. HOW TO INVESTIGATE AND REMEDIATE. Specific, actionable guidance for
-     this exact alert. Cover, as flowing prose woven together (not as
-     subsections):
+    Label: value
 
-       (a) INVESTIGATION — what to check in the environment to confirm /
-           rule out the threat. Reference the actual artefacts from this
-           alert (the user, the IP, the process tree, the time window).
-           Name the data source (sign-in logs, DeviceProcessEvents,
-           EmailEvents, EDR process tree, mail audit log) and what a
-           benign vs malicious answer looks like.
+No bullets, no dashes, no markdown, no asterisks. Just labelled lines.
+Only include labels that actually have data in the log — skip empty
+fields entirely. Pick from this set (in this rough order of relevance,
+ignore the ones that don't apply):
 
-       (b) CONTAINMENT — concrete steps to contain THIS threat specific to
-           the technology in the log. Identity: reset, revoke sessions,
-           re-enroll MFA, audit conditional-access. Endpoint: isolate,
-           collect forensic artefacts, scan for adjacent IOCs. Email:
-           purge from mailboxes, block sender / domain, check inbox /
-           forwarding rules. Skip whichever doesn't apply.
+    User
+    Source IP                 (one or two — for impossible-travel etc.)
+    Source location           (city, country — when geolocation is known)
+    Time                      (UTC timestamp)
+    Asset / Host
+    Process
+    Parent process
+    Command line              (truncated to ~120 chars when long)
+    File / Hash
+    Destination / URL / Domain
+    Error code                (with the one-line meaning in parens)
+    User agent
+    Auth method
+    Device compliance         (compliant/non-compliant)
+    Response action           (what was already done about it)
 
-       (c) REMEDIATION AND RECOVERY — how to safely restore affected
-           resources (re-enable the account after rotating credentials,
-           re-image vs scan-and-clear the host, replay safe email,
-           etc.).
+Follow the facts block with EXACTLY ONE short sentence (no more than 25
+words) that names what this alert IS in plain language. Not a paragraph.
+One sentence. Example: "Sign-in failure for a disabled account — most
+likely a stale automation still calling the deactivated identity."
 
-       (d) DETECTION HARDENING — what additional logging, detection rule,
-           or monitoring should be enabled to catch repeats. Name the
-           data source + the field/pattern to watch.
+Then one blank line and Section 2.
 
-     One to three paragraphs total. Adapt depth to severity: a clearing
-     notification needs only sentence-level investigation guidance ("if
-     similar failures recur for this account, confirm whether the account
-     should be re-enabled or removed"); a genuine incident gets the full
-     investigation + containment + remediation + detection coverage.
+──────────────────────────────────────────────────────────────────────────
+SECTION 2 — INVESTIGATE AND REMEDIATE (tight prose, one paragraph)
+──────────────────────────────────────────────────────────────────────────
+ONE paragraph (3-5 sentences) covering the investigation steps,
+containment, remediation, and detection guidance that actually apply to
+this alert. Write it as natural prose, not as subsections. Reference the
+specific artefacts by name. Be DIRECTLY actionable: "Confirm in Entra ID
+whether hou-paton-storage1@... is intentionally disabled and review the
+last 30 days of SigninLogs for any success by the same UPN. If similar
+failures keep recurring, find and retire the workflow still calling the
+account." That's what one looks like.
 
+For a genuine incident, you may use UP TO TWO paragraphs but keep each
+tight. For a clearing / false-positive notification, ONE sentence is
+enough ("if similar failures recur, confirm the account state in Entra
+ID before re-enabling").
+
+──────────────────────────────────────────────────────────────────────────
 NO third section. NO closing courtesy line. The signature is appended
 automatically and IS the closing.
 
-SCALING THE DEPTH:
-* Clearing notification / confirmed false positive: DETAILS paragraph plus
-  a one-sentence statement of why the alert is benign and what (if
-  anything) is worth verifying. Total 6-10 lines.
-* Routine informational alert: DETAILS plus a single combined
-  investigate/remediate paragraph. Total 14-22 lines.
-* Genuine incident: full DETAILS plus the full investigate/contain/
-  remediate/detect coverage. Total 22-40 lines.
+LENGTH:
+* Clearing / false positive: facts block + 1-sentence summary + 1-sentence
+  guidance. Total 8-14 lines.
+* Routine informational: facts block + summary sentence + 1 prose
+  paragraph. Total 14-22 lines.
+* Genuine incident: facts block + summary sentence + up to 2 tight
+  paragraphs. Total 22-32 lines.
 
 CALIBRATION — do NOT over-state the threat:
 * If the evidence shows a clean hash, a known vendor maintenance pattern,
@@ -1835,6 +1843,25 @@ VOICE:
 * Speak to one technical reader. No second-person plurals.
 * No corporate filler. No hedging where the evidence is clear.
 * When something is genuinely uncertain, say so plainly.
+
+ROBOTIC PHRASES TO AVOID (these read as ChatGPT-generated noise):
+* "indicates that"           → "shows" / "means" / just state the fact
+* "associated with this event" → just describe the field directly
+* "noted by the logon error code" → "Error: 50057 (account disabled)"
+* "identified for this request was" → "User agent: BAV2ROPC"
+* "the authentication method utilized was" → "Auth: OAuth2:Token"
+* "ensure that"              → just say "do X"
+* "consider whether"         → "check whether" / "decide if"
+* "in terms of"              → cut the phrase, restate directly
+* "to enhance detection capabilities" → "to catch repeats"
+* "in your environment"      → "in Entra ID" / "in your SIEM" (be specific)
+* "may be necessary"         → "do X" or "skip X" (commit)
+* "potential patterns of unauthorized access" → "unauthorized access"
+* "for any related activity" → cut entirely
+* "as always"                → cut entirely
+* "right away"               → cut, or use "immediately" if it matters
+* "to act quickly"           → cut
+* "we'll continue to monitor" → cut entirely
 
 NEVER write any of these:
 * References to "our team", "the team", "our MDR team", "our analysts",
@@ -1876,7 +1903,31 @@ REDUNDANT OPENERS TO AVOID:
 * "Rest assured"
 * "We wanted to reach out"
 * "In response to this alert"
+* "We'll continue monitoring your environment"
 Strip these openers; replace with the direct statement they were padding.
+
+EXAMPLE — the format you should produce:
+
+  User: hou-paton-storage1@patoncontrols.com
+  Source IP: 108.249.198.145
+  Time: 13:31:01 UTC on May 30, 2026
+  Error: 50057 (account is disabled)
+  User agent: BAV2ROPC
+  Auth: OAuth2:Token
+  Device: non-compliant, unmanaged
+
+  Sign-in failure against a disabled account — most likely a stale
+  automation still calling the deactivated identity.
+
+  Confirm in Entra ID whether hou-paton-storage1@patoncontrols.com is
+  intentionally disabled and review the last 30 days of SigninLogs for any
+  success by the same UPN. If similar failures keep recurring against a
+  disabled account, find and retire the workflow still calling it; if the
+  account needs to come back, rotate the credential, enforce MFA, and check
+  conditional-access before re-enabling.
+
+That's the whole body. Not "robotic narration of each field" — clean labelled
+facts on top, one sentence of context, one paragraph of action.
 """
 
 
@@ -1970,20 +2021,60 @@ _FILLER_SUBS = [
     (re.compile(r"\b(?:our|the)\s+(?:MDR|SOC)\s+analysts?\s+", re.IGNORECASE), ""),
     (re.compile(r"\bour\s+analysts?\s+", re.IGNORECASE), ""),
 
-    # ── Closing-courtesy lines — kill the WHOLE sentence on its own line ─
-    # Triggered by sentences (paragraph endings) containing any of these
-    # patterns. Removes the entire sentence + trailing whitespace.
+    # ── Closing-courtesy lines — kill the WHOLE sentence containing the
+    # offending phrase. Uses a lookbehind for the leading sentence boundary
+    # so re.sub can find adjacent closing sentences on a second pass; if
+    # the boundary were consumed, only the first of two back-to-back
+    # closing sentences would be stripped.
     (re.compile(
-        r"(?:^|\n|\.\s+)[^.\n]*\b(?:please\s+(?:reach\s+out|contact\s+us|let\s+us\s+know)|"
+        r"(?<=[.\n])\s*[^.\n]*\b(?:please\s+(?:reach\s+out|contact\s+us|let\s+us\s+know)|"
         r"feel\s+free\s+to\s+(?:contact|reach|ask)|"
         r"happy\s+to\s+assist|"
         r"do\s+not\s+hesitate\s+to\s+(?:contact|reach|ask)|"
         r"don'?t\s+hesitate\s+to\s+(?:contact|reach|ask)|"
-        r"we\s+are\s+here\s+to\s+help|"
+        r"we\s+are\s+here\s+(?:to\s+help|for\s+any\s+questions)|"
+        r"we'?re\s+here\s+(?:to\s+help|for\s+any\s+questions)|"
+        r"we'?ll\s+continue\s+(?:to\s+)?monitor(?:ing)?|"
+        r"we\s+will\s+continue\s+(?:to\s+)?monitor(?:ing)?|"
         r"if\s+you\s+have\s+any\s+(?:further\s+)?questions|"
         r"should\s+you\s+have\s+any\s+(?:further\s+)?questions)"
         r"[^.\n]*\.?",
-        re.IGNORECASE), "."),
+        re.IGNORECASE), ""),
+    # Also catch a closing-courtesy sentence at the very TOP of the body
+    # (no preceding boundary because there's nothing before it). The
+    # lookbehind above misses position 0 when the sentence is the first
+    # thing in the body.
+    (re.compile(
+        r"\A\s*[^.\n]*\b(?:please\s+(?:reach\s+out|contact\s+us|let\s+us\s+know)|"
+        r"feel\s+free\s+to\s+(?:contact|reach|ask)|"
+        r"we'?re\s+here\s+(?:to\s+help|for\s+any\s+questions)|"
+        r"we'?ll\s+continue\s+(?:to\s+)?monitor(?:ing)?)"
+        r"[^.\n]*\.?\s*",
+        re.IGNORECASE), ""),
+
+    # ── Robotic phrases — surgical word-level rewrites that don't kill
+    # whole sentences, just strip the chatgpt-isms. Order matters: the
+    # longer patterns come first so "may be necessary" matches before
+    # "be necessary" would fire.
+    (re.compile(r"\bin\s+terms\s+of\s+\w+\s*,?\s*", re.IGNORECASE), ""),
+    (re.compile(r"\bensure\s+that\s+", re.IGNORECASE), ""),
+    (re.compile(r"\bconsider\s+whether\s+", re.IGNORECASE), "check whether "),
+    (re.compile(r"\bto\s+enhance\s+detection\s+capabilities\s*,?\s*", re.IGNORECASE), "to catch repeats, "),
+    (re.compile(r"\bmay\s+be\s+necessary\b", re.IGNORECASE), "is needed"),
+    (re.compile(r"\bpotential\s+patterns\s+of\s+unauthorized\s+access\b", re.IGNORECASE), "unauthorized access"),
+    (re.compile(r"\bfor\s+any\s+related\s+activity\b", re.IGNORECASE), ""),
+    (re.compile(r"\bas\s+always,?\s*", re.IGNORECASE), ""),
+    (re.compile(r"\bright\s+away\b", re.IGNORECASE), ""),
+    (re.compile(r"\bto\s+act\s+quickly\b", re.IGNORECASE), ""),
+    # "the X identified for this request was Y" -> "X: Y" — drops the
+    # robotic restatement; the structured-facts block above carries the
+    # actual data. But only fire mid-sentence so we don't break the
+    # labelled lines themselves.
+    (re.compile(r"\b(?:the\s+)?user\s+agent\s+identified\s+(?:for\s+this\s+request\s+)?was\s+", re.IGNORECASE), "User agent: "),
+    (re.compile(r"\b(?:the\s+)?authentication\s+method\s+utili[sz]ed\s+was\s+", re.IGNORECASE), "Auth: "),
+    (re.compile(r"\bnoted\s+by\s+the\s+logon\s+error\s+code\s+", re.IGNORECASE), "Error code "),
+    (re.compile(r"\bassociated\s+with\s+this\s+event\s+", re.IGNORECASE), ""),
+    (re.compile(r"\bindicates\s+that\s+", re.IGNORECASE), "means "),
 
     # ── Whitespace cleanup ───────────────────────────────────────────────
     # Collapse any stray ", " left at line start by the rewrites above.
@@ -2169,12 +2260,14 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
             text = text.replace(k, v if v is not None else "")
     html = _render_html(text_body, replacements, signature_html, False)
     subject = _render_subject_ai(log_text, parsed)
+    # Drop any "If you have questions, reach out..." line the AI body OR the
+    # template inheritance produced. The compose_ai flow no longer injects
+    # the canned _CLOSING_STATEMENT — the analyst's signature handles the
+    # closing on its own (per repeated user feedback).
     text = _strip_closing_block(text)
     html = _strip_closing_block_html(html)
-    text = _inject_closing_text(text, _signature_plain(config))
-    html = _inject_closing_html(html, signature_html)
     # Last-pass dash strip — catches anything injected after the AI body
-    # was first sanitized (closing statement, signature line, future templates).
+    # was first sanitized (signature line, future templates).
     text = _strip_em_dashes(text)
     html = _strip_em_dashes(html)
     subject = _strip_em_dashes(subject)
