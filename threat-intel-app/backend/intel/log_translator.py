@@ -13,6 +13,7 @@ if the call fails so the pipeline never blocks on translation.
 
 from __future__ import annotations
 import json
+import os
 from typing import Optional, Dict
 
 
@@ -97,71 +98,62 @@ No markdown fences. No commentary outside the JSON.
 
 
 async def translate_log(raw: str, config) -> Optional[Dict]:
-    """Run the log translator. Returns None if no OPENAI_API_KEY is configured
-    or the call fails — caller falls back to legacy raw-text behavior."""
+    """Run the log translator. Returns None if the configured LLM provider
+    isn't reachable; otherwise returns the normalized translation dict.
+
+    Routes through providers.get_provider() so any LLM backend (Azure OpenAI,
+    OpenAI, Anthropic, Ollama) works without touching this file."""
     if not raw or len(raw.strip()) < 8:
         return None
 
-    key = config.get("OPENAI_API_KEY")
-    if not key:
+    # OpenAI-style providers need an API key to function; gate the call
+    # rather than burning a request when there's no chance of success.
+    if not (config.get("OPENAI_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")):
         return None
 
-    try:
-        from openai import AsyncAzureOpenAI, AsyncOpenAI
-    except ImportError:
-        return None
+    from providers import get_provider
+    provider = get_provider()
+    # Log-format normalization is light + latency-sensitive (gates IOC
+    # extraction) — use the fast model tier when the provider supports it.
+    model = config.get_model(fast=True) if hasattr(config, "get_model") else None
 
-    base_url = config.get("OPENAI_BASE_URL", "")
-    # Log-format normalization is a light, latency-sensitive step that runs first
-    # in triage and blocks IOC extraction → fast model tier.
-    model    = config.get_model(fast=True)
-    try:
-        if "openai.azure.com" in base_url:
-            client = AsyncAzureOpenAI(
-                api_key=key,
-                azure_endpoint=base_url.rstrip("/"),
-                api_version="2024-02-01",
-                timeout=30.0, max_retries=1,   # triage is latency-critical — fail fast
-            )
-        else:
-            client = AsyncOpenAI(api_key=key, base_url=base_url or "https://api.openai.com/v1",
-                                 timeout=30.0, max_retries=1)
-        resp = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user",   "content": f"## Raw log\n```\n{raw[:6000]}\n```"},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.0,
-            # Logs with deeply-nested fields (Entra impossible-travel has
-            # ~30 fields across FirstLogin/SecondLogin blocks) used to
-            # truncate the normalized_summary mid-write at 600 tokens.
-            # Bumped to 1800; combined with the field-ordering change above
-            # the summary survives even when extracted_fields balloons.
-            max_tokens=1800,
-        )
-        # Lenient parse: a truncated translation keeps its completed fields
-        # rather than discarding the whole step (which gates IOC extraction).
-        from agents.investigation import _loads_lenient
-        out = _loads_lenient(resp.choices[0].message.content)
-        # Defensive shape — ensure callers can always access expected keys
-        return {
-            "detected_format":    out.get("detected_format", "unknown"),
-            "confidence":         out.get("confidence", 0.5),
-            "extracted_fields":   out.get("extracted_fields") or {},
-            "anomalies":          out.get("anomalies") or [],
-            "normalized_summary": out.get("normalized_summary", ""),
-        }
-    except Exception as e:
+    resp = await provider.complete(
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user",   "content": f"## Raw log\n```\n{raw[:6000]}\n```"},
+        ],
+        temperature=0.0,
+        # Logs with deeply-nested fields (Entra impossible-travel has
+        # ~30 fields across FirstLogin/SecondLogin blocks) used to
+        # truncate the normalized_summary mid-write at 600 tokens.
+        # Bumped to 1800; combined with the field-ordering change in the
+        # SYSTEM_PROMPT above the summary survives even when
+        # extracted_fields balloons.
+        max_tokens=1800,
+        response_format={"type": "json_object"},   # OpenAI-only; ignored by other providers
+        model=model,
+    )
+    if resp.error:
         return {
             "detected_format":    "unknown",
             "confidence":         0.0,
             "extracted_fields":   {},
             "anomalies":          [],
             "normalized_summary": "",
-            "error":              str(e),
+            "error":              resp.error,
         }
+    # Lenient parse: a truncated translation keeps its completed fields
+    # rather than discarding the whole step (which gates IOC extraction).
+    from agents.investigation import _loads_lenient
+    out = _loads_lenient(resp.message)
+    # Defensive shape — ensure callers can always access expected keys
+    return {
+        "detected_format":    out.get("detected_format", "unknown"),
+        "confidence":         out.get("confidence", 0.5),
+        "extracted_fields":   out.get("extracted_fields") or {},
+        "anomalies":          out.get("anomalies") or [],
+        "normalized_summary": out.get("normalized_summary", ""),
+    }
 
 
 def fields_as_text(translation: Optional[Dict]) -> str:

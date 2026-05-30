@@ -201,7 +201,6 @@ Respond with exactly this JSON:
 
 async def run_triage(state: dict) -> dict:
     from config import config
-    from openai import AsyncAzureOpenAI, AsyncOpenAI
     import time
     _t_start = time.perf_counter()
 
@@ -364,21 +363,9 @@ async def run_triage(state: dict) -> dict:
     openai_key = config.get("OPENAI_API_KEY")
     if ai_result is None and openai_key:
         try:
-            base_url = config.get("OPENAI_BASE_URL", "")
-            if "openai.azure.com" in base_url:
-                client = AsyncAzureOpenAI(
-                    api_key=openai_key,
-                    azure_endpoint=base_url.rstrip("/"),
-                    api_version="2024-02-01",
-                    timeout=30.0, max_retries=1,   # triage is latency-critical — fail fast
-                )
-            else:
-                client = AsyncOpenAI(
-                    api_key=openai_key,
-                    base_url=base_url or "https://api.openai.com/v1",
-                    timeout=30.0, max_retries=1,
-                )
-            resp = await client.chat.completions.create(
+            from providers import get_provider
+            provider = get_provider()
+            resp = await provider.complete(
                 # Triage is a fast routing decision (the real reasoning is the
                 # investigation step) → fast model tier.
                 model=config.get_model(fast=True),
@@ -387,10 +374,13 @@ async def run_triage(state: dict) -> dict:
                 )}],
                 max_tokens=220,
                 temperature=0.0,
-                response_format={"type": "json_object"},
+                response_format={"type": "json_object"},   # OpenAI-only; safely ignored elsewhere
             )
-            ai_result = json.loads(resp.choices[0].message.content)
-        except Exception as e:
+            if resp.error:
+                ai_result = None
+            else:
+                ai_result = json.loads(resp.message)
+        except Exception:
             ai_result = None
 
     if ai_result is None:

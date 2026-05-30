@@ -1781,12 +1781,6 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     if not key:
         return {"error": "OPENAI_API_KEY not configured"}
 
-    try:
-        from openai import AsyncAzureOpenAI, AsyncOpenAI
-    except ImportError:
-        return {"error": "openai package not installed"}
-
-    base_url = config.get("OPENAI_BASE_URL", "")
     # Short customer-facing email — light, latency-sensitive → fast model tier.
     # NOTE: `config` here is a plain dict (passed from the endpoint), not the
     # ConfigManager, so resolve the fast model via dict access, not get_model().
@@ -1853,31 +1847,20 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "No em dashes or en dashes anywhere in the output."
     )
 
-    try:
-        if "openai.azure.com" in base_url:
-            client = AsyncAzureOpenAI(
-                api_key=key,
-                azure_endpoint=base_url.rstrip("/"),
-                api_version="2024-02-01",
-                timeout=45.0, max_retries=1,   # don't hang the composer under throttling
-            )
-        else:
-            client = AsyncOpenAI(api_key=key,
-                                 base_url=base_url or "https://api.openai.com/v1",
-                                 timeout=45.0, max_retries=1)
-        resp = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": _AI_SYSTEM},
-                {"role": "user",   "content": user_prompt},
-            ],
-            temperature=0.4,
-            max_tokens=900,
-        )
-        body = (resp.choices[0].message.content or "").strip()
-    except Exception as e:
-        return {"error": f"AI call failed: {str(e)[:200]}"}
-
+    from providers import get_provider
+    provider = get_provider()
+    resp = await provider.complete(
+        model=model,
+        messages=[
+            {"role": "system", "content": _AI_SYSTEM},
+            {"role": "user",   "content": user_prompt},
+        ],
+        temperature=0.4,
+        max_tokens=900,
+    )
+    if resp.error:
+        return {"error": f"AI call failed: {resp.error}"}
+    body = (resp.message or "").strip()
     if not body:
         return {"error": "AI returned empty body"}
 

@@ -197,29 +197,17 @@ async def update_settings(req: SettingsRequest):
 
 @app.post("/api/settings/test")
 async def test_key():
-    from openai import AsyncAzureOpenAI, AsyncOpenAI
-    key = config.get("OPENAI_API_KEY")
-    base_url = config.get("OPENAI_BASE_URL", "")
-    model = config.get("AI_MODEL", "gpt-4o-mini")
-    if not key:
-        return {"ok": False, "error": "No OpenAI API key configured"}
-    try:
-        if "openai.azure.com" in base_url:
-            client = AsyncAzureOpenAI(
-                api_key=key,
-                azure_endpoint=base_url.rstrip("/"),
-                api_version="2024-02-01",
-            )
-        else:
-            client = AsyncOpenAI(api_key=key, base_url=base_url or "https://api.openai.com/v1")
-        resp = await client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": "hi"}],
-            max_tokens=5,
-        )
-        return {"ok": True, "message": f"Valid · model {resp.model}"}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    if not config.get("OPENAI_API_KEY") and not os.environ.get("ANTHROPIC_API_KEY"):
+        return {"ok": False, "error": "No LLM API key configured"}
+    from providers import get_provider
+    provider = get_provider()
+    resp = await provider.complete(
+        messages=[{"role": "user", "content": "hi"}],
+        max_tokens=5,
+    )
+    if resp.error:
+        return {"ok": False, "error": resp.error}
+    return {"ok": True, "message": f"Valid · provider {resp.provider} · model {resp.model}"}
 
 
 # ─── HEALTH ───────────────────────────────────────────────────────────────────────
@@ -659,30 +647,21 @@ from agents.response import _match_actors as _match_threat_actors_fn
 
 
 async def _ai_gen(prompt: str) -> str:
-    from openai import AsyncAzureOpenAI, AsyncOpenAI
-    key = config.get("OPENAI_API_KEY")
-    base_url = config.get("OPENAI_BASE_URL", "")
+    if not config.get("OPENAI_API_KEY"):
+        return "# OpenAI API key not configured. Add it in Settings."
     # Detection-content generation (Sigma/KQL/YARA) is a light, latency-sensitive
     # task → use the fast model tier.
-    model = config.get_model(fast=True)
-    if not key:
-        return "# OpenAI API key not configured. Add it in Settings."
-    try:
-        if "openai.azure.com" in base_url:
-            client = AsyncAzureOpenAI(
-                api_key=key,
-                azure_endpoint=base_url.rstrip("/"),
-                api_version="2024-02-01",
-            )
-        else:
-            client = AsyncOpenAI(api_key=key, base_url=base_url or "https://api.openai.com/v1")
-        resp = await client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1500, temperature=0.1)
-        return resp.choices[0].message.content.strip()
-    except Exception as e:
-        return f"# Generation failed: {e}"
+    from providers import get_provider
+    provider = get_provider()
+    resp = await provider.complete(
+        model=config.get_model(fast=True),
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=1500,
+        temperature=0.1,
+    )
+    if resp.error:
+        return f"# Generation failed: {resp.error}"
+    return (resp.message or "").strip()
 
 
 @app.post("/api/detection")
@@ -965,18 +944,10 @@ YOUR INITIAL ANALYSIS:
 
 async def _chat_stream(run_id: str, user_msg: str):
     """SSE-stream the AI reply token-by-token so the analyst sees it type out."""
-    from openai import AsyncAzureOpenAI, AsyncOpenAI
+    from providers import get_provider
     from agents.investigation_tools import TOOL_SCHEMAS, execute_tool, _summarize_for_trace
 
-    key = config.get("OPENAI_API_KEY")
-    base_url = config.get("OPENAI_BASE_URL", "")
-    if "openai.azure.com" in base_url:
-        client = AsyncAzureOpenAI(api_key=key, azure_endpoint=base_url.rstrip("/"),
-                                   api_version="2024-02-01",
-                                   timeout=45.0, max_retries=1)
-    else:
-        client = AsyncOpenAI(api_key=key, base_url=base_url or "https://api.openai.com/v1",
-                             timeout=45.0, max_retries=1)
+    provider = get_provider()
 
     state = _results[run_id]
     sys_msg = _build_chat_system_msg(state)
@@ -1000,7 +971,7 @@ async def _chat_stream(run_id: str, user_msg: str):
         for iteration in range(4):
             # First, a non-streaming call to decide if tools are needed.
             # Chat is interactive → fast model tier for snappy replies.
-            resp = await client.chat.completions.create(
+            resp = await provider.complete(
                 model=config.get_model(fast=True),
                 messages=messages,
                 tools=TOOL_SCHEMAS,
@@ -1008,36 +979,36 @@ async def _chat_stream(run_id: str, user_msg: str):
                 temperature=0.2,
                 max_tokens=700,
             )
-            msg = resp.choices[0].message
-            if msg.tool_calls:
+            if resp.error:
+                yield f"data: {json.dumps({'event': 'error', 'error': resp.error})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+            if resp.tool_calls:
                 # Tell the client we're calling tools so it shows "RECON checked X"
                 messages.append({
-                    "role":      "assistant", "content": msg.content or "",
-                    "tool_calls": [{"id": tc.id, "type": "function",
-                                     "function": {"name": tc.function.name,
-                                                  "arguments": tc.function.arguments}}
-                                    for tc in msg.tool_calls],
+                    "role":      "assistant", "content": resp.message or "",
+                    "tool_calls": [{"id": tc["id"], "type": "function",
+                                     "function": {"name": tc["name"],
+                                                  "arguments": json.dumps(tc["arguments"])}}
+                                    for tc in resp.tool_calls],
                 })
-                for tc in msg.tool_calls:
-                    try:
-                        args = json.loads(tc.function.arguments)
-                    except Exception:
-                        args = {}
-                    tool_result = await execute_tool(tc.function.name, args, config)
-                    tc_summary = _summarize_for_trace(tc.function.name, tool_result)
+                for tc in resp.tool_calls:
+                    args = tc.get("arguments") or {}
+                    tool_result = await execute_tool(tc["name"], args, config)
+                    tc_summary = _summarize_for_trace(tc["name"], tool_result)
                     tool_calls_made.append({
-                        "tool": tc.function.name, "args": args, "summary": tc_summary,
+                        "tool": tc["name"], "args": args, "summary": tc_summary,
                     })
                     # Stream the tool call to the UI live
-                    yield f"data: {json.dumps({'event': 'tool_call', 'tool': tc.function.name, 'args': args, 'summary': tc_summary})}\n\n"
+                    yield f"data: {json.dumps({'event': 'tool_call', 'tool': tc['name'], 'args': args, 'summary': tc_summary})}\n\n"
                     messages.append({
-                        "role": "tool", "tool_call_id": tc.id,
+                        "role": "tool", "tool_call_id": tc["id"],
                         "content": json.dumps(tool_result, default=str)[:2000],
                     })
                 continue
 
             # No more tool calls — re-issue this turn with streaming for the visible answer
-            final_content = msg.content or ""
+            final_content = resp.message or ""
             if final_content:
                 # We already have the text from the non-stream call — fake-stream it word by word
                 # so the UI fills progressively. (Avoids a 2nd AI roundtrip.)
