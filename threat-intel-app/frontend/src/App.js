@@ -4,6 +4,8 @@ import {
 } from 'lucide-react';
 
 import AgentPipeline     from './components/AgentPipeline';
+import ErrorBoundary     from './components/ErrorBoundary';
+import ToastHost         from './components/Toast';
 
 // MUI-based primitives (adapted from OpenCTI's Tag.tsx + theme) — every chip,
 // card, code-block, copy button now renders through MUI components that inherit
@@ -1933,6 +1935,20 @@ function AnalystSummary({ result, rs }) {
         </MuiPaper>
       )}
 
+      {/* Why this rating — transparent enumeration of the evidence points the
+          AI used to set the threat level. Calibration fix from S8: if this
+          block is empty or only lists benign indicators, the threat level
+          should be INFORMATIONAL/LOW. The analyst can verify the reasoning
+          before acting. */}
+      {(rs?.assessment_basis?.length > 0 || rs?.threat_level) && (
+        <WhyThisRating
+          threatLevel={rs?.threat_level}
+          basis={rs?.assessment_basis || []}
+          fpCheck={rs?.false_positive_check}
+          aiUnavailable={rs?.ai_unavailable}
+        />
+      )}
+
       {hasGti && <ThreatScore result={result}/>}
 
       {a?.clear_justification && (
@@ -1961,6 +1977,105 @@ function AnalystSummary({ result, rs }) {
         </Block>
       )}
     </Card>
+  );
+}
+
+/* ─── Why this rating — surfaces the AI's assessment_basis under the threat
+       level so analysts can verify the reasoning. Calibration fix from S8. */
+function WhyThisRating({ threatLevel, basis, fpCheck, aiUnavailable }) {
+  const [open, setOpen] = useState(false);
+  const lvl = (threatLevel || 'INFORMATIONAL').toUpperCase();
+  const color = lvl === 'CRITICAL' ? '#ff2d2d'
+              : lvl === 'HIGH'     ? '#ff8c00'
+              : lvl === 'MEDIUM'   ? '#ffd700'
+              : lvl === 'LOW'      ? '#00b4d8'
+              :                       '#74c0fc';
+  const items = Array.isArray(basis) ? basis.filter(Boolean) : [];
+  const hasItems = items.length > 0;
+  const showCalibrationNote = items.some(s => /\[recon calibration\]/i.test(String(s)));
+
+  return (
+    <Box sx={{ mb: 1.5 }}>
+      <Box
+        onClick={() => setOpen(o => !o)}
+        sx={{
+          display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer',
+          py: 0.75, px: 1, borderRadius: '4px',
+          backgroundColor: muiAlpha(color, 0.06),
+          border: `1px solid ${muiAlpha(color, 0.25)}`,
+          borderLeft: `3px solid ${color}`,
+          '&:hover': { backgroundColor: muiAlpha(color, 0.10) },
+        }}>
+        <Box sx={{ width: 6, height: 6, borderRadius: 99, backgroundColor: color }}/>
+        <Typography sx={{ fontSize: 11, color, fontWeight: 700,
+          letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+          {lvl}
+        </Typography>
+        <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
+          · Why this rating
+        </Typography>
+        <Box sx={{ flex: 1 }}/>
+        <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
+          {open ? '−' : '+'}
+        </Typography>
+      </Box>
+      {open && (
+        <Box sx={{
+          mt: 0.5, pl: 1.5, pr: 1, py: 1,
+          borderLeft: `2px solid ${muiAlpha(color, 0.25)}`,
+        }}>
+          {!hasItems && (
+            <Typography sx={{ fontSize: 12, color: 'text.tertiary', fontStyle: 'italic' }}>
+              {aiUnavailable
+                ? 'AI analysis was unavailable for this run — threat level is a fallback default.'
+                : 'No assessment basis provided for this run.'}
+            </Typography>
+          )}
+          {hasItems && (
+            <Stack spacing={0.75}>
+              {items.map((item, i) => {
+                const isCalibration = /\[recon calibration\]/i.test(String(item));
+                return (
+                  <Stack key={i} direction="row" spacing={1} alignItems="flex-start">
+                    <Box sx={{
+                      width: 4, height: 4, borderRadius: 99,
+                      backgroundColor: isCalibration ? '#0fbcff' : color,
+                      mt: '7px', flexShrink: 0,
+                    }}/>
+                    <Typography sx={{
+                      fontSize: 12.5, color: 'text.primary', lineHeight: 1.55,
+                      fontStyle: isCalibration ? 'italic' : 'normal',
+                      opacity: isCalibration ? 0.85 : 1,
+                    }}>
+                      {String(item)}
+                    </Typography>
+                  </Stack>
+                );
+              })}
+            </Stack>
+          )}
+          {fpCheck && (
+            <Box sx={{ mt: 1, pt: 0.75,
+              borderTop: `1px solid ${muiAlpha('#ffffff', 0.06)}` }}>
+              <Typography sx={{ fontSize: 10, color: 'text.tertiary',
+                textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.25 }}>
+                False-positive check
+              </Typography>
+              <Typography sx={{ fontSize: 12, color: 'text.secondary', lineHeight: 1.55 }}>
+                {fpCheck}
+              </Typography>
+            </Box>
+          )}
+          {showCalibrationNote && (
+            <Typography sx={{ mt: 1, fontSize: 10, color: '#0fbcff',
+              fontStyle: 'italic', lineHeight: 1.4 }}>
+              The [RECON calibration] note above means the platform lowered the
+              threat level because the evidence pointed to benign activity.
+            </Typography>
+          )}
+        </Box>
+      )}
+    </Box>
   );
 }
 
@@ -3605,13 +3720,27 @@ export default function App() {
   }
   if (authState === 'out') {
     return (
-      <Suspense fallback={<LazyFallback height={300}/>}>
-        <LoginPage onAuthed={onAuthed}/>
-      </Suspense>
+      <ErrorBoundary label="Login">
+        <Suspense fallback={<LazyFallback height={300}/>}>
+          <LoginPage onAuthed={onAuthed}/>
+        </Suspense>
+        <ToastHost/>
+      </ErrorBoundary>
     );
   }
 
-  return <AppMain authUser={authUser} setAuthState={setAuthState}/>;
+  // Outermost ErrorBoundary so a crash anywhere in AppMain still renders the
+  // toast surface + a recovery panel instead of a blank white screen.
+  // ToastHost sits OUTSIDE the boundary so API errors during a crash still
+  // surface as notifications.
+  return (
+    <>
+      <ErrorBoundary label="RECON">
+        <AppMain authUser={authUser} setAuthState={setAuthState}/>
+      </ErrorBoundary>
+      <ToastHost/>
+    </>
+  );
 }
 
 function AppMain({ authUser, setAuthState }) {
@@ -3806,13 +3935,15 @@ function AppMain({ authUser, setAuthState }) {
 
       {/* Main view priority: email composer > file scanner > analysis */}
       {emailState && (
-        <Suspense fallback={<LazyFallback/>}>
-          <EmailComposerView
-            initialLog={emailState.log || ''}
-            initialParsed={emailState.parsed || null}
-            onClose={() => setEmailState(null)}
-          />
-        </Suspense>
+        <ErrorBoundary label="Email Composer">
+          <Suspense fallback={<LazyFallback/>}>
+            <EmailComposerView
+              initialLog={emailState.log || ''}
+              initialParsed={emailState.parsed || null}
+              onClose={() => setEmailState(null)}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
       {!emailState && showScanner && (
         <Box sx={{ flex: 1, minWidth: 0, position: 'relative' }}>
@@ -3825,14 +3956,16 @@ function AppMain({ authUser, setAuthState }) {
             }}>
             <X size={16}/>
           </MuiIconButton>
-          <Suspense fallback={<LazyFallback/>}>
-            <FileScannerView
-              external={scanState}
-              onScanFile={scanFile}
-              onScanHash={scanHash}
-              onScanUrl={scanUrl}
-            />
-          </Suspense>
+          <ErrorBoundary label="File Scanner">
+            <Suspense fallback={<LazyFallback/>}>
+              <FileScannerView
+                external={scanState}
+                onScanFile={scanFile}
+                onScanHash={scanHash}
+                onScanUrl={scanUrl}
+              />
+            </Suspense>
+          </ErrorBoundary>
         </Box>
       )}
       {!emailState && !showScanner && (
@@ -3880,9 +4013,11 @@ function AppMain({ authUser, setAuthState }) {
             <BulkTable result={result}/>
             {(result?.iocs?.ips || []).length > 0 && (
               <Card title="Geolocation" accent="#0fbcff" noPad>
-                <Suspense fallback={<LazyFallback height={260}/>}>
-                  <MapTab result={result}/>
-                </Suspense>
+                <ErrorBoundary label="Geolocation map">
+                  <Suspense fallback={<LazyFallback height={260}/>}>
+                    <MapTab result={result}/>
+                  </Suspense>
+                </ErrorBoundary>
               </Card>
             )}
           </>
@@ -3905,15 +4040,17 @@ function AppMain({ authUser, setAuthState }) {
                 4. Geolocation   — map (only when IPs are present)
                 5. Detection     — SIEM-ready rules
                 EmailAnalysis still slots in when an EML is present. */}
-            <AnalystSummary result={result} rs={rs || {}}/>
-            <ChatWithRecon result={result}/>
-            <Triage result={result} rs={rs || {}}/>
-            <EmailAnalysis result={result}/>
+            <ErrorBoundary label="Summary"><AnalystSummary result={result} rs={rs || {}}/></ErrorBoundary>
+            <ErrorBoundary label="Ask RECON"><ChatWithRecon result={result}/></ErrorBoundary>
+            <ErrorBoundary label="Triage detail"><Triage result={result} rs={rs || {}}/></ErrorBoundary>
+            <ErrorBoundary label="Email analysis"><EmailAnalysis result={result}/></ErrorBoundary>
             {(result?.iocs?.ips || []).length > 0 && (
               <Card title="Geolocation" accent="#0fbcff" noPad>
-                <Suspense fallback={<LazyFallback height={260}/>}>
-                  <MapTab result={result}/>
-                </Suspense>
+                <ErrorBoundary label="Geolocation map">
+                  <Suspense fallback={<LazyFallback height={260}/>}>
+                    <MapTab result={result}/>
+                  </Suspense>
+                </ErrorBoundary>
               </Card>
             )}
             <Detection result={result}/>

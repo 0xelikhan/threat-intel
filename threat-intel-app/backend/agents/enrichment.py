@@ -79,67 +79,93 @@ def _ck(ioc_type: str, value: str) -> str:
 async def _get(session, url, **kw):
     """Issue one GET inside the global semaphore, bounded by the per-source
     safety timeout, gated by the per-host circuit breaker. Never raises —
-    always returns a dict (with `error` key on failure) so callers rely on
-    a uniform shape."""
+    always returns a dict (with `error` + `error_type` keys on failure) so
+    callers + the frontend can categorise the failure without parsing the
+    message string.
+
+    error_type values: timed_out | circuit_open | auth_failed |
+    rate_limited | unreachable | http_error"""
     breaker = get_breaker()
     host = host_of(url)
     if host and breaker.is_open(host):
         _log.debug("circuit open — skipping %s", host)
-        return {"error": f"circuit open for {host}", "skipped": True}
+        return {"error": f"circuit open for {host}", "error_type": "circuit_open",
+                "skipped": True}
 
     async def _do():
         async with session.get(url, timeout=_TIMEOUT, **kw) as r:
-            return await r.json() if "json" in r.content_type else {"raw": await r.text()}
+            status = r.status
+            payload = await r.json() if "json" in r.content_type else {"raw": await r.text()}
+            return status, payload
     try:
         async with _SEMAPHORE:
-            result = await asyncio.wait_for(_do(), timeout=_PER_SOURCE_TIMEOUT)
-        # Treat dicts that already carry an `error` key as a soft failure
-        # — these come from APIs that return 200 with a JSON error body.
-        if host:
-            if isinstance(result, dict) and "error" in result and not isinstance(result.get("error"), bool):
-                breaker.record_failure(host)
-            else:
-                breaker.record_success(host)
-        return result
+            status, payload = await asyncio.wait_for(_do(), timeout=_PER_SOURCE_TIMEOUT)
+        # Tag categorical failures so the frontend can render them
+        # consistently (auth → "check your key", rate-limit → "wait n s").
+        if status in (401, 403):
+            if host: breaker.record_failure(host)
+            return {"error": f"auth failed (HTTP {status})", "error_type": "auth_failed"}
+        if status == 429:
+            if host: breaker.record_failure(host)
+            return {"error": "rate limited (HTTP 429)", "error_type": "rate_limited"}
+        if status >= 500:
+            if host: breaker.record_failure(host)
+            return {"error": f"server error (HTTP {status})", "error_type": "http_error"}
+        # Successful response. Some APIs return 200 with a JSON error
+        # body — treat that as a soft failure for breaker accounting.
+        if isinstance(payload, dict) and "error" in payload and not isinstance(payload.get("error"), bool):
+            if host: breaker.record_failure(host)
+        else:
+            if host: breaker.record_success(host)
+        return payload
     except asyncio.TimeoutError:
-        if host:
-            breaker.record_failure(host)
-        return {"error": f"source timed out after {_PER_SOURCE_TIMEOUT:.0f}s"}
+        if host: breaker.record_failure(host)
+        return {"error": f"source timed out after {_PER_SOURCE_TIMEOUT:.0f}s",
+                "error_type": "timed_out"}
     except Exception as e:
-        if host:
-            breaker.record_failure(host)
-        return {"error": str(e)}
+        if host: breaker.record_failure(host)
+        return {"error": str(e), "error_type": "unreachable"}
 
 
 async def _post(session, url, **kw):
     """POST variant of `_get` — same semaphore, same timeout discipline,
-    same circuit breaker, same never-raise contract."""
+    same circuit breaker, same never-raise contract, same error_type tags."""
     breaker = get_breaker()
     host = host_of(url)
     if host and breaker.is_open(host):
         _log.debug("circuit open — skipping %s", host)
-        return {"error": f"circuit open for {host}", "skipped": True}
+        return {"error": f"circuit open for {host}", "error_type": "circuit_open",
+                "skipped": True}
 
     async def _do():
         async with session.post(url, timeout=_TIMEOUT, **kw) as r:
-            return await r.json() if "json" in r.content_type else {"raw": await r.text()}
+            status = r.status
+            payload = await r.json() if "json" in r.content_type else {"raw": await r.text()}
+            return status, payload
     try:
         async with _SEMAPHORE:
-            result = await asyncio.wait_for(_do(), timeout=_PER_SOURCE_TIMEOUT)
-        if host:
-            if isinstance(result, dict) and "error" in result and not isinstance(result.get("error"), bool):
-                breaker.record_failure(host)
-            else:
-                breaker.record_success(host)
-        return result
+            status, payload = await asyncio.wait_for(_do(), timeout=_PER_SOURCE_TIMEOUT)
+        if status in (401, 403):
+            if host: breaker.record_failure(host)
+            return {"error": f"auth failed (HTTP {status})", "error_type": "auth_failed"}
+        if status == 429:
+            if host: breaker.record_failure(host)
+            return {"error": "rate limited (HTTP 429)", "error_type": "rate_limited"}
+        if status >= 500:
+            if host: breaker.record_failure(host)
+            return {"error": f"server error (HTTP {status})", "error_type": "http_error"}
+        if isinstance(payload, dict) and "error" in payload and not isinstance(payload.get("error"), bool):
+            if host: breaker.record_failure(host)
+        else:
+            if host: breaker.record_success(host)
+        return payload
     except asyncio.TimeoutError:
-        if host:
-            breaker.record_failure(host)
-        return {"error": f"source timed out after {_PER_SOURCE_TIMEOUT:.0f}s"}
+        if host: breaker.record_failure(host)
+        return {"error": f"source timed out after {_PER_SOURCE_TIMEOUT:.0f}s",
+                "error_type": "timed_out"}
     except Exception as e:
-        if host:
-            breaker.record_failure(host)
-        return {"error": str(e)}
+        if host: breaker.record_failure(host)
+        return {"error": str(e), "error_type": "unreachable"}
 
 
 async def _noop():

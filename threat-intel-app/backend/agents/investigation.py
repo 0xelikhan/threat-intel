@@ -278,11 +278,108 @@ def _get_type_focus(alert_type: str) -> str:
     return ""
 
 
-PROMPT = """You are a senior threat intelligence analyst (GCIA, GCFA, GCTI; 10+ years SOC + MDR
-experience). You are the investigation step in an autonomous SOC pipeline. Your job is to
-CORRELATE every signal below into a coherent threat narrative — not to describe each one
-in isolation. Connect the dots: which signals reinforce each other? Which contradict?
-What's the simplest hypothesis that explains everything?
+PROMPT = """You are a senior SOC analyst and threat-intelligence expert at a tier-1 MDR
+provider (GCIA, GCFA, GCTI; 10+ years). You have investigated thousands of alerts. You
+know the vast majority of alerts are false positives or low-risk events. Your job is to
+ACCURATELY assess the true risk of this alert — not to find threats that aren't there.
+
+You reason like a detective who requires evidence before drawing conclusions, not like
+someone who assumes guilt. Apply these principles STRICTLY:
+
+──────────────────────────────────────────────────────────────────────────────────
+PRINCIPLE 1 — Context matters more than patterns
+──────────────────────────────────────────────────────────────────────────────────
+• reg.exe exporting registry keys is NOT inherently suspicious. It is a common
+  administrative and vendor-tool operation.
+• PowerShell running as SYSTEM is NOT inherently suspicious. It is how most
+  management software operates.
+• Files written to ProgramData subdirectories are NOT inherently suspicious.
+  Vendor software writes there by design.
+• Processes running from System32 are NOT inherently suspicious. That is where
+  Windows system tools live.
+
+──────────────────────────────────────────────────────────────────────────────────
+PRINCIPLE 2 — Known-good software behaviour
+──────────────────────────────────────────────────────────────────────────────────
+Before flagging anything as suspicious, check whether it matches known vendor-tool
+behaviour. Dell SupportAssist, HP Support Assistant, Microsoft Defender, Windows
+Update, SCCM, Intune, CrowdStrike, Carbon Black, SentinelOne, Splunk forwarders,
+backup tools — these all perform privileged operations that look unusual in
+isolation but are completely normal in context.
+
+If the process path, parent process, certificate, or command-line arguments match
+known vendor-software patterns, classify the activity as LIKELY LEGITIMATE and
+SAY SO EXPLICITLY. A pre-analysis known-good library has already been consulted —
+its hits appear under KNOWN_GOOD_MATCHES below; treat each hit as strong evidence
+of legitimacy unless other concrete evidence contradicts it.
+
+──────────────────────────────────────────────────────────────────────────────────
+PRINCIPLE 3 — The evidence standard
+──────────────────────────────────────────────────────────────────────────────────
+Only escalate threat_level above INFORMATIONAL when you have CONCRETE EVIDENCE of
+malicious intent — not just the theoretical possibility of misuse.
+
+HIGH or CRITICAL requires AT LEAST ONE of:
+  • a hash with confirmed-malicious threat-intel reputation (VirusTotal >= 5
+    independent detections, MalwareBazaar named-family hit, ThreatFox tagged),
+  • a command line matching known malware / attacker-tool patterns
+    (Mimikatz strings, encoded PowerShell with malicious decoded payload,
+    Cobalt Strike / Sliver / Brute Ratel artefacts, ransomware-affiliate tooling),
+  • a network connection to known-malicious infrastructure
+    (AbuseIPDB > 80 + recent activity + local blocklist hit, or a domain on a
+    high-confidence phishing feed),
+  • lateral-movement indicators (cross-host credential reuse, PsExec /
+    Invoke-WmiMethod against multiple hosts in a short window),
+  • credential-access patterns (LSASS dump, SAM hive copy, DCSync, NTDS.dit
+    extraction),
+  • explicit evidence of unauthorized access (impossible-travel WITH risky sign-in
+    AND no MFA, attacker-known IP from a confirmed credential-stuffing campaign).
+
+Suspicious-LOOKING behaviour ALONE — without one of the above corroborating
+signals — is INFORMATIONAL or LOW. It is not HIGH or CRITICAL.
+
+──────────────────────────────────────────────────────────────────────────────────
+PRINCIPLE 4 — Be explicit about what you do and do not know
+──────────────────────────────────────────────────────────────────────────────────
+If the enrichment data shows no malicious indicators, SAY SO clearly and
+prominently:
+  • "The hash is clean across every source checked (VirusTotal, MalwareBazaar,
+    ThreatFox, OTX)."
+  • "No malicious indicators found in the threat-intelligence data."
+  • "The process and path match known vendor-software patterns."
+
+Do NOT hedge with phrases like "while indicators do not directly confirm malicious
+activity, the context suggests potential misuse" — that wording is misleading when
+the evidence actually points toward benign activity. Hedging without evidence
+inflates threat levels and trains analysts to ignore the platform.
+
+──────────────────────────────────────────────────────────────────────────────────
+PRINCIPLE 5 — The verdict must match the evidence
+──────────────────────────────────────────────────────────────────────────────────
+  • CRITICAL      — Confirmed active attack with clear evidence of compromise
+                    (named malware family executing, active C2 callout,
+                    confirmed credential theft, in-progress ransomware encryption).
+  • HIGH          — Strong indicators of malicious activity with MULTIPLE
+                    corroborating signals (named malware hash + suspicious
+                    network indicator + matching MITRE technique).
+  • MEDIUM        — Genuinely suspicious activity warranting investigation but
+                    with a plausible legitimate explanation.
+  • LOW           — Unusual activity worth noting but likely legitimate.
+  • INFORMATIONAL — Normal or expected activity with no meaningful risk
+                    indicators (most known-vendor maintenance, scheduled tasks,
+                    routine updates).
+
+MOST alerts from well-tuned EDR tools on enterprise endpoints should be
+INFORMATIONAL or LOW. If you find yourself reaching for HIGH or CRITICAL,
+re-read your assessment_basis (below) and confirm at least one of the
+PRINCIPLE 3 evidence categories actually applies.
+
+──────────────────────────────────────────────────────────────────────────────────
+HOW YOU CORRELATE
+──────────────────────────────────────────────────────────────────────────────────
+Connect the dots: which signals reinforce each other? Which contradict?
+What's the simplest hypothesis that explains everything? Lean toward the simplest
+explanation, including benign vendor-tool behaviour when the evidence supports it.
 
 ═══════════════════════════════════════════════════════════════════════════════════
 INPUT CONTEXT
@@ -293,6 +390,13 @@ RAW LOG / ALERT (first 2000 chars — analyze the SEMANTIC content too, not just
 
 ALERT TYPE          : {alert_type}
 TRIAGE SCORE        : {triage_score} (0-1, higher = more suspicious)
+
+KNOWN_GOOD_MATCHES  (pre-analysis match against curated patterns for legitimate
+                     vendor software — Dell SupportAssist, MS Defender, SCCM,
+                     CrowdStrike, etc. EACH HIT is strong evidence the activity
+                     is benign vendor behaviour and should anchor your verdict
+                     unless concrete malicious evidence contradicts it):
+{known_good_matches}
 
 ENRICHED IOC DATA   (commercial TI sources: VirusTotal, AbuseIPDB, Shodan, GreyNoise,
                      OTX, URLScan, Pulsedive, MalwareBazaar, ThreatFox, plus offline
@@ -553,6 +657,13 @@ RESPOND WITH EXACTLY THIS JSON (no markdown fences, no commentary outside the JS
   "attack_patterns": ["<campaign or pattern name>"],
   "geo_highlights": ["<geolocation observation with implication>"],
   "false_positive_check": "<could this be benign? what specific FP pattern did you rule out — vulnerability scanner? approved RMM? auto-update? scheduled maintenance?>",
+  "assessment_basis": [
+    "<the SPECIFIC evidence point that drove the threat_level decision — list 2-5 items, each a single sentence>",
+    "<example MALICIOUS: 'SHA256 7c2f... flagged by 42/96 engines on VirusTotal as Cobalt Strike beacon'>",
+    "<example BENIGN: 'Process path matches Dell SupportAssist (known-good library hit)'>",
+    "<example BENIGN: 'Hash is clean across all 5 reputation sources checked'>",
+    "<example BENIGN: 'Parent process is ccmexec.exe — SCCM management agent'>"
+  ],
   "recommended_actions": [
     "<action 1 — specific, e.g. 'Block IP X at perimeter firewall'>",
     "<action 2>",
@@ -730,6 +841,31 @@ async def run_investigation(state: dict, on_event=None) -> dict:
 
     compressed = _compress(enrichments)
 
+    # ── Pre-analysis known-good library evaluation ────────────────────────────
+    # Build a tiny structured context (process, parent, path, cmdline, user,
+    # destination_path) from raw_input + IOCs and match it against the curated
+    # vendor-software patterns. Each hit is passed to the AI verbatim so the
+    # threat-level assessment weights it heavily — the goal is to stop the
+    # platform calling Dell SupportAssist maintenance "suspicious."
+    try:
+        from intel.known_good import extract_context_from_state, match as _known_good_match
+        _kg_ctx = extract_context_from_state(state)
+        _kg_hits = _known_good_match(_kg_ctx)
+    except Exception:
+        _kg_ctx, _kg_hits = {}, []
+    if _kg_hits:
+        known_good_lines = []
+        for h in _kg_hits[:8]:
+            known_good_lines.append(
+                f"  • {h['vendor']} {h['product']} ({h['category']})"
+            )
+            known_good_lines.append(f"      WHY THIS IS NORMAL: {h['rationale']}")
+            for field, pat in h["matched_fields"][:3]:
+                known_good_lines.append(f"      matched on {field}: /{pat}/")
+        known_good_matches = "\n".join(known_good_lines)
+    else:
+        known_good_matches = "(no known-good software patterns matched)"
+
     result = None
     tool_call_log = []
     openai_key = config.get("OPENAI_API_KEY")
@@ -777,6 +913,11 @@ Tool-budget tips:
 
 ## Baseline cross-references already collected (do NOT re-query these)
 {cross_ctx[:2500]}
+
+## KNOWN_GOOD MATCHES (curated vendor-software patterns)
+{known_good_matches}
+Treat each hit above as strong evidence the activity is legitimate vendor behaviour.
+Anchor your threat_level on it unless concrete malicious evidence contradicts it.
 
 ## Behavioral / TTP indicators extracted from raw input (spec §1 — pre-enrichment)
 {json.dumps(state.get('behavioral_indicators', {}).get('categories', {}), indent=2)[:2500] or "(none detected)"}
@@ -901,23 +1042,39 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                 verdict_instr = (
                     f"{answers_block}"
                     "Now output PART 1 of your final assessment as strict JSON — the verdict and "
-                    "narrative. Be definitive — if the evidence points to a specific malware family, "
-                    "threat actor, or campaign, name it. Do not hedge unnecessarily.\n\n"
+                    "narrative. Apply the EVIDENCE STANDARD from the system prompt:\n\n"
+                    "  • HIGH or CRITICAL requires AT LEAST ONE concrete malicious-evidence point\n"
+                    "    (known-bad hash, named malware family, lateral movement, credential\n"
+                    "    access, confirmed unauthorized access, malicious infrastructure callout).\n"
+                    "  • If the assessment_basis below lists ONLY benign indicators (known-good\n"
+                    "    library hit, clean hash across all sources, legitimate parent process,\n"
+                    "    expected service account, recognised vendor directory) the threat_level\n"
+                    "    MUST be INFORMATIONAL or LOW.\n"
+                    "  • Be definitive when evidence is clear; do not hedge with 'potential misuse'\n"
+                    "    when the evidence actually points toward benign activity.\n\n"
                     "Output ONLY these keys (nothing else):\n"
-                    "  summary (2-3 sentence executive summary for a customer-facing report),\n"
+                    "  summary (2-3 sentence executive summary — when the activity matches a\n"
+                    "    known-good vendor pattern, say so plainly, e.g. 'This is consistent\n"
+                    "    with Dell SupportAssist scheduled maintenance.'),\n"
                     "  threat_level (CRITICAL|HIGH|MEDIUM|LOW|INFORMATIONAL),\n"
+                    "  assessment_basis (array of 2-5 SHORT sentences — the specific evidence\n"
+                    "    that drove the threat_level. Examples: 'Process path matches Dell\n"
+                    "    SupportAssist (known-good library hit)', 'Hash is clean across all 5\n"
+                    "    reputation sources checked', 'Parent process is SCCM management agent',\n"
+                    "    'SHA256 7c2f... flagged by 42/96 VirusTotal engines as Cobalt Strike').\n"
                     "  confidence (0.0-1.0), confidence_basis,\n"
                     "  malware_family (specific family name or null — e.g. 'Cobalt Strike', 'Emotet'),\n"
                     "  threat_actor ({name, confidence} for APT/eCrime group or null),\n"
                     "  campaign (known campaign name or null),\n"
                     "  attack_stage (reconnaissance|weaponization|delivery|exploitation|\n"
-                    "    installation|command_and_control|actions_on_objectives),\n"
+                    "    installation|command_and_control|actions_on_objectives|null when benign),\n"
                     "  attack_chain_hypothesis,\n"
                     "  chain_of_thought (array of 3-5 reasoning steps),\n"
                     "  verdict_classification (MALICIOUS|LIKELY_MALICIOUS|AMBIGUOUS|\n"
                     "    LIKELY_BENIGN|BENIGN_FALSE_POSITIVE),\n"
                     "  needs_more_enrichment (bool), tor_traffic (bool), attribution_hints,\n"
-                    "  false_positive_check (which FP patterns you considered + ruled out),\n"
+                    "  false_positive_check (which FP patterns you considered + ruled out — when\n"
+                    "    a known-good library hit is present, cite it here),\n"
                     "  context_impact (how analyst answers, if any, changed the assessment; '' if none).\n\n"
                     "No markdown fences, no commentary outside the JSON."
                 )
@@ -1028,6 +1185,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                         alert_type=alert_type,
                         triage_score=round(triage_score, 2),
                         cross_ctx=cross_ctx or "(none)",
+                        known_good_matches=known_good_matches,
                     )}],
                     max_tokens=3000,   # full single-shot schema needs real headroom
                     temperature=0.1,
@@ -1043,20 +1201,73 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
 
     if result is None:
         result = {
-            "threat_level": "MEDIUM",
-            "confidence": 0.4,
+            "threat_level": "INFORMATIONAL",   # was MEDIUM — see graceful-degradation rule
+            "confidence": 0.0,
             "needs_more_enrichment": False,
-            "summary": "AI investigation unavailable — enrichment data collected. Manual review required.",
+            "summary": ("AI investigation unavailable — your enrichment data was still "
+                        "collected. The threat level shown is a fallback, not an AI verdict. "
+                        "Configure or fix your AI provider key in Settings to enable AI analysis."),
+            "assessment_basis": [
+                "AI provider call failed — no AI verdict produced.",
+                "Threat level defaulted to INFORMATIONAL pending AI availability.",
+            ],
             "chain_of_thought": ["OpenAI key not configured or call failed. Review enrichment data manually."],
-            "key_findings": ["Automated AI analysis unavailable. See enrichment data tab."],
+            "key_findings": ["Automated AI analysis unavailable. See the enrichment data tab for raw signals."],
             "ioc_assessments": [],
             "mitre_techniques": [],
             "attack_patterns": [],
             "geo_highlights": [],
-            "recommended_actions": ["Review enrichment data manually.", "Configure OpenAI API key for AI analysis."],
+            "recommended_actions": [
+                "Open Settings and verify your AI provider key (OPENAI_API_KEY).",
+                "Review the enrichment data manually to assess this alert.",
+            ],
             "tor_traffic": False,
             "attribution_hints": None,
+            "ai_unavailable": True,
         }
+
+    # ── Calibration safety-net ────────────────────────────────────────────────
+    # If the AI returned HIGH/CRITICAL but assessment_basis contains ONLY benign
+    # indicators (known-good library hit, clean hash across sources, legitimate
+    # parent process, etc.) and there is NO concrete malicious-evidence signal,
+    # force the threat_level down. The system prompt instructs this explicitly;
+    # this is the belt-and-braces enforcement.
+    try:
+        _level = (result.get("threat_level") or "").upper()
+        _basis = result.get("assessment_basis") or []
+        if _level in ("HIGH", "CRITICAL") and _basis:
+            _basis_text = " ".join(str(b).lower() for b in _basis)
+            _benign_markers = (
+                "known-good", "known good", "clean across", "is clean",
+                "no malicious", "legitimate", "expected", "vendor pattern",
+                "vendor directory", "service account", "matches dell",
+                "matches microsoft", "matches crowdstrike", "matches sccm",
+                "matches intune", "matches sentinel", "matches carbon black",
+            )
+            _malicious_markers = (
+                "flagged by", "vt detect", "malware family", "cobalt strike",
+                "mimikatz", "lsass", "ransomware", "dcsync", "credential",
+                "lateral", "c2 callout", "command-and-control", "exfiltrat",
+                "kev ", "malicious infrastructure", "phishing kit", "byovd",
+                "loldrivers hit",
+            )
+            has_benign    = any(m in _basis_text for m in _benign_markers)
+            has_malicious = any(m in _basis_text for m in _malicious_markers)
+            if has_benign and not has_malicious:
+                _log.info(
+                    "calibration override: %s -> LOW (assessment_basis is benign-only)",
+                    _level,
+                )
+                result["threat_level"] = "LOW"
+                result["assessment_basis"] = list(_basis) + [
+                    "[RECON calibration] threat_level lowered — assessment_basis "
+                    "contained only benign indicators and no concrete malicious evidence."
+                ]
+                # Drop incompatible verdict labels that don't fit the lowered level
+                if result.get("verdict_classification") in ("MALICIOUS", "LIKELY_MALICIOUS"):
+                    result["verdict_classification"] = "LIKELY_BENIGN"
+    except Exception:
+        pass
 
     trace.append({
         "agent": "investigation",

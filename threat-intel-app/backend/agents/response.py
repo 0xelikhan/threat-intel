@@ -320,6 +320,8 @@ the evidence pack. No generic phrasing."""
         "attack_chain_hypothesis": investigation.get("attack_chain_hypothesis", ""),
         "confidence_basis":    investigation.get("confidence_basis", ""),
         "false_positive_check":investigation.get("false_positive_check", ""),
+        "assessment_basis":    investigation.get("assessment_basis", []),
+        "ai_unavailable":      investigation.get("ai_unavailable", False),
         "correlated_signals":  investigation.get("correlated_signals", []),
         "mitre_evidence":      investigation.get("mitre_evidence", []),
         "timestamp":           datetime.now(timezone.utc).isoformat(),
