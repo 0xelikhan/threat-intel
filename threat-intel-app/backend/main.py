@@ -129,6 +129,16 @@ async def _kick_prewarm():
         ]
         # Fan out — all warm in parallel; startup completes immediately
         await asyncio.gather(*[_warm_one(*m) for m in light + heavy])
+        # Register static-dataset namespaces in the TTL cache so they
+        # appear in /api/status (the actual data lives in each module's
+        # own dict — we don't double-store). A long-TTL marker entry
+        # keeps the namespace non-empty for hit-rate accounting.
+        try:
+            from intel.cache import cache_for
+            for ns in ("mitre", "warninglists", "feodo", "sslbl", "kev"):
+                cache_for(ns).set("__warmed__", True)
+        except Exception:
+            pass
         print("[recon] all intel pre-warm tasks complete")
 
     asyncio.create_task(_warm_all())
@@ -227,6 +237,14 @@ async def test_key():
 async def health():
     status = config.get_status()
     missing = [k for k, v in status.items() if v["required"] and not v["configured"]]
+    # Additive: existing fields untouched, plus a `cache` rollup so the
+    # status page can show hit rate without breaking older clients that
+    # only read the legacy keys.
+    try:
+        from intel.cache import global_stats as _cache_stats
+        cache_block = _cache_stats()
+    except Exception as e:
+        cache_block = {"error": str(e)}
     return {
         "status":          "ready" if config.is_configured() else "setup_required",
         "version":         "3.0.0",
@@ -240,6 +258,7 @@ async def health():
         "historyCount":    len(_history),
         "webhooks":        _webhooks_available(),
         "intel_layer":     _intel_status(),
+        "cache":           cache_block,
     }
 
 

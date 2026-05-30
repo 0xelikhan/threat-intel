@@ -60,35 +60,58 @@ class EnrichIOCSkill(Skill):
 
         # Dispatch to the right enrich_* function from agents.enrichment.
         try:
+            import logging
             import aiohttp
             from config import config
             from agents import enrichment as _enr
+            from intel.cache import cache_for
         except Exception as e:
             return {"ioc": ioc_value, "type": ioc_type, "verdict": "UNKNOWN",
                     "score": 0, "sources": {}, "summary": [f"enrichment unavailable: {e}"]}
 
+        _log = logging.getLogger("recon.skill.enrich_ioc")
         keys = {k: config.get(k, "") for k in (
             "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
             "GREYNOISE_KEY", "SHODAN_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
             "IPINFO_TOKEN", "WHOISXML_KEY", "CROWDSEC_KEY", "PHISHTANK_KEY",
         )}
-        # Share the enrichment module's process-wide TCP/DNS pool so
-        # individual skill calls benefit from the same warm sockets
-        # as the full pipeline.
-        async with aiohttp.ClientSession(
-            connector=_enr._get_connector(), connector_owner=False
-        ) as session:
-            if ioc_type == "ip":
-                data = await _enr.enrich_ip(session, ioc_value, keys)
-            elif ioc_type in ("domain", "hostname"):
-                data = await _enr.enrich_domain(session, ioc_value, keys)
-            elif ioc_type in ("hash", "file"):
-                data = await _enr.enrich_hash(session, ioc_value, keys)
-            elif ioc_type == "url":
-                data = await _enr.enrich_url(session, ioc_value, keys)
-            else:
-                return {"ioc": ioc_value, "type": ioc_type, "verdict": "UNKNOWN",
-                        "score": 0, "sources": {}, "summary": ["unknown ioc_type"]}
+
+        # ── cache lookup ──────────────────────────────────────────────────────
+        # Cache the full per-IOC enrichment payload. The skill is the single
+        # entry point so caching here avoids the entire downstream fan-out
+        # on a hit. Namespace is "enrich" so each TI bucket can still tune
+        # its own TTL independently if we split later.
+        cache    = cache_for("enrich")
+        cache_key = f"{ioc_type}:{ioc_value.lower()}"
+        cached    = cache.get(cache_key)
+        if cached is not None:
+            _log.debug("cache hit %s", cache_key)
+            data = cached
+        else:
+            _log.debug("cache miss %s", cache_key)
+            # Share the enrichment module's process-wide TCP/DNS pool so
+            # individual skill calls benefit from the same warm sockets
+            # as the full pipeline.
+            async with aiohttp.ClientSession(
+                connector=_enr._get_connector(), connector_owner=False
+            ) as session:
+                if ioc_type == "ip":
+                    data = await _enr.enrich_ip(session, ioc_value, keys)
+                elif ioc_type in ("domain", "hostname"):
+                    data = await _enr.enrich_domain(session, ioc_value, keys)
+                elif ioc_type in ("hash", "file"):
+                    data = await _enr.enrich_hash(session, ioc_value, keys)
+                elif ioc_type == "url":
+                    data = await _enr.enrich_url(session, ioc_value, keys)
+                else:
+                    return {"ioc": ioc_value, "type": ioc_type, "verdict": "UNKNOWN",
+                            "score": 0, "sources": {}, "summary": ["unknown ioc_type"]}
+            # Only cache on a real payload — never store an empty/error-only
+            # response or we'd serve the failure forever.
+            if data and isinstance(data, dict) and any(
+                k for k in data if k != "error"
+            ):
+                cache.set(cache_key, data)
 
         # Derive verdict + score via the existing deterministic scorer for
         # parity with the GTI panel; falls back to a coarse heuristic if it
