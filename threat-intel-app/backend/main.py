@@ -207,6 +207,17 @@ async def _kick_prewarm():
 
     _log.info("startup: pre-warm scheduled in background, accepting requests now")
 
+    # Self-diagnosis: run once at startup so the operator sees what's
+    # broken in the logs, then continuously every 15 min so /api/health
+    # always reflects live source status.
+    try:
+        from intel.diagnose import run_startup_checks, background_health_loop
+        asyncio.create_task(run_startup_checks())
+        asyncio.create_task(background_health_loop(interval_s=900))
+        _log.info("self-diagnosis scheduled")
+    except Exception as e:
+        _log.warning("self-diagnosis NOT started: %s", e)
+
 
 @app.on_event("shutdown")
 async def _close_http_pool():
@@ -301,6 +312,14 @@ async def health():
         breaker_block = _get_breaker().stats()
     except Exception as e:
         breaker_block = {"error": str(e)}
+    # Live diagnosis snapshot — updated by the 15-min background loop
+    # so /api/health reflects current source / AI provider state, not
+    # the boot-time snapshot. Additive — old fields preserved.
+    try:
+        from intel.diagnose import get_current_health
+        diagnosis_block = get_current_health()
+    except Exception as e:
+        diagnosis_block = {"error": str(e)}
     return {
         "status":          "ready" if config.is_configured() else "setup_required",
         "version":         "3.0.0",
@@ -316,7 +335,18 @@ async def health():
         "intel_layer":     _intel_status(),
         "cache":           cache_block,
         "circuit_breaker": breaker_block,
+        "diagnosis":       diagnosis_block,
     }
+
+
+# ─── /api/diagnose — on-demand self-diagnosis report ────────────────────────
+@app.get("/api/diagnose")
+async def diagnose():
+    """Run every health check on demand and return the full report. Each
+    entry carries {name, status, message, fix_hint, detail} so the UI
+    can render an actionable list."""
+    from intel.diagnose import run_all_checks
+    return await run_all_checks()
 
 
 # ─── Auth ────────────────────────────────────────────────────────────────────
@@ -2249,6 +2279,155 @@ async def email_compose_ai(req: EmailComposeAIRequest):
     if "error" in out:
         raise HTTPException(503, out["error"])
     return out
+
+
+# ─── AI remediation (Section 7) ─────────────────────────────────────────────
+class EmailRemediateRequest(BaseModel):
+    """Body for /api/email/remediate. Accepts whatever subset of parsed
+    alert fields the email composer has populated — every field is
+    optional because alert types vary widely."""
+    parsed:            dict = {}
+    log_text:          str = ""
+    alert_type:        str = ""
+    threat_level:      str = ""
+    mitre_techniques:  list = []
+    severity:          str = ""
+
+
+_REMEDIATION_SYSTEM_PROMPT = """You are a senior incident responder and threat-intelligence
+analyst at a Managed Detection and Response provider with 10 years of experience.
+
+An analyst is about to send a security alert notification email to a customer or
+internal stakeholder. You have been given the parsed details of the alert. Your
+job is to generate clear, SPECIFIC, ACTIONABLE remediation and investigation
+guidance that will be included directly in the email.
+
+Write as if you are advising the recipient on exactly what to do right now. Be
+specific to the actual threat details provided — do NOT give generic advice. If
+you can identify the malware family or threat actor from the details, reference
+their known behaviors and typical next steps.
+
+Output STRICT JSON with EXACTLY these keys (no markdown fences, no commentary):
+{
+  "immediate_actions": [
+    "<3-5 things to do in the next 15 minutes. Each item is ONE actionable
+     sentence starting with a verb: Isolate / Block / Revoke / Reset / Preserve / Disable / Notify>"
+  ],
+  "investigation_steps": [
+    {
+      "title":       "<short, specific title>",
+      "description": "<2 sentences explaining what to do and what to look for>"
+    }
+    // 4-6 entries
+  ],
+  "containment_guidance": "<1 paragraph explaining how to contain THIS specific threat>",
+  "recovery_guidance":    "<1 paragraph explaining how to safely recover affected systems>",
+  "detection_guidance":   "<1 paragraph explaining what additional logging or monitoring to enable>",
+  "executive_summary":    "<2-3 sentences in plain English suitable for non-technical management>"
+}
+
+Calibration rules:
+* If the parsed details indicate likely benign / known-good vendor behaviour, say
+  so in the executive_summary and skew the immediate_actions toward verification
+  ("Confirm the alert matches expected vendor maintenance activity") rather than
+  containment.
+* If the threat is genuinely high-severity (named malware family, confirmed
+  unauthorized access, lateral movement), make the immediate_actions decisive
+  and time-bound."""
+
+
+@app.post("/api/email/remediate")
+async def email_remediate(req: EmailRemediateRequest):
+    """Generate structured AI remediation guidance for the parsed alert.
+    Returns the same 6-section dict the email composer's remediation
+    panel renders, so the analyst can pick which sections to include
+    in the outgoing email body."""
+    from providers import get_provider
+    import json as _json
+
+    if not config.get("OPENAI_API_KEY"):
+        from intel.error_messages import lookup as _lookup
+        err = _lookup("OPENAI_API_KEY_MISSING")
+        raise HTTPException(503, err["detail"])
+
+    # Compact, AI-friendly representation of the alert details.
+    parsed = req.parsed or {}
+    detail_lines = []
+    for k in ("suggested_alert_type", "_alert_label", "user_principal_name",
+              "user_display_name", "asset_name", "ip_address",
+              "location_city", "location_country",
+              "ep_process_path", "ep_cmd_line", "ep_sha256",
+              "ep_application_name", "ep_message", "ep_defender_type",
+              "risk_event_type", "risk_state", "risk_level", "risk_detail",
+              "additional_info_risk_reasons", "additional_info_user_agent"):
+        v = parsed.get(k)
+        if v:
+            detail_lines.append(f"  {k}: {v}")
+
+    user_msg = (
+        f"ALERT TYPE        : {req.alert_type or parsed.get('suggested_alert_type') or 'unknown'}\n"
+        f"THREAT LEVEL      : {req.threat_level or 'unknown'}\n"
+        f"SEVERITY          : {req.severity or 'unknown'}\n"
+        f"MITRE TECHNIQUES  : {', '.join((req.mitre_techniques or [])[:8]) or '(none mapped)'}\n\n"
+        f"PARSED ALERT DETAILS:\n"
+        + ("\n".join(detail_lines) if detail_lines else "  (no structured fields available)")
+        + "\n\nRAW LOG (first 2000 chars):\n"
+        + (req.log_text or "")[:2000]
+    )
+
+    try:
+        provider = get_provider()
+        resp = await provider.complete(
+            model=config.get_model(),   # smart model for the customer-facing guidance
+            messages=[
+                {"role": "system", "content": _REMEDIATION_SYSTEM_PROMPT},
+                {"role": "user",   "content": user_msg},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+            max_tokens=1800,
+        )
+    except Exception as e:
+        raise HTTPException(503, f"AI remediation unavailable: {e}")
+
+    if resp.error:
+        raise HTTPException(503, resp.error)
+
+    try:
+        out = _json.loads(resp.message or "{}")
+    except Exception:
+        # Retry once with an explicit format-fix instruction — matches the
+        # graceful-degradation rule in S4.
+        try:
+            resp2 = await provider.complete(
+                model=config.get_model(),
+                messages=[
+                    {"role": "system", "content": _REMEDIATION_SYSTEM_PROMPT},
+                    {"role": "user",   "content": user_msg},
+                    {"role": "assistant", "content": resp.message or ""},
+                    {"role": "user", "content":
+                        "Your previous response was not valid JSON. Re-emit it as "
+                        "strict JSON only — no markdown, no commentary, no fences."},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.0,
+                max_tokens=1800,
+            )
+            out = _json.loads(resp2.message or "{}")
+        except Exception:
+            out = {}
+
+    # Schema fill-in so the frontend can render every section unconditionally.
+    return {
+        "immediate_actions":   out.get("immediate_actions") or [],
+        "investigation_steps": out.get("investigation_steps") or [],
+        "containment_guidance": out.get("containment_guidance") or "",
+        "recovery_guidance":    out.get("recovery_guidance") or "",
+        "detection_guidance":   out.get("detection_guidance") or "",
+        "executive_summary":    out.get("executive_summary") or "",
+        "model":                resp.model or "",
+        "provider":             resp.provider or "",
+    }
 
 
 @app.post("/api/email/send")
