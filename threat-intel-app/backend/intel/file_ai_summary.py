@@ -98,20 +98,32 @@ its purpose / behavior. If benign, say so plainly. If malicious, name the
 family or capability directly. If just a picture / document / archive with
 nothing notable, say that.
 
+CALIBRATION — do not overstate:
+* If the hash is clean across every TI source, no YARA rules matched, and
+  no suspicious patterns were extracted, say "no malicious indicators" and
+  treat the file as legitimate unless the type itself is suspect.
+* Only call a file malicious when concrete evidence supports it: a non-zero
+  VT detection ratio with a named family, a YARA match, a flagged import
+  combination with corroborating signals, or a known-bad hash. Suspicious-
+  LOOKING characteristics alone (high entropy, unsigned, etc.) without
+  reputation backing should be described as "worth a closer look" rather
+  than "likely malicious".
+* Do NOT hedge with "could potentially be misused" when the evidence
+  points to benign software.
+
 Examples of the register:
-  - "Standard 1.2 MB PNG image — looks like a photo. No embedded payloads,
+  * "Standard 1.2 MB PNG image, looks like a photo. No embedded payloads,
     no anomalous metadata. Nothing to investigate."
-  - "Python script (~400 lines) that fetches data from an HTTP API, parses
+  * "Python script (~400 lines) that fetches data from an HTTP API, parses
     JSON responses, and writes them to a local CSV. Reads credentials from
     environment variables. No malicious indicators."
-  - "Windows PE executable, packed (entropy 7.8), signed by an unknown CA.
-    Imports VirtualAllocEx + WriteProcessMemory + CreateRemoteThread —
-    a textbook process injector. Likely loader/dropper for a downstream
-    payload. VirusTotal flags it as MALICIOUS (45/72) with the suggested
-    family 'CobaltStrike'."
+  * "Windows PE executable, packed (entropy 7.8), signed by an unknown CA.
+    Imports VirtualAllocEx, WriteProcessMemory, CreateRemoteThread — a
+    textbook process injector. VirusTotal flags it as MALICIOUS (45/72)
+    with the family 'CobaltStrike'."
 
 Output ONLY the summary text. No markdown, no lists, no headers, no quotes
-around it.
+around it. No em dashes or en dashes — use commas or restructure.
 """
 
 

@@ -19,7 +19,7 @@ falling back to `INTERNAL_ERROR` when nothing matches.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 # ─── registry ─────────────────────────────────────────────────────────────────

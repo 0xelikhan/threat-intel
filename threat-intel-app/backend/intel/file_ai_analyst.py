@@ -77,10 +77,27 @@ def _client(config, fast: bool = False):
 
 
 # ─── Phase 1 — rapid triage classification ─────────────────────────────────────
+# Calibration: file triage must apply the same evidence-required standard the
+# investigation agent uses. A clean hash + benign import set + no YARA hits is
+# "Likely Legitimate", not "Unknown Malware".
+from intel.calibration import CALIBRATION_PRINCIPLES as _CAL_PRINCIPLES  # noqa: E402
+
 _TRIAGE_SYSTEM = f"""You are a senior malware triage analyst. You receive
 high-signal indicators from a static file scan and must classify the sample
-into exactly ONE category within seconds. Do not analyze deeply — that runs
-separately. Output strict JSON only.
+within seconds. Apply the calibration rules below — many submitted files are
+legitimate vendor binaries, signed software, or known-good system tools.
+
+{_CAL_PRINCIPLES}
+
+CLASSIFICATION TIE-BREAKERS for file triage:
+* If the hash is clean across every TI source AND no YARA rules matched AND
+  no suspicious patterns were extracted AND no flagged PE imports, classify
+  as "Likely Legitimate" (use the closest of the categories below, e.g.
+  "Potentially Unwanted Program" only when there's PUA-specific evidence).
+* If a VT detection ratio is non-zero but minimal (1-2/many engines), treat
+  as "Unknown Malware" only when corroborating evidence exists — otherwise
+  prefer the static_verdict already calculated.
+* malware_family from VT is authoritative when present. Use it.
 
 Categories (pick exactly one):
 {', '.join(CLASSIFICATIONS)}
@@ -88,7 +105,7 @@ Categories (pick exactly one):
 Output schema:
   {{
     "classification": "<one of the categories>",
-    "confidence": <float 0.0-1.0>,
+    "confidence": <float 0.0-1.0 — DO NOT inflate; clean files deserve high confidence in 'Likely Legitimate'>,
     "reasoning": "<one short sentence — the single strongest signal that drove this>"
   }}
 
@@ -167,19 +184,27 @@ async def triage_classify(analysis: Dict, config) -> Optional[Dict]:
 #   • HEADLINE   — the narrative-heavy fields the analyst reads first
 #   • STRUCTURED — the list/object findings
 # Both share the same analyst persona so the voice is consistent.
-_DEEP_PERSONA = """You are a senior malware analyst and reverse engineer with 15
-years of experience analyzing malware for a major antivirus vendor and government
-CERT. You have analyzed hundreds of thousands of malware samples. You think like
-a detective — you look for what is unusual, what does not fit, what the attacker
-was trying to hide, and what the COMBINATION of indicators tells you that no
-single indicator could reveal alone.
+_DEEP_PERSONA = f"""You are a senior malware analyst and reverse engineer with 15
+years of experience at a major AV vendor and government CERT. You have analyzed
+hundreds of thousands of samples. You think like a detective — you look for what
+is unusual, what does not fit, what the attacker was trying to hide, and what
+the COMBINATION of indicators tells you that no single indicator reveals alone.
+
+{_CAL_PRINCIPLES}
 
 You have just received the complete static analysis, threat intelligence, and
-behavioral assessment of a suspicious file. DO NOT simply restate what the tools
-found. Synthesize the findings into insights. Explain what the combination of
-indicators means. Identify what is unusual or notable about this specific sample.
-Make definitive attributions when the evidence supports them and explain your
-reasoning. Flag anything designed to mislead analysts.
+behavioral assessment of a file. DO NOT simply restate what the tools found.
+Synthesize the findings. Explain what the combination of indicators means.
+Identify what is unusual or notable about this specific sample. Make definitive
+attributions when the evidence supports them — and EQUALLY definitive
+"this looks legitimate" calls when the evidence supports THAT. Flag anything
+designed to mislead analysts; do NOT invent threats that are not there.
+
+When the file is plainly a legitimate vendor binary (clean hash across every
+source, signed by a known vendor, matches a known-good software path), say so
+clearly in the executive_summary and set malware_classification.category to
+"Likely Legitimate" (or the closest from the standard list). DO NOT hedge with
+"could be misused" when the evidence shows benign software.
 
 SOURCE-CITATION RULES (anti-hallucination — analysts have explicitly flagged
 made-up TI sources as the worst possible failure mode):
@@ -200,7 +225,7 @@ made-up TI sources as the worst possible failure mode):
 
 _HEADLINE_SCHEMA = """Output STRICT JSON ONLY with this exact schema (every field present, no extras):
 {
-  "executive_summary":       "3-4 sentences for a CISO in plain English. No jargon. What is this file, what does it do, what risk does it pose, what should be done.",
+  "executive_summary":       "3-4 sentences for a CISO in plain English. No jargon. What is this file, what does it do, what risk does it pose, what should be done. When the file looks legitimate, say so plainly.",
   "technical_summary":       "2-3 paragraphs for a senior analyst. Architecture, how it achieves objectives, what makes this sample notable, comparison to similar known families.",
   "execution_narrative":     "3-4 paragraphs written like a story. Walk through what happens from execution to objective. Junior analyst should know what to look for in logs.",
   "malware_classification":  {"category": "<from the standard list>", "confidence": 0.0-1.0},
@@ -210,6 +235,7 @@ _HEADLINE_SCHEMA = """Output STRICT JSON ONLY with this exact schema (every fiel
   "campaign":                "<campaign name or null>",
   "sophistication_level":    {"level": "<Script Kiddie|Commodity Malware|Capable Threat Actor|Nation State Actor>", "reasoning": "..."},
   "infection_vector":        "<most likely delivery mechanism>",
+  "assessment_basis":        ["<2-5 SHORT sentences listing the specific evidence points that drove your malware_classification. Cite each one (e.g. 'VT 42/96 named Cobalt Strike', 'Hash clean across all 6 sources checked', 'Signed by Dell Inc. — vendor binary', 'YARA matched ransomware_note pattern'). If basis lists only benign indicators, classification MUST be Likely Legitimate / Potentially Unwanted Program.>"],
   "confidence_assessment":   {"overall_confidence": 0.0-1.0, "what_would_help": "<what additional analysis would most strengthen this>"}
 }
 
@@ -340,6 +366,7 @@ def _safe_normalize_deep(out: Dict) -> Dict:
             "reasoning": soph.get("reasoning") or "",
         },
         "infection_vector":       out.get("infection_vector"),
+        "assessment_basis":       _list(out.get("assessment_basis")),
         "objectives":             _list(out.get("objectives")),
         "key_findings":           _list(out.get("key_findings")),
         "anomalies":              _list(out.get("anomalies")),

@@ -1227,45 +1227,13 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
         }
 
     # ── Calibration safety-net ────────────────────────────────────────────────
-    # If the AI returned HIGH/CRITICAL but assessment_basis contains ONLY benign
-    # indicators (known-good library hit, clean hash across sources, legitimate
-    # parent process, etc.) and there is NO concrete malicious-evidence signal,
-    # force the threat_level down. The system prompt instructs this explicitly;
-    # this is the belt-and-braces enforcement.
+    # Shared with file_ai_analyst, response.py, email_composer via
+    # intel/calibration.py. Belt-and-braces enforcement of the in-prompt
+    # rule: HIGH/CRITICAL with only benign markers in assessment_basis
+    # downshifts to LOW.
     try:
-        _level = (result.get("threat_level") or "").upper()
-        _basis = result.get("assessment_basis") or []
-        if _level in ("HIGH", "CRITICAL") and _basis:
-            _basis_text = " ".join(str(b).lower() for b in _basis)
-            _benign_markers = (
-                "known-good", "known good", "clean across", "is clean",
-                "no malicious", "legitimate", "expected", "vendor pattern",
-                "vendor directory", "service account", "matches dell",
-                "matches microsoft", "matches crowdstrike", "matches sccm",
-                "matches intune", "matches sentinel", "matches carbon black",
-            )
-            _malicious_markers = (
-                "flagged by", "vt detect", "malware family", "cobalt strike",
-                "mimikatz", "lsass", "ransomware", "dcsync", "credential",
-                "lateral", "c2 callout", "command-and-control", "exfiltrat",
-                "kev ", "malicious infrastructure", "phishing kit", "byovd",
-                "loldrivers hit",
-            )
-            has_benign    = any(m in _basis_text for m in _benign_markers)
-            has_malicious = any(m in _basis_text for m in _malicious_markers)
-            if has_benign and not has_malicious:
-                _log.info(
-                    "calibration override: %s -> LOW (assessment_basis is benign-only)",
-                    _level,
-                )
-                result["threat_level"] = "LOW"
-                result["assessment_basis"] = list(_basis) + [
-                    "[RECON calibration] threat_level lowered — assessment_basis "
-                    "contained only benign indicators and no concrete malicious evidence."
-                ]
-                # Drop incompatible verdict labels that don't fit the lowered level
-                if result.get("verdict_classification") in ("MALICIOUS", "LIKELY_MALICIOUS"):
-                    result["verdict_classification"] = "LIKELY_BENIGN"
+        from intel.calibration import downshift_if_benign_only
+        downshift_if_benign_only(result, label="RECON calibration")
     except Exception:
         pass
 
