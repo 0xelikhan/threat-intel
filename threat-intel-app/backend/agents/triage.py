@@ -90,7 +90,7 @@ def extract_iocs(text: str) -> dict:
     """Extract IOCs using iocextract (handles defanged forms like 8[.]8[.]8[.]8,
     hxxp://, bracketed dots, etc.) with a regex fallback if the library is missing."""
     iocs = {"ips": set(), "domains": set(), "urls": set(), "hashes": set(),
-            "emails": set(), "files": set(), "paths": set()}
+            "emails": set(), "files": set(), "paths": set(), "cves": set()}
 
     # Try the library route first — refangs defanged IOCs automatically.
     # iocextract's extract_ips() covers both v4 and v6.
@@ -194,6 +194,18 @@ def extract_iocs(text: str) -> dict:
         p = m.group(0).rstrip(".,;)\"'")
         if len(p) >= 8:
             iocs["paths"].add(p)
+
+    # CVE IDs — extracted from raw text via a strict regex, deduped,
+    # year-validated. Drives the CVE-enrichment pipeline (NVD + EPSS +
+    # live CISA KEV check). Lives in its own bucket alongside ips/domains
+    # so it routes through the same parallel fan-out + per-source
+    # streaming.
+    try:
+        from intel.cve_enrichment import extract_cves as _xcves
+        for cve in _xcves(text):
+            iocs["cves"].add(cve)
+    except Exception:
+        pass
 
     return {k: list(v) for k, v in iocs.items()}
 

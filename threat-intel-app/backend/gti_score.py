@@ -522,6 +522,70 @@ def score_email(data: dict, label: str = "email") -> GTIScore:
     )
 
 
+def score_cve(data: dict, label: str = "cve") -> GTIScore:
+    """Score a CVE based on NVD severity + EPSS probability + CISA KEV
+    actively-exploited status. KEV match is the highest-confidence signal
+    (CISA only adds CVEs with confirmed in-the-wild exploitation)."""
+    factors = []
+    score = 0
+    verdict = "UNKNOWN"
+
+    kev = data.get("cisa_kev") or {}
+    if kev and not kev.get("error") and kev.get("in_kev"):
+        score += 60
+        verdict = "MALICIOUS"
+        factors.append(f"CISA KEV: actively exploited (added {kev.get('date_added')})")
+        if kev.get("ransomware_use"):
+            score += 10
+            factors.append("CISA KEV: known ransomware-campaign use")
+
+    nvd = data.get("nvd") or {}
+    if nvd and not nvd.get("error") and nvd.get("found"):
+        sev = (nvd.get("cvss_v3_severity") or "").upper()
+        sc = nvd.get("cvss_v3_score") or 0
+        if sev == "CRITICAL":
+            score += 25
+            if verdict == "UNKNOWN":
+                verdict = "MALICIOUS"
+            factors.append(f"NVD: CVSS {sc} CRITICAL")
+        elif sev == "HIGH":
+            score += 15
+            if verdict == "UNKNOWN":
+                verdict = "SUSPICIOUS"
+            factors.append(f"NVD: CVSS {sc} HIGH")
+        elif sev == "MEDIUM":
+            score += 5
+            factors.append(f"NVD: CVSS {sc} MEDIUM")
+        elif sev == "LOW":
+            factors.append(f"NVD: CVSS {sc} LOW")
+
+    ep = data.get("epss") or {}
+    if ep and not ep.get("error") and ep.get("found"):
+        prob = float(ep.get("score") or 0.0)
+        if prob >= 0.7:
+            score += 15
+            if verdict == "UNKNOWN":
+                verdict = "SUSPICIOUS"
+            factors.append(f"EPSS: {round(prob * 100, 1)}% exploit probability")
+        elif prob >= 0.1:
+            score += 5
+            factors.append(f"EPSS: {round(prob * 100, 1)}% exploit probability")
+
+    if not factors:
+        factors.append("No CVE intelligence data available.")
+        verdict = "UNKNOWN"
+
+    score = min(score, 100)
+    severity = "HIGH" if score >= 70 else "MEDIUM" if score >= 40 \
+               else "LOW" if score >= 20 else "NONE"
+    tier_label, color = _label_and_color(score, verdict)
+    return GTIScore(
+        score=score, verdict=verdict, severity=severity,
+        contributing_factors=factors,
+        ioc_type="cve", label=label, color=color,
+    )
+
+
 def compute_gti_scores(enrichments: dict) -> dict:
     """
     Compute GTI scores for all IOC types in an enrichment result.
@@ -548,6 +612,10 @@ def compute_gti_scores(enrichments: dict) -> dict:
     for email, data in (enrichments.get("emails") or {}).items():
         if isinstance(data, dict):
             scores[email] = score_email(data, label=email).to_dict()
+
+    for cve, data in (enrichments.get("cves") or {}).items():
+        if isinstance(data, dict):
+            scores[cve] = score_cve(data, label=cve).to_dict()
 
     return scores
 

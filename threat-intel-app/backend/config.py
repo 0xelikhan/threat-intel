@@ -192,6 +192,16 @@ API_KEY_DEFINITIONS = {
         "placeholder": "Criminal IP API key",
         "group": "API Keys"
     },
+    "ABUSECH_AUTH_KEY": {
+        "label": "abuse.ch API Key",
+        "description": "abuse.ch API key — free at auth.abuse.ch, unlocks MalwareBazaar, "
+                       "ThreatFox, and URLhaus. Required since mid-2024; anonymous calls "
+                       "are heavily rate-limited.",
+        "required": False,
+        "url": "https://auth.abuse.ch",
+        "placeholder": "abuse.ch Auth-Key",
+        "group": "API Keys"
+    },
     "WHOISXML_KEY": {
         "label": "Whois XML API Key",
         "description": "Domain WHOIS lookup: registrar, creation date, registrant. Strong FP signal for newly-registered domains.",
