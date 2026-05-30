@@ -7,7 +7,6 @@ Keys never leave the user's machine — no telemetry, no cloud sync.
 import json
 import os
 from pathlib import Path
-from typing import Optional
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "./data"))
 CONFIG_FILE = DATA_DIR / "config.json"

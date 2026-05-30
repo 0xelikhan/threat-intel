@@ -6,11 +6,9 @@ Free public feeds included. Add credentials for commercial feeds.
 
 import asyncio
 import json
-import os
 import logging
 from datetime import datetime, timezone, timedelta
-from taxii2client.v21 import Server, Collection
-from stix2 import parse as stix_parse
+from taxii2client.v21 import Server
 
 logger = logging.getLogger(__name__)
 
@@ -286,7 +284,6 @@ def parse_misp_json(filepath: str) -> list[dict]:
 
 # ─── STANDALONE RUN ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    import asyncio
     logging.basicConfig(level=logging.INFO)
 
     async def main():

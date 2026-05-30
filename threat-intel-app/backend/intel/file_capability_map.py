@@ -13,7 +13,7 @@ Takes a result dict produced by file_analyzer.analyze_file() and synthesizes:
 
 from __future__ import annotations
 from functools import lru_cache
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List
 
 
 @lru_cache(maxsize=1)

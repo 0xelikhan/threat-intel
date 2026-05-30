@@ -5,7 +5,6 @@ Detects when a domain in an alert may be impersonating a well-known brand.
 Heuristic: only run dnstwist if the domain is NOT itself a well-known brand
 (no point twisting google.com) AND looks suspicious (recent registration, etc.).
 """
-import re
 from functools import lru_cache
 
 # Tier-1 brands attackers commonly impersonate

@@ -25,7 +25,7 @@ from __future__ import annotations
 import asyncio
 import aiohttp
 import time
-from typing import Dict, Optional, Set
+from typing import Dict, Set
 
 _TIMEOUT = aiohttp.ClientTimeout(total=8)
 

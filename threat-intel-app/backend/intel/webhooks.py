@@ -6,8 +6,6 @@ Configured via config.json keys:
   - THEHIVE_URL  + THEHIVE_TOKEN
   - WEBHOOK_GENERIC_URL  (raw POST of the analysis JSON)
 """
-import asyncio
-import json
 import aiohttp
 from datetime import datetime
 

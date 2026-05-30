@@ -3,7 +3,6 @@ Response Agent — generates Sigma rule, KQL query, STIX bundle, matches threat 
 Reads AI config at call time.
 """
 
-import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
@@ -137,25 +136,6 @@ def _make_client(config):
         return None
 
 
-async def _ai_call(prompt: str, config, max_tokens: int = 1500) -> str:
-    provider = _make_client(config)
-    if not provider:
-        return "# OpenAI API key not configured"
-    resp = await provider.complete(
-        # Detection-content generation (Sigma/KQL) + templated hand-off →
-        # fast model tier. The response stage runs these concurrently, so the
-        # slowest call bounds the stage; keeping all of them fast is what
-        # actually shortens it.
-        model=config.get_model(fast=True),
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=max_tokens,
-        temperature=0.1,
-    )
-    if resp.error:
-        return f"# AI generation failed: {resp.error}"
-    return (resp.message or "").strip()
-
-
 async def _ai_call_json(prompt: str, config, max_tokens: int = 1400) -> dict:
     provider = _make_client(config)
     if not provider:
@@ -187,58 +167,7 @@ async def run_response(state: dict) -> dict:
     trace = state.get("agent_trace", [])
 
     summary = investigation.get("summary", "")
-    ioc_json = json.dumps({k: v[:5] for k, v in iocs.items() if v})
     mitre_str = ", ".join(mitre[:8])
-
-    mitre_tags = " ".join(
-        f"attack.{t.split(' ')[0].lower().replace('.','_')}" for t in mitre[:8]
-    )
-
-    sigma_prompt = f"""Generate a complete production-ready Sigma detection rule in YAML.
-Threat: {summary}
-Threat Level: {threat_level}
-MITRE Techniques: {mitre_str}
-IOCs: {ioc_json}
-
-Requirements:
-- title, id (uuid4), status: experimental, description
-- author: RECON Platform
-- tags section MUST include all MITRE IDs formatted as: attack.tXXXX or attack.tXXXX_XXX
-  Tags for this rule: {mitre_tags}
-- logsource with category and product
-- detection section with keywords or field matching covering all IOCs
-- falsepositives section
-- level: {threat_level.lower()}
-Output ONLY valid YAML. No markdown fences, no explanation."""
-
-    kql_prompt = f"""Generate a complete Microsoft Sentinel KQL analytics rule.
-Threat: {summary}
-Threat Level: {threat_level}
-MITRE ATT&CK: {mitre_str}
-IOCs: {ioc_json}
-
-Requirements:
-- Comment block header with: rule name, MITRE techniques ({mitre_str}), severity, author: RECON Platform
-- let statements defining IOC lists from the provided IOCs
-- Query using relevant Sentinel tables (SecurityAlert, CommonSecurityLog, DeviceNetworkEvents, DnsEvents, etc.)
-- extend or project to add ThreatLevel, MITRETechniques fields
-- inline // comments explaining each section
-Output ONLY valid KQL. No markdown fences, no explanation."""
-
-    # Additional SIEM query languages
-    siem_prompt = f"""Generate hunt queries in 4 SIEM languages for this threat.
-Threat: {summary}
-MITRE: {mitre_str}
-IOCs: {ioc_json}
-
-Output ONLY valid JSON with these exact keys (each value is a complete, runnable query string with inline comments):
-{{
-  "splunk_spl":      "<Splunk SPL query — index= ... | search ... | stats ...>",
-  "elastic_eql":     "<Elastic EQL query — sequence by host.id ... or process where ...>",
-  "chronicle_yara_l":"<Google Chronicle YARA-L 2.0 rule — rule {{...}}>",
-  "crowdstrike_fql": "<CrowdStrike Falcon FQL/Event Search query>"
-}}
-Each query MUST reference at least one of the provided IOCs and use realistic field names for that platform."""
 
     # ── Actor attribution must happen BEFORE the evidence pack uses it ──
     matched_actors = _match_actors(mitre)

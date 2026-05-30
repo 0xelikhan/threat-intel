@@ -12,7 +12,6 @@ if the call fails so the pipeline never blocks on translation.
 """
 
 from __future__ import annotations
-import json
 import os
 from typing import Optional, Dict
 

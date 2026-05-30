@@ -38,7 +38,6 @@ import hmac
 import ipaddress
 import os
 import warnings
-from typing import Optional
 
 
 _DEFAULT_TENANT = "_global_"
