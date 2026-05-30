@@ -125,7 +125,7 @@ function IOCScoreCard({ ioc, scoreData }) {
 }
 
 // ─── MAIN GTI SCORE PANEL ─────────────────────────────────────────────────────────
-export default function GTIScorePanel({ result }) {
+function GTIScorePanel({ result }) {
   const gtiScores = result?.gti_scores || {};
   const iocs = result?.iocs || {};
 
@@ -223,3 +223,7 @@ export default function GTIScorePanel({ result }) {
     </div>
   );
 }
+
+// Skip re-render when props are shallowly equal — the top-level views all
+// receive a heavy `result` / `analysisResult` prop plus stable callbacks.
+export default React.memo(GTIScorePanel);

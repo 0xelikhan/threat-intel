@@ -5,7 +5,7 @@ const LEVEL_COLORS = {
   LOW: '#00b4d8', INFORMATIONAL: '#4a5568', UNKNOWN: '#4a5568'
 };
 
-export default function HistoryPanel({ onSelect, currentRunId }) {
+function HistoryPanel({ onSelect, currentRunId }) {
   const [history, setHistory]   = useState([]);
   const [loading, setLoading]   = useState(true);
   const [expanded, setExpanded] = useState(true);
@@ -96,3 +96,7 @@ export default function HistoryPanel({ onSelect, currentRunId }) {
     </div>
   );
 }
+
+// Skip re-render when props are shallowly equal — the top-level views all
+// receive a heavy `result` / `analysisResult` prop plus stable callbacks.
+export default React.memo(HistoryPanel);
