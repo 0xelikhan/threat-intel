@@ -120,3 +120,22 @@ def test_calibration_blocks_are_nonempty():
     assert "CALIBRATION PRINCIPLES" in CALIBRATION_PRINCIPLES
     assert "INFORMATIONAL" in VERDICT_LEVEL_GUIDE
     assert "HIGH / CRITICAL" in EVIDENCE_STANDARD
+
+
+def test_calibration_principles_cover_log_format_gotchas():
+    """The shared calibration must explain that M365 UAL ResultStatus is
+    audit-pipeline metadata, not the operation outcome. This was a real
+    false-positive: the AI claimed 'log manipulation' on a normal
+    UserLoginFailed record because ResultStatus showed Success."""
+    for needle in (
+        "ResultStatus",
+        "audit",
+        "LogonError",
+        "50057",                  # account disabled error code
+        "UserLoginFailed",
+        "IsCompliant",
+    ):
+        assert needle in CALIBRATION_PRINCIPLES, (
+            f"missing log-format gotcha: {needle!r} — the M365 UAL "
+            f"'ResultStatus: Success' false-positive will reappear"
+        )

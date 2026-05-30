@@ -192,10 +192,16 @@ def test_investigation_prompt_contains_calibration_principles():
         "evidence before drawing conclusions",  # the "innocent until proven guilty" principle, paraphrased
         "PRINCIPLE 1",
         "PRINCIPLE 3",
+        "PRINCIPLE 6",                          # log-format gotchas — added after the M365 UAL false-positive
         "EVIDENCE STANDARD",
         "INFORMATIONAL",
         "Dell SupportAssist",
         "known-good",
+        # M365 UAL ResultStatus gotcha — explicitly named in PRINCIPLE 6
+        "ResultStatus",
+        "audit-pipeline metadata",
+        "50057",                                # account disabled error code
+        "UserLoginFailed",
     ):
         # Case-insensitive substring — the prompt's exact wording is what
         # we're checking; minor capitalisation tweaks shouldn't fail it.
