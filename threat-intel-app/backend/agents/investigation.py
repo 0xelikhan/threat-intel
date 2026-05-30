@@ -82,6 +82,26 @@ def _src_flagged_malicious(src_name: str, payload: Any) -> bool:
     if s == "deception":
         # Honeypot interaction is high-signal — treat as a flag
         return bool(p.get("hit") or p.get("honeypot_interaction"))
+    # ── Breach / dark-web sources ────────────────────────────────────────────
+    if s == "hibp":
+        # An email appearing in 3+ breaches is a meaningful compromised-account
+        # signal worth flagging. 10+ is the MALICIOUS verdict threshold inside
+        # the HIBP parser; here we use the lower 3-breach bar so even moderate
+        # exposure shows up in the enrichment-summary "flagged" tally.
+        return int(p.get("breach_count") or 0) >= 3
+    if s == "dehashed":
+        return int(p.get("total") or 0) >= 3
+    if s == "intelx":
+        # 5+ matches in IntelX (dark web + paste sites) is a real signal.
+        # A single match is often coincidence (the same IP / domain across
+        # many unrelated documents).
+        return int(p.get("count") or 0) >= 5
+    if s == "criminal_ip":
+        return (p.get("verdict") or "").upper() in ("MALICIOUS", "SUSPICIOUS")
+    if s == "urlscan_screenshot":
+        # Only flag when the prior scan explicitly classified it malicious;
+        # "found=True with no malicious verdict" is informational, not bad.
+        return bool(p.get("malicious")) or int(p.get("score") or 0) >= 50
     # Default: payload had explicit malicious=True / verdict==malicious
     return (
         p.get("malicious") is True

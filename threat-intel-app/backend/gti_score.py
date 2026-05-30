@@ -458,6 +458,70 @@ def score_url(enrichment: dict) -> GTIScore:
 
 
 # ─── PUBLIC INTERFACE ─────────────────────────────────────────────────────────────
+def score_email(data: dict, label: str = "email") -> GTIScore:
+    """Score an email-address IOC based on breach exposure. The breach
+    sources (HIBP, Dehashed, IntelX) each contribute to the score; an
+    email appearing in many breaches is a meaningful compromise signal."""
+    factors = []
+    score = 0
+    verdict = "UNKNOWN"
+
+    hibp = data.get("hibp") or {}
+    if hibp and not hibp.get("error"):
+        n = int(hibp.get("breach_count") or 0)
+        if n >= 10:
+            score += 60
+            verdict = "MALICIOUS"
+            factors.append(f"HIBP: {n} breaches expose this email")
+        elif n >= 3:
+            score += 35
+            verdict = "SUSPICIOUS"
+            factors.append(f"HIBP: {n} breaches expose this email")
+        elif n >= 1:
+            score += 15
+            verdict = "SUSPICIOUS"
+            factors.append(f"HIBP: {n} breach(es)")
+        elif hibp.get("breach_count") == 0:
+            factors.append("HIBP: no breaches found")
+
+    dh = data.get("dehashed") or {}
+    if dh and not dh.get("error"):
+        t = int(dh.get("total") or 0)
+        if t >= 10:
+            score += 25
+            if verdict != "MALICIOUS":
+                verdict = "MALICIOUS"
+            factors.append(f"Dehashed: {t} leaked records")
+        elif t >= 3:
+            score += 15
+            if verdict == "UNKNOWN":
+                verdict = "SUSPICIOUS"
+            factors.append(f"Dehashed: {t} leaked records")
+
+    ix = data.get("intelx") or {}
+    if ix and not ix.get("error"):
+        n = int(ix.get("count") or 0)
+        if n >= 5:
+            score += 10
+            factors.append(f"IntelX: {n} dark-web / paste matches")
+        elif n >= 1:
+            factors.append(f"IntelX: {n} dark-web / paste match(es)")
+
+    if not factors:
+        factors.append("No breach data available for this email.")
+        verdict = "UNKNOWN"
+
+    score = min(score, 100)
+    severity = "HIGH" if score >= 70 else "MEDIUM" if score >= 40 \
+               else "LOW" if score >= 20 else "NONE"
+    tier_label, color = _label_and_color(score, verdict)
+    return GTIScore(
+        score=score, verdict=verdict, severity=severity,
+        contributing_factors=factors,
+        ioc_type="email", label=label, color=color,
+    )
+
+
 def compute_gti_scores(enrichments: dict) -> dict:
     """
     Compute GTI scores for all IOC types in an enrichment result.
@@ -480,6 +544,10 @@ def compute_gti_scores(enrichments: dict) -> dict:
     for url, data in (enrichments.get("urls") or {}).items():
         if isinstance(data, dict):
             scores[url] = score_url(data).to_dict()
+
+    for email, data in (enrichments.get("emails") or {}).items():
+        if isinstance(data, dict):
+            scores[email] = score_email(data, label=email).to_dict()
 
     return scores
 
