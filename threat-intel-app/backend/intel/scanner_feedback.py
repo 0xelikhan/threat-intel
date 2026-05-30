@@ -67,7 +67,7 @@ def institutional_knowledge_for(analysis: Dict, max_examples: int = 5) -> List[D
     same imphash. The matching uses the scan_history index to resolve sha256s
     referenced in feedback entries."""
     try:
-        from intel.file_correlation import get_scan_history, load_scan
+        from intel.file_correlation import get_scan_history
     except Exception:
         return []
 

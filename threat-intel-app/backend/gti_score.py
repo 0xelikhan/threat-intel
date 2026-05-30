@@ -19,7 +19,7 @@ Score bands (matching GTI logic):
   BENIGN / UNKNOWN    → 0–4
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 
@@ -303,7 +303,6 @@ def score_domain(enrichment: dict) -> GTIScore:
 
     HIGH_CATS = ["malware", "ransomware", "phishing", "c2", "command and control", "botnet", "exploit"]
     MED_CATS  = ["spam", "spyware", "adware", "suspicious", "hacking", "newly registered"]
-    LOW_CATS  = ["ads", "tracking", "content delivery"]
 
     # ── Verdict ───────────────────────────────────────────────────────────────────
     if vt_mal >= 5 or (us_mal and vt_mal >= 2) or vt_rep < -50:

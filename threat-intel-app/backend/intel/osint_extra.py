@@ -12,7 +12,7 @@ into a single `osint` section per IOC.
 
 from __future__ import annotations
 import aiohttp
-from typing import Optional, Dict, List
+from typing import Dict, List
 
 _TIMEOUT = aiohttp.ClientTimeout(total=10)
 

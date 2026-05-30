@@ -27,7 +27,7 @@ context to reason against.
 from __future__ import annotations
 import asyncio
 import json
-from typing import Optional, Dict, List
+from typing import Optional, Dict
 
 
 # ─── classification labels (kept in sync between prompts + UI badges) ──────────

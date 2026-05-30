@@ -26,7 +26,7 @@ import re
 import time
 import threading
 from pathlib import Path
-from typing import Optional, List, Tuple, Dict
+from typing import List, Tuple, Dict
 
 _CUSTOM_DIR = Path(__file__).resolve().parent / "yara_rules"
 _CUSTOM_DIR.mkdir(parents=True, exist_ok=True)

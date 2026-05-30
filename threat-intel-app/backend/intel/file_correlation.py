@@ -26,12 +26,7 @@ async def correlate(analysis: Dict, config) -> Dict:
     """Run all TI correlations in parallel. Returns dict to merge under
     analysis['threat_intel']."""
     sha256 = (analysis.get("hashes") or {}).get("sha256")
-    md5    = (analysis.get("hashes") or {}).get("md5")
     iocs   = analysis.get("iocs") or {}
-    pe     = (analysis.get("format_specific") or {}).get("pe") or {}
-    imphash = pe.get("imphash")
-    tlsh   = (analysis.get("hashes") or {}).get("tlsh")
-    ssdeep_h = (analysis.get("hashes") or {}).get("ssdeep")
     family_hint = None  # filled below if VT / MalwareBazaar return one
 
     keys = {
@@ -236,56 +231,6 @@ async def _feed_cache_for_iocs(iocs: Dict) -> Optional[Dict]:
     return {"hits": hits, "hit_count": len(hits)} if hits else {"hit_count": 0}
 
 
-
-
-# ─── prior scan history (file scanner's own index) ────────────────────────────
-def _scan_history_match(sha256, imphash, tlsh_h, ssdeep_h) -> Optional[Dict]:
-    """Look up any prior file scans matching by exact sha256, imphash, or
-    fuzzy hash (TLSH numeric distance, ssdeep score)."""
-    import json
-    if not _SCAN_INDEX.exists():
-        return None
-    try:
-        with open(_SCAN_INDEX, encoding="utf-8") as f:
-            idx = json.load(f)
-    except Exception:
-        return None
-    if not isinstance(idx, list):
-        return None
-
-    matches = {"exact": [], "imphash": [], "tlsh_similar": [], "ssdeep_similar": []}
-    for entry in idx:
-        e_sha    = entry.get("sha256")
-        e_imp    = entry.get("imphash")
-        e_tlsh   = entry.get("tlsh")
-        e_ssdeep = entry.get("ssdeep")
-        if sha256 and e_sha == sha256:
-            matches["exact"].append(entry)
-            continue
-        if imphash and e_imp and e_imp == imphash:
-            matches["imphash"].append(entry)
-        if tlsh_h and e_tlsh:
-            try:
-                import tlsh
-                d = tlsh.diff(tlsh_h, e_tlsh)
-                if d < 60:  # tighter = more similar
-                    matches["tlsh_similar"].append({**entry, "tlsh_distance": d})
-            except Exception:
-                pass
-        if ssdeep_h and e_ssdeep:
-            try:
-                import ssdeep
-                score = ssdeep.compare(ssdeep_h, e_ssdeep)
-                if score > 50:
-                    matches["ssdeep_similar"].append({**entry, "ssdeep_score": score})
-            except Exception:
-                pass
-
-    matches["imphash"]        = matches["imphash"][:10]
-    matches["tlsh_similar"]   = sorted(matches["tlsh_similar"], key=lambda x: x.get("tlsh_distance", 999))[:10]
-    matches["ssdeep_similar"] = sorted(matches["ssdeep_similar"], key=lambda x: -x.get("ssdeep_score", 0))[:10]
-    total = sum(len(v) for v in matches.values())
-    return matches if total else {"exact": [], "imphash": [], "tlsh_similar": [], "ssdeep_similar": []}
 
 
 def append_scan_history(analysis: Dict) -> None:

@@ -1261,7 +1261,7 @@ async def scan_file_v2(file: UploadFile = File(...)):
 
     # TI correlation (async)
     try:
-        from intel.file_correlation import correlate, append_scan_history
+        from intel.file_correlation import correlate
         analysis["threat_intel"] = await correlate(analysis, config)
     except Exception as e:
         analysis["threat_intel"] = {"error": str(e)}
@@ -1623,7 +1623,7 @@ async def scan_hunt(req: YaraHuntRequest):
         compiled = yara.compile(source=req.rule)
     except Exception as e:
         raise HTTPException(400, f"rule compile error: {e}")
-    from intel.file_correlation import get_scan_history, _SCAN_HISTORY_DIR
+    from intel.file_correlation import get_scan_history
     matches = []
     for entry in get_scan_history():
         sha = entry.get("sha256")

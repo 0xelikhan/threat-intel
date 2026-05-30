@@ -5,7 +5,6 @@ with hashes, URLs, and surfaces classic phishing signals.
 """
 import hashlib
 import re
-from typing import Any
 
 
 _EML_HINTS = ("Received:", "From:", "To:", "Subject:", "Message-ID:", "Return-Path:",
