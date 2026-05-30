@@ -19,7 +19,7 @@ import {
   ToggleButton, ToggleButtonGroup, MenuItem, Chip as MuiChip,
 } from '@mui/material';
 import { alpha as muiAlpha } from '@mui/material/styles';
-import { Mail, Copy, Check, Eye, RefreshCcw, AlertCircle, Sparkles, Zap } from 'lucide-react';
+import { Mail, Copy, Check, Eye, RefreshCcw, AlertCircle, Sparkles, Zap, Wand2 } from 'lucide-react';
 
 const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
 
@@ -88,11 +88,76 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
   const [detected, setDetected]             = useState(null);   // {alert_type, alert_label}
   const parseTimer                          = useRef(null);
   // Parsed fields stash — populated by the debounced auto-classify. Kept in
-  // state so compose can send the structured fields alongside the raw log.
-  // The AI remediation guidance is generated INLINE by compose_ai (see
-  // backend/intel/email_composer.py::_AI_SYSTEM) as flowing paragraphs in
-  // the email body — no separate panel, no button, no toggles.
-  const [, setParsedFields] = useState(initialParsed || {});
+  // state so compose can send the structured fields alongside the raw log,
+  // and so the AI Remediation panel can render the structured guidance the
+  // analyst sees the email being built from.
+  const [parsedFields, setParsedFields] = useState(initialParsed || {});
+
+  // AI Remediation panel — DISPLAY-ONLY view of the structured guidance the
+  // compose_ai prompt weaves into the email body. The panel lets analysts
+  // verify where the recommendations are coming from without parsing the
+  // rendered email. The email itself still gets the remediation woven in
+  // automatically by the backend prompt — the panel doesn't change the body.
+  const [remediation, setRemediation] = useState(null);
+  const [remLoading, setRemLoading]   = useState(false);
+  const [remError, setRemError]       = useState(null);
+
+  const _REM_SECTIONS = [
+    { key: 'executive_summary',    label: 'Executive summary' },
+    { key: 'immediate_actions',    label: 'Immediate actions (next 15 minutes)' },
+    { key: 'investigation_steps',  label: 'Investigation steps' },
+    { key: 'containment_guidance', label: 'Containment' },
+    { key: 'recovery_guidance',    label: 'Recovery' },
+    { key: 'detection_guidance',   label: 'Detection hardening' },
+  ];
+
+  const generateRemediation = useCallback(async () => {
+    if (!rawLog.trim()) { setRemError('Paste the alert log first'); return; }
+    setRemLoading(true); setRemError(null);
+    try {
+      const r = await fetch('/api/email/remediate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          parsed:           parsedFields || {},
+          log_text:         rawLog,
+          alert_type:       detected?.alert_type || parsedFields?.suggested_alert_type || '',
+          threat_level:     '',
+          severity:         '',
+          mitre_techniques: [],
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || d.error || `HTTP ${r.status}`);
+      setRemediation(d);
+    } catch (e) {
+      setRemError(e.message);
+    } finally {
+      setRemLoading(false);
+    }
+  }, [rawLog, parsedFields, detected]);
+
+  const copyAllRemediation = useCallback(() => {
+    if (!remediation) return;
+    const lines = [];
+    for (const s of _REM_SECTIONS) {
+      const v = remediation[s.key];
+      if (!v) continue;
+      lines.push(`# ${s.label}`);
+      if (Array.isArray(v)) {
+        for (const item of v) {
+          if (typeof item === 'string') lines.push(`  - ${item}`);
+          else if (item && typeof item === 'object') {
+            lines.push(`  - ${item.title || ''}`);
+            if (item.description) lines.push(`      ${item.description}`);
+          }
+        }
+      } else {
+        lines.push(String(v));
+      }
+      lines.push('');
+    }
+    navigator.clipboard.writeText(lines.join('\n'));
+  }, [remediation]);
 
   const doCompose = useCallback(async () => {
     if (!rawLog.trim()) { setComposeError('Paste the alert log first'); return; }
@@ -261,6 +326,115 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
             </Stack>
           )}
         </Stack>
+      </MuiPaper>
+
+      {/* ─── AI Remediation reference panel ──────────────────────────────
+          Display-only view of the structured guidance the AI uses to weave
+          the email body. Generated on demand so the analyst can see WHERE
+          the email's recommendations came from. The email itself ALREADY
+          contains this guidance as flowing prose — this panel doesn't
+          change the body; it only surfaces the structured source.        */}
+      <MuiPaper elevation={0} sx={{
+        backgroundColor: '#09253d',
+        border: theme => `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+        borderRadius: '4px', p: 2, mb: 2,
+      }}>
+        <SectionHeader
+          title="AI Remediation reference"
+          badge="see what the email body is built from"
+        />
+        <Stack direction="row" spacing={1} alignItems="center"
+          flexWrap="wrap" useFlexGap sx={{ mb: remediation ? 1.5 : 0 }}>
+          <MuiButton
+            variant={remediation ? 'outlined' : 'contained'}
+            size="small"
+            disabled={remLoading || !rawLog.trim()}
+            onClick={generateRemediation}
+            startIcon={remLoading
+              ? <CircularProgress size={12} sx={{ color: 'inherit' }}/>
+              : (remediation ? <RefreshCcw size={14}/> : <Wand2 size={14}/>)}
+            sx={{ textTransform: 'none' }}
+          >
+            {remLoading
+              ? 'Generating…'
+              : (remediation ? 'Regenerate' : 'Show AI remediation')}
+          </MuiButton>
+          {remediation && (
+            <MuiButton size="small" variant="outlined"
+              onClick={copyAllRemediation}
+              startIcon={<Copy size={14}/>}
+              sx={{ textTransform: 'none' }}>
+              Copy all
+            </MuiButton>
+          )}
+          {remError && (
+            <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: 'error.main' }}>
+              <AlertCircle size={12}/>
+              <Typography sx={{ fontSize: 11 }}>{remError}</Typography>
+            </Stack>
+          )}
+        </Stack>
+
+        {!remediation && !remLoading && (
+          <Typography sx={{ fontSize: 11, color: 'text.tertiary',
+            fontStyle: 'italic', mt: 1 }}>
+            The email body is generated with the investigation and remediation
+            guidance woven in as flowing prose. Click the button above to see
+            the structured source the AI is reasoning from — useful for
+            understanding why a recommendation appears in the email.
+          </Typography>
+        )}
+
+        {remediation && _REM_SECTIONS.map(s => {
+          const v = remediation[s.key];
+          if (!v) return null;
+          return (
+            <Box key={s.key} sx={{
+              mt: 1.25, p: 1.25, borderRadius: '4px',
+              backgroundColor: muiAlpha('#0fbcff', 0.05),
+              border: `1px solid ${muiAlpha('#0fbcff', 0.18)}`,
+              borderLeft: `3px solid ${muiAlpha('#0fbcff', 0.6)}`,
+            }}>
+              <Typography sx={{ mb: 0.75, fontSize: 11, fontWeight: 600,
+                color: '#0fbcff', textTransform: 'uppercase',
+                letterSpacing: '0.06em' }}>
+                {s.label}
+              </Typography>
+              {Array.isArray(v) ? (
+                <Stack spacing={0.75}>
+                  {v.map((item, i) => (
+                    <Stack key={i} direction="row" spacing={1} alignItems="flex-start">
+                      <Box sx={{ width: 4, height: 4, borderRadius: 99,
+                        backgroundColor: '#0fbcff', mt: '7px', flexShrink: 0 }}/>
+                      <Box>
+                        {typeof item === 'string' ? (
+                          <Typography sx={{ fontSize: 12.5, color: 'text.primary',
+                            lineHeight: 1.55 }}>{item}</Typography>
+                        ) : (
+                          <>
+                            <Typography sx={{ fontSize: 12.5, fontWeight: 600,
+                              color: 'text.primary', lineHeight: 1.55 }}>
+                              {item?.title || ''}
+                            </Typography>
+                            {item?.description && (
+                              <Typography sx={{ fontSize: 12, color: 'text.secondary',
+                                lineHeight: 1.55, mt: 0.25 }}>
+                                {item.description}
+                              </Typography>
+                            )}
+                          </>
+                        )}
+                      </Box>
+                    </Stack>
+                  ))}
+                </Stack>
+              ) : (
+                <Typography sx={{ fontSize: 12.5, color: 'text.primary',
+                  lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{String(v)}</Typography>
+              )}
+            </Box>
+          );
+        })}
       </MuiPaper>
 
       {/* ─── 3 · Preview ──────────────────────────────────────────────────── */}

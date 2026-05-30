@@ -17,12 +17,32 @@ from typing import Any, Dict, List, Optional
 
 from providers.base import LLMProvider
 
+import ipaddress
+
 from .base import Skill
 
 
 # Patterns mirror agents/triage.py — kept in sync so callers get identical
 # behaviour whether they hit the legacy agent or the skill.
 _RE_IPV4   = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+# IPv6 candidate matcher — kept in sync with agents/triage._IPV6_CANDIDATE_RE.
+# Alternation order matters (trailing :: comes LAST) so the regex engine
+# tries longer compressed-with-suffix forms before falling back to the
+# prefix-only trailing-:: branch.
+_RE_IPV6_CANDIDATE = re.compile(
+    r"\b(?:"
+    r"(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}"
+    r"|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}"
+    r"|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}"
+    r"|(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}"
+    r"|(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}"
+    r"|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}"
+    r"|[0-9a-fA-F]{1,4}:(?:(?::[0-9a-fA-F]{1,4}){1,6})"
+    r"|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}"
+    r"|(?:[0-9a-fA-F]{1,4}:){1,7}:"
+    r"|::"
+    r")\b"
+)
 _RE_DOMAIN = re.compile(
     r"\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
     r"(?:[a-z]{2,24})\b",
@@ -36,7 +56,33 @@ _RE_SHA256 = re.compile(r"\b[a-f0-9]{64}\b", re.IGNORECASE)
 
 
 def _noise_ip(ip: str) -> bool:
-    return ip.startswith(("0.", "127.", "169.254.", "255."))
+    # Loopback / unspecified / link-local / multicast / reserved — works for
+    # both v4 and v6 via the stdlib `ipaddress` module.
+    try:
+        a = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return (a.is_loopback or a.is_unspecified or a.is_link_local
+            or a.is_multicast or a.is_reserved or a.is_private)
+
+
+def _extract_ipv6(text: str) -> set:
+    """Pull IPv6 addresses out of text and normalise through
+    ipaddress.ip_address(). Drops regex-prefix substrings (when both
+    '2606:4700::' and '2606:4700::1111' match, only the longer survives —
+    the shorter is a regex artefact of the trailing-:: branch)."""
+    raw = []
+    for cand in _RE_IPV6_CANDIDATE.findall(text or ""):
+        try:
+            raw.append((cand, str(ipaddress.ip_address(cand))))
+        except ValueError:
+            pass
+    out = set()
+    for r, norm in raw:
+        if any(r != other and r in other for other, _ in raw):
+            continue
+        out.add(norm)
+    return out
 
 
 def _noise_domain(d: str) -> bool:
@@ -94,7 +140,8 @@ class ExtractIOCsSkill(Skill):
         if not isinstance(raw, str):
             raw = str(raw)
 
-        ips     = sorted({m for m in _RE_IPV4.findall(raw) if not _noise_ip(m)})
+        ips     = sorted({m for m in _RE_IPV4.findall(raw) if not _noise_ip(m)} |
+                         {m for m in _extract_ipv6(raw)        if not _noise_ip(m)})
         domains = sorted({m for m in _RE_DOMAIN.findall(raw) if not _noise_domain(m)})
         urls    = sorted(set(_RE_URL.findall(raw)))
         emails  = sorted({m.lower() for m in _RE_EMAIL.findall(raw)})

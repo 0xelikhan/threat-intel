@@ -3,6 +3,7 @@ Triage Agent — reads API config at call time, not import time.
 This allows keys entered in the Settings UI to take effect immediately.
 """
 
+import ipaddress
 import re
 import json
 from datetime import datetime, timezone
@@ -11,11 +12,10 @@ from datetime import datetime, timezone
 BENIGN_IPS = {
     "8.8.8.8", "8.8.4.4", "1.1.1.1", "1.0.0.1",
     "208.67.222.222", "169.254.169.254", "100.100.100.200",
+    # IPv6 equivalents of the well-known public resolvers
+    "2001:4860:4860::8888", "2001:4860:4860::8844",
+    "2606:4700:4700::1111", "2606:4700:4700::1001",
 }
-PRIVATE_RANGES = [
-    r"^10\.", r"^192\.168\.", r"^172\.(1[6-9]|2\d|3[01])\.",
-    r"^127\.", r"^::1$", r"^fe80:",
-]
 BENIGN_DOMAINS = {
     "microsoft.com", "windows.com", "windowsupdate.com", "office.com",
     "office365.com", "live.com", "azure.com", "amazonaws.com",
@@ -23,16 +23,58 @@ BENIGN_DOMAINS = {
     "icloud.com", "cloudflare.com", "fastly.net", "akamai.net",
 }
 
+# Loose IPv6 candidate matcher — handles full notation, leading ::, trailing ::,
+# and embedded :: compression. Every candidate is validated through
+# ipaddress.ip_address() so false-positive substrings (hex strings, MAC
+# addresses, etc.) are rejected at the validation step.
+#
+# Alternation ORDER matters: re.findall takes the first match it commits to
+# at each position. The "trailing ::" branch is moved LAST so a fully-formed
+# "2606:4700:4700::1111" tries to match as a full-with-suffix form FIRST
+# before the engine falls back to the trailing-:: prefix-only match.
+_IPV6_CANDIDATE_RE = re.compile(
+    r"\b(?:"
+    r"(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}"          # full 8-group form
+    r"|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}"      # compressed with 1-group suffix
+    r"|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}"
+    r"|(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}"
+    r"|(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}"
+    r"|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}"
+    r"|[0-9a-fA-F]{1,4}:(?:(?::[0-9a-fA-F]{1,4}){1,6})"
+    r"|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}"     # leading :: with suffix
+    r"|(?:[0-9a-fA-F]{1,4}:){1,7}:"                       # trailing :: (NO suffix — LAST)
+    r"|::"                                                  # bare ::
+    r")\b"
+)
+
 
 def _is_private_ip(ip: str) -> bool:
-    return any(re.match(p, ip) for p in PRIVATE_RANGES)
-
-
-def _valid_octets(ip: str) -> bool:
+    """True for loopback / private / link-local / multicast / reserved
+    addresses in BOTH IPv4 and IPv6 — uses the stdlib `ipaddress`
+    module so we don't have to re-implement RFC1918 / RFC4193 / etc."""
     try:
-        return all(0 <= int(p) <= 255 for p in ip.split("."))
+        addr = ipaddress.ip_address(ip)
     except ValueError:
         return False
+    return (addr.is_private or addr.is_loopback or addr.is_link_local
+            or addr.is_multicast or addr.is_reserved or addr.is_unspecified)
+
+
+def _valid_ip(ip: str) -> bool:
+    """Accept any well-formed IPv4 or IPv6 address. Replaces the old
+    IPv4-only _valid_octets which rejected every IPv6 input on the
+    `int(part) ValueError` branch — that bug caused impossible-travel
+    alerts (which carry IPv6 source IPs) to skip enrichment entirely."""
+    try:
+        ipaddress.ip_address(ip)
+        return True
+    except ValueError:
+        return False
+
+
+# Backwards-compatible alias — `_valid_octets` was the old name and may be
+# imported by tests. The new behaviour accepts IPv6 too.
+_valid_octets = _valid_ip
 
 
 _EXE_RE  = re.compile(
@@ -50,13 +92,14 @@ def extract_iocs(text: str) -> dict:
     iocs = {"ips": set(), "domains": set(), "urls": set(), "hashes": set(),
             "emails": set(), "files": set(), "paths": set()}
 
-    # Try the library route first — refangs defanged IOCs automatically
+    # Try the library route first — refangs defanged IOCs automatically.
+    # iocextract's extract_ips() covers both v4 and v6.
     try:
         import iocextract
 
         for ip in iocextract.extract_ips(text, refang=True):
             ip = ip.strip()
-            if ip in BENIGN_IPS or _is_private_ip(ip) or not _valid_octets(ip):
+            if ip in BENIGN_IPS or _is_private_ip(ip) or not _valid_ip(ip):
                 continue
             iocs["ips"].add(ip)
 
@@ -70,14 +113,14 @@ def extract_iocs(text: str) -> dict:
             iocs["emails"].add(e.lower())
 
     except ImportError:
-        # Fallback regex path — keeps the app running if iocextract isn't installed
+        # Fallback regex path — keeps the app running if iocextract isn't installed.
         norm = (text
             .replace("[.]", ".").replace("(dot)", ".")
             .replace("[://]", "://").replace("hxxp", "http"))
         for url in re.findall(r"https?://[^\s\"'<>\]\),]+", norm):
             iocs["urls"].add(url.rstrip(".,;)"))
         for ip in re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", norm):
-            if ip in BENIGN_IPS or _is_private_ip(ip) or not _valid_octets(ip):
+            if ip in BENIGN_IPS or _is_private_ip(ip) or not _valid_ip(ip):
                 continue
             iocs["ips"].add(ip)
         for pat in [r"\b[a-fA-F0-9]{64}\b", r"\b[a-fA-F0-9]{40}\b", r"\b[a-fA-F0-9]{32}\b"]:
@@ -85,6 +128,42 @@ def extract_iocs(text: str) -> dict:
                 iocs["hashes"].add(h.lower())
         for e in re.findall(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}", norm):
             iocs["emails"].add(e.lower())
+
+    # IPv6 sweep — runs regardless of which path above ran. iocextract picks
+    # up most IPv6 forms but the regex catch-all here makes the impossible-
+    # travel case (where v6 addresses sit in `FirstLoginIp : <addr>` lines)
+    # bulletproof. Every candidate is validated through ipaddress.ip_address()
+    # so hex strings, MAC addresses, and other v6-shaped noise get rejected.
+    for cand in _IPV6_CANDIDATE_RE.findall(text or ""):
+        try:
+            normalised = str(ipaddress.ip_address(cand))
+        except ValueError:
+            continue
+        if normalised in BENIGN_IPS or _is_private_ip(normalised):
+            continue
+        iocs["ips"].add(normalised)
+
+    # IPv6 substring dedup — the trailing-:: branch of the regex (plus the
+    # equivalent in iocextract) sometimes matches both "2606:4700::" and the
+    # longer "2606:4700::1111" from the same source. They're both technically
+    # valid IPv6, but the shorter is just a regex prefix of the longer.
+    # Whichever raw substring is contained in another is dropped.
+    v6_in_set = [s for s in iocs["ips"] if ":" in s]
+    if len(v6_in_set) > 1:
+        # Reconstruct the raw textual forms we'd compare against — using the
+        # source text, not the canonicalised forms (those have already been
+        # normalised away from each other).
+        for shorter in list(v6_in_set):
+            for longer in v6_in_set:
+                if shorter == longer:
+                    continue
+                # A raw "2606:4700::" appears INSIDE "2606:4700::1111" in the
+                # source text. Drop the shorter when it's a textual prefix
+                # substring of another match and they normalise to different
+                # addresses.
+                if shorter in longer and shorter != longer:
+                    iocs["ips"].discard(shorter)
+                    break
 
     # Domain extraction (TLD-bounded so we don't grab arbitrary words)
     norm = (text.replace("[.]", ".").replace("(dot)", ".")
