@@ -287,15 +287,15 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     async def main():
-        print("Polling TAXII feeds (last 24h)...")
+        logger.info("Polling TAXII feeds (last 24h)...")
         result = await poll_all_feeds(since_hours=24)
-        print(f"\nTotal unique IOCs: {result['total']}")
-        print(f"By type: {result['by_type']}")
-        print(f"By feed: {result['by_feed']}")
+        logger.info("Total unique IOCs: %d", result['total'])
+        logger.info("By type: %s", result['by_type'])
+        logger.info("By feed: %s", result['by_feed'])
 
         # Save to JSON for inspection
         with open("taxii_results.json", "w") as f:
             json.dump(result, f, indent=2)
-        print("\nResults saved to taxii_results.json")
+        logger.info("Results saved to taxii_results.json")
 
     asyncio.run(main())

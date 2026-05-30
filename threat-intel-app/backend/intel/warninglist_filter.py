@@ -15,8 +15,11 @@ used as a fallback if vendor/ isn't checked out.
 
 import ipaddress
 import json
+import logging
 from pathlib import Path
 from typing import Set, List, Tuple, Optional
+
+_log = logging.getLogger("recon.warninglists")
 
 # Per-type stores (populated by load_warninglists)
 _benign_ips:      Set[str] = set()
@@ -51,8 +54,8 @@ def load_warninglists() -> dict:
 
     base = _pick_dir()
     if not base:
-        print("[warninglists] vendor/misp-warninglists not found — "
-              "false positive filtering disabled. Run scripts/setup_vendor.sh.")
+        _log.warning("vendor/misp-warninglists not found — false positive "
+                     "filtering disabled. Run scripts/setup_vendor.sh.")
         _loaded = True
         return _stats()
 
@@ -72,11 +75,11 @@ def load_warninglists() -> dict:
 
     _loaded = True
     stats = _stats()
-    print(f"[warninglists] loaded: "
-          f"{stats['ips']} IPs, {stats['cidrs']} CIDR ranges, "
-          f"{stats['domains']} domains, "
-          f"{stats['md5']}+{stats['sha1']}+{stats['sha256']} hashes, "
-          f"{stats['urls']} URLs from {stats['lists']} lists")
+    _log.info("loaded: %d IPs, %d CIDR ranges, %d domains, %d+%d+%d hashes, "
+              "%d URLs from %d lists",
+              stats['ips'], stats['cidrs'], stats['domains'],
+              stats['md5'], stats['sha1'], stats['sha256'],
+              stats['urls'], stats['lists'])
     return stats
 
 
