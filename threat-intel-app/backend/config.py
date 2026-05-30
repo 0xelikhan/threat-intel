@@ -46,6 +46,30 @@ API_KEY_DEFINITIONS = {
         "placeholder": "gpt-4o-mini",
         "group": "API Keys"
     },
+    "LLM_PROVIDER": {
+        "label": "LLM Provider",
+        "description": "Which provider every AI call routes through. openai (default, also covers Azure OpenAI when OPENAI_BASE_URL is set), anthropic, or ollama.",
+        "required": False,
+        "default": "openai",
+        "placeholder": "openai | anthropic | ollama",
+        "group": "API Keys"
+    },
+    "ANTHROPIC_API_KEY": {
+        "label": "Anthropic API Key",
+        "description": "Required when LLM_PROVIDER=anthropic. Claude Sonnet 4 by default.",
+        "required": False,
+        "url": "https://console.anthropic.com",
+        "placeholder": "sk-ant-...",
+        "group": "API Keys"
+    },
+    "OLLAMA_BASE_URL": {
+        "label": "Ollama Base URL",
+        "description": "Local Ollama endpoint when LLM_PROVIDER=ollama. Default http://localhost:11434.",
+        "required": False,
+        "default": "http://localhost:11434",
+        "placeholder": "http://localhost:11434",
+        "group": "API Keys"
+    },
     "VIRUSTOTAL_KEY": {
         "label": "VirusTotal API Key",
         "description": "IP, domain, URL, hash reputation. Free: 500 req/day.",
