@@ -146,6 +146,18 @@ async def _kick_prewarm():
 
     print("[recon] startup: pre-warm scheduled in background, accepting requests now")
 
+
+@app.on_event("shutdown")
+async def _close_http_pool():
+    """Close the shared TCP connector used by the enrichment fan-out so
+    we don't leak sockets on graceful shutdown (Ctrl-C, container stop)."""
+    try:
+        from agents.enrichment import close_connector
+        await close_connector()
+    except Exception:
+        pass
+
+
 _results: dict = {}
 # IOC pivot index: { ioc_value: [(run_id, timestamp_iso, threat_level), ...] }
 _ioc_index: dict[str, list[tuple]] = {}
