@@ -338,6 +338,14 @@ the evidence points to benign activity."""
         "confidence_basis":    investigation.get("confidence_basis", ""),
         "false_positive_check":investigation.get("false_positive_check", ""),
         "assessment_basis":    investigation.get("assessment_basis", []),
+        # PRINCIPLE 7 two-tier split — surfaced separately in the UI so
+        # analysts can tell evidence-backed facts from analyst inference.
+        "confirmed_facts":     investigation.get("confirmed_facts", []),
+        "analysis_assessment": investigation.get("analysis_assessment", []),
+        # Server-computed enrichment baseline — quoted at the top of the
+        # Summary card so analysts see the empirical numbers before
+        # reading any AI interpretation.
+        "enrichment_summary":  investigation.get("enrichment_summary", {}),
         "ai_unavailable":      investigation.get("ai_unavailable", False),
         "correlated_signals":  investigation.get("correlated_signals", []),
         "mitre_evidence":      investigation.get("mitre_evidence", []),

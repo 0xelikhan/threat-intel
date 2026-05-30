@@ -8,8 +8,147 @@ import json
 import logging
 import re as _re
 from datetime import datetime, timezone
+from typing import Any, Dict
 
 _log = logging.getLogger("recon.investigation")
+
+
+# ─── Enrichment-summary header (computed server-side, not by the AI) ────────
+# Counts how many sources returned data vs how many flagged any IOC as
+# malicious. The result is prepended to the AI's summary so the analyst sees
+# the empirical baseline BEFORE reading the AI's interpretation. The AI is
+# also given the same numbers in its context so it can quote them in its
+# reasoning, but it never has to compute them itself.
+
+# Source-name → "what counts as a malicious verdict from this source"
+# resolver. Each entry maps the raw enrichment payload to True/False.
+def _src_returned_data(src_name: str, payload: Any) -> bool:
+    """True when a source returned a payload (non-empty, non-error). The
+    error / skipped dicts our enrichment fan-out emits have an `error` key
+    or a `skipped` flag; anything else with at least one informational key
+    counts as 'returned data'."""
+    if not isinstance(payload, dict) or not payload:
+        return False
+    if payload.get("skipped"):
+        return False
+    # error_type='timed_out' / 'circuit_open' / etc. means no useful data
+    if "error" in payload and not any(
+        k for k in payload if k not in ("error", "error_type", "skipped", "source")
+    ):
+        return False
+    return True
+
+
+def _src_flagged_malicious(src_name: str, payload: Any) -> bool:
+    """True when a source's payload meets that source's malicious threshold.
+    Conservative thresholds — leaning toward False unless the signal is
+    clearly high-confidence malicious."""
+    if not _src_returned_data(src_name, payload):
+        return False
+    p = payload  # already a dict per _src_returned_data
+    s = src_name.lower()
+
+    if s == "virustotal":
+        # >= 1 independent engine; we don't gate on family naming because a
+        # single hit is enough to count this source as "flagged".
+        return int(p.get("malicious") or 0) >= 1
+    if s == "abuseipdb":
+        return int(p.get("abuseScore") or 0) >= 50
+    if s == "otx":
+        return int(p.get("pulseCount") or 0) >= 1
+    if s == "greynoise":
+        # GreyNoise classification "malicious" is the explicit malicious tag;
+        # "benign" / "unknown" do NOT count.
+        return (p.get("classification") or "").lower() == "malicious"
+    if s == "shodan":
+        # Vulns / open exposed ports aren't a malicious VERDICT on their own
+        return False
+    if s in ("malwarebazaar", "threatfox", "hybrid_analysis", "anyrun"):
+        # Any hit on these is a malicious verdict (they're malware-specific dbs)
+        return bool(p.get("found") or p.get("malware_family") or p.get("malwareName"))
+    if s == "pulsedive":
+        return (p.get("risk") or "").lower() in ("high", "critical")
+    if s in ("urlscan", "urlhaus"):
+        return (p.get("verdict") or "").lower() in ("malicious", "phishing")
+    if s == "local_feeds":
+        return bool(p.get("hit"))
+    if s == "tor":
+        # TOR exit is contextual, not a malicious verdict per se
+        return False
+    if s == "maltiverse":
+        return (p.get("classification") or "").lower() == "malicious"
+    if s == "feodo_tracker":
+        return bool(p)
+    if s == "deception":
+        # Honeypot interaction is high-signal — treat as a flag
+        return bool(p.get("hit") or p.get("honeypot_interaction"))
+    # Default: payload had explicit malicious=True / verdict==malicious
+    return (
+        p.get("malicious") is True
+        or (str(p.get("verdict") or "").upper() in ("MALICIOUS", "SUSPICIOUS"))
+    )
+
+
+def compute_enrichment_summary(enrichments: dict) -> Dict[str, Any]:
+    """Walk every IOC × source combination and tally:
+      - returned_count   : sources that returned usable data
+      - total_count      : sources that were called (regardless of outcome)
+      - flagged_count    : sources that returned a malicious verdict
+      - flagged_iocs     : set of IOC values any source flagged as malicious
+      - flagged_per_ioc  : {ioc: [source_name, ...]} for the AI to quote
+      - line             : the one-sentence header analysts see first
+
+    Pure server-side computation — the AI never has to count. Result is
+    injected into the AI's context so it can quote the numbers, AND
+    prepended to the response_summary so the frontend displays it before
+    any AI interpretation."""
+    enrichments = enrichments or {}
+    returned, total, flagged = 0, 0, 0
+    flagged_iocs = []
+    flagged_per_ioc: Dict[str, list] = {}
+    for ioc_type, by_ioc in enrichments.items():
+        if not isinstance(by_ioc, dict):
+            continue
+        for ioc, by_src in by_ioc.items():
+            if not isinstance(by_src, dict):
+                continue
+            ioc_flagged_sources = []
+            for src_name, payload in by_src.items():
+                if src_name.startswith("_"):   # internal fields like _summary
+                    continue
+                total += 1
+                if _src_returned_data(src_name, payload):
+                    returned += 1
+                    if _src_flagged_malicious(src_name, payload):
+                        flagged += 1
+                        ioc_flagged_sources.append(src_name)
+            if ioc_flagged_sources:
+                flagged_iocs.append(ioc)
+                flagged_per_ioc[ioc] = ioc_flagged_sources
+
+    # One-sentence summary the analyst sees as the FIRST line of the
+    # analysis output, before any AI interpretation.
+    if total == 0:
+        line = "No enrichment sources ran for this alert (log-only analysis)."
+    elif flagged == 0:
+        line = (f"{returned} of {total} enrichment sources returned data, "
+                f"0 sources flagged any IOC as malicious.")
+    else:
+        ioc_summary = (f" — flagged: {', '.join(flagged_iocs[:5])}"
+                       if flagged_iocs else "")
+        line = (f"{returned} of {total} enrichment sources returned data, "
+                f"{flagged} source{'s' if flagged != 1 else ''} flagged "
+                f"{len(flagged_iocs)} IOC{'s' if len(flagged_iocs) != 1 else ''} "
+                f"as malicious{ioc_summary}.")
+
+    return {
+        "returned_count":  returned,
+        "total_count":     total,
+        "flagged_count":   flagged,
+        "flagged_iocs":    flagged_iocs,
+        "flagged_per_ioc": flagged_per_ioc,
+        "line":            line,
+    }
 
 
 def _loads_lenient(text: str) -> dict:
@@ -338,6 +477,16 @@ HIGH or CRITICAL requires AT LEAST ONE of:
 Suspicious-LOOKING behaviour ALONE — without one of the above corroborating
 signals — is INFORMATIONAL or LOW. It is not HIGH or CRITICAL.
 
+DEFAULT-BENIGN RULE: when NO enrichment source has flagged any IOC as
+malicious (the enrichment_summary header at the top of the input will tell
+you "0 sources flagged any IOC as malicious"), your default assumption MUST
+be that the activity is LEGITIMATE until proven otherwise. You may still
+note unusual patterns or recommend monitoring for follow-on activity, but
+you may NOT characterise the activity as "suspicious" or "potentially
+malicious" without at least one enrichment source supporting that
+characterisation. Inferences are still welcome — just label them clearly
+as analyst assessment (see PRINCIPLE 7 below).
+
 ──────────────────────────────────────────────────────────────────────────────────
 PRINCIPLE 4 — Be explicit about what you do and do not know
 ──────────────────────────────────────────────────────────────────────────────────
@@ -400,6 +549,22 @@ they appear:
     - ResultStatusDetail "Success" in an ExtendedProperties block under
       a Failed Operation is the same audit-pipeline-success metadata —
       not a contradiction.
+    - RequestType "OAuth2:Authorize" / "OAuth2:Token" is the STANDARD
+      OAuth 2.0 authorization-code flow — the same one every legitimate
+      Microsoft, Salesforce, GitHub, Google Workspace and third-party
+      SaaS app uses to log in. It is NOT "potential credential
+      harvesting"; it is the documented Entra sign-in mechanism for
+      modern auth. Suspicion requires additional evidence (the OAuth
+      app's ApplicationId being unknown / unconsented, an unusual
+      consent grant, or a malicious-app OAuth abuse pattern from threat
+      intel) — not the request type alone. Standard Microsoft first-
+      party AppIds like 00000002-0000-0ff1-ce00-000000000000 (Office
+      365 Exchange Online), 00000003-0000-0000-c000-000000000000
+      (Microsoft Graph), 9199bf20-a13f-4107-85dc-02114787ef48
+      (Teams / Office.com), and 1fec8e78-bce4-4aaf-ab1b-5451cc387264
+      (Teams mobile/desktop) are Microsoft's own services.
+    - UserAuthenticationMethod = 1 is "password" — normal, not suspicious
+      on its own. Values 2-9 cover MFA methods.
 
   • Windows Event Logs:
     - "Audit Success" / "Audit Failure" describe whether the AUDIT EVENT
@@ -424,6 +589,64 @@ outcome — the actual outcome is the LogonError field showing UserDisabled")
 rather than inferring an attack from the field name.
 
 ──────────────────────────────────────────────────────────────────────────────────
+PRINCIPLE 7 — Separate CONFIRMED facts from analyst ASSESSMENT
+──────────────────────────────────────────────────────────────────────────────────
+Your output has two separate buckets. The analyst reads both, but uses them
+differently:
+
+  • confirmed_facts — statements directly traceable to enrichment data or
+    to the raw log itself. "VirusTotal returned 0/96 detections on the
+    SHA-256." "The source IP is registered to AS6079 (RCN)." "The
+    LogonError field reports UserDisabled." These are FACTS — anyone
+    reading the same data could verify each one.
+
+  • analysis_assessment — your inferences, interpretations, and expert
+    pattern-recognition. Things like "this behaviour is consistent with
+    the early stages of a credential-stuffing campaign" or "the
+    combination of an encoded PowerShell + outbound to a TOR exit
+    suggests a Cobalt Strike beacon, though the hash is not in
+    threat-intel yet". These are ASSESSMENT — they require analyst
+    judgement and could be wrong.
+
+Both are valuable — confirmed_facts ground the analyst in what the data
+actually says; analysis_assessment is where you add expertise beyond
+what the lookup tables produce. Never blur them — readers must be able
+to tell at a glance which is which.
+
+──────────────────────────────────────────────────────────────────────────────────
+PRINCIPLE 8 — Calibrated confidence language
+──────────────────────────────────────────────────────────────────────────────────
+Match the strength of your wording to the strength of the evidence.
+
+  ✗ "This IS Cobalt Strike"
+  ✓ "This behaviour is CONSISTENT WITH Cobalt Strike, based on the
+     encoded PowerShell pattern and the VirusTotal family hit."
+
+  ✗ "This matches APT28"
+  ✓ "The TTPs OVERLAP WITH publicly reported APT28 activity, though
+     the available enrichment data is INSUFFICIENT FOR HIGH-CONFIDENCE
+     ATTRIBUTION — recommend monitoring for follow-on activity."
+
+  ✗ "The user account is compromised"
+  ✓ "The sign-in pattern (impossible travel + failed MFA + risky-state
+     classification) SUPPORTS a hypothesis of credential compromise.
+     Verify session activity to confirm."
+
+  ✗ "Definitely malware"
+  ✓ "The hash matches a known-bad pattern in MalwareBazaar (named
+     family: Cobalt Strike beacon)." [when the hit is direct]
+   OR
+  ✓ "No threat-intel source flagged this hash; the behavioural pattern
+     (encoded PowerShell + execution-policy bypass) WARRANTS A CLOSER
+     LOOK at process tree + network egress to rule out a beacon, but
+     calling it 'malware' here would be unsupported."
+
+When you genuinely don't have evidence to attribute or classify, say so
+in those exact terms: "insufficient evidence to attribute to a specific
+threat actor", "no enrichment source flagged the IOCs", "the data does
+not support a definitive verdict — recommend X to gather more signal".
+
+──────────────────────────────────────────────────────────────────────────────────
 HOW YOU CORRELATE
 ──────────────────────────────────────────────────────────────────────────────────
 Connect the dots: which signals reinforce each other? Which contradict?
@@ -439,6 +662,12 @@ RAW LOG / ALERT (first 2000 chars — analyze the SEMANTIC content too, not just
 
 ALERT TYPE          : {alert_type}
 TRIAGE SCORE        : {triage_score} (0-1, higher = more suspicious)
+
+ENRICHMENT SUMMARY  (computed by RECON before this prompt — quote these numbers
+                     verbatim in your summary; they're the empirical baseline
+                     the analyst sees first. When 0 sources flagged any IOC,
+                     PRINCIPLE 3's DEFAULT-BENIGN RULE applies):
+{enrichment_summary_line}
 
 KNOWN_GOOD_MATCHES  (pre-analysis match against curated patterns for legitimate
                      vendor software — Dell SupportAssist, MS Defender, SCCM,
@@ -706,8 +935,21 @@ RESPOND WITH EXACTLY THIS JSON (no markdown fences, no commentary outside the JS
   "attack_patterns": ["<campaign or pattern name>"],
   "geo_highlights": ["<geolocation observation with implication>"],
   "false_positive_check": "<could this be benign? what specific FP pattern did you rule out — vulnerability scanner? approved RMM? auto-update? scheduled maintenance?>",
+  "confirmed_facts": [
+    "<PRINCIPLE 7 — statements directly traceable to enrichment data or the raw log; anyone reading the same data could verify these. List 3-6 items, each one short sentence.>",
+    "<example: 'VirusTotal returned 0/96 detections on SHA-256 7c2f...'>",
+    "<example: 'Source IP 108.249.198.145 is registered to AS6079 (RCN).'>",
+    "<example: 'The LogonError field reports UserDisabled (Entra error 50057).'>",
+    "<example: 'No enrichment source flagged any IOC as malicious.'>"
+  ],
+  "analysis_assessment": [
+    "<PRINCIPLE 7 — your INFERENCES and pattern recognition clearly labeled as analyst judgement. List 2-5 items, each one short sentence using calibrated language from PRINCIPLE 8.>",
+    "<example: 'The sign-in attempt is consistent with a stale automation still calling a deactivated identity, based on the absence of MFA challenge in the trace.'>",
+    "<example: 'The encoded PowerShell + outbound to a TOR exit is consistent with Cobalt Strike beacon staging, though the hash is not yet in threat-intel feeds — recommend behavioural monitoring.'>",
+    "<example: 'Insufficient evidence to attribute to a specific threat actor.'>"
+  ],
   "assessment_basis": [
-    "<the SPECIFIC evidence point that drove the threat_level decision — list 2-5 items, each a single sentence>",
+    "<the SPECIFIC evidence point that drove the threat_level decision — list 2-5 items, each a single sentence. This is a SUBSET of confirmed_facts (the ones that pushed the threat_level needle).>",
     "<example MALICIOUS: 'SHA256 7c2f... flagged by 42/96 engines on VirusTotal as Cobalt Strike beacon'>",
     "<example BENIGN: 'Process path matches Dell SupportAssist (known-good library hit)'>",
     "<example BENIGN: 'Hash is clean across all 5 reputation sources checked'>",
@@ -890,6 +1132,14 @@ async def run_investigation(state: dict, on_event=None) -> dict:
 
     compressed = _compress(enrichments)
 
+    # ── Enrichment-summary header (server-side count, not LLM math) ───────────
+    # The AI sees the same one-sentence line the analyst sees, so when it
+    # writes the assessment it can quote the empirical baseline ("0 sources
+    # flagged any IOC") rather than computing the number itself or
+    # mis-stating it.
+    enrichment_summary = compute_enrichment_summary(state.get("enrichments") or {})
+    enrichment_summary_line = enrichment_summary["line"]
+
     # ── Pre-analysis known-good library evaluation ────────────────────────────
     # Build a tiny structured context (process, parent, path, cmdline, user,
     # destination_path) from raw_input + IOCs and match it against the curated
@@ -956,6 +1206,9 @@ Tool-budget tips:
 {type_focus}"""
                 user_msg = f"""## Alert content (first 1500 chars)
 {(state.get("raw_input") or "")[:1500]}
+
+## ENRICHMENT SUMMARY (server-side empirical baseline — quote in your summary)
+{enrichment_summary_line}
 
 ## Extracted IOCs
 {json.dumps(state.get('iocs', {}), indent=2)[:1200]}
@@ -1095,25 +1348,43 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                     "  • HIGH or CRITICAL requires AT LEAST ONE concrete malicious-evidence point\n"
                     "    (known-bad hash, named malware family, lateral movement, credential\n"
                     "    access, confirmed unauthorized access, malicious infrastructure callout).\n"
+                    "  • If the enrichment_summary above says '0 sources flagged any IOC as\n"
+                    "    malicious', the DEFAULT-BENIGN RULE from PRINCIPLE 3 applies — you may\n"
+                    "    note patterns and recommend monitoring, but you may NOT call the activity\n"
+                    "    'suspicious' or 'potentially malicious' without a source backing it.\n"
                     "  • If the assessment_basis below lists ONLY benign indicators (known-good\n"
                     "    library hit, clean hash across all sources, legitimate parent process,\n"
                     "    expected service account, recognised vendor directory) the threat_level\n"
                     "    MUST be INFORMATIONAL or LOW.\n"
-                    "  • Be definitive when evidence is clear; do not hedge with 'potential misuse'\n"
-                    "    when the evidence actually points toward benign activity.\n\n"
+                    "  • Use CALIBRATED LANGUAGE from PRINCIPLE 8: 'consistent with X based on Y'\n"
+                    "    instead of 'this IS X'; 'insufficient evidence to attribute to a\n"
+                    "    specific threat actor' when the data doesn't support attribution.\n"
+                    "  • SEPARATE confirmed_facts from analysis_assessment per PRINCIPLE 7 —\n"
+                    "    both are valuable, never blur them.\n\n"
                     "Output ONLY these keys (nothing else):\n"
-                    "  summary (2-3 sentence executive summary — when the activity matches a\n"
-                    "    known-good vendor pattern, say so plainly, e.g. 'This is consistent\n"
-                    "    with Dell SupportAssist scheduled maintenance.'),\n"
+                    "  summary (2-3 sentences — START with the enrichment_summary line VERBATIM,\n"
+                    "    then a one-sentence plain-language read of what the alert IS. When the\n"
+                    "    activity matches a known-good vendor pattern, say so plainly e.g.\n"
+                    "    'This is consistent with Dell SupportAssist scheduled maintenance.'),\n"
                     "  threat_level (CRITICAL|HIGH|MEDIUM|LOW|INFORMATIONAL),\n"
-                    "  assessment_basis (array of 2-5 SHORT sentences — the specific evidence\n"
-                    "    that drove the threat_level. Examples: 'Process path matches Dell\n"
-                    "    SupportAssist (known-good library hit)', 'Hash is clean across all 5\n"
-                    "    reputation sources checked', 'Parent process is SCCM management agent',\n"
-                    "    'SHA256 7c2f... flagged by 42/96 VirusTotal engines as Cobalt Strike').\n"
+                    "  confirmed_facts (3-6 SHORT sentences — statements directly traceable to\n"
+                    "    the enrichment data or raw log. Anyone reading the same data could\n"
+                    "    verify each one. PRINCIPLE 7 governs this field.),\n"
+                    "  analysis_assessment (2-5 SHORT sentences — your inferences, pattern\n"
+                    "    recognition, and expert interpretation. Use the CALIBRATED LANGUAGE\n"
+                    "    from PRINCIPLE 8 — 'consistent with' / 'overlap with' / 'insufficient\n"
+                    "    evidence to attribute' rather than definitive claims. PRINCIPLE 7 + 8\n"
+                    "    govern this field.),\n"
+                    "  assessment_basis (array of 2-5 SHORT sentences — the SUBSET of\n"
+                    "    confirmed_facts that drove the threat_level decision.),\n"
                     "  confidence (0.0-1.0), confidence_basis,\n"
-                    "  malware_family (specific family name or null — e.g. 'Cobalt Strike', 'Emotet'),\n"
-                    "  threat_actor ({name, confidence} for APT/eCrime group or null),\n"
+                    "  malware_family (specific family name or null — only set when AT LEAST\n"
+                    "    ONE reputation source named the family; otherwise null and explain\n"
+                    "    the absence in analysis_assessment),\n"
+                    "  threat_actor ({name, confidence} for APT/eCrime group or null — only\n"
+                    "    when the TTP overlap is strong enough that confidence >= medium;\n"
+                    "    otherwise null and note 'insufficient evidence to attribute' in\n"
+                    "    analysis_assessment),\n"
                     "  campaign (known campaign name or null),\n"
                     "  attack_stage (reconnaissance|weaponization|delivery|exploitation|\n"
                     "    installation|command_and_control|actions_on_objectives|null when benign),\n"
@@ -1196,20 +1467,17 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                     # completed fields rather than discarding the whole half.
                     return _loads_lenient(resp.message)
 
-                # Generous per-half budgets so the full schema isn't truncated —
-                # the findings half (lists + CTI frameworks) is the heavy one.
-                # Both run concurrently, so wall-time ≈ the findings call, still
-                # faster than one complete ~3500-token single call.
-                #
-                # Probing questions get a higher temperature (0.55 vs 0.1) so
-                # surface wording varies between runs — combined with the
-                # evidence-anchoring rule in the prompt, this stops "second
-                # analysis hits the same probe template" by making each call
-                # structurally and stylistically unique.
+                # All three synthesis calls run at temperature 0.1 — low enough
+                # to reduce creative speculation, high enough to avoid the
+                # robotic output that temperature 0.0 produces. Variation in
+                # the probing-questions surface wording is anchored by the
+                # ANCHORING RULE in the probing_instr prompt (each question
+                # MUST cite a specific IOC / username / process from THIS
+                # alert), not by temperature variance.
                 part_a, part_b, part_c = await asyncio.gather(
                     _synth(verdict_instr, 1300),
                     _synth(findings_instr, 1900),
-                    _synth(probing_instr, 1100, temperature=0.55),
+                    _synth(probing_instr, 1100, temperature=0.1),
                     return_exceptions=True,
                 )
                 result = {}
@@ -1235,6 +1503,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                         triage_score=round(triage_score, 2),
                         cross_ctx=cross_ctx or "(none)",
                         known_good_matches=known_good_matches,
+                        enrichment_summary_line=enrichment_summary_line,
                     )}],
                     max_tokens=3000,   # full single-shot schema needs real headroom
                     temperature=0.1,
@@ -1256,6 +1525,10 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
             "summary": ("AI investigation unavailable — your enrichment data was still "
                         "collected. The threat level shown is a fallback, not an AI verdict. "
                         "Configure or fix your AI provider key in Settings to enable AI analysis."),
+            "confirmed_facts": [enrichment_summary_line],
+            "analysis_assessment": [
+                "AI analysis unavailable — no analyst assessment generated.",
+            ],
             "assessment_basis": [
                 "AI provider call failed — no AI verdict produced.",
                 "Threat level defaulted to INFORMATIONAL pending AI availability.",
@@ -1274,6 +1547,11 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
             "attribution_hints": None,
             "ai_unavailable": True,
         }
+
+    # Attach the server-computed enrichment summary to the result so the
+    # response builder + frontend always have the empirical baseline,
+    # even if the AI dropped or mangled it in the summary text.
+    result["enrichment_summary"] = enrichment_summary
 
     # ── Calibration safety-net ────────────────────────────────────────────────
     # Shared with file_ai_analyst, response.py, email_composer via
