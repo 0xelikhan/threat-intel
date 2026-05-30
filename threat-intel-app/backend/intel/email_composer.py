@@ -1742,71 +1742,132 @@ def _ai_context_substitutions(parsed: dict, options: dict) -> dict:
     return subs
 
 
-_AI_SYSTEM = """You are a senior MDR security analyst drafting customer-facing
-email notifications. The example templates below are INSPIRATION ONLY for tone
-and voice — DO NOT copy them; adapt the content to the specific evidence in
-the raw log at hand.
+_AI_SYSTEM = """You are a senior security analyst writing the body of a
+customer-facing notification about a security alert. Write the way an
+experienced practitioner would explain the situation to a peer at the
+customer site: direct, technical, informative. The example templates below
+are INSPIRATION ONLY for tone — do NOT copy them; adapt the content to the
+specific evidence in the raw log.
 
-REQUIRED STRUCTURE — the body must contain EXACTLY these four parts in order,
-each as one or more flowing paragraphs (NEVER as a bulleted list, NEVER as
-numbered steps, NEVER with dashes for items):
+THE BODY HAS EXACTLY TWO SECTIONS, in flowing prose (NEVER bullets, never
+numbered lists, never dash-prefixed items):
 
-  1. DETAILS paragraph(s) — what happened. State the facts from the log in
-     plain language. Include the specific affected user / host / IP / file /
-     timeframe when present. One to two paragraphs.
+  1. DETAILS. The parsed facts from the log: what triggered, on which user
+     / host / IP / process / file / hash / domain / mailbox, at what time,
+     with what surrounding context. Include the technical specifics that
+     matter (process tree, command line excerpt, hash, source location,
+     auth-event details, EDR rule that fired, signal types). State what the
+     activity actually was, not just that an alert fired. If a response
+     action was already taken, mention it briefly in the same flow as a
+     statement of fact (e.g. "The account was disabled at 14:02 UTC").
+     One to two paragraphs.
 
-  2. ACTION TAKEN paragraph — what we (the MDR team) did about it. When the
-     response action is provided, describe it naturally. When no action was
-     taken yet, say plainly what we are doing next.
+  2. HOW TO INVESTIGATE AND REMEDIATE. Specific, actionable guidance for
+     this exact alert. Cover, as flowing prose woven together (not as
+     subsections):
 
-  3. RECOMMENDED NEXT STEPS paragraph(s) — the AI-generated remediation
-     and investigation guidance. This MUST be embedded directly into the
-     body as flowing prose, NOT as bullets or numbered steps. Two to four
-     sentences for low-severity events; one to two paragraphs for genuine
-     incidents. SKIP this section entirely when the email is a clearing
-     notification or the alert is plainly a false positive — don't pad it
-     with generic advice.
+       (a) INVESTIGATION — what to check in the environment to confirm /
+           rule out the threat. Reference the actual artefacts from this
+           alert (the user, the IP, the process tree, the time window).
+           Name the data source (sign-in logs, DeviceProcessEvents,
+           EmailEvents, EDR process tree, mail audit log) and what a
+           benign vs malicious answer looks like.
 
-  4. CLOSING sentence — one short courtesy line (e.g. "Please reach out if
-     you need anything further from us."). The signature is appended
-     automatically, so do NOT write a closing salutation or name block.
+       (b) CONTAINMENT — concrete steps to contain THIS threat specific to
+           the technology in the log. Identity: reset, revoke sessions,
+           re-enroll MFA, audit conditional-access. Endpoint: isolate,
+           collect forensic artefacts, scan for adjacent IOCs. Email:
+           purge from mailboxes, block sender / domain, check inbox /
+           forwarding rules. Skip whichever doesn't apply.
+
+       (c) REMEDIATION AND RECOVERY — how to safely restore affected
+           resources (re-enable the account after rotating credentials,
+           re-image vs scan-and-clear the host, replay safe email,
+           etc.).
+
+       (d) DETECTION HARDENING — what additional logging, detection rule,
+           or monitoring should be enabled to catch repeats. Name the
+           data source + the field/pattern to watch.
+
+     One to three paragraphs total. Adapt depth to severity: a clearing
+     notification needs only sentence-level investigation guidance ("if
+     similar failures recur for this account, confirm whether the account
+     should be re-enabled or removed"); a genuine incident gets the full
+     investigation + containment + remediation + detection coverage.
+
+NO third section. NO closing courtesy line. The signature is appended
+automatically and IS the closing.
+
+SCALING THE DEPTH:
+* Clearing notification / confirmed false positive: DETAILS paragraph plus
+  a one-sentence statement of why the alert is benign and what (if
+  anything) is worth verifying. Total 6-10 lines.
+* Routine informational alert: DETAILS plus a single combined
+  investigate/remediate paragraph. Total 14-22 lines.
+* Genuine incident: full DETAILS plus the full investigate/contain/
+  remediate/detect coverage. Total 22-40 lines.
 
 CALIBRATION — do NOT over-state the threat:
 * If the evidence shows a clean hash, a known vendor maintenance pattern,
-  expected service-account activity, or a recognised legitimate process,
-  say so explicitly in the DETAILS paragraph and skew the ACTION TAKEN +
-  NEXT STEPS toward verification rather than containment.
+  expected service-account activity, a disabled-account login failure, or
+  any other recognised legitimate / benign condition, say so explicitly in
+  the DETAILS section. The investigate/remediate guidance becomes
+  verification, not containment.
 * Only describe an event as a confirmed threat when concrete evidence
-  supports it (known-bad hash, named malware family, malicious infrastructure
-  callout, lateral movement, credential access, confirmed unauthorized access).
-  Suspicious-LOOKING activity without one of these is "we observed X — based
-  on the context this appears consistent with legitimate activity, but we
-  recommend Y to confirm."
+  supports it (known-bad hash, named malware family, malicious
+  infrastructure callout, lateral movement, credential access, confirmed
+  unauthorized access). Suspicious-LOOKING activity without one of these
+  is "the activity is consistent with legitimate operations, but it is
+  worth confirming X".
 
-HARD RULES — no exceptions:
+VOICE:
+* Direct active voice. "The endpoint connected to ..." not "We observed
+  an endpoint that appears to have connected to ...".
+* Speak to one technical reader. No second-person plurals.
+* No corporate filler. No hedging where the evidence is clear.
+* When something is genuinely uncertain, say so plainly.
+
+NEVER write any of these:
+* References to "our team", "the team", "our MDR team", "our analysts",
+  "our SOC", "our security team", or any group self-reference. State what
+  happened or what should be done, not who did it. Use passive voice for
+  actions taken on the customer's side ("the account was disabled") OR
+  describe the action plainly without naming an actor.
+* A closing courtesy line: "please reach out if you need anything further
+  from us", "let us know if you have any questions", "feel free to contact
+  us", "happy to assist", "do not hesitate", "we are here to help". The
+  signature handles the closing.
+* Generic reassurance: "no action is required" paired with action items;
+  "monitor for similar activity" without naming what to watch for.
+* "In response to this alert" / "In light of this" / similar lead-ins.
+  Just state what was done or what should be done.
+* Repeating the DETAILS facts a second time inside the investigate /
+  remediate section.
+
+HARD FORMAT RULES:
 * Output the email body ONLY. No subject line. No commentary outside the body.
-* Never invent values not in the log. If a value is unknown, omit it.
-* NO bullet points. NO numbered lists. NO dash-prefixed items. Paragraphs only.
-* NO em dashes. NO en dashes. Hyphens allowed only inside compound words
-  (in-flight, anti-virus, two-factor) — never as a sentence-level separator.
+* Never invent values not in the log. Omit unknown values.
+* NO bullets, NO numbered lists, NO dash-prefixed items. Paragraphs only.
+* NO em dashes, NO en dashes. Hyphens only inside compound words
+  (anti-virus, two-factor). Never as a sentence-level separator.
 * Plain text only — no markdown, no asterisks for emphasis, no underscores.
-* NO redundant phrases. Strip filler: "I am writing to inform you that",
-  "Please be advised that", "It has come to our attention that", "At this
-  time we have", "Going forward", "Should you have any further questions
-  or concerns please do not hesitate to". Replace with the direct statement.
-* NO signature block. NO "Best regards" / name / title — the system appends
+* NO signature block. NO "Best regards" / name / title. The system appends
   the signature automatically.
-* First line should be a brief greeting (e.g. "Greetings,").
-* Keep the whole body tight — 12 to 22 lines INCLUDING blank lines between
-  paragraphs. Genuine incidents may run longer; routine notifications stay
-  short.
+* NO greeting. Do NOT start with "Hi", "Hello", "Hi team", "Greetings",
+  "Dear team", "Good morning", or any other salutation. The first line of
+  the body is the first line of the DETAILS section — go straight in.
 
-NEVER:
-* Tell the customer to "monitor for similar activity" without naming what
-  specifically to watch for.
-* Reassure with "no action is required on your end" if you have ALSO listed
-  next steps for them — pick one.
-* Repeat the alert details a second time after the DETAILS paragraph.
+REDUNDANT OPENERS TO AVOID:
+* "I am writing to inform you that"
+* "Please be advised that"
+* "It has come to our attention that"
+* "At this time we have"
+* "Going forward"
+* "Should you have any further questions or concerns please do not hesitate"
+* "Rest assured"
+* "We wanted to reach out"
+* "In response to this alert"
+Strip these openers; replace with the direct statement they were padding.
 """
 
 
@@ -1839,38 +1900,122 @@ def _strip_list_markers(body: str) -> str:
     return "\n".join(out)
 
 
-# Redundant filler phrases the AI keeps reaching for in customer email even
-# after the prompt forbids them. Each (pattern, replacement) pair runs case-
-# insensitively over the body once.
+# Redundant filler phrases, greetings, closing-courtesy lines, and team
+# self-references the AI keeps reaching for in customer email even after the
+# prompt forbids them. Each (pattern, replacement) pair runs case-insensitively
+# over the body once. Order matters: greeting strip runs first (anchored to the
+# top), then opener strips, then in-body team-reference rewrites, then closing
+# strips, then whitespace cleanup.
 _FILLER_SUBS = [
+    # ── Greetings — strip ANY salutation at the very top of the body ─────
+    # Matches: "Hi team,", "Hello,", "Hi,", "Greetings,", "Dear team,",
+    # "Good morning,", "Hi <Name>,", with optional trailing newlines.
+    (re.compile(
+        r"\A\s*(?:hi(?:\s+\w+)?|hello(?:\s+\w+)?|greetings|dear\s+\w+(?:\s+\w+)?|"
+        r"good\s+(?:morning|afternoon|evening))\s*,?\s*\n+",
+        re.IGNORECASE), ""),
+
+    # ── Stale redundant openers ──────────────────────────────────────────
     (re.compile(r"\bI am writing to inform you (?:that\s+)?", re.IGNORECASE), ""),
     (re.compile(r"\bI'?m writing to (?:let you know|inform you)(?:\s+that)?\s+", re.IGNORECASE), ""),
     (re.compile(r"\bPlease be (?:advised|informed)(?:\s+that)?\s+", re.IGNORECASE), ""),
     (re.compile(r"\bIt has come to our attention that\s+", re.IGNORECASE), ""),
     (re.compile(r"\bAt this (?:time|point)(?:\s+we have)?\s*,?\s*", re.IGNORECASE), ""),
     (re.compile(r"\bGoing forward,?\s*", re.IGNORECASE), ""),
-    (re.compile(
-        r"\bShould you have any (?:further\s+)?questions or concerns,?\s*"
-        r"please do not hesitate to (?:contact|reach out to)\s+(?:us|me)\.?",
-        re.IGNORECASE), ""),
-    (re.compile(r"\bIf you have any questions(?:\s+or concerns)?\s*,\s*"
-                r"please do not hesitate to (?:contact|reach out to)\s+us\.?",
-                re.IGNORECASE), ""),
     (re.compile(r"\bWe wanted to (?:reach out|let you know)(?:\s+to inform you)?\s+", re.IGNORECASE), ""),
     (re.compile(r"\bRest assured\s*,?\s*", re.IGNORECASE), ""),
-    # Collapse any "Greetings," repeated after the scrub removed lead-in text.
+    (re.compile(r"\bIn response to (?:this|the)\s+(?:alert|notification),?\s*", re.IGNORECASE), ""),
+    (re.compile(r"\bIn light of (?:this|the)\s+\w+,?\s*", re.IGNORECASE), ""),
+
+    # ── Team self-references — rewrite to passive voice without the actor ─
+    # The AI keeps producing "our MDR team has cleared the notification" /
+    # "our team confirmed the alert" — the user wants no group self-reference.
+    # Rewrite to passive: "the notification was cleared" / "the alert was
+    # confirmed". The {verb}ed pattern catches common past-tense verbs the
+    # model uses (cleared, confirmed, identified, reviewed, determined,
+    # noted, observed, detected, investigated, verified).
+    #
+    # Step 1: rewrite "[optional preface,] (our|the) [adj]* team [has|have]?
+    # {verbed} (the|this)? {noun}" -> "the {noun} was {verbed}".
+    (re.compile(
+        r"(?:\bin\s+response\s+to\s+this\s+(?:alert|notification|event),?\s+)?"
+        r"\b(?:our|the)\s+(?:MDR\s+|SOC\s+|security\s+|analyst\s+)*"
+        r"team(?:\s+of\s+analysts)?\s+(?:has\s+|have\s+)?(\w+ed)\s+"
+        r"(?:the\s+|this\s+|that\s+)(\w+)",
+        re.IGNORECASE),
+     lambda m: f"the {m.group(2).lower()} was {m.group(1).lower()}"),
+    # Same shape but for "our analysts ..." instead of "our team ..."
+    (re.compile(
+        r"(?:\bin\s+response\s+to\s+this\s+(?:alert|notification|event),?\s+)?"
+        r"\bour\s+(?:MDR\s+|SOC\s+)?analysts?\s+(?:have\s+|has\s+)?(\w+ed)\s+"
+        r"(?:the\s+|this\s+|that\s+)(\w+)",
+        re.IGNORECASE),
+     lambda m: f"the {m.group(2).lower()} was {m.group(1).lower()}"),
+    # Step 2: plain team-strip fallback — catches "our team is monitoring",
+    # "the team reviewed", and any remaining mid-sentence references the
+    # verb-rewrite missed.
+    (re.compile(
+        r"\b(?:our|the)\s+(?:MDR\s+|SOC\s+|security\s+|analyst\s+)*"
+        r"team(?:\s+of\s+analysts)?\s+",
+        re.IGNORECASE), ""),
+    (re.compile(r"\b(?:our|the)\s+(?:MDR|SOC)\s+analysts?\s+", re.IGNORECASE), ""),
+    (re.compile(r"\bour\s+analysts?\s+", re.IGNORECASE), ""),
+
+    # ── Closing-courtesy lines — kill the WHOLE sentence on its own line ─
+    # Triggered by sentences (paragraph endings) containing any of these
+    # patterns. Removes the entire sentence + trailing whitespace.
+    (re.compile(
+        r"(?:^|\n|\.\s+)[^.\n]*\b(?:please\s+(?:reach\s+out|contact\s+us|let\s+us\s+know)|"
+        r"feel\s+free\s+to\s+(?:contact|reach|ask)|"
+        r"happy\s+to\s+assist|"
+        r"do\s+not\s+hesitate\s+to\s+(?:contact|reach|ask)|"
+        r"don'?t\s+hesitate\s+to\s+(?:contact|reach|ask)|"
+        r"we\s+are\s+here\s+to\s+help|"
+        r"if\s+you\s+have\s+any\s+(?:further\s+)?questions|"
+        r"should\s+you\s+have\s+any\s+(?:further\s+)?questions)"
+        r"[^.\n]*\.?",
+        re.IGNORECASE), "."),
+
+    # ── Whitespace cleanup ───────────────────────────────────────────────
+    # Collapse any stray ", " left at line start by the rewrites above.
     (re.compile(r"^[\s]*,\s*", re.MULTILINE), ""),
+    # Collapse "  has cleared" -> " cleared" (when "team" was scrubbed mid-sentence)
+    (re.compile(r"\s{2,}has\s+", re.IGNORECASE), " has "),
 ]
 
 
+# Auxiliary verbs left orphaned at sentence start by mid-sentence scrubs
+# ("our team is monitoring" -> " is monitoring"). When a sentence starts with
+# one of these, drop the whole sentence rather than leaving a fragment.
+_ORPHAN_SENTENCE_RE = re.compile(
+    r"(?:^|(?<=[.!?]\s))\s*(?:is|are|was|were|has|have|had|will|would|"
+    r"should|may|might|can|could|do|does|did)\s+\w+[^.!?\n]*[.!?]",
+    re.IGNORECASE,
+)
+
+
 def _strip_filler_phrases(body: str) -> str:
-    """Apply the filler regex list; collapse the multiple blank lines the
-    removals leave behind."""
+    """Apply the filler regex list; collapse multiple blank lines and fix
+    capitalisation at sentence starts (the scrubs lowercase as they
+    rewrite). Also drops any orphan sentences left starting with a bare
+    auxiliary verb."""
     if not body:
         return body
     out = body
     for pat, repl in _FILLER_SUBS:
         out = pat.sub(repl, out)
+
+    # Drop orphan sentences that start with a bare auxiliary verb (the
+    # team-strip fallback leaves "The team is monitoring" -> " is monitoring").
+    out = _ORPHAN_SENTENCE_RE.sub("", out)
+
+    # Re-capitalise the first letter of every sentence (the verb-rewrite
+    # produces "the notification was cleared" — that should be "The
+    # notification was cleared" when it sits at the start of a sentence).
+    def _cap(match):
+        return match.group(1) + match.group(2).upper()
+    out = re.sub(r"(^|[.!?]\s+)([a-z])", _cap, out)
+
     # Collapse 3+ blank lines down to one
     out = re.sub(r"\n{3,}", "\n\n", out)
     # Collapse runs of spaces left by mid-sentence removals
@@ -1946,19 +2091,24 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "## Now write an email for THIS alert\n"
         f"{classified_as}Use the inspiration above for voice ONLY — write a "
         "fresh email adapted to the evidence in the raw log. Do not copy any "
-        "sentence verbatim from the examples. Follow the four-part structure "
-        "from your system instructions (DETAILS, ACTION TAKEN, RECOMMENDED "
-        "NEXT STEPS, CLOSING) as flowing paragraphs — no bullets, no lists."
+        "sentence from the examples. Follow the TWO-SECTION structure from "
+        "your system instructions: (1) DETAILS — the parsed facts from this "
+        "alert, (2) HOW TO INVESTIGATE AND REMEDIATE — actionable guidance "
+        "specific to this alert woven together as flowing prose (investigation "
+        "checks, containment, remediation, detection hardening). NO third "
+        "section. NO greeting. NO closing courtesy line."
         f"{must_include_block}\n\n"
         "Raw log:\n```\n"
         f"{log_text[:5000]}\n```\n\n"
         f"Extracted fields:\n{parsed_block or '(none)'}"
         f"{action_hint}\n\n"
-        "Produce the email body only. Paragraphs only. No bullets, no lists, "
-        "no em/en dashes. Embed the next-steps guidance directly into the "
-        "prose — do not label it 'Recommended Next Steps:' or render it as "
-        "a list. Skip the next-steps paragraph entirely if the email is a "
-        "clearing notification."
+        "Produce the email body only. Start directly with the DETAILS section "
+        "(no 'Hi team,' / 'Hello,' / 'Greetings,' etc). Paragraphs only — no "
+        "bullets, no numbered lists, no dash-prefixed items. No em/en dashes. "
+        "No references to 'our team', 'the team', 'our MDR team', 'our "
+        "analysts', 'our SOC'. No closing courtesy line ('please reach out', "
+        "'let us know', 'feel free to contact'). The signature is appended "
+        "automatically and IS the closing."
     )
 
     from providers import get_provider
