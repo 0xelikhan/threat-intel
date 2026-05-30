@@ -1,6 +1,16 @@
 """
 LangGraph orchestrator — defines the multi-agent pipeline graph.
 Triage → Enrichment → Investigation → (loop if low confidence) → Response
+
+Pipeline note: every node here is a thin wrapper around an agent function
+(run_triage / run_enrichment / run_investigation / run_response), and
+every one of those functions now routes its LLM calls through
+`providers.get_provider()` rather than importing the OpenAI SDK directly.
+Swapping LLM_PROVIDER swaps the backend for the whole graph at once.
+
+If you need to invoke a single procedure (triage-only, sigma-only, etc.)
+without running the full pipeline, use `skills.run_skill(name, inputs)`
+— same provider abstraction, granular surface.
 """
 
 from typing import TypedDict, Literal

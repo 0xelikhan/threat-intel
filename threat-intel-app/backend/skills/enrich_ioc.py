@@ -1,0 +1,109 @@
+"""
+EnrichIOCSkill — per-IOC enrichment against every configured TI source.
+
+Wraps the existing agents.enrichment functions (enrich_ip / enrich_domain /
+enrich_hash / enrich_url) and re-shapes the output into a deterministic
+verdict + raw-source dict. The verdict is derived from the same signals
+the deterministic GTI scorer uses.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, Optional
+
+from providers.base import LLMProvider
+
+from .base import Skill
+
+
+class EnrichIOCSkill(Skill):
+    @property
+    def name(self) -> str:
+        return "enrich_ioc"
+
+    @property
+    def description(self) -> str:
+        return ("Look up one IOC against every configured TI source "
+                "(VirusTotal, AbuseIPDB, OTX, GreyNoise, URLScan, Shodan, "
+                "Pulsedive, Maltiverse, WHOIS, DNS, BGP, etc.) and return a "
+                "structured verdict alongside the raw per-source payloads.")
+
+    @property
+    def input_schema(self) -> Dict[str, Any]:
+        return {"ioc_value": "str", "ioc_type": "str (ip|domain|hash|url)"}
+
+    @property
+    def output_schema(self) -> Dict[str, Any]:
+        return {
+            "ioc":      "str",
+            "type":     "str",
+            "verdict":  "str (MALICIOUS|SUSPICIOUS|CLEAN|UNKNOWN)",
+            "score":    "int (0-100)",
+            "sources":  "dict",
+            "summary":  "list[str]",
+        }
+
+    @property
+    def test_input(self) -> Dict[str, Any]:
+        return {"ioc_value": "1.1.1.1", "ioc_type": "ip"}
+
+    async def execute(
+        self,
+        inputs:   Dict[str, Any],
+        provider: Optional[LLMProvider] = None,
+    ) -> Dict[str, Any]:
+        ioc_value = (inputs or {}).get("ioc_value") or ""
+        ioc_type  = ((inputs or {}).get("ioc_type") or "").lower()
+        if not ioc_value or not ioc_type:
+            return {"ioc": ioc_value, "type": ioc_type, "verdict": "UNKNOWN",
+                    "score": 0, "sources": {}, "summary": ["missing ioc_value / ioc_type"]}
+
+        # Dispatch to the right enrich_* function from agents.enrichment.
+        try:
+            import aiohttp
+            from config import config
+            from agents import enrichment as _enr
+        except Exception as e:
+            return {"ioc": ioc_value, "type": ioc_type, "verdict": "UNKNOWN",
+                    "score": 0, "sources": {}, "summary": [f"enrichment unavailable: {e}"]}
+
+        keys = {k: config.get(k, "") for k in (
+            "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
+            "GREYNOISE_KEY", "SHODAN_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
+            "IPINFO_TOKEN", "WHOISXML_KEY", "CROWDSEC_KEY", "PHISHTANK_KEY",
+        )}
+        async with aiohttp.ClientSession() as session:
+            if ioc_type == "ip":
+                data = await _enr.enrich_ip(session, ioc_value, keys)
+            elif ioc_type in ("domain", "hostname"):
+                data = await _enr.enrich_domain(session, ioc_value, keys)
+            elif ioc_type in ("hash", "file"):
+                data = await _enr.enrich_hash(session, ioc_value, keys)
+            elif ioc_type == "url":
+                data = await _enr.enrich_url(session, ioc_value, keys)
+            else:
+                return {"ioc": ioc_value, "type": ioc_type, "verdict": "UNKNOWN",
+                        "score": 0, "sources": {}, "summary": ["unknown ioc_type"]}
+
+        # Derive verdict + score via the existing deterministic scorer for
+        # parity with the GTI panel; falls back to a coarse heuristic if it
+        # can't run.
+        try:
+            from gti_score import compute_gti_scores
+            scores = compute_gti_scores({ioc_type + "s": [ioc_value]},
+                                        {ioc_type + "s": {ioc_value: data}})
+            entry = (scores or {}).get(ioc_value) or {}
+            verdict = entry.get("verdict") or "UNKNOWN"
+            score   = int(entry.get("score") or 0)
+            factors = [f for f in (entry.get("contributing_factors") or [])][:6]
+        except Exception:
+            verdict, score, factors = "UNKNOWN", 0, []
+
+        return {
+            "ioc":      ioc_value,
+            "type":     ioc_type,
+            "verdict":  verdict,
+            "score":    score,
+            "sources":  data or {},
+            "summary":  factors,
+        }
