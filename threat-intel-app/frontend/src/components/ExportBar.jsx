@@ -186,7 +186,7 @@ export function downloadFile(content, filename, mimeType = 'text/plain') {
 
 
 // ─── EXPORT BAR COMPONENT ────────────────────────────────────────────────────────
-export default function ExportBar({ result }) {
+function ExportBar({ result }) {
   const [lastExport, setLastExport] = useState(null);
 
   if (!result) return null;
@@ -286,3 +286,7 @@ export default function ExportBar({ result }) {
     </div>
   );
 }
+
+// Skip re-render when props are shallowly equal — the top-level views all
+// receive a heavy `result` / `analysisResult` prop plus stable callbacks.
+export default React.memo(ExportBar);

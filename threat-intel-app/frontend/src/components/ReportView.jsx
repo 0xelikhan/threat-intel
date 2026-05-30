@@ -107,7 +107,7 @@ function EnrichmentHighlights({ enrichments }) {
   );
 }
 
-export default function ReportView({ result }) {
+function ReportView({ result }) {
   const [analystName, setAnalystName] = useState('');
   const [notes, setNotes] = useState('');
   const reportRef = useRef(null);
@@ -273,3 +273,7 @@ export default function ReportView({ result }) {
     </div>
   );
 }
+
+// Skip re-render when props are shallowly equal — the top-level views all
+// receive a heavy `result` / `analysisResult` prop plus stable callbacks.
+export default React.memo(ReportView);

@@ -31,7 +31,7 @@ function isBareUrl(text) {
   return !!trimmed && !trimmed.includes('\n') && _URL_ONLY_RE.test(trimmed);
 }
 
-export default function AgentPipeline({ logText, label, onComplete, onStart, onPartial, onScanUrl }) {
+function AgentPipeline({ logText, label, onComplete, onStart, onPartial, onScanUrl }) {
   const [running, setRunning] = useState(false);
   const [trace, setTrace]     = useState([]);
   const [error, setError]     = useState(null);
@@ -350,3 +350,7 @@ export default function AgentPipeline({ logText, label, onComplete, onStart, onP
     </Box>
   );
 }
+
+// Skip re-render when props are shallowly equal — the top-level views all
+// receive a heavy `result` / `analysisResult` prop plus stable callbacks.
+export default React.memo(AgentPipeline);

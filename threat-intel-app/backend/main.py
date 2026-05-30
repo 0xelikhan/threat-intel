@@ -13,6 +13,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -30,6 +31,13 @@ app = FastAPI(title="Threat Intelligence Platform", version="3.0.0",
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+# Compress JSON responses >= 1 KB. Browsers / proxies all negotiate gzip
+# automatically via Accept-Encoding; analyze responses can hit 200-400 KB
+# pre-compression so this is a meaningful network win on every page load.
+# minimum_size=1024 skips tiny payloads where the gzip framing overhead
+# would actually grow the response.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 # Auth gate — everything under /api/* requires a session EXCEPT:
 #   * /api/health        — needed by the Docker HEALTHCHECK and the deploy probe

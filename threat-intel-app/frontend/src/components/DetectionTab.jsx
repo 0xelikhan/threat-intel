@@ -263,7 +263,7 @@ function KQLBuilder({ analysisResult }) {
 }
 
 // ─── MAIN TAB ────────────────────────────────────────────────────────────────────
-export default function DetectionTab({ analysisResult }) {
+function DetectionTab({ analysisResult }) {
   const [tab, setTab] = useState('mitre');
   const tabs = [{ id: 'mitre', label: 'MITRE ATT&CK' }, { id: 'actors', label: 'THREAT ACTORS' }, { id: 'sigma', label: 'SIGMA RULE' }, { id: 'kql', label: 'KQL BUILDER' }];
   return (
@@ -280,3 +280,7 @@ export default function DetectionTab({ analysisResult }) {
     </div>
   );
 }
+
+// Skip re-render when props are shallowly equal — the top-level views all
+// receive a heavy `result` / `analysisResult` prop plus stable callbacks.
+export default React.memo(DetectionTab);
