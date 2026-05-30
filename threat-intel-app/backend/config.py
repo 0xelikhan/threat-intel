@@ -149,6 +149,49 @@ API_KEY_DEFINITIONS = {
         "placeholder": "PhishTank app key",
         "group": "API Keys"
     },
+    # ── Breach / dark-web / paste-site enrichment sources ────────────────────
+    "HIBP_KEY": {
+        "label": "HaveIBeenPwned API Key",
+        "description": "Breach history for email-address IOCs. Returns breach name, "
+                       "date, pwn count, and exposed data classes. Required for "
+                       "the /breachedaccount endpoint since 2019.",
+        "required": False,
+        "url": "https://haveibeenpwned.com/API/Key",
+        "placeholder": "HIBP API key",
+        "group": "API Keys"
+    },
+    "DEHASHED_EMAIL": {
+        "label": "Dehashed Account Email",
+        "description": "Account email for Dehashed credential-leak search (paired with DEHASHED_KEY for basic auth).",
+        "required": False,
+        "url": "https://dehashed.com",
+        "placeholder": "you@example.com",
+        "group": "API Keys"
+    },
+    "DEHASHED_KEY": {
+        "label": "Dehashed API Key",
+        "description": "Credential-leak database search across email / username / phone / IP. Use with DEHASHED_EMAIL for basic auth.",
+        "required": False,
+        "url": "https://dehashed.com/api",
+        "placeholder": "Dehashed API key",
+        "group": "API Keys"
+    },
+    "INTELX_KEY": {
+        "label": "IntelligenceX API Key",
+        "description": "Dark-web + paste-site search for domains, IPs, and emails. Returns matches with source, date, and previews.",
+        "required": False,
+        "url": "https://intelx.io/account",
+        "placeholder": "IntelX API key",
+        "group": "API Keys"
+    },
+    "CRIMINAL_IP_KEY": {
+        "label": "Criminal IP API Key",
+        "description": "IP threat scoring (inbound / outbound) + VPN / proxy / Tor / scanner classification.",
+        "required": False,
+        "url": "https://www.criminalip.io",
+        "placeholder": "Criminal IP API key",
+        "group": "API Keys"
+    },
     "WHOISXML_KEY": {
         "label": "Whois XML API Key",
         "description": "Domain WHOIS lookup: registrar, creation date, registrant. Strong FP signal for newly-registered domains.",

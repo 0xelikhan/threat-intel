@@ -936,10 +936,21 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     except Exception:
         _dec_co = _skip()
 
-    bgp_r, gsb_r, dec_r, mv_r, oc_r = await asyncio.gather(
+    # ── New IP enrichment sources (Criminal IP + IntelX) ──
+    # Criminal IP returns inbound/outbound threat scores. IntelX searches
+    # the dark-web + paste-site index for any mentions of this IP.
+    try:
+        from intel.breach_sources import criminal_ip as _crimip, intelx_search as _ix
+        _crimip_co = _crimip(session, ip, keys.get("CRIMINAL_IP_KEY", ""))
+        _ix_co     = _ix(session, ip, keys.get("INTELX_KEY", ""))
+    except Exception:
+        _crimip_co, _ix_co = _skip(), _skip()
+
+    bgp_r, gsb_r, dec_r, mv_r, oc_r, crimip_r, ix_r = await asyncio.gather(
         _bgp_co, _gsb_co, _dec_co,
         _maltiverse_lookup("ip", ip, _cfg),
         _opencti_lookup(ip, _cfg),
+        _crimip_co, _ix_co,
         return_exceptions=True,
     )
 
@@ -961,6 +972,15 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     oc = _ok_dict(oc_r)
     if oc:
         data["opencti"] = oc
+    # New sources — attach only when they returned real data (auth-failed /
+    # not-configured results carry an error key + error_type and are
+    # surfaced as a separate source-status row by the frontend).
+    crimip = _ok_dict(crimip_r)
+    if crimip:
+        data["criminal_ip"] = crimip
+    ix = _ok_dict(ix_r)
+    if ix:
+        data["intelx"] = ix
 
     # ASN reputation — offline, uses ISP/org strings we already have, no API call
     try:
@@ -1051,11 +1071,18 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     except Exception:
         _dns_co, _gsb_co = _skip(), _skip()
 
-    dbl_r, mv_r, oc_r, dns_r, gsb_r = await asyncio.gather(
+    # IntelX dark-web + paste-site search for this domain.
+    try:
+        from intel.breach_sources import intelx_search as _ix
+        _ix_co = _ix(session, domain, keys.get("INTELX_KEY", ""))
+    except Exception:
+        _ix_co = _skip()
+
+    dbl_r, mv_r, oc_r, dns_r, gsb_r, ix_r = await asyncio.gather(
         _dbl_co,
         _maltiverse_lookup("hostname", domain, _cfg),
         _opencti_lookup(domain, _cfg),
-        _dns_co, _gsb_co,
+        _dns_co, _gsb_co, _ix_co,
         return_exceptions=True,
     )
 
@@ -1077,6 +1104,9 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         osint["google_safebrowsing"] = gsb
     if osint:
         data["osint"] = osint
+    ix = _ok_dict(ix_r)
+    if ix:
+        data["intelx"] = ix
 
     _cache[ck] = data
     return data
@@ -1203,15 +1233,77 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
     import base64
     url_b64 = base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
 
+    # URLScan screenshot lookup — finds any previous public scan for this
+    # URL and returns the screenshot UUID so the frontend can render the
+    # thumbnail inline. Works without an API key (rate-limited) but a key
+    # raises the limit considerably.
+    try:
+        from intel.breach_sources import urlscan_screenshot as _us
+        _us_co = _us(session, url, keys.get("URLSCAN_KEY", ""))
+    except Exception:
+        _us_co = _skip()
+
     results = await asyncio.gather(
         _get(session, f"https://www.virustotal.com/api/v3/urls/{url_b64}",
              headers={"x-apikey": keys.get("VIRUSTOTAL_KEY", "")}),
+        _us_co,
         return_exceptions=True,
     )
 
     data = {
         "virustotal": _p_vt_url(results[0]),
     }
+    # URLScan screenshot — surface only when a previous scan was found
+    # (the "not found" payload still carries source + summary so the
+    # frontend can render a per-source row with status if desired).
+    us = _ok_dict(results[1])
+    if us:
+        data["urlscan_screenshot"] = us
+    _cache[ck] = data
+    return data
+
+
+# ─── Email enrichment ─────────────────────────────────────────────────────────
+async def enrich_email(session, email: str, keys: dict) -> dict:
+    """Enrich an email-address IOC against breach databases + the dark-web
+    paste-site index. Returns:
+      * hibp — breach-history list (count + per-breach details)
+      * dehashed — credential-leak database hits (when DEHASHED keys set)
+      * intelx — dark-web + paste-site matches (when INTELX_KEY set)
+    HIBP, Dehashed, and IntelX each handle their own missing-key fallback
+    (returns {"error": "...", "error_type": "auth_failed"} which the
+    enrichment-summary tally treats as 'not configured', not 'flagged')."""
+    ck = _ck("email", email)
+    if ck in _cache:
+        return {**_cache[ck], "cached": True}
+
+    try:
+        from intel.breach_sources import (
+            hibp_email, dehashed_search, intelx_search,
+        )
+    except Exception as e:
+        return {"error": f"breach_sources unavailable: {e}"}
+
+    hibp_r, dh_r, ix_r = await asyncio.gather(
+        hibp_email(session, email, keys.get("HIBP_KEY", "")),
+        dehashed_search(session, email, "email",
+                        keys.get("DEHASHED_EMAIL", ""),
+                        keys.get("DEHASHED_KEY", "")),
+        intelx_search(session, email, keys.get("INTELX_KEY", "")),
+        return_exceptions=True,
+    )
+
+    data: dict = {}
+    hibp = _ok_dict(hibp_r)
+    if hibp:
+        data["hibp"] = hibp
+    dh = _ok_dict(dh_r)
+    if dh:
+        data["dehashed"] = dh
+    ix = _ok_dict(ix_r)
+    if ix:
+        data["intelx"] = ix
+
     _cache[ck] = data
     return data
 
@@ -1265,6 +1357,12 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
         "GOOGLE_API_KEY":      config.get("GOOGLE_API_KEY"),
         "HONEYPOT_KEY":        config.get("HONEYPOT_KEY"),
         "ANYRUN_KEY":          config.get("ANYRUN_KEY"),
+        # Breach / dark-web sources (added by the breach-enrichment feature)
+        "HIBP_KEY":            config.get("HIBP_KEY"),
+        "DEHASHED_EMAIL":      config.get("DEHASHED_EMAIL"),
+        "DEHASHED_KEY":        config.get("DEHASHED_KEY"),
+        "INTELX_KEY":          config.get("INTELX_KEY"),
+        "CRIMINAL_IP_KEY":     config.get("CRIMINAL_IP_KEY"),
     }
 
     iocs = state.get("iocs", {})
@@ -1276,15 +1374,20 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
     # that — as each type finishes — we can stream a cumulative snapshot to the UI
     # (via on_partial) instead of waiting for the slowest type to land everything
     # at once. The final `enrichments` dict is identical either way.
-    enrichments = {"ips": {}, "domains": {}, "hashes": {}, "urls": {}}
+    enrichments = {"ips": {}, "domains": {}, "hashes": {}, "urls": {}, "emails": {}}
     type_iocs = {
         "ips":     iocs.get("ips", [])[:10],
         "domains": iocs.get("domains", [])[:10],
         "hashes":  iocs.get("hashes", [])[:10],
         "urls":    iocs.get("urls", [])[:5],
+        # Email enrichment — HIBP breach history, Dehashed credential
+        # leaks, IntelX dark-web/paste-site matches. Capped at 5 per
+        # investigation since each email triggers 3 API calls.
+        "emails":  iocs.get("emails", [])[:5],
     }
     _enrichers = {"ips": enrich_ip, "domains": enrich_domain,
-                  "hashes": enrich_hash, "urls": enrich_url}
+                  "hashes": enrich_hash, "urls": enrich_url,
+                  "emails": enrich_email}
 
     # Share the process-wide TCP/DNS pool. connector_owner=False keeps the
     # connector alive after this session closes so the next investigation

@@ -1556,6 +1556,7 @@ function _ocSources(result, ioc, type) {
     : type === 'hash'   ? enr.hashes
     : type === 'file'   ? enr.hashes
     : type === 'url'    ? enr.urls
+    : type === 'email'  ? enr.emails
     : null;
   const d = bucket?.[ioc] || {};
   const out = [];
@@ -1679,6 +1680,89 @@ function _ocSources(result, ioc, type) {
     out.push({ source: 'Spamhaus DBL', label: `${d.spamhaus_dbl.verdict || 'listed'}${d.spamhaus_dbl.code ? ` · ${d.spamhaus_dbl.code}` : ''}`, color: red });
   }
 
+  // HIBP — breach history for email IOCs.
+  if (d.hibp && !d.hibp.error) {
+    const h = d.hibp;
+    const n = h.breach_count ?? 0;
+    if (n > 0) {
+      const c = n >= 10 ? red : n >= 3 ? orange : yellow;
+      const first = (h.breaches || [])[0]?.title || '';
+      const extra = first ? ` · ${first}` : '';
+      out.push({
+        source: 'HaveIBeenPwned',
+        label: `${n} breach${n === 1 ? '' : 'es'}${extra}`,
+        color: c,
+      });
+    } else if (h.breach_count === 0) {
+      out.push({ source: 'HaveIBeenPwned', label: 'no breaches', color: green });
+    }
+  }
+
+  // Dehashed — credential-leak database hits.
+  if (d.dehashed && !d.dehashed.error) {
+    const t = d.dehashed.total ?? 0;
+    if (t > 0) {
+      const c = t >= 10 ? red : t >= 3 ? orange : yellow;
+      out.push({
+        source: 'Dehashed',
+        label: `${t} leaked record${t === 1 ? '' : 's'}`,
+        color: c,
+      });
+    }
+  }
+
+  // IntelX — dark-web + paste-site matches.
+  if (d.intelx && !d.intelx.error) {
+    const n = d.intelx.count ?? 0;
+    if (n > 0) {
+      const buckets = (d.intelx.buckets || []).slice(0, 3).join(', ');
+      const c = n >= 5 ? orange : yellow;
+      out.push({
+        source: 'IntelX',
+        label: `${n} match${n === 1 ? '' : 'es'}${buckets ? ` · ${buckets}` : ''}`,
+        color: c,
+      });
+    }
+  }
+
+  // Criminal IP — inbound/outbound threat scoring.
+  if (d.criminal_ip && !d.criminal_ip.error) {
+    const cip = d.criminal_ip;
+    const inb = cip.inbound_score, outb = cip.outbound_score;
+    if (inb || outb) {
+      const worst = [inb, outb].find(s => s === 'critical' || s === 'dangerous')
+                 || [inb, outb].find(s => s === 'moderate')
+                 || inb || outb;
+      const c = /critical|dangerous/i.test(worst) ? red
+              : /moderate/i.test(worst)           ? orange
+              : /low/i.test(worst)                ? yellow
+              : /safe/i.test(worst)               ? green : tert;
+      const flags = [];
+      if (cip.is_tor) flags.push('TOR');
+      if (cip.is_vpn || cip.is_anonymous_vpn) flags.push('VPN');
+      if (cip.is_proxy) flags.push('proxy');
+      if (cip.is_scanner) flags.push('scanner');
+      out.push({
+        source: 'Criminal IP',
+        label: `inbound ${inb || '?'} · outbound ${outb || '?'}${flags.length ? ` · ${flags.join(', ')}` : ''}`,
+        color: c,
+      });
+    }
+  }
+
+  // URLScan screenshot — prior public scan for this URL.
+  if (d.urlscan_screenshot && !d.urlscan_screenshot.error
+      && d.urlscan_screenshot.found) {
+    const u = d.urlscan_screenshot;
+    const c = u.malicious ? red : u.score >= 50 ? orange : cyan;
+    const dateStr = u.scan_date ? ` · scanned ${String(u.scan_date).slice(0, 10)}` : '';
+    out.push({
+      source: 'URLScan screenshot',
+      label: `${u.malicious ? 'malicious' : 'archived scan'}${dateStr}`,
+      color: c,
+    });
+  }
+
   // WHOIS — registrar + age + registrant. Domain age is the single
   // strongest FP-vs-real signal: < 30 d is highly suspicious, < 1 d is
   // near-certain phishing/C2 staging. Show it color-coded by age band.
@@ -1710,8 +1794,24 @@ function PerIndicatorList({ sorted, result }) {
     const tr = tierFor(d.score);
     // Backend field is `ioc_type`; tolerate `type` as a fallback for any
     // older runs cached in memory before this commit.
-    const sources = _ocSources(result, ioc, d.ioc_type || d.type);
-    const expandable = sources.length > 0 || (d.contributing_factors || []).length > 1;
+    const iocType = d.ioc_type || d.type;
+    const sources = _ocSources(result, ioc, iocType);
+    // Inline breach + screenshot summaries — surfaced PROMINENTLY in the
+    // row (not buried behind the expand toggle) since both directly
+    // influence threat-level reasoning.
+    const enrBucket =
+        iocType === 'ip'     ? result?.enrichments?.ips
+      : iocType === 'domain' ? result?.enrichments?.domains
+      : iocType === 'url'    ? result?.enrichments?.urls
+      : iocType === 'email'  ? result?.enrichments?.emails
+      :                         null;
+    const enrData = enrBucket?.[ioc] || {};
+    const breachCount = enrData?.hibp?.breach_count ?? null;
+    const dehashedCount = enrData?.dehashed?.total ?? null;
+    const urlScreenshot = enrData?.urlscan_screenshot;
+    const expandable = sources.length > 0
+                       || (d.contributing_factors || []).length > 1
+                       || (urlScreenshot && urlScreenshot.found);
     const open = openIoc === ioc;
     return (
       <Box key={ioc} sx={{
@@ -1746,6 +1846,33 @@ function PerIndicatorList({ sorted, result }) {
               </Typography>
             )}
           </Box>
+          {/* Breach badge — credential exposure is a high-signal compromise
+              indicator. Sits next to the verdict so analysts notice it
+              without expanding the row. */}
+          {(breachCount != null && breachCount > 0) && (
+            <Box sx={{
+              px: 0.875, py: 0.25, borderRadius: '3px',
+              border: `1px solid ${breachCount >= 10 ? '#EE3838' : breachCount >= 3 ? '#E6700F' : '#E1B823'}`,
+              backgroundColor: muiAlpha(breachCount >= 10 ? '#EE3838' : breachCount >= 3 ? '#E6700F' : '#E1B823', 0.12),
+              color: breachCount >= 10 ? '#ff6b6b' : breachCount >= 3 ? '#ffa94d' : '#ffd700',
+              fontSize: 10, fontWeight: 700, fontFamily: '"IBM Plex Mono", monospace',
+              letterSpacing: '0.04em', whiteSpace: 'nowrap',
+            }}>
+              ⚠ {breachCount} BREACH{breachCount === 1 ? '' : 'ES'}
+            </Box>
+          )}
+          {(dehashedCount != null && dehashedCount > 0 && breachCount == null) && (
+            <Box sx={{
+              px: 0.875, py: 0.25, borderRadius: '3px',
+              border: `1px solid ${dehashedCount >= 10 ? '#EE3838' : '#E6700F'}`,
+              backgroundColor: muiAlpha(dehashedCount >= 10 ? '#EE3838' : '#E6700F', 0.12),
+              color: dehashedCount >= 10 ? '#ff6b6b' : '#ffa94d',
+              fontSize: 10, fontWeight: 700, fontFamily: '"IBM Plex Mono", monospace',
+              whiteSpace: 'nowrap',
+            }}>
+              ⚠ {dehashedCount} LEAKED
+            </Box>
+          )}
           <Verdict verdict={d.verdict} size="small"/>
         </Box>
 
@@ -1764,6 +1891,57 @@ function PerIndicatorList({ sorted, result }) {
               <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontStyle: 'italic' }}>
                 No source-level enrichment data available for this indicator.
               </Typography>
+            )}
+            {/* URLScan screenshot — embed the thumbnail inline so the analyst
+                sees what the page looks like without visiting it. The link
+                opens the full scan in a new tab. */}
+            {urlScreenshot?.found && urlScreenshot?.screenshot_url && (
+              <Box sx={{
+                mt: 1.25, pt: 1,
+                borderTop: `1px solid ${muiAlpha('#ffffff', 0.06)}`,
+              }}>
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
+                  <Typography sx={{
+                    fontSize: 10, color: 'text.disabled',
+                    textTransform: 'uppercase', letterSpacing: '0.06em',
+                  }}>
+                    URLScan archive
+                  </Typography>
+                  {urlScreenshot.scan_url && (
+                    <Typography
+                      component="a"
+                      href={urlScreenshot.scan_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      sx={{ fontSize: 10, color: 'primary.main', textDecoration: 'none',
+                        '&:hover': { textDecoration: 'underline' } }}>
+                      open full scan ↗
+                    </Typography>
+                  )}
+                </Stack>
+                <Box
+                  component="a"
+                  href={urlScreenshot.scan_url || urlScreenshot.screenshot_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{
+                    display: 'block',
+                    border: `1px solid ${muiAlpha('#ffffff', 0.1)}`,
+                    borderRadius: 1, overflow: 'hidden',
+                    backgroundColor: '#070d19',
+                    maxWidth: 480,
+                  }}>
+                  <Box component="img"
+                    src={urlScreenshot.screenshot_url}
+                    alt={`Screenshot of ${ioc}`}
+                    loading="lazy"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    sx={{
+                      display: 'block', width: '100%', height: 'auto',
+                      maxHeight: 320,
+                    }}/>
+                </Box>
+              </Box>
             )}
             {(d.contributing_factors || []).length > 1 && (
               <Box sx={{
