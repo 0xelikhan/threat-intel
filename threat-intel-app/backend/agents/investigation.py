@@ -436,6 +436,14 @@ PRINCIPLE 1 — Context matters more than patterns
   Vendor software writes there by design.
 • Processes running from System32 are NOT inherently suspicious. That is where
   Windows system tools live.
+• Source IPs in major cloud provider ranges (AWS, Azure, GCP, Cloudflare,
+  Oracle Cloud, DigitalOcean) are NOT inherently suspicious. These providers
+  host the majority of legitimate internet traffic — every mobile app, SaaS
+  product, CDN, and corporate VPN exits from one. Phrases like "the IP
+  resolves to AWS infrastructure, which is often associated with malicious
+  activity" are FORBIDDEN — they would flag essentially every modern
+  internet service. Treat cloud-provider attribution as INFORMATIONAL
+  context unless an enrichment source explicitly flagged the specific IP.
 
 ──────────────────────────────────────────────────────────────────────────────────
 PRINCIPLE 2 — Known-good software behaviour

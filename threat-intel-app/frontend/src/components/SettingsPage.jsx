@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { SkeletonLazyFallback } from './Skeleton';
 
 const API = '/api';
 
@@ -68,8 +69,10 @@ export default function SettingsPage({ onConfigured }) {
   };
 
   if (loading) return (
-    <div style={{ display: 'flex', justifyContent: 'center', padding: '60px', color: '#4a5568' }}>
-      Loading...
+    <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <SkeletonLazyFallback height={80} label="settings header"/>
+      <SkeletonLazyFallback height={140} label="API keys"/>
+      <SkeletonLazyFallback height={140} label="integrations"/>
     </div>
   );
 
