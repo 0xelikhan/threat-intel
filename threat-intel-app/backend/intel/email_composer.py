@@ -2123,11 +2123,140 @@ def _strip_filler_phrases(body: str) -> str:
     return out.strip()
 
 
+# ─── Deterministic facts-block renderer ──────────────────────────────────────
+#
+# The LLM is unreliable at producing the clean "Label: value" structured
+# block we want at the top of every alert email — even with strong prompt
+# rules and post-processor scrubs, it keeps falling back to "A failed
+# login attempt was recorded for ..." style robotic narration.
+#
+# Solution: take the formatting concern away from the LLM entirely. We
+# already extracted every field in /api/email/parse — render them directly
+# as labelled lines server-side. The LLM is then asked for ONLY two small
+# things it cannot screw up: a one-sentence plain-language summary and a
+# one-paragraph action block. The body is assembled by concatenation, not
+# by prompting the LLM to format anything.
+#
+# Field ordering follows the natural triage flow: WHO -> WHERE -> WHAT ->
+# OUTCOME -> WHEN. Within each group, the most specific field wins (e.g.
+# user_principal_name beats user_display_name when both are present).
+_FACT_FIELDS = (
+    # (label, [candidate keys in priority order], optional formatter)
+    ("User",                 ["user_principal_name", "ep_user", "user_display_name"]),
+    ("User display name",    ["user_display_name"], lambda v, p: v if (p.get("user_principal_name")
+                                                                        or p.get("ep_user"))
+                                                                        and v != (p.get("user_principal_name")
+                                                                                  or p.get("ep_user"))
+                                                                        else None),
+    ("Target user",          ["target_user_principal_name"]),
+    ("Asset",                ["asset_name", "ep_domain"]),
+    ("Host",                 ["ep_domain"], lambda v, p: v if not p.get("asset_name") else None),
+    ("Process",              ["ep_application_name"]),
+    ("Process path",         ["ep_process_path", "ep_full_path"]),
+    ("Process ID",           ["ep_process_id"]),
+    ("Command line",         ["ep_cmd_line"], lambda v, p: (v[:200] + "...") if isinstance(v, str) and len(v) > 200 else v),
+    ("File path",            ["ep_defender_path", "ep_defender_file"]),
+    ("File hash (SHA-256)",  ["ep_sha256"]),
+    ("Detection",            ["ep_defender_type", "ep_message", "ep_admin_alert_title"]),
+    ("Source IP",            ["ip_address"]),
+    ("First login IP",       ["first_login_ip"]),
+    ("Second login IP",      ["second_login_ip"]),
+    ("Source location",      ["location_city", "location_country"], lambda v, p: _join_location(p)),
+    ("User agent",           ["additional_info_user_agent"]),
+    ("Risk type",            ["risk_event_type"]),
+    ("Risk level",           ["risk_level"]),
+    ("Risk state",           ["risk_state"]),
+    ("Risk reasons",         ["additional_info_risk_reasons"]),
+    ("Forwarding to",        ["forwarding_address"]),
+    ("Privileged role",      ["privileged_role_display_name", "privileged_role_well_known"]),
+    ("Time",                 ["ep_date"]),
+)
+
+
+def _join_location(p: dict) -> str:
+    """Combine city + state + country into 'City, ST, Country' when present."""
+    parts = []
+    for k in ("location_city", "location_state", "location_country"):
+        v = (p or {}).get(k)
+        if v and str(v).strip() and str(v).strip().lower() not in {"unknown", "-", "n/a"}:
+            parts.append(str(v).strip())
+    return ", ".join(parts) if parts else ""
+
+
+def _is_real_value(v) -> bool:
+    """Empty / placeholder values shouldn't render as facts."""
+    if v in (None, "", "N/A", "-"):
+        return False
+    s = str(v).strip()
+    if not s or s.lower() in {"unknown", "n/a", "na", "-", "(empty)", "null", "none"}:
+        return False
+    return True
+
+
+def _render_facts_block(parsed: dict, options: dict) -> str:
+    """Build the labelled 'Label: value' block from parsed alert fields.
+    Returns a multi-line string ready to slot at the top of the email body.
+    Returns "" when the parser produced nothing usable.
+
+    The LLM never produces this content — it's deterministic, so we never
+    have to worry about robotic narration or hallucinated fields."""
+    p = parsed or {}
+    o = options or {}
+    seen_values = set()
+    lines = []
+
+    for entry in _FACT_FIELDS:
+        label, keys = entry[0], entry[1]
+        formatter   = entry[2] if len(entry) > 2 else None
+
+        # Pick first key that has a real value
+        raw = None
+        for k in keys:
+            if _is_real_value(p.get(k)):
+                raw = p.get(k)
+                break
+        if raw is None:
+            continue
+
+        value = formatter(raw, p) if formatter else raw
+        if not _is_real_value(value):
+            continue
+        value_str = str(value).strip()
+
+        # Dedup: if a value has already been emitted under a different
+        # label (e.g. ep_user == user_principal_name), skip it.
+        if value_str in seen_values:
+            continue
+        seen_values.add(value_str)
+        lines.append(f"{label}: {value_str}")
+
+    # Response action — what was already done about the alert, if anything
+    response_action = (o or {}).get("response_action") or ""
+    if response_action:
+        for rid, rlabel in RESPONSE_ACTIONS:
+            if rid == response_action and rid:
+                lines.append(f"Response action: {rlabel}")
+                break
+
+    return "\n".join(lines)
+
+
 async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
                      config) -> Dict:
-    """Generate a fresh template body via AI, then run it through the same
-    render pipeline so the signature, subject, and HTML wrapping match the
-    static-template flow. Returns {subject, text, html, template_used}."""
+    """Generate a customer-facing email body.
+
+    Body structure (assembled server-side, NOT by the LLM):
+      1. Deterministic facts block (Label: value lines) — rendered from
+         parsed fields directly. The LLM never touches this.
+      2. AI summary — ONE plain-language sentence naming what the alert is.
+      3. AI guidance — ONE tight paragraph of investigate + remediate.
+      4. Signature — appended by the existing render pipeline.
+
+    The LLM scope is limited to producing JSON {summary, guidance} which
+    is small enough that prompt-following stays reliable. This replaces
+    the prior approach of asking the LLM to format the entire body,
+    which kept producing robotic prose narration regardless of how
+    strongly the prompt forbade it."""
     if not log_text or not log_text.strip():
         return {"error": "log_text required"}
 
@@ -2186,59 +2315,106 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     must_include_block = (f"\n\nADDITIONAL RULES FOR THIS ALERT:\n{must_include}\n"
                           if must_include else "")
 
-    user_prompt = (
-        f"{inspiration}\n\n"
-        "## Now write an email for THIS alert\n"
-        f"{classified_as}Use the inspiration above for voice ONLY — write a "
-        "fresh email adapted to the evidence in the raw log. Do not copy any "
-        "sentence from the examples. Follow the TWO-SECTION structure from "
-        "your system instructions: (1) DETAILS — the parsed facts from this "
-        "alert, (2) HOW TO INVESTIGATE AND REMEDIATE — actionable guidance "
-        "specific to this alert woven together as flowing prose (investigation "
-        "checks, containment, remediation, detection hardening). NO third "
-        "section. NO greeting. NO closing courtesy line."
-        f"{must_include_block}\n\n"
-        "Raw log:\n```\n"
-        f"{log_text[:5000]}\n```\n\n"
-        f"Extracted fields:\n{parsed_block or '(none)'}"
+    # ── Server-side facts block (deterministic, no LLM involvement) ──────
+    facts_block = _render_facts_block(parsed, options)
+
+    # ── Tiny LLM scope: ONLY a summary sentence + a guidance paragraph ──
+    # The prompt asks for strict JSON {summary, guidance} — both fields are
+    # small, so prompt-following stays reliable. The model never has the
+    # chance to robotic-narrate the facts (because we render them itself).
+    sys_msg = (
+        "You are a senior SOC analyst writing two small pieces of an email "
+        "body. Output STRICT JSON with exactly two string fields: 'summary' "
+        "and 'guidance'. No other keys. No markdown fences.\n\n"
+        "summary: ONE plain-English sentence (max 25 words) naming what the "
+        "alert actually is. Example: 'Sign-in failure against a disabled "
+        "account, most likely a stale automation still calling the "
+        "deactivated identity.' Example: 'A scheduled Dell SupportAssist "
+        "task ran successfully against the system registry, which is "
+        "expected vendor maintenance behaviour.'\n\n"
+        "guidance: ONE tight paragraph (3-5 sentences, max 90 words) of "
+        "specific investigation + containment + remediation + detection "
+        "advice for THIS alert. Reference the specific artefacts by name "
+        "(the actual user, IP, process, hash, etc. from the parsed "
+        "fields). For clearing notifications / confirmed false positives, "
+        "ONE sentence of verification advice is enough. For genuine "
+        "incidents, give concrete steps in the order they should happen.\n\n"
+        "CALIBRATION:\n"
+        "* When the evidence shows a known-good vendor pattern (Dell "
+        "SupportAssist, Microsoft Defender, SCCM, CrowdStrike, etc.), say "
+        "so explicitly in the summary and skew the guidance toward "
+        "verification rather than containment.\n"
+        "* Only treat an event as confirmed-malicious with concrete "
+        "evidence (named malware hash, malicious infrastructure callout, "
+        "lateral movement, credential access). Otherwise the guidance is "
+        "verification + monitoring.\n\n"
+        "BANNED PHRASES (the analyst will reject the email if you produce "
+        "any of these): 'indicates that', 'associated with this event', "
+        "'in terms of', 'ensure that', 'consider whether', 'may be "
+        "necessary', 'to enhance detection capabilities', 'we will "
+        "continue monitoring', 'we are here to help', 'please contact "
+        "us', 'feel free to', 'do not hesitate', 'rest assured', 'as "
+        "always', 'in light of', 'in response to this alert'. Use direct "
+        "active voice instead.\n\n"
+        "NO references to 'our team', 'the team', 'our analysts', or any "
+        "group self-reference. NO greeting. NO closing courtesy line. "
+        "NO em/en dashes."
+    )
+
+    user_msg = (
+        f"## Alert facts (already rendered as the email's top block — DO NOT "
+        "re-narrate these in the summary or guidance)\n"
+        f"{facts_block or '(no structured fields)'}\n\n"
+        f"## Raw log (for context only)\n"
+        f"```\n{log_text[:3500]}\n```\n"
         f"{action_hint}\n\n"
-        "Produce the email body only. Start directly with the DETAILS section "
-        "(no 'Hi team,' / 'Hello,' / 'Greetings,' etc). Paragraphs only — no "
-        "bullets, no numbered lists, no dash-prefixed items. No em/en dashes. "
-        "No references to 'our team', 'the team', 'our MDR team', 'our "
-        "analysts', 'our SOC'. No closing courtesy line ('please reach out', "
-        "'let us know', 'feel free to contact'). The signature is appended "
-        "automatically and IS the closing."
+        f"{classified_as}Return ONLY the JSON object with 'summary' and "
+        "'guidance' keys."
     )
 
     from providers import get_provider
+    import json as _json
     provider = get_provider()
     resp = await provider.complete(
         model=model,
         messages=[
-            {"role": "system", "content": _AI_SYSTEM},
-            {"role": "user",   "content": user_prompt},
+            {"role": "system", "content": sys_msg},
+            {"role": "user",   "content": user_msg},
         ],
-        temperature=0.4,
-        max_tokens=900,
+        response_format={"type": "json_object"},
+        temperature=0.2,
+        max_tokens=500,
     )
     if resp.error:
         return {"error": f"AI call failed: {resp.error}"}
-    body = (resp.message or "").strip()
-    if not body:
-        return {"error": "AI returned empty body"}
 
-    # Strip em/en dashes (belt-and-braces — the prompt also forbids them, but
-    # models still occasionally produce them and they're the #1 AI-giveaway in
-    # customer-facing email).
-    body = _strip_em_dashes(body)
-    # Belt-and-braces bullet/list stripper. The prompt forbids bullets, but
-    # the model still occasionally produces them. Convert leading "- ", "• ",
-    # "* ", or "N. " markers at the start of lines into flowing prose by
-    # joining adjacent list lines into one paragraph separated by ". ".
-    body = _strip_list_markers(body)
-    # Filler-phrase scrub — the prompt forbids these, this is the safety-net.
-    body = _strip_filler_phrases(body)
+    try:
+        parsed_ai = _json.loads(resp.message or "{}")
+    except Exception:
+        parsed_ai = {}
+
+    summary  = str(parsed_ai.get("summary") or "").strip()
+    guidance = str(parsed_ai.get("guidance") or "").strip()
+
+    # Scrub the LLM output for any banned phrases that slipped through.
+    summary  = _strip_filler_phrases(_strip_em_dashes(_strip_list_markers(summary)))
+    guidance = _strip_filler_phrases(_strip_em_dashes(_strip_list_markers(guidance)))
+
+    # Assemble the body: facts block + blank line + summary + blank line + guidance.
+    # The signature template token gets appended below.
+    body_parts = []
+    if facts_block:
+        body_parts.append(facts_block)
+    if summary:
+        body_parts.append(summary)
+    if guidance:
+        body_parts.append(guidance)
+    body = "\n\n".join(body_parts) if body_parts else (
+        # Defensive fallback — if both the facts and the LLM produced nothing
+        # the email is empty, which is worse than a curt fallback.
+        "The alert details could not be parsed automatically. Review the raw "
+        "log directly to determine impact and next steps."
+    )
 
     # Defang URLs / IPs / domains the AI emitted so the recipient can't click
     # a live IOC out of a security email. Opt-out via options.defang=false for
