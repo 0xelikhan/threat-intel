@@ -72,9 +72,59 @@ def _valid_ip(ip: str) -> bool:
         return False
 
 
+def _valid_ipv4_octets(ip: str) -> bool:
+    """Explicit IPv4 octet validation: every octet must be 0-255. Belt-and-
+    braces gate on top of ipaddress.ip_address() — Microsoft Defender logs
+    emit Security Intelligence Version strings like "AV: 1.451.195.0" that
+    look IPv4-shaped but have octets > 255. They are not IPs and must never
+    reach the IOC list."""
+    if not ip or ":" in ip:
+        return False
+    parts = ip.split(".")
+    if len(parts) != 4:
+        return False
+    for part in parts:
+        if not part.isdigit():
+            return False
+        if int(part) > 255:
+            return False
+    return True
+
+
 # Backwards-compatible alias — `_valid_octets` was the old name and may be
 # imported by tests. The new behaviour accepts IPv6 too.
 _valid_octets = _valid_ip
+
+
+# Microsoft Defender Event ID 1116/1117 emits Security Intelligence and
+# Engine version strings in the form "AV: 1.451.195.0", "AS: 1.451.195.0",
+# "NIS: 1.451.195.0", "AM: 1.1.24090.11". Their second octet routinely
+# exceeds 255, so they are NOT IP addresses — they are software version
+# numbers. iocextract still matches them as dotted-quad candidates, so we
+# scrub them out of the raw text before IOC extraction runs.
+_DEFENDER_VERSION_RE = re.compile(
+    r"\b(?:AV|AS|NIS|AM|AntiSpyware|AntiVirus|Engine|"
+    r"Security\s+Intelligence|Anti(?:malware|spyware|virus))\s+"
+    r"(?:Version|Signature\s+Version)?\s*:\s*"
+    r"\d{1,5}(?:\.\d{1,5}){2,3}",
+    re.IGNORECASE,
+)
+# Standalone "AV: 1.451.195.0" form (no "Version" word) — common in Defender XML.
+_DEFENDER_AV_KV_RE = re.compile(
+    r"\b(?:AV|AS|NIS|AM)\s*:\s*\d{1,5}(?:\.\d{1,5}){2,3}\b",
+)
+
+
+def strip_defender_version_strings(text: str) -> str:
+    """Remove Microsoft Defender Security Intelligence / Engine version
+    strings from the input so they never reach IOC extraction. Replaces
+    each match with a single space so token boundaries upstream of the
+    match still hold."""
+    if not text:
+        return text
+    text = _DEFENDER_VERSION_RE.sub(" ", text)
+    text = _DEFENDER_AV_KV_RE.sub(" ", text)
+    return text
 
 
 _EXE_RE  = re.compile(
@@ -92,6 +142,12 @@ def extract_iocs(text: str) -> dict:
     iocs = {"ips": set(), "domains": set(), "urls": set(), "hashes": set(),
             "emails": set(), "files": set(), "paths": set(), "cves": set()}
 
+    # Scrub Microsoft Defender version strings (AV/AS/NIS/AM: 1.451.195.0)
+    # BEFORE iocextract sees them. Their second octet routinely exceeds 255
+    # so they are software versions, not IP addresses, but iocextract's
+    # regex would still pick them up before validation runs.
+    text = strip_defender_version_strings(text or "")
+
     # Try the library route first — refangs defanged IOCs automatically.
     # iocextract's extract_ips() covers both v4 and v6.
     try:
@@ -100,6 +156,11 @@ def extract_iocs(text: str) -> dict:
         for ip in iocextract.extract_ips(text, refang=True):
             ip = ip.strip()
             if ip in BENIGN_IPS or _is_private_ip(ip) or not _valid_ip(ip):
+                continue
+            # Explicit IPv4 octet gate — discard any v4-shaped string with
+            # an octet > 255 (Defender version numbers slip past iocextract
+            # but get caught here).
+            if "." in ip and ":" not in ip and not _valid_ipv4_octets(ip):
                 continue
             iocs["ips"].add(ip)
 
@@ -121,6 +182,8 @@ def extract_iocs(text: str) -> dict:
             iocs["urls"].add(url.rstrip(".,;)"))
         for ip in re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", norm):
             if ip in BENIGN_IPS or _is_private_ip(ip) or not _valid_ip(ip):
+                continue
+            if not _valid_ipv4_octets(ip):
                 continue
             iocs["ips"].add(ip)
         for pat in [r"\b[a-fA-F0-9]{64}\b", r"\b[a-fA-F0-9]{40}\b", r"\b[a-fA-F0-9]{32}\b"]:
