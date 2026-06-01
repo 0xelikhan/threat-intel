@@ -370,6 +370,18 @@ async def run_triage(state: dict) -> dict:
     except Exception:
         email_analysis = None
 
+    # Microsoft Defender Event 1116/1117 detection — structured parse so
+    # downstream stages (investigation prompt, response summary, email
+    # composer) treat the Path field as the infected artifact and the
+    # Process Name field as the legitimate triggering process, not as the
+    # malware itself.
+    defender_parse = None
+    try:
+        from intel.defender_parser import parse_defender_event
+        defender_parse = parse_defender_event(raw)
+    except Exception:
+        defender_parse = None
+
     # AI log translation (spec §4) — runs before IOC extraction and behavioral
     # analysis so they operate on structured fields rather than just raw text.
     # Fails open: if no API key or the call errors out, translation is None and
@@ -570,6 +582,7 @@ async def run_triage(state: dict) -> dict:
         "suppressed_iocs":       suppressed_iocs,        # MISP warninglist removals (spec §4)
         "behavioral_indicators": behavioral_indicators,  # TTP / pattern extraction (spec §1)
         "log_translation":       log_translation,        # AI log format detection (spec §4)
+        "defender_parse":        defender_parse,         # Defender 1116/1117 structured parse
         "triage_score":          final_score,
         "should_proceed":        ai_result.get("should_proceed", True) and final_score > 0.15,
         "triage_reasoning":      ai_result.get("reasoning", ""),
