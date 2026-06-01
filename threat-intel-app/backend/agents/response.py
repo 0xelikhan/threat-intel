@@ -338,6 +338,10 @@ the evidence points to benign activity."""
         "confidence_basis":    investigation.get("confidence_basis", ""),
         "false_positive_check":investigation.get("false_positive_check", ""),
         "assessment_basis":    investigation.get("assessment_basis", []),
+        # Always-visible reasoning paragraph rendered right beneath the
+        # threat-level badge — the analyst should never have to expand a
+        # toggle to find out why the platform picked this level.
+        "threat_level_reasoning": investigation.get("threat_level_reasoning", ""),
         # PRINCIPLE 7 two-tier split — surfaced separately in the UI so
         # analysts can tell evidence-backed facts from analyst inference.
         "confirmed_facts":     investigation.get("confirmed_facts", []),

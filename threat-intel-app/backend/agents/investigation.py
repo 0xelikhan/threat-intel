@@ -976,6 +976,7 @@ RESPOND WITH EXACTLY THIS JSON (no markdown fences, no commentary outside the JS
 ═══════════════════════════════════════════════════════════════════════════════════
 {{
   "threat_level": "CRITICAL|HIGH|MEDIUM|LOW|INFORMATIONAL",
+  "threat_level_reasoning": "<REQUIRED — 2-4 sentences explaining why THIS specific threat_level was chosen. Name the threat_level explicitly. State what drove it UP and what kept it from being higher/lower. Analyst reads this directly under the badge.>",
   "confidence": <float 0.0-1.0>,
   "confidence_basis": "<one sentence: WHY this confidence level given the evidence>",
   "needs_more_enrichment": <true|false>,
@@ -1511,6 +1512,21 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                     "    govern this field.),\n"
                     "  assessment_basis (array of 2-5 SHORT sentences — the SUBSET of\n"
                     "    confirmed_facts that drove the threat_level decision.),\n"
+                    "  threat_level_reasoning (REQUIRED — 2-4 SENTENCES of plain prose\n"
+                    "    that explain exactly WHY this specific threat_level was chosen.\n"
+                    "    State what evidence drove it UP and what evidence kept it from\n"
+                    "    being higher / lower. Examples:\n"
+                    "      'This alert is MEDIUM because the hash has no threat-intel\n"
+                    "       hits and the process is a known system tool, but the\n"
+                    "       destination IP has 3 abuse reports suggesting the connection\n"
+                    "       warrants investigation.'\n"
+                    "      'This alert is LOW because all enrichment sources return\n"
+                    "       clean verdicts, the process is Microsoft-signed, and the\n"
+                    "       behavior matches known vendor maintenance patterns — no\n"
+                    "       corroborating malicious indicators were found.'\n"
+                    "    The analyst reads this directly under the threat-level badge;\n"
+                    "    never leave it empty. Use the threat_level value (CRITICAL /\n"
+                    "    HIGH / MEDIUM / LOW / INFORMATIONAL) by name in the sentence.),\n"
                     "  confidence (0.0-1.0), confidence_basis,\n"
                     "  malware_family (specific family name or null — only set when AT LEAST\n"
                     "    ONE reputation source named the family; otherwise null and explain\n"
@@ -1671,6 +1687,12 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
     if result is None:
         result = {
             "threat_level": "INFORMATIONAL",   # was MEDIUM — see graceful-degradation rule
+            "threat_level_reasoning": (
+                "Threat level defaulted to INFORMATIONAL because the AI provider "
+                "call failed before producing a verdict. The shown level is a "
+                "graceful-degradation fallback, not an AI-derived rating. "
+                "Re-run the investigation after restoring the AI provider key."
+            ),
             "confidence": 0.0,
             "needs_more_enrichment": False,
             "summary": ("AI investigation unavailable — your enrichment data was still "
