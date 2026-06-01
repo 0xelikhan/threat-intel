@@ -2471,30 +2471,13 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
 
               return (
                 <Stack spacing={2}>
-                  {/* Soft-fail download banner — when the remote site
-                      refused the GET, we didn't get the file body. URL
-                      reputation + WHOIS + Wayback + URLScan submission
-                      still ran. Styled as a neutral note (not a warning)
-                      because bot-protected HTML pages are the common
-                      case here, not a real problem. */}
-                  {result.download_warning && (
-                    <MuiPaper elevation={0} sx={{
-                      backgroundColor: muiAlpha('#0fbcff', 0.05),
-                      border: `1px solid ${muiAlpha('#0fbcff', 0.25)}`,
-                      borderLeft: '3px solid #0fbcff',
-                      borderRadius: '4px', p: '10px 14px',
-                    }}>
-                      <Typography sx={{ fontSize: 11, color: '#0fbcff',
-                        fontWeight: 700, textTransform: 'uppercase',
-                        letterSpacing: '0.06em', mb: 0.5 }}>
-                        Page not downloadable
-                      </Typography>
-                      <Typography sx={{ fontSize: 12.5, color: 'text.primary',
-                        lineHeight: 1.55 }}>
-                        {result.download_warning}
-                      </Typography>
-                    </MuiPaper>
-                  )}
+                  {/* The 'Page not downloadable' banner was removed — it
+                      fired on every modern HTML page (Google, Udemy,
+                      anything behind Cloudflare) and confused analysts
+                      into thinking the scan failed. URLScan's screenshot
+                      below is the actual visual evidence; the backend
+                      still records download_warning on the scan object
+                      for debugging but it no longer surfaces in the UI. */}
 
                   {_topFactoids.length > 0 && (
                     <SectionCard id="url-identity" label="URL Identity"
