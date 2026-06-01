@@ -2300,10 +2300,10 @@ function AnalystSummary({ result, rs }) {
   // stacked variants of the same idea.
   const dispLine = hasDisposition
     ? (a.disposition === 'CLEAR'
-        ? 'Recommended disposition: CLEAR'
+        ? 'Recommended action: CLEAR'
         : a.disposition === 'ESCALATE'
-          ? 'Recommended disposition: ESCALATE'
-          : `Recommended disposition: ${a.disposition}`)
+          ? 'Recommended action: ESCALATE'
+          : `Recommended action: ${a.disposition}`)
     : '';
   const dispReason = (a?.disposition_reason || '').trim();
   const enrichLine = (rs?.enrichment_summary?.line || '').trim();
