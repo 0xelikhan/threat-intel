@@ -223,11 +223,24 @@ made-up TI sources as the worst possible failure mode):
 5. Listing sources you didn't see in the input violates rule 1, even when the
    indicator "looks like" the kind of thing those sources would flag."""
 
-_HEADLINE_SCHEMA = """Output STRICT JSON ONLY with this exact schema (every field present, no extras):
+# NARRATIVE schema — the prose-heavy fields. These are pure descriptive
+# writing with no classification or attribution logic, so the FAST model
+# handles them well and we save a lot of wall-clock time by not waiting on
+# the smart model to write paragraphs.
+_NARRATIVE_SCHEMA = """Output STRICT JSON ONLY with this exact schema (every field present, no extras):
+{
+  "technical_summary":   "2-3 paragraphs for a senior analyst. Architecture, how it achieves objectives, what makes this sample notable, comparison to similar known families.",
+  "execution_narrative": "3-4 paragraphs written like a story. Walk through what happens from execution to objective. Junior analyst should know what to look for in logs."
+}
+
+No markdown. No commentary outside the JSON object."""
+
+# VERDICT schema — classification + attribution + evidence basis. Smart
+# model required because calibration matters here (classifying a clean
+# vendor binary as legitimate vs flagging real malware).
+_VERDICT_SCHEMA = """Output STRICT JSON ONLY with this exact schema (every field present, no extras):
 {
   "executive_summary":       "3-4 sentences for a CISO in plain English. No jargon. What is this file, what does it do, what risk does it pose, what should be done. When the file looks legitimate, say so plainly.",
-  "technical_summary":       "2-3 paragraphs for a senior analyst. Architecture, how it achieves objectives, what makes this sample notable, comparison to similar known families.",
-  "execution_narrative":     "3-4 paragraphs written like a story. Walk through what happens from execution to objective. Junior analyst should know what to look for in logs.",
   "malware_classification":  {"category": "<from the standard list>", "confidence": 0.0-1.0},
   "malware_family":          "<specific family name or null>",
   "variant":                 "<specific variant or null>",
@@ -240,6 +253,9 @@ _HEADLINE_SCHEMA = """Output STRICT JSON ONLY with this exact schema (every fiel
 }
 
 No markdown. No commentary outside the JSON object."""
+
+# Kept for backwards compat with any caller that imports it.
+_HEADLINE_SCHEMA = _VERDICT_SCHEMA
 
 _STRUCTURED_SCHEMA = """Output STRICT JSON ONLY with this exact schema (every field present, no extras):
 {
@@ -413,15 +429,28 @@ async def _deep_group(provider, model, system_msg: str, user_msg: str,
 
 async def analyze_deep(analysis: Dict, config,
                        comparative_context: Optional[Dict] = None,
-                       extra_context: Optional[str] = None) -> Optional[Dict]:
+                       extra_context: Optional[str] = None,
+                       on_partial=None) -> Optional[Dict]:
     """Phase 2 — full structured assessment.
 
-    Split into two concurrent model calls (headline + structured field groups)
-    that are merged into one report. This roughly halves wall-clock latency
-    versus a single ~2800-token generation while keeping every field. Each group
-    retries once on malformed JSON; whichever fields come back are merged and
-    normalized, so a partial failure degrades gracefully rather than erroring."""
-    provider, model = _client(config)   # smart model — this is the deep reasoning pass
+    Split into THREE concurrent model calls instead of two:
+
+      * NARRATIVE  — technical_summary + execution_narrative. Pure prose, no
+                     verdict logic, so the FAST model handles it just fine and
+                     finishes well before either smart-model call.
+      * VERDICT    — classification + attribution + evidence basis. Smart
+                     model required: calibration matters here.
+      * STRUCTURED — objectives, key_findings, anomalies, evasion, persistence,
+                     C2, detection difficulty, recommended actions, hunting.
+                     Smart model.
+
+    Wall-clock latency is bounded by the slowest of the three. Splitting the
+    prose half onto the fast model AND lowering the per-call token budget cuts
+    the deep-stage wall time roughly in half versus the previous two-call
+    layout. Each group fails open independently; whichever fields come back
+    are merged and normalised."""
+    provider, smart_model = _client(config)
+    _, fast_model = _client(config, fast=True)
     if not provider:
         return None
 
@@ -430,17 +459,41 @@ async def analyze_deep(analysis: Dict, config,
     if extra_context:
         user_msg += "\n\n## Additional context\n" + extra_context[:2000]
 
-    headline, structured = await asyncio.gather(
-        _deep_group(provider, model, _DEEP_PERSONA + "\n\n" + _HEADLINE_SCHEMA, user_msg),
-        _deep_group(provider, model, _DEEP_PERSONA + "\n\n" + _STRUCTURED_SCHEMA, user_msg),
+    merged: Dict = {}
+
+    # Each task wraps _deep_group + (if a partial callback is set) folds the
+    # piece's fields into the merged dict and fires on_partial(merged_copy)
+    # so the background task can persist progressively. Without this the
+    # background task waits for the slowest call (verdict OR structured) and
+    # only persists once at the end — that's the "2 minutes and still not
+    # loading" symptom the analyst sees.
+    async def _run(model, schema, max_tokens, label):
+        out = await _deep_group(provider, model,
+                                _DEEP_PERSONA + "\n\n" + schema,
+                                user_msg, max_tokens=max_tokens)
+        if isinstance(out, dict) and out:
+            merged.update(out)
+            if on_partial:
+                try:
+                    snap = _safe_normalize_deep(dict(merged))
+                    snap["_partial"] = label
+                    await on_partial(snap)
+                except Exception:
+                    pass
+        return out
+
+    narrative, verdict, structured = await asyncio.gather(
+        _run(fast_model or smart_model, _NARRATIVE_SCHEMA, 1400, "narrative"),
+        _run(smart_model,                _VERDICT_SCHEMA,   1200, "verdict"),
+        _run(smart_model,                _STRUCTURED_SCHEMA, 2000, "structured"),
         return_exceptions=True,
     )
 
-    merged: Dict = {}
-    if isinstance(headline, dict):
-        merged.update(headline)
-    if isinstance(structured, dict):
-        merged.update(structured)
+    # Defensive re-merge in case any task raised before reaching the merge
+    # block above (return_exceptions=True keeps the gather alive).
+    for part in (narrative, verdict, structured):
+        if isinstance(part, dict):
+            merged.update(part)
     if not merged:
         return {"error": "AI failed to produce valid JSON"}
     return _safe_normalize_deep(merged)

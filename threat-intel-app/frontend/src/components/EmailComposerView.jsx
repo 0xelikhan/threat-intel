@@ -480,10 +480,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
         border: theme => `1px solid ${muiAlpha('#ffffff', 0.12)}`,
         borderRadius: '4px', p: 2, mb: 2,
       }}>
-        <SectionHeader title="Template"
-          badge={enabledFields.length === ALL_FIELD_IDS.length
-            ? 'all fields enabled'
-            : `${enabledFields.length} / ${ALL_FIELD_IDS.length} fields enabled`}/>
+        <SectionHeader title="Template"/>
 
         <Stack direction="row" spacing={1} alignItems="flex-end" flexWrap="wrap"
           useFlexGap sx={{ mb: 1.5 }}>
@@ -504,23 +501,8 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
               InputProps={{ sx: { fontSize: 13 } }}
             >
               {allTemplates.map(t => (
-                <MenuItem key={t.id} value={t.id} sx={{ fontSize: 13, display: 'block' }}>
-                  <Box>
-                    <Typography sx={{ fontSize: 13, fontWeight: 500 }}>
-                      {t.name}
-                      {t.builtIn && (
-                        <Box component="span" sx={{ ml: 1, fontSize: 10,
-                          color: 'text.tertiary', textTransform: 'uppercase',
-                          letterSpacing: '0.06em' }}>built-in</Box>
-                      )}
-                    </Typography>
-                    {t.description && (
-                      <Typography sx={{ fontSize: 11, color: 'text.tertiary',
-                        lineHeight: 1.4, whiteSpace: 'normal' }}>
-                        {t.description}
-                      </Typography>
-                    )}
-                  </Box>
+                <MenuItem key={t.id} value={t.id} sx={{ fontSize: 13 }}>
+                  {t.name}
                 </MenuItem>
               ))}
               <MenuItem value="__create_new"
@@ -556,13 +538,6 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
             </>
           )}
         </Stack>
-
-        {selectedTemplate.description && (
-          <Typography sx={{ fontSize: 11, color: 'text.tertiary',
-            lineHeight: 1.55, mb: 1.5, fontStyle: 'italic' }}>
-            {selectedTemplate.description}
-          </Typography>
-        )}
 
         {/* Field toggle grid */}
         <Box sx={{
@@ -629,11 +604,6 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
                 value={draftName}
                 onChange={e => setDraftName(e.target.value)}
                 placeholder="Template name (e.g. Defender Alerts)"
-                InputProps={{ sx: { fontSize: 13 } }}/>
-              <MuiTextField size="small" fullWidth
-                value={draftDescription}
-                onChange={e => setDraftDescription(e.target.value)}
-                placeholder="One-line description"
                 InputProps={{ sx: { fontSize: 13 } }}/>
               <Stack direction="row" spacing={1}>
                 <MuiButton size="small" variant="contained"

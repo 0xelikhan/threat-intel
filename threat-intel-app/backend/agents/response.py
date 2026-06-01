@@ -119,8 +119,14 @@ def _attach_attribution_evidence(matched_actors: list,
                                  mitre_techniques: list,
                                  mitre_evidence: list,
                                  behavioral_indicators: dict) -> list:
-    """Annotate each matched actor with evidence_by_technique so the
-    AttributionChip can show exactly what in the log matched each TTP."""
+    """Annotate each matched actor with:
+      * evidence_by_technique — what in THIS log matched each TTP
+      * ttps_to_look_for      — { before, after, all_count } showing this
+        actor's full known TTP list bucketed by kill-chain position
+        relative to the matched evidence. Lets the AttributionChip render
+        "look for X before this alert" / "look for Y after this alert"
+        hunt guidance specific to this actor's playbook.
+    """
     if not matched_actors:
         return matched_actors
     ev_map = _attribution_evidence(mitre_techniques, mitre_evidence,
@@ -133,6 +139,13 @@ def _attach_attribution_evidence(matched_actors: list,
         parts = t.split(" - ", 1)
         if len(parts) == 2:
             name_map[parts[0].strip().upper()] = parts[1].strip()
+    # Lazy import — only loads the heavy MITRE STIX bundle when there are
+    # actually matched actors to enrich.
+    try:
+        from intel.mitre_data import get_actor_ttps_by_phase
+    except Exception:
+        get_actor_ttps_by_phase = None  # type: ignore
+
     for actor in matched_actors:
         matched_tids = actor.get("matchedTechniques") or []
         per_tech = []
@@ -146,6 +159,22 @@ def _attach_attribution_evidence(matched_actors: list,
                 "evidence": entries[:4],   # cap per technique to keep payload small
             })
         actor["evidence_by_technique"] = per_tech
+
+        # Full TTP list bucketed by phase. mitre_id may be empty on the
+        # hardcoded ACTORS fallback; the helper returns empty buckets in
+        # that case and the UI just hides the section.
+        actor_mid = actor.get("mitre_id") or actor.get("id") or ""
+        if get_actor_ttps_by_phase and actor_mid:
+            try:
+                actor["ttps_to_look_for"] = get_actor_ttps_by_phase(
+                    actor_mid, [str(t).strip().upper() for t in matched_tids],
+                )
+            except Exception:
+                actor["ttps_to_look_for"] = {"before": [], "after": [],
+                                              "matched": [], "all_count": 0}
+        else:
+            actor["ttps_to_look_for"] = {"before": [], "after": [],
+                                          "matched": [], "all_count": 0}
     return matched_actors
 
 

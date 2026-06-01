@@ -1450,12 +1450,31 @@ async def _finish_ai_in_background(sha256: str, file_bytes: bytes):
     def _val(r):
         return {"error": str(r)[:200]} if isinstance(r, Exception) else r
 
+    # Progressive deep-result persistence — each of the three deep sub-calls
+    # (narrative / verdict / structured) lands at a different time. Without
+    # this hook, the deep result only persists once when ALL three complete,
+    # so technical_summary / execution_narrative / key_findings all wait on
+    # the slowest of the three. The callback merges each partial into
+    # scan["ai_analyst"]["deep"] and calls _persist() so the next poll
+    # picks them up immediately.
+    async def _deep_partial(snap):
+        try:
+            existing = scan.get("ai_analyst", {}).get("deep") or {}
+            if not isinstance(existing, dict):
+                existing = {}
+            existing.update(snap or {})
+            scan.setdefault("ai_analyst", {})["deep"] = existing
+            _persist()
+        except Exception:
+            pass
+
     tasks = {
         asyncio.ensure_future(generate_yara_for_file(scan, _ai_gen)):  "ai_yara",
         asyncio.ensure_future(summarize_file(scan, config)):           "ai_summary",
         asyncio.ensure_future(triage_classify(scan, config)):          "triage",
         asyncio.ensure_future(analyze_deep(scan, config,
-            comparative_context=comparative, extra_context=extra)):    "deep",
+            comparative_context=comparative, extra_context=extra,
+            on_partial=_deep_partial)):                                "deep",
     }
     pending = set(tasks)
     while pending:

@@ -2060,8 +2060,9 @@ function PerIndicatorList({ sorted, result }) {
 // see in vendor reports (CrowdStrike/FireEye/MITRE/Microsoft). Aliases hide
 // behind a click so the chip stays compact when there are 12 of them.
 function AttributionChip({ actor }) {
-  const [openAliases, setOpenAliases] = useState(false);
+  const [openAliases, setOpenAliases]   = useState(false);
   const [openEvidence, setOpenEvidence] = useState(false);
+  const [openHunt, setOpenHunt]         = useState(false);
   if (!actor) return null;
   const display = actor.ms_name || actor.name;
   const aliases = (actor.aliases || []).filter(a => a && a !== display);
@@ -2069,6 +2070,10 @@ function AttributionChip({ actor }) {
     ? actor.evidence_by_technique : [];
   const evidenceCount = evByTech.reduce((n, t) => n + (t.evidence?.length || 0), 0);
   const hasEvidence = evidenceCount > 0;
+  const huntTtps = actor.ttps_to_look_for || {};
+  const huntBefore = Array.isArray(huntTtps.before) ? huntTtps.before : [];
+  const huntAfter  = Array.isArray(huntTtps.after)  ? huntTtps.after  : [];
+  const hasHunt    = huntBefore.length + huntAfter.length > 0;
 
   return (
     <Box sx={{
@@ -2127,6 +2132,9 @@ function AttributionChip({ actor }) {
             {actor.matchedTechniques.length > 6
               ? ` + ${actor.matchedTechniques.length - 6} more`
               : ''}
+            {huntTtps.all_count
+              ? ` (of ${huntTtps.all_count} known TTPs for this actor)`
+              : ''}
           </Typography>
           {hasEvidence && (
             <Box component="button" onClick={() => setOpenEvidence(o => !o)} sx={{
@@ -2139,6 +2147,19 @@ function AttributionChip({ actor }) {
               {openEvidence
                 ? 'hide log evidence'
                 : `· show log evidence (${evidenceCount})`}
+            </Box>
+          )}
+          {hasHunt && (
+            <Box component="button" onClick={() => setOpenHunt(o => !o)} sx={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: openHunt ? 'primary.main' : 'text.tertiary',
+              fontSize: 11, fontFamily: 'inherit', textDecoration: 'underline',
+              p: 0,
+              '&:hover': { color: 'primary.main' },
+            }}>
+              {openHunt
+                ? 'hide hunt guidance'
+                : `· what to look for before / after (${huntBefore.length + huntAfter.length})`}
             </Box>
           )}
         </Box>
@@ -2219,6 +2240,107 @@ function AttributionChip({ actor }) {
               </Typography>
             )}
           </Stack>
+        </Box>
+      )}
+
+      {/* Hunt guidance — this actor's other known TTPs bucketed relative to
+          the kill-chain position of the matched evidence. "Before" = look
+          earlier in the alert's surrounding activity (recon, initial
+          access, execution). "After" = look later (persistence, lateral,
+          exfil, impact). Junior analysts get a curated checklist of what
+          to hunt for given the AI's attribution. */}
+      {openHunt && hasHunt && (
+        <Box sx={{ mt: 0.75, pt: 0.75,
+          borderTop: `1px solid ${muiAlpha('#0fbcff', 0.18)}` }}>
+          <Typography sx={{ fontSize: 10, color: '#0fbcff', fontWeight: 600,
+            textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
+            What to look for in this investigation
+          </Typography>
+
+          {actor.description && (
+            <Typography sx={{ fontSize: 11.5, color: 'text.tertiary',
+              lineHeight: 1.6, mb: 1, fontStyle: 'italic' }}>
+              {String(actor.description).slice(0, 320)}
+              {String(actor.description).length > 320 ? '…' : ''}
+            </Typography>
+          )}
+
+          {huntBefore.length > 0 && (
+            <Box sx={{ mb: 1 }}>
+              <Typography sx={{ fontSize: 11, color: 'text.primary',
+                fontWeight: 600, mb: 0.5 }}>
+                ↤ Look earlier in the kill chain
+                <Box component="span" sx={{ color: 'text.tertiary', fontWeight: 400 }}>
+                  {' '}— precursor activity {display} typically performs before this stage
+                </Box>
+              </Typography>
+              <Stack spacing={0.4} sx={{ pl: 1,
+                borderLeft: `2px solid ${muiAlpha('#0fbcff', 0.2)}` }}>
+                {huntBefore.map((t, i) => (
+                  <Stack key={i} direction="row" spacing={0.75}
+                    alignItems="flex-start">
+                    <Box component="a"
+                      href={`https://attack.mitre.org/techniques/${(t.id || '').replace('.', '/')}/`}
+                      target="_blank" rel="noreferrer"
+                      sx={{ fontFamily: '"IBM Plex Mono", monospace',
+                        fontSize: 11, color: '#0fbcff', textDecoration: 'none',
+                        minWidth: 72, '&:hover': { textDecoration: 'underline' } }}>
+                      {t.id}
+                    </Box>
+                    <Typography sx={{ fontSize: 11.5, color: 'text.primary',
+                      flex: 1, lineHeight: 1.55 }}>
+                      {t.name}
+                      <Box component="span" sx={{ color: 'text.tertiary', ml: 0.75 }}>
+                        · {t.tactic}
+                      </Box>
+                    </Typography>
+                  </Stack>
+                ))}
+              </Stack>
+            </Box>
+          )}
+
+          {huntAfter.length > 0 && (
+            <Box>
+              <Typography sx={{ fontSize: 11, color: 'text.primary',
+                fontWeight: 600, mb: 0.5 }}>
+                ↦ Look later in the kill chain
+                <Box component="span" sx={{ color: 'text.tertiary', fontWeight: 400 }}>
+                  {' '}— follow-on activity {display} typically performs after this stage
+                </Box>
+              </Typography>
+              <Stack spacing={0.4} sx={{ pl: 1,
+                borderLeft: `2px solid ${muiAlpha('#E6700F', 0.25)}` }}>
+                {huntAfter.map((t, i) => (
+                  <Stack key={i} direction="row" spacing={0.75}
+                    alignItems="flex-start">
+                    <Box component="a"
+                      href={`https://attack.mitre.org/techniques/${(t.id || '').replace('.', '/')}/`}
+                      target="_blank" rel="noreferrer"
+                      sx={{ fontFamily: '"IBM Plex Mono", monospace',
+                        fontSize: 11, color: '#E6700F', textDecoration: 'none',
+                        minWidth: 72, '&:hover': { textDecoration: 'underline' } }}>
+                      {t.id}
+                    </Box>
+                    <Typography sx={{ fontSize: 11.5, color: 'text.primary',
+                      flex: 1, lineHeight: 1.55 }}>
+                      {t.name}
+                      <Box component="span" sx={{ color: 'text.tertiary', ml: 0.75 }}>
+                        · {t.tactic}
+                      </Box>
+                    </Typography>
+                  </Stack>
+                ))}
+              </Stack>
+            </Box>
+          )}
+
+          <Typography sx={{ fontSize: 10, color: 'text.disabled',
+            mt: 1, fontStyle: 'italic' }}>
+            Buckets derived from MITRE ATT&CK Groups data. "Before" / "after"
+            is relative to the latest kill-chain phase represented by the
+            matched evidence.
+          </Typography>
         </Box>
       )}
     </Box>
@@ -2392,10 +2514,10 @@ function AnalystSummary({ result, rs }) {
 }
 
 /* ─── Threat-level badge — non-collapsible. Shows the rating and the
-       always-visible reasoning paragraph. The old "Why this rating · +/−"
-       toggle was removed because the expanded panel was routinely empty
-       ("No assessment basis provided for this run.") and added no value
-       on top of the reasoning sentence already visible below the badge. */
+       always-visible reasoning paragraph. Reasoning sits inside a larger
+       readable panel rather than a thin inline line so multi-sentence
+       paragraphs (driven-by + enrichment-summary tail) don't feel
+       cramped.                                                          */
 function WhyThisRating({ threatLevel, reasoning, aiUnavailable }) {
   const lvl = (threatLevel || 'INFORMATIONAL').toUpperCase();
   const color = lvl === 'CRITICAL' ? '#ff2d2d'
@@ -2408,13 +2530,13 @@ function WhyThisRating({ threatLevel, reasoning, aiUnavailable }) {
     <Box sx={{ mb: 1.5 }}>
       <Box sx={{
         display: 'flex', alignItems: 'center', gap: 1,
-        py: 0.75, px: 1, borderRadius: '4px',
+        py: 0.85, px: 1.25, borderRadius: '4px',
         backgroundColor: muiAlpha(color, 0.06),
         border: `1px solid ${muiAlpha(color, 0.25)}`,
         borderLeft: `3px solid ${color}`,
       }}>
-        <Box sx={{ width: 6, height: 6, borderRadius: 99, backgroundColor: color }}/>
-        <Typography sx={{ fontSize: 11, color, fontWeight: 700,
+        <Box sx={{ width: 7, height: 7, borderRadius: 99, backgroundColor: color }}/>
+        <Typography sx={{ fontSize: 12, color, fontWeight: 700,
           letterSpacing: '0.06em', textTransform: 'uppercase' }}>
           {lvl}
         </Typography>
@@ -2422,25 +2544,36 @@ function WhyThisRating({ threatLevel, reasoning, aiUnavailable }) {
           · threat level
         </Typography>
       </Box>
-      {reasoningText && (
-        <Typography sx={{
-          mt: 0.6, ml: 0.5, fontSize: 12, color: 'text.tertiary',
-          lineHeight: 1.6,
-          borderLeft: `2px solid ${muiAlpha(color, 0.25)}`,
-          pl: 1.25, py: 0.25, whiteSpace: 'pre-wrap',
+      {(reasoningText || aiUnavailable) && (
+        <Box sx={{
+          mt: 0.75,
+          p: '12px 14px',
+          borderRadius: '4px',
+          backgroundColor: muiAlpha(color, 0.03),
+          border: `1px solid ${muiAlpha(color, 0.18)}`,
+          borderLeft: `2px solid ${muiAlpha(color, 0.45)}`,
         }}>
-          {reasoningText}
-        </Typography>
-      )}
-      {!reasoningText && aiUnavailable && (
-        <Typography sx={{
-          mt: 0.6, ml: 0.5, fontSize: 12, color: 'text.tertiary',
-          fontStyle: 'italic', lineHeight: 1.6, pl: 1.25,
-          borderLeft: `2px solid ${muiAlpha(color, 0.25)}`,
-        }}>
-          AI analysis was unavailable for this run — the level shown is a
-          fallback default. Restore the AI provider key and re-run.
-        </Typography>
+          {reasoningText && (
+            <Typography sx={{
+              fontSize: 13.5,
+              color: 'text.primary',
+              lineHeight: 1.7,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}>
+              {reasoningText}
+            </Typography>
+          )}
+          {!reasoningText && aiUnavailable && (
+            <Typography sx={{
+              fontSize: 13, color: 'text.tertiary',
+              fontStyle: 'italic', lineHeight: 1.7,
+            }}>
+              AI analysis was unavailable for this run — the level shown is a
+              fallback default. Restore the AI provider key and re-run.
+            </Typography>
+          )}
+        </Box>
       )}
     </Box>
   );
