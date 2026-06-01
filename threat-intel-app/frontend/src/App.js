@@ -753,19 +753,19 @@ function LogTranslation({ result, bare }) {
 // InfrastructureIntel's render guard so the Triage wrapper can decide whether
 // to render the embedded "OSINT" section + label.
 function hasOsintContent(result) {
+  // Geopolitical context now lives under the Geolocation card, and
+  // URL detonation lifts to the top of Triage on URL-bearing alerts —
+  // neither contributes to OSINT-presence anymore.
   const enr = result?.enrichments || {};
   const hasRows = ['ips', 'domains', 'hashes'].some(cat =>
     Object.values(enr[cat] || {}).some(p => p?.osint && Object.keys(p.osint).length));
-  const gp = result?.geopolitical;
-  const hasGeo = !!(gp && !gp.error && (gp.countries?.length || gp.attribution));
   const hasHoneypot = Object.values(enr.ips || {})
     .some(p => p?.deception && (p.deception.flagged_count > 0 || p.deception.greynoise_riot?.is_known_good));
   const hasNet = !!(result?.response_summary?.ja_fingerprints || []).length;
-  const hasUrlscan = !!(result?.iocs?.urls || []).length;
-  return hasRows || hasGeo || hasHoneypot || hasNet || hasUrlscan;
+  return hasRows || hasHoneypot || hasNet;
 }
 
-function InfrastructureIntel({ result, bare, hideUrlscan = false }) {
+function InfrastructureIntel({ result, bare, hideUrlscan = false, hideGeopolitical = true }) {
   const enr = result?.enrichments || {};
   const rows = [];
   for (const cat of ['ips', 'domains', 'hashes']) {
@@ -777,7 +777,10 @@ function InfrastructureIntel({ result, bare, hideUrlscan = false }) {
     }
   }
   const gp = result?.geopolitical;
-  const hasGeo = !!(gp && !gp.error && (gp.countries?.length || gp.attribution));
+  // hideGeopolitical (default true) lets the Geolocation card own the
+  // geopolitical block so it doesn't compete with the actual map.
+  const hasGeo = !hideGeopolitical
+    && !!(gp && !gp.error && (gp.countries?.length || gp.attribution));
   const hasHoneypot = Object.values(result?.enrichments?.ips || {})
     .some(p => p?.deception && (p.deception.flagged_count > 0 || p.deception.greynoise_riot?.is_known_good));
   const hasNet = !!(result?.response_summary?.ja_fingerprints || []).length;
@@ -1226,23 +1229,6 @@ function Triage({ result, rs }) {
   //  6. What did the FP filter strip? (MISP — audit trail, lowest urgency).
   //  7. What to do next (AI recommended actions).
   //  8. Senior-analyst context paragraph (analyst notes).
-  // OSINT shouldn't claim there's content when its only signal was the
-  // URLScan we just lifted to the top — keep it hidden in that case.
-  const osintHasOtherSignals = hasOsint
-    && (!hasUrlscan || (() => {
-      const enr = result?.enrichments || {};
-      const anyOsintRow = ['ips', 'domains', 'hashes'].some(cat =>
-        Object.values(enr[cat] || {}).some(p =>
-          p?.osint && Object.keys(p.osint).length));
-      const gp = result?.geopolitical;
-      const hasGeo = !!(gp && !gp.error && (gp.countries?.length || gp.attribution));
-      const hasHoneypot = Object.values(enr.ips || {})
-        .some(p => p?.deception && (p.deception.flagged_count > 0
-          || p.deception.greynoise_riot?.is_known_good));
-      const hasNet = !!(result?.response_summary?.ja_fingerprints || []).length;
-      return anyOsintRow || hasGeo || hasHoneypot || hasNet;
-    })());
-
   return (
     <Card title="Triage" accent="#0fbcff" defaultOpen={false}>
       {/* URL detonation ALWAYS sits at the top of Triage when the alert
@@ -1256,7 +1242,7 @@ function Triage({ result, rs }) {
         <CrossRefs rs={rs} bare/></Section>
       <Section show={hasSandbox}  label="Sandbox detonation · process tree">
         <SandboxBehavioral result={result} bare/></Section>
-      <Section show={osintHasOtherSignals} label="OSINT">
+      <Section show={hasOsint} label="OSINT">
         <InfrastructureIntel result={result} bare hideUrlscan/></Section>
       <Section show={hasSup}      label="Filtered as benign · MISP warninglists">
         <SuppressedIOCs result={result} bare/></Section>
@@ -4887,6 +4873,24 @@ function AppMain({ authUser, setAuthState }) {
                     <MapTab result={result}/>
                   </Suspense>
                 </ErrorBoundary>
+                {/* Geopolitical context — country + ASN breakdown +
+                    nation-state attribution hints. Rolled into the
+                    Geolocation card so geographic signals live in one
+                    place. Renders nothing when there's no data. */}
+                {(() => {
+                  const gp = result?.geopolitical;
+                  const has = !!(gp && !gp.error
+                    && (gp.countries?.length || gp.attribution));
+                  if (!has) return null;
+                  return (
+                    <Box sx={{ p: 2,
+                      borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
+                      <ErrorBoundary label="Geopolitical context">
+                        <GeopoliticalContext result={result} bare/>
+                      </ErrorBoundary>
+                    </Box>
+                  );
+                })()}
               </Card>
             )}
           </>
@@ -4927,6 +4931,24 @@ function AppMain({ authUser, setAuthState }) {
                     <MapTab result={result}/>
                   </Suspense>
                 </ErrorBoundary>
+                {/* Geopolitical context — country + ASN breakdown +
+                    nation-state attribution hints. Rolled into the
+                    Geolocation card so geographic signals live in one
+                    place. Renders nothing when there's no data. */}
+                {(() => {
+                  const gp = result?.geopolitical;
+                  const has = !!(gp && !gp.error
+                    && (gp.countries?.length || gp.attribution));
+                  if (!has) return null;
+                  return (
+                    <Box sx={{ p: 2,
+                      borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
+                      <ErrorBoundary label="Geopolitical context">
+                        <GeopoliticalContext result={result} bare/>
+                      </ErrorBoundary>
+                    </Box>
+                  );
+                })()}
               </Card>
             )}
             <Detection result={result}/>
