@@ -1225,8 +1225,9 @@ function Triage({ result, rs }) {
         <LogTranslation result={result} bare/></Section>
       <Section show={hasCross}    label="Threat-intel cross-references">
         <CrossRefs rs={rs} bare/></Section>
-      <Section show={hasBehavior} label="MITRE-mapped TTPs · D3FEND mitigations">
-        <BehavioralIndicators result={result} bare/></Section>
+      {/* MITRE-mapped TTPs · D3FEND mitigations section removed per
+          analyst request — the AttributionChip's "Hunt for" tab and the
+          per-actor TTP buckets already surface the actionable mapping. */}
       <Section show={hasSandbox}  label="Sandbox detonation · process tree">
         <SandboxBehavioral result={result} bare/></Section>
       <Section show={hasOsint}    label="OSINT">
