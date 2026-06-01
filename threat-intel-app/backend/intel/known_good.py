@@ -206,6 +206,68 @@ _KNOWN_GOOD: List[Dict[str, Any]] = [
                      "enforcement, configuration tasks.",
     },
     {
+        "vendor": "Microsoft", "product": "Entra ID / Hybrid Join Migration (opsolemigrate)",
+        "process":           [r"\\opsolemigrate(?:\.exe)?$",
+                              r"\\opsoleimporter(?:\.exe)?$",
+                              r"\\dsregcmd\.exe$"],
+        "command_line":      [r"opsolemigrate", r"opsoleimporter",
+                              r"opsolemigrate\.msi", r"opsoleimporter\.msi",
+                              r"dsregcmd\s+/join", r"dsregcmd\s+/leave",
+                              r"aad(?:rm|connect|sync)"],
+        "destination_path":  [r"\\opsolemigrate\\", r"\\opsoleimporter\\",
+                              r"\\programdata\\microsoft\\opsolemigrate"],
+        "path":              [r"\\opsolemigrate", r"\\opsoleimporter"],
+        "category": "management_tools",
+        "rationale": "Microsoft Entra ID hybrid-join / migration tooling "
+                     "(opsolemigrate.msi, opsoleimporter) is a sanctioned "
+                     "Microsoft enterprise tool that joins on-premises Active "
+                     "Directory devices to Microsoft Entra ID (formerly Azure "
+                     "AD). It writes cache + state data to ProgramData and is "
+                     "deployed by IT through Intune, SCCM, or GPO during the "
+                     "AD-to-Entra migration. Cache and configuration artefacts "
+                     "in standard cache directories are expected by-products.",
+    },
+    {
+        "vendor": "Microsoft", "product": "Azure AD Connect / Entra Connect",
+        "process":           [r"\\miiserver\.exe$", r"\\synccmd\.exe$",
+                              r"\\azureadsynchronizer", r"\\adsync"],
+        "path":              [r"\\program files\\microsoft azure ad sync\\",
+                              r"\\program files\\microsoft entra connect\\",
+                              r"\\program files\\microsoft azure active directory connect\\"],
+        "category": "management_tools",
+        "rationale": "Azure AD Connect / Microsoft Entra Connect synchronises "
+                     "on-prem AD identities to Entra ID. Service-level access "
+                     "to AD + Entra is its core function, not abuse.",
+    },
+    {
+        "vendor": "Microsoft", "product": "Signed Windows Installer (.msi)",
+        "command_line":      [r"\bmsiexec(?:\.exe)?\b.*\b/i\b.*\.msi",
+                              r"\bmsiexec(?:\.exe)?\b.*\b/x\b"],
+        "process":           [r"\\msiexec\.exe$"],
+        "category": "windows_builtin",
+        "rationale": "msiexec.exe installing or removing an .msi package is "
+                     "the standard Windows software deployment mechanism. "
+                     "Treat as legitimate UNLESS the package is unsigned OR "
+                     "the publisher is unknown / malicious — verify Authenticode "
+                     "signature before flagging.",
+    },
+    {
+        "vendor": "Microsoft", "product": "Windows cache directories",
+        "destination_path":  [r"\\windows\\system32\\config\\systemprofile\\appdata\\local\\",
+                              r"\\users\\[^\\]+\\appdata\\local\\microsoft\\",
+                              r"\\windows\\softwaredistribution\\",
+                              r"\\windows\\ccmcache\\",
+                              r"\\windows\\system32\\catroot2\\"],
+        "category": "windows_builtin",
+        "rationale": "Cache data written to standard Microsoft cache "
+                     "directories (AppData\\Local\\Microsoft, "
+                     "SoftwareDistribution, CCMcache, catroot2) is by-product "
+                     "of normal Windows / SCCM / Intune operation and is not "
+                     "in itself suspicious — additional corroborating evidence "
+                     "(unknown publisher, unusual parent process, network "
+                     "egress to suspicious IP) is required to flag.",
+    },
+    {
         "vendor": "Tanium", "product": "Tanium Client",
         "process":           [r"\\taniumclient\.exe$", r"\\taniumtaas\.exe$"],
         "path":              [r"\\program files\\tanium\\"],
