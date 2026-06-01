@@ -2754,28 +2754,49 @@ function LogCorrelationCard({ multiLog, correlation }) {
 }
 
 
-/* ─── Provide Feedback — analyst-driven re-analysis with operator context.
-       Surfaces a textarea + button below all result cards. When the analyst
-       submits feedback, the original raw input plus their statement is sent
-       back through /api/analyze with analystFeedback set; the AI prompt
-       prepends an "ANALYST VERDICT AND CONTEXT" block flagged as the
-       highest-weight input. When the re-run completes the prior result is
-       replaced and an "Updated based on analyst feedback" banner appears.  */
-function FeedbackPanel({ result, onStart, onPartial, onComplete }) {
-  const [feedback, setFeedback] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
-  const updated = !!result?.response_summary?.analyst_feedback;
+/* ─── Chat with RECON · conversational follow-up on the investigation.
+       Also hosts the analyst feedback workflow ("Provide feedback to train
+       the AI on false positives") — feedback expands inline, then POSTs the
+       original raw input plus the analyst's statement back through
+       /api/analyze with analystFeedback set so the investigation prompt
+       prepends an "ANALYST VERDICT AND CONTEXT" block as the highest-weight
+       input. The result replaces the current analysis and an "Updated based
+       on analyst feedback" banner appears at the top of this card.       */
+function ChatWithRecon({ result, bare,
+                          onFeedbackStart, onFeedbackPartial, onFeedbackComplete }) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput]       = useState('');
+  const [sending, setSending]   = useState(false);
+  const [error, setError]       = useState(null);
+  const [pendingQuestion, setPendingQuestion] = useState(null);
+  const scrollRef = useRef(null);
+  const textareaRef = useRef(null);
 
-  // The original raw input is preserved on the state snapshot (state.raw_input).
+  const runId = result?.runId;
+  const rs    = result?.response_summary || {};
+  // Surface every AI-generated probing question the investigation produced —
+  // don't drop the plain ones for lacking if_yes/if_no metadata; the render
+  // below already hides those chips when they're missing. We keep zero
+  // hardcoded fallbacks here so the analyst only ever sees questions specific
+  // to whatever they uploaded.
+  const questions = (rs.probing_questions || []).filter(q => q && q.question);
+
+  // ─── Feedback workflow (folded in from the old FeedbackPanel) ───────────
+  // Toggled open by a button below the chat input. When the analyst submits,
+  // we re-run the full /api/analyze pipeline with analystFeedback set.
+  const [feedbackOpen, setFeedbackOpen]   = useState(false);
+  const [feedback, setFeedback]           = useState('');
+  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [feedbackError, setFeedbackError] = useState(null);
+  const feedbackUpdated = !!rs?.analyst_feedback;
   const originalLog = result?.raw_input || '';
 
-  const reanalyze = async () => {
+  const submitFeedback = async () => {
     const trimmed = feedback.trim();
     if (!trimmed || !originalLog) return;
-    setError(null);
-    setSubmitting(true);
-    onStart?.();
+    setFeedbackError(null);
+    setFeedbackSending(true);
+    onFeedbackStart?.();
     try {
       const resp = await fetch('/api/analyze', {
         method: 'POST',
@@ -2806,116 +2827,25 @@ function FeedbackPanel({ result, onStart, onPartial, onComplete }) {
           if (raw === '[DONE]') break;
           try {
             const ev = JSON.parse(raw);
-            if (ev.event === 'partial_result' && ev.result) onPartial?.(ev.result);
+            if (ev.event === 'partial_result' && ev.result) onFeedbackPartial?.(ev.result);
             if (ev.event === 'complete') {
-              onComplete?.(ev.result);
-              setSubmitting(false);
+              onFeedbackComplete?.(ev.result);
+              setFeedbackSending(false);
               setFeedback('');
+              setFeedbackOpen(false);
             }
             if (ev.event === 'error') {
-              setError(ev.error || 'analysis failed');
-              setSubmitting(false);
+              setFeedbackError(ev.error || 'analysis failed');
+              setFeedbackSending(false);
             }
           } catch {}
         }
       }
     } catch (e) {
-      setError(e.message);
-      setSubmitting(false);
+      setFeedbackError(e.message);
+      setFeedbackSending(false);
     }
   };
-
-  if (!originalLog) return null;
-
-  return (
-    <Card title="Provide Feedback" accent="#B286FF" defaultOpen={false}>
-      {updated && (
-        <MuiPaper elevation={0} sx={{
-          backgroundColor: muiAlpha('#B286FF', 0.08),
-          border: `1px solid ${muiAlpha('#B286FF', 0.35)}`,
-          borderLeft: `3px solid #B286FF`,
-          borderRadius: '4px', p: '10px 14px', mb: 1.5,
-        }}>
-          <Typography sx={{ fontSize: 12, color: '#B286FF', fontWeight: 600, mb: 0.5 }}>
-            Updated based on analyst feedback
-          </Typography>
-          <Typography sx={{ fontSize: 12, color: 'text.tertiary',
-            lineHeight: 1.55, fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>
-            “{result.response_summary.analyst_feedback}”
-          </Typography>
-        </MuiPaper>
-      )}
-      <Typography sx={{ fontSize: 12, color: 'text.tertiary',
-        lineHeight: 1.55, mb: 1 }}>
-        Tell the AI what you found. Your verdict overrides the AI's inference
-        when the two conflict — the platform re-runs the analysis with your
-        context labelled as the highest-weight input.
-      </Typography>
-      <MuiTextField
-        multiline minRows={3} maxRows={8} fullWidth
-        value={feedback} onChange={e => setFeedback(e.target.value)}
-        placeholder={"Tell the AI what you found — e.g. this alert is a false "
-          + "positive because the hash belongs to Dell SupportAssist, or this IS "
-          + "malicious — the user account was compromised and this IP is a known "
-          + "attacker infrastructure, or the MSI file is legitimate Microsoft "
-          + "Entra migration tooling deployed by IT."}
-        disabled={submitting}
-        sx={{
-          mb: 1,
-          '& .MuiOutlinedInput-root': {
-            fontSize: 13, fontFamily: '"IBM Plex Sans", sans-serif',
-            backgroundColor: 'background.default',
-          },
-        }}
-      />
-      {error && (
-        <Typography sx={{ fontSize: 12, color: 'error.main', mb: 1 }}>
-          {error}
-        </Typography>
-      )}
-      <Stack direction="row" alignItems="center" spacing={1}>
-        <MuiButton
-          variant="contained"
-          size="small"
-          onClick={reanalyze}
-          disabled={!feedback.trim() || submitting}
-          sx={{ textTransform: 'none', fontSize: 12, fontWeight: 500 }}
-        >
-          {submitting ? 'Re-analyzing…' : 'Re-analyze with Feedback'}
-        </MuiButton>
-        {feedback.trim() && !submitting && (
-          <MuiButton
-            variant="text" size="small"
-            onClick={() => { setFeedback(''); setError(null); }}
-            sx={{ textTransform: 'none', fontSize: 11, color: 'text.tertiary' }}
-          >
-            Clear
-          </MuiButton>
-        )}
-      </Stack>
-    </Card>
-  );
-}
-
-
-/* ─── Chat with RECON · conversational follow-up on the investigation ───────── */
-function ChatWithRecon({ result, bare }) {
-  const [messages, setMessages] = useState([]);
-  const [input, setInput]       = useState('');
-  const [sending, setSending]   = useState(false);
-  const [error, setError]       = useState(null);
-  const [pendingQuestion, setPendingQuestion] = useState(null);
-  const scrollRef = useRef(null);
-  const textareaRef = useRef(null);
-
-  const runId = result?.runId;
-  const rs    = result?.response_summary || {};
-  // Surface every AI-generated probing question the investigation produced —
-  // don't drop the plain ones for lacking if_yes/if_no metadata; the render
-  // below already hides those chips when they're missing. We keep zero
-  // hardcoded fallbacks here so the analyst only ever sees questions specific
-  // to whatever they uploaded.
-  const questions = (rs.probing_questions || []).filter(q => q && q.question);
 
   // Load history when run changes
   useEffect(() => {
@@ -3054,6 +2984,26 @@ function ChatWithRecon({ result, bare }) {
 
   const body = (
     <>
+      {/* "Updated based on analyst feedback" banner — shown once a feedback
+          re-run has completed so the analyst sees this card reflects their
+          input, not the original AI verdict. */}
+      {feedbackUpdated && (
+        <MuiPaper elevation={0} sx={{
+          backgroundColor: muiAlpha('#B286FF', 0.08),
+          border: `1px solid ${muiAlpha('#B286FF', 0.35)}`,
+          borderLeft: `3px solid #B286FF`,
+          borderRadius: '4px', p: '10px 14px', mb: 1.5,
+        }}>
+          <Typography sx={{ fontSize: 12, color: '#B286FF', fontWeight: 600, mb: 0.5 }}>
+            Updated based on analyst feedback
+          </Typography>
+          <Typography sx={{ fontSize: 12, color: 'text.tertiary',
+            lineHeight: 1.55, fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>
+            “{rs.analyst_feedback}”
+          </Typography>
+        </MuiPaper>
+      )}
+
       {/* Investigation-guidance question cards, always visible so the analyst
           can pick a new one mid-conversation. */}
       {questions.length > 0 && (
@@ -3250,6 +3200,107 @@ function ChatWithRecon({ result, bare }) {
           color:'error.main', fontSize:12,
         }}>
           {error}
+        </Box>
+      )}
+
+      {/* ── Feedback toggle + form (folded in from the old FeedbackPanel) ──
+          A single button below the chat input lets the analyst flip into
+          feedback mode. Submitting re-runs /api/analyze with the original
+          raw input + the analyst statement labelled as the highest-weight
+          input, then replaces the visible analysis with the new result.   */}
+      {originalLog && (
+        <Box sx={{ mt: 1.5, pt: 1.25,
+          borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
+          {!feedbackOpen && (
+            <MuiButton
+              variant="text" size="small"
+              onClick={() => setFeedbackOpen(true)}
+              sx={{
+                textTransform: 'none', fontSize: 12, color: '#B286FF',
+                fontWeight: 500, p: '4px 8px',
+                '&:hover': { backgroundColor: muiAlpha('#B286FF', 0.08) },
+              }}
+            >
+              Provide feedback to train the AI on false positives
+            </MuiButton>
+          )}
+          {feedbackOpen && (
+            <Box sx={{
+              p: 1.25, borderRadius: '4px',
+              backgroundColor: muiAlpha('#B286FF', 0.05),
+              border: `1px solid ${muiAlpha('#B286FF', 0.3)}`,
+              borderLeft: `3px solid #B286FF`,
+            }}>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
+                <Typography sx={{ fontSize: 11, color: '#B286FF',
+                  fontWeight: 700, textTransform: 'uppercase',
+                  letterSpacing: '0.06em' }}>
+                  Provide feedback to train the AI on false positives
+                </Typography>
+                <Box sx={{ flex: 1 }}/>
+                <MuiButton size="small" variant="text"
+                  onClick={() => {
+                    setFeedbackOpen(false);
+                    setFeedback('');
+                    setFeedbackError(null);
+                  }}
+                  sx={{ textTransform: 'none', fontSize: 11, color: 'text.tertiary',
+                    minWidth: 0, p: '2px 6px' }}>
+                  Cancel
+                </MuiButton>
+              </Stack>
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary',
+                lineHeight: 1.55, mb: 0.75 }}>
+                Tell the AI what you found — your verdict overrides the AI's
+                inference when the two conflict and the analysis re-runs with
+                your statement as the highest-weight input.
+              </Typography>
+              <MuiTextField
+                multiline minRows={3} maxRows={8} fullWidth
+                value={feedback}
+                onChange={e => setFeedback(e.target.value)}
+                placeholder={"e.g. this alert is a false positive because the "
+                  + "hash belongs to Dell SupportAssist, or this IS malicious — "
+                  + "the user account was compromised and this IP is a known "
+                  + "attacker infrastructure."}
+                disabled={feedbackSending}
+                sx={{
+                  mb: 1,
+                  '& .MuiOutlinedInput-root': {
+                    fontSize: 12.5, fontFamily: '"IBM Plex Sans", sans-serif',
+                    backgroundColor: 'background.default',
+                  },
+                }}
+              />
+              {feedbackError && (
+                <Typography sx={{ fontSize: 12, color: 'error.main', mb: 0.75 }}>
+                  {feedbackError}
+                </Typography>
+              )}
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <MuiButton
+                  variant="contained" size="small"
+                  onClick={submitFeedback}
+                  disabled={!feedback.trim() || feedbackSending}
+                  sx={{ textTransform: 'none', fontSize: 12, fontWeight: 500,
+                    backgroundColor: '#B286FF',
+                    '&:hover': { backgroundColor: '#9061f0' } }}
+                >
+                  {feedbackSending ? 'Re-analyzing…' : 'Re-analyze with feedback'}
+                </MuiButton>
+                {feedback.trim() && !feedbackSending && (
+                  <MuiButton
+                    variant="text" size="small"
+                    onClick={() => { setFeedback(''); setFeedbackError(null); }}
+                    sx={{ textTransform: 'none', fontSize: 11,
+                      color: 'text.tertiary' }}
+                  >
+                    Clear
+                  </MuiButton>
+                )}
+              </Stack>
+            </Box>
+          )}
         </Box>
       )}
     </>
@@ -4867,7 +4918,14 @@ function AppMain({ authUser, setAuthState }) {
                 5. Detection     — SIEM-ready rules
                 EmailAnalysis still slots in when an EML is present. */}
             <ErrorBoundary label="Summary"><AnalystSummary result={result} rs={rs || {}}/></ErrorBoundary>
-            <ErrorBoundary label="Ask RECON"><ChatWithRecon result={result}/></ErrorBoundary>
+            <ErrorBoundary label="Ask RECON">
+              <ChatWithRecon
+                result={result}
+                onFeedbackStart={() => setAnalyzing(true)}
+                onFeedbackPartial={mergePartial}
+                onFeedbackComplete={(r) => { setAnalyzing(false); setResult(r); }}
+              />
+            </ErrorBoundary>
             <ErrorBoundary label="Triage detail"><Triage result={result} rs={rs || {}}/></ErrorBoundary>
             <ErrorBoundary label="Email analysis"><EmailAnalysis result={result}/></ErrorBoundary>
             {(result?.iocs?.ips || []).length > 0 && (
@@ -4880,14 +4938,6 @@ function AppMain({ authUser, setAuthState }) {
               </Card>
             )}
             <Detection result={result}/>
-            <ErrorBoundary label="Analyst feedback">
-              <FeedbackPanel
-                result={result}
-                onStart={() => { setAnalyzing(true); }}
-                onPartial={mergePartial}
-                onComplete={(r) => { setAnalyzing(false); setResult(r); }}
-              />
-            </ErrorBoundary>
             </CardDefaultOpenContext.Provider>
           </>
         )}
