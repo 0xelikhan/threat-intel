@@ -494,11 +494,40 @@ def _p_crt(r):
 def _p_whois(r):
     if _is_fail(r):
         return _err("whois", r)
-    return {"registrar":   _safe(r, "registrar", "name"),
-            "created":     _safe(r, "domain", "created_date"),
-            "expires":     _safe(r, "domain", "expiration_date"),
-            "updated":     _safe(r, "domain", "updated_date"),
-            "nameservers": (r.get("nameservers") or [])[:4]}
+    # who-dat.as93.net response shape — pull the fields the frontend
+    # source-card actually renders. age_days is derived here so the
+    # WHOIS card and the URL-identity banner can both show domain age
+    # without re-parsing the date string client-side.
+    created = _safe(r, "domain", "created_date") or ""
+    age_days = None
+    if created:
+        try:
+            from datetime import datetime as _dt, timezone as _tz
+            _s = created.replace("Z", "+00:00")
+            _d = _dt.fromisoformat(_s)
+            if _d.tzinfo is None:
+                _d = _d.replace(tzinfo=_tz.utc)
+            age_days = max(0, (_dt.now(_tz.utc) - _d).days)
+        except Exception:
+            age_days = None
+    registrant_country = _safe(r, "registrant", "country") or _safe(r, "registrant", "country_code") or ""
+    registrant_org = _safe(r, "registrant", "organization") or ""
+    return {
+        "registrar":          _safe(r, "registrar", "name"),
+        "registrar_iana_id":  _safe(r, "registrar", "iana_id"),
+        "registrant_org":     registrant_org,
+        "registrant_country": registrant_country,
+        "registrant_email":   _safe(r, "registrant", "email"),
+        "created":            created,
+        "updated":            _safe(r, "domain", "updated_date"),
+        "expires":            _safe(r, "domain", "expiration_date"),
+        "age_days":           age_days,
+        "name_servers":       (r.get("nameservers") or _safe(r, "domain", "name_servers") or [])[:6],
+        "status":             (_safe(r, "domain", "status") or [])[:5] if isinstance(_safe(r, "domain", "status"), list) else [],
+        "privacy_protected":  bool(registrant_org.lower().startswith(
+            ("privacy", "redacted", "withheld", "domains by proxy",
+             "whoisguard", "data redacted"))),
+    }
 
 
 def _p_pd(r):

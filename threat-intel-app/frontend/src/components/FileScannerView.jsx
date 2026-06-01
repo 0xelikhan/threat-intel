@@ -397,17 +397,23 @@ function UrlReputationReport({ result }) {
   };
 
   // ── render ──────────────────────────────────────────────────────────────
+  // Count source cards that will actually render in each group so we can
+  // surface a "(N sources)" summary on the collapsed SectionCard header.
+  const repCount = 3
+    + (spamhaus ? 1 : 0)
+    + (pulsedive && !pulsedive.error && pulsedive.risk && pulsedive.risk !== 'none' ? 1 : 0)
+    + (safeBrowse?.verdict ? 1 : 0);
+  const idCount = 1
+    + (crt ? 1 : 0)
+    + (dnsRecords?.total_records > 0 ? 1 : 0)
+    + (wayback && (wayback.has_snapshots != null || wayback.first_snapshot) ? 1 : 0);
+  const infraCount = (urlscan ? 1 : 0) + (bgp ? 1 : 0);
+
   return (
-    <Box>
-      {/* Headline panel — verdict pill with inline score, host on its own
-          row, URL clamped to two lines so a marketing tracker-laden URL
-          can't push the whole panel 4 lines tall. */}
-      <MuiPaper elevation={0} sx={{
-        backgroundColor: '#09253d',
-        border: `1px solid ${muiAlpha(verdict.color, 0.35)}`,
-        borderLeft: `3px solid ${verdict.color}`,
-        borderRadius: '4px', p: '14px 18px', mb: 2,
-      }}>
+    <Stack spacing={2}>
+      <SectionCard id="url-verdict" label="URL Reputation"
+        accent={verdict.color} defaultOpen={true}
+        summary={`${verdict.label} · ${score}/100 · ${signalCount} source${signalCount === 1 ? '' : 's'}`}>
         <Stack direction="row" alignItems="center" spacing={1.25}
           sx={{ mb: host || url ? 1.25 : 0 }} flexWrap="wrap">
           <Box sx={{
@@ -461,9 +467,9 @@ function UrlReputationReport({ result }) {
           </Box>
         )}
 
-        {/* Headline factoids — WHOIS registration date + last Wayback
-            snapshot so the analyst can place the domain in time without
-            scrolling to the per-source cards below. */}
+        {/* Headline factoids — left here as a safety net; in the new
+            layout the URL-identity SectionCard above already shows the
+            same fields, so factoids is currently kept empty. */}
         {factoids.length > 0 && (
           <Box sx={{ mt: topDrivers.length ? 1.5 : 1.5,
             pt: topDrivers.length ? 1.5 : 0,
@@ -490,11 +496,12 @@ function UrlReputationReport({ result }) {
             </Box>
           </Box>
         )}
-      </MuiPaper>
+      </SectionCard>
 
-      {/* ── REPUTATION group ───────────────────────────────────────────── */}
-      <GroupHeader>Reputation</GroupHeader>
-      <Stack spacing={1.25} sx={{ mb: 2.5 }}>
+      <SectionCard id="url-reputation" label="Reputation"
+        accent="#0fbcff" defaultOpen={true}
+        summary={`${repCount} source${repCount === 1 ? '' : 's'}`}>
+      <Stack spacing={1.25}>
         {/* VirusTotal */}
         {(() => {
           const mal = vt?.malicious ?? 0;
@@ -636,10 +643,12 @@ function UrlReputationReport({ result }) {
           </CollapsibleSource>
         )}
       </Stack>
+      </SectionCard>
 
-      {/* ── IDENTITY group ─────────────────────────────────────────────── */}
-      <GroupHeader>Identity</GroupHeader>
-      <Stack spacing={1.25} sx={{ mb: 2.5 }}>
+      <SectionCard id="url-identity-sources" label="Identity"
+        accent="#0fbcff" defaultOpen={true}
+        summary={`${idCount} source${idCount === 1 ? '' : 's'}`}>
+      <Stack spacing={1.25}>
         {/* WHOIS — the big one. */}
         {(() => {
           const age = whois?.age_days;
@@ -762,13 +771,13 @@ function UrlReputationReport({ result }) {
           </CollapsibleSource>
         )}
       </Stack>
+      </SectionCard>
 
-      {/* ── INFRASTRUCTURE group ───────────────────────────────────────── */}
       {(urlscan || bgp) && (
-        <>
-          <GroupHeader>Infrastructure</GroupHeader>
-          <Stack spacing={1.25} sx={{ mb: 2.5 }}>
-            {/* URLScan.io */}
+        <SectionCard id="url-infrastructure" label="Infrastructure"
+          accent="#0fbcff" defaultOpen={true}
+          summary={`${infraCount} source${infraCount === 1 ? '' : 's'}`}>
+          <Stack spacing={1.25}>
             {urlscan && (
               <CollapsibleSource title="URLScan.io"
                 status={urlscan.total ? `${urlscan.total} scans` : 'no scans'}
@@ -794,7 +803,6 @@ function UrlReputationReport({ result }) {
               </CollapsibleSource>
             )}
 
-            {/* BGP ranking */}
             {bgp && (
               <CollapsibleSource title="BGP / ASN (CIRCL)"
                 status={bgp.rank != null ? `rank ${bgp.rank}` : 'ok'}
@@ -807,9 +815,9 @@ function UrlReputationReport({ result }) {
               </CollapsibleSource>
             )}
           </Stack>
-        </>
+        </SectionCard>
       )}
-    </Box>
+    </Stack>
   );
 }
 
@@ -2405,25 +2413,47 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
               || ['MALICIOUS','SUSPICIOUS'].includes(result.verdict);
 
             if (isUrlScan) {
-              // Compact identity banner — Domain registered + Registrar +
-              // Last Wayback snapshot. Lives at the very top of the URL
-              // scanner so the analyst sees domain age / first-seen
-              // before they kick off detonation or scroll through the
-              // reputation report.
+              // Identity factoids — Domain registered (WHOIS, with VT
+              // creation_date fallback when the registrar returns no
+              // date), Registrar, Last Wayback snapshot. Lives at the
+              // top in its own collapsible card so the analyst sees
+              // domain age / first-seen before scrolling further.
               let _host = '';
               try { _host = new URL(result.source_url || '').hostname; }
               catch { _host = ''; }
               const _dom    = result?.enrichments?.domains?.[_host] || {};
+              const _urlEnr = result?.enrichments?.urls?.[result.source_url] || {};
               const _whois  = _dom.whois || null;
               const _wb     = _dom.wayback || null;
-              const _ageDays = _whois?.age_days;
+              const _vtDom  = _dom.virustotal || null;
+              const _vtUrl  = _urlEnr.virustotal || null;
+              // VT's creation_date can be a unix timestamp (number) or an
+              // ISO string. Normalise to an ISO string before _formatDate
+              // and reuse it for age math.
+              const _toIso = (v) => {
+                if (v == null || v === '') return '';
+                if (typeof v === 'number') return new Date(v * 1000).toISOString();
+                return String(v);
+              };
+              const _vtCreated = _toIso(_vtDom?.creation_date)
+                              || _toIso(_vtUrl?.creation_date);
+              const _regIso = _whois?.created || _vtCreated;
+              const _regSource = _whois?.created ? 'WHOIS'
+                : _vtCreated ? 'VirusTotal first seen' : null;
+              const _regAgeDays = _regIso ? (() => {
+                const d = new Date(_regIso);
+                if (isNaN(d)) return null;
+                return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
+              })() : null;
               const _topFactoids = [
-                _whois?.created && {
-                  label: 'Domain registered',
-                  value: _ageDays != null
-                    ? `${_formatDate(_whois.created)}  (${_ageDays}d ago)`
-                    : _formatDate(_whois.created),
-                  accent: _ageDays != null && _ageDays < 30 ? '#E6700F' : null,
+                _regIso && {
+                  label: _regSource === 'WHOIS'
+                    ? 'Domain registered'
+                    : 'First seen (VirusTotal)',
+                  value: _regAgeDays != null
+                    ? `${_formatDate(_regIso)}  (${_regAgeDays}d ago)`
+                    : _formatDate(_regIso),
+                  accent: _regAgeDays != null && _regAgeDays < 30 ? '#E6700F' : null,
                 },
                 _whois?.registrar && {
                   label: 'Registrar',
@@ -2436,7 +2466,7 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
               ].filter(Boolean);
 
               return (
-                <Stack spacing={3}>
+                <Stack spacing={2}>
                   {/* Soft-fail download banner — when the remote site
                       refused the GET, we didn't get the file body. URL
                       reputation + WHOIS + Wayback + URLScan submission
@@ -2462,32 +2492,19 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
                     </MuiPaper>
                   )}
 
-                  {/* URL identity banner — Domain registered / Registrar /
-                      Last Wayback snapshot. Pinned at the very top so the
-                      analyst sees domain-age signal before doing anything
-                      else. Hidden when none of the three factoids has a
-                      value. */}
                   {_topFactoids.length > 0 && (
-                    <MuiPaper elevation={0} sx={{
-                      backgroundColor: '#09253d',
-                      border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-                      borderLeft: '3px solid #0fbcff',
-                      borderRadius: '4px', p: '12px 16px',
-                    }}>
-                      <Typography sx={{ fontSize: 10, color: 'text.disabled',
-                        fontWeight: 600, textTransform: 'uppercase',
-                        letterSpacing: '0.08em', mb: 1 }}>
-                        URL identity · {_host || '(unknown host)'}
-                      </Typography>
+                    <SectionCard id="url-identity" label="URL Identity"
+                      accent="#0fbcff" defaultOpen={true}
+                      summary={_host || ''}>
                       <Box sx={{ display: 'grid',
                         gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' },
-                        gap: '6px 18px' }}>
+                        gap: '8px 20px' }}>
                         {_topFactoids.map((f, i) => (
                           <Box key={i}>
-                            <Typography sx={{ fontSize: 10,
+                            <Typography sx={{ fontSize: 9.5,
                               color: 'text.disabled', fontWeight: 600,
                               textTransform: 'uppercase',
-                              letterSpacing: '0.07em' }}>
+                              letterSpacing: '0.08em', mb: 0.25 }}>
                               {f.label}
                             </Typography>
                             <Typography sx={{ fontSize: 12.5,
@@ -2499,16 +2516,16 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
                           </Box>
                         ))}
                       </Box>
-                    </MuiPaper>
+                    </SectionCard>
                   )}
 
-                  {/* Live URL detonation pinned near the top — the
-                      analyst wants to kick the detonation off and see
-                      its progress before scrolling through reputation
-                      details. Pre-populated with [source_url] so the
-                      Submit button is one click away. */}
-                  <URLScanLive result={result} urls={[result.source_url]}/>
+                  <SectionCard id="url-detonation" label="Live URL Scan"
+                    accent="#0fbcff" defaultOpen={true} summary="URLScan.io">
+                    <URLScanLive result={result} urls={[result.source_url]} bare/>
+                  </SectionCard>
+
                   <UrlReputationReport result={result}/>
+
                   {fileHasSignal && (
                     <UrlFileAnalysisExpander result={result} onRefreshScan={onRefreshScan}
                       autoOpen={['MALICIOUS','SUSPICIOUS'].includes(result.verdict)}/>

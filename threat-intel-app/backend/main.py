@@ -1806,6 +1806,28 @@ async def scan_url_endpoint(req: dict):
     }
     _SOFT_BLOCK_STATUSES = {401, 403, 406, 429, 503}
 
+    def _err_summary(e: Exception) -> str:
+        """aiohttp's default str() produces noise like
+        '0, message='', url=URL(...)'. Map common exception types to
+        analyst-readable phrasing."""
+        cls = type(e).__name__
+        if isinstance(e, asyncio.TimeoutError):
+            return "request timed out after 30s"
+        if isinstance(e, aiohttp.ClientConnectorError):
+            return "host refused the connection or DNS failed"
+        if isinstance(e, aiohttp.ServerDisconnectedError):
+            return "server closed the connection before responding"
+        if isinstance(e, aiohttp.ClientResponseError):
+            return f"HTTP {e.status} ({e.message or 'no message'})"
+        if isinstance(e, aiohttp.TooManyRedirects):
+            return "the URL bounced through too many redirects"
+        if isinstance(e, aiohttp.InvalidURL):
+            return "URL is malformed"
+        msg = str(e).strip()
+        if not msg or msg.startswith("0, message="):
+            return cls.replace("Error", "").lower() or "unknown network error"
+        return msg[:160]
+
     async def _try_fetch(headers):
         """Returns (data_bytes, status_code, exc_str). data is empty on
         any non-200. Caller decides whether the result is a soft fail."""
@@ -1826,7 +1848,7 @@ async def scan_url_endpoint(req: dict):
                             return b"", 413, "remote file exceeds 50 MB cap"
                     return b"".join(chunks), 200, ""
         except Exception as e:
-            return b"", 0, str(e)[:160]
+            return b"", 0, _err_summary(e)
 
     data, last_status, last_err = await _try_fetch(_CHROME_HEADERS)
     if not data and last_status in _SOFT_BLOCK_STATUSES:
@@ -1905,7 +1927,7 @@ async def scan_url_endpoint(req: dict):
         keys = {k: config.get(k, "") for k in (
             "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
             "GREYNOISE_KEY", "SHODAN_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
-            "IPINFO_TOKEN",
+            "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
         )}
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as sess:
             url_enr, dom_enr = await asyncio.gather(
