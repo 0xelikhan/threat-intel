@@ -360,6 +360,11 @@ the evidence points to benign activity."""
         "ja_fingerprints":     ja_fingerprints,
         "ja_sigma_snippet":    ja_sigma_snippet,
         "ja_kql_snippet":      ja_kql_snippet,
+        # Defender 1116/1117 structured parse — gives the UI authoritative
+        # field interpretation (malware_name, infected_path, process_name)
+        # so renderers don't conflate the legitimate triggering process
+        # with the malware itself.
+        "defender_parse":      state.get("defender_parse"),
     }
 
     trace.append({

@@ -625,6 +625,18 @@ they appear:
       the same as a confirmed attack. Read the supporting evidence.
     - Defender "Initial access" alerts often fire on legitimate VPN
       sign-ins from new countries.
+    - Microsoft Defender Event ID 1116 / 1117 (Antivirus detection):
+      The PATH field is the malicious artifact. The PROCESS NAME field
+      is the LEGITIMATE process that triggered the scan (usually
+      C:\\WINDOWS\\explorer.exe, svchost.exe, or another system process)
+      and is NOT itself the malware. The NAME field is the malware
+      family (e.g. "Trojan:Win32/SparkOnSoft.A!MTB"). Always describe
+      the threat as "<Name> detected in <Path basename>" — never as
+      "the malware is explorer.exe" or "the process explorer.exe is
+      malicious". If a DEFENDER EVENT PARSE block appears below, treat
+      its field labels as authoritative.
+    - Defender "AV:", "AS:", "NIS:", "AM:" version strings are software
+      version numbers (e.g. "AV: 1.451.195.0"), not IP addresses.
 
   • EDR alerts:
     - "Suspicious process tree" / "Behavioural anomaly" classifications
@@ -1213,6 +1225,20 @@ async def run_investigation(state: dict, on_event=None) -> dict:
     else:
         known_good_matches = "(no known-good software patterns matched)"
 
+    # ── Defender Event 1116/1117 structured parse ─────────────────────────────
+    # When the input is a Defender detection log, render an authoritative
+    # field-by-field block with explicit labels so the AI can't mistake the
+    # legitimate triggering process (explorer.exe / svchost.exe / …) for the
+    # actual malware. malware_name is the threat; infected_path is the
+    # malicious artifact; process_name is just the system process that
+    # encountered the file.
+    defender_block = ""
+    try:
+        from intel.defender_parser import to_prompt_block
+        defender_block = to_prompt_block(state.get("defender_parse") or {})
+    except Exception:
+        defender_block = ""
+
     result = None
     tool_call_log = []
     openai_key = config.get("OPENAI_API_KEY")
@@ -1263,6 +1289,8 @@ Tool-budget tips:
 
 ## Baseline cross-references already collected (do NOT re-query these)
 {cross_ctx[:2500]}
+
+{defender_block}
 
 ## KNOWN_GOOD MATCHES (curated vendor-software patterns)
 {known_good_matches}
@@ -1542,10 +1570,15 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                 _log.warning("TOOL-CALLING FAILED, falling back: %s", e)
                 traceback.print_exc()
                 tool_call_log.append({"tool": "_fallback", "summary": f"tool-calling failed: {str(e)[:120]}"})
+                # Prepend the Defender field-parse block to the raw input so the
+                # single-shot prompt sees the authoritative labels too.
+                _raw_for_fallback = (state.get("raw_input") or "")[:2000]
+                if defender_block:
+                    _raw_for_fallback = defender_block + "\n\n" + _raw_for_fallback
                 resp = await provider.complete(
                     model=config.get_model(),   # smart
                     messages=[{"role": "user", "content": PROMPT.format(
-                        raw_input=(state.get("raw_input") or "")[:2000],
+                        raw_input=_raw_for_fallback[:2400],
                         enrichments=json.dumps(compressed, indent=2)[:5000] or "(empty — log-only analysis required)",
                         alert_type=alert_type,
                         triage_score=round(triage_score, 2),
