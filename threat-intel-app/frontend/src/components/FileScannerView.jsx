@@ -95,24 +95,74 @@ function downloadText(name, text) {
 }
 
 
-// ─── RECON-styled card wrapper ────────────────────────────────────────────────
-function SectionCard({ id, label, accent, children, sx, defaultPad = true }) {
+// ─── RECON-styled card wrapper (collapsible) ─────────────────────────────────
+// Mirrors the log-analysis Card pattern: clickable header with chevron, body
+// renders inside an MUI Collapse. `defaultOpen` controls the initial state;
+// `summary` is a small right-aligned indicator the analyst can read at a
+// glance without expanding (e.g. "3 matches", "MALICIOUS", "clean").
+//
+// The expand / collapse state lives in component state and persists for the
+// lifetime of the result (until a new file is scanned).
+function SectionCard({
+  id,
+  label,
+  accent,
+  children,
+  sx,
+  defaultPad = true,
+  defaultOpen = true,
+  summary = null,
+}) {
   const theme = useTheme();
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <Box id={`section-${id}`} sx={{ scrollMarginTop: 88 }}>
-      <Typography sx={{
-        fontSize: 10, color: 'text.tertiary', fontWeight: 600,
-        textTransform: 'uppercase', letterSpacing: '0.1em',
-        mb: 1, pl: 0.5,
-      }}>{label}</Typography>
-      <MuiPaper elevation={0} sx={{
-        backgroundColor: theme.palette.background.paper,
-        border: `1px solid ${muiAlpha('#ffffff', 0.08)}`,
-        borderLeft: accent ? `3px solid ${accent}` : `1px solid ${muiAlpha('#ffffff', 0.08)}`,
-        borderRadius: '4px',
-        p: defaultPad ? 2 : 0,
-        ...sx,
-      }}>{children}</MuiPaper>
+      <Box
+        onClick={() => setOpen(o => !o)}
+        sx={{
+          display: 'flex', alignItems: 'center', cursor: 'pointer',
+          gap: 1, mb: 1, pl: 0.5, userSelect: 'none',
+          '&:hover .recon-section-label': { color: accent || 'text.primary' },
+        }}
+      >
+        <Box sx={{
+          color: accent || 'text.tertiary',
+          transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+          transition: 'transform 0.18s ease',
+          display: 'flex', alignItems: 'center',
+        }}>
+          <ChevronRight size={12}/>
+        </Box>
+        <Typography
+          className="recon-section-label"
+          sx={{
+            fontSize: 10, color: accent || 'text.tertiary', fontWeight: 600,
+            textTransform: 'uppercase', letterSpacing: '0.1em',
+            transition: 'color 0.18s ease',
+          }}
+        >
+          {label}
+        </Typography>
+        {summary != null && summary !== '' && (
+          <Typography sx={{
+            fontSize: 10, color: 'text.tertiary', fontWeight: 500,
+            ml: 'auto', pr: 0.5,
+            textTransform: 'none', letterSpacing: '0.02em',
+          }}>
+            {summary}
+          </Typography>
+        )}
+      </Box>
+      {open && (
+        <MuiPaper elevation={0} sx={{
+          backgroundColor: theme.palette.background.paper,
+          border: `1px solid ${muiAlpha('#ffffff', 0.08)}`,
+          borderLeft: accent ? `3px solid ${accent}` : `1px solid ${muiAlpha('#ffffff', 0.08)}`,
+          borderRadius: '4px',
+          p: defaultPad ? 2 : 0,
+          ...sx,
+        }}>{children}</MuiPaper>
+      )}
     </Box>
   );
 }
@@ -764,7 +814,8 @@ function VerdictBanner({ result }) {
   const exec_text = deep?.executive_summary || result.ai_summary;
 
   return (
-    <SectionCard id="verdict" label="AI Verdict" accent={c} sx={{
+    <SectionCard id="verdict" label="AI Verdict" accent={c} defaultOpen={true}
+      summary={result.verdict || null} sx={{
       background: `linear-gradient(135deg, ${muiAlpha(c, 0.08)} 0%, ${theme.palette.background.paper} 60%)`,
     }}>
       <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: exec_text ? 1.5 : 0 }} flexWrap="wrap">
@@ -817,7 +868,7 @@ function TechnicalAssessment({ result }) {
   const soph = deep?.sophistication_level;
   const vec  = deep?.infection_vector;
   return (
-    <SectionCard id="technical" label="Technical Assessment">
+    <SectionCard id="technical" label="Technical Assessment" defaultOpen={true}>
       {!tech && <AILoading text="Synthesizing technical assessment…"/>}
       {tech && (
         <>
@@ -872,7 +923,7 @@ function ExecutionNarrative({ result }) {
   const text = result.ai_analyst?.deep?.execution_narrative;
   if (!text && !result.ai_analyst) return null;
   return (
-    <SectionCard id="narrative" label="Execution Narrative" accent="#B286FF" sx={{
+    <SectionCard id="narrative" label="Execution Narrative" accent="#B286FF" defaultOpen={true} sx={{
       backgroundColor: muiAlpha('#B286FF', 0.04),
     }}>
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.25 }}>
@@ -900,7 +951,8 @@ function KeyFindings({ result }) {
   const items = result.ai_analyst?.deep?.key_findings || [];
   if (!items.length && !result.ai_analyst) return null;
   return (
-    <SectionCard id="findings" label="Key Findings">
+    <SectionCard id="findings" label="Key Findings" defaultOpen={true}
+      summary={items.length ? `${items.length} finding${items.length > 1 ? 's' : ''}` : null}>
       {!items.length && <AILoading text="Identifying analytical insights…"/>}
       {items.map((f, i) => (
         <Box key={i} sx={{
@@ -953,7 +1005,8 @@ function FileIdentity({ result }) {
     ...(pe?.imphash ? [['imphash', pe.imphash]] : []),
   ];
   return (
-    <SectionCard id="identity" label="File Identity">
+    <SectionCard id="identity" label="File Identity" defaultOpen={false}
+      summary={h.sha256 ? `SHA-256 ${String(h.sha256).slice(0, 12)}…` : 'metadata'}>
       <Box sx={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: '8px 16px' }}>
         {rows.map(([k, v, sub]) => (
           <React.Fragment key={k}>
@@ -1045,8 +1098,12 @@ function ThreatIntelSection({ result }) {
     return order;
   }, [ti]);
 
+  // Top-level summary indicator — how many TI sources returned an actual hit.
+  const hitCount = sources.reduce((n, [, d, fn]) => n + (d && fn(d) ? 1 : 0), 0);
   return (
-    <SectionCard id="ti" label="Threat Intelligence" defaultPad={false}>
+    <SectionCard id="ti" label="Threat Intelligence" defaultPad={false}
+      defaultOpen={true}
+      summary={hitCount > 0 ? `${hitCount} source hit${hitCount > 1 ? 's' : ''}` : 'no hits'}>
       {sources.map(([name, data, summarize], i) => {
         const open = openSource === name;
         const summary = data ? summarize(data) : null;
@@ -1101,7 +1158,11 @@ function CapabilitiesSection({ result }) {
   const cap = result.capabilities || {};
   if (!cap.tags?.length && !cap.mitre_techniques?.length) return null;
   return (
-    <SectionCard id="caps" label="Behavioral Capabilities">
+    <SectionCard id="caps" label="Behavioral Capabilities"
+      defaultOpen={(cap.tags?.length || 0) > 0 || (cap.mitre_techniques?.length || 0) > 0}
+      summary={(cap.tags?.length || 0) + (cap.mitre_techniques?.length || 0) > 0
+        ? `${cap.tags?.length || 0} caps · ${cap.mitre_techniques?.length || 0} MITRE`
+        : 'none'}>
       {cap.tags?.length > 0 && (
         <Box>
           <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
@@ -1205,8 +1266,11 @@ function StringsSection({ result }) {
     MALICIOUS: '#EE3838', SUSPICIOUS: '#E6700F', CLEAN: '#16AD34',
   };
 
+  const totalStrings = Object.values(groups).reduce((n, g) => n + g.length, 0);
   return (
-    <SectionCard id="strings" label="Strings & IOCs">
+    <SectionCard id="strings" label="Strings & IOCs"
+      defaultOpen={totalStrings > 0 && sus.length > 0}
+      summary={totalStrings > 0 ? `${totalStrings} indicator${totalStrings !== 1 ? 's' : ''}` : 'none'}>
       <MuiTextField size="small" fullWidth
         value={query} onChange={e => setQuery(e.target.value)}
         placeholder="Filter strings…"
@@ -1266,7 +1330,11 @@ function YaraSection({ result }) {
   const [openRule, setOpenRule] = useState(null);
   if (!matches.length && !ai.rule) return null;
   return (
-    <SectionCard id="yara" label="YARA Analysis">
+    <SectionCard id="yara" label="YARA Analysis"
+      defaultOpen={matches.length > 0}
+      summary={matches.length > 0
+        ? `${matches.length} match${matches.length > 1 ? 'es' : ''}`
+        : 'no matches'}>
       <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
         textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1 }}>
         Matched rules · {matches.length}
@@ -1384,7 +1452,10 @@ function FormatSection({ result }) {
   const pe = fs.pe, off = fs.office, pdf = fs.pdf, ar = fs.archive, sc = fs.script;
   if (!pe && !off && !pdf && !ar && !sc) return null;
   return (
-    <SectionCard id="format" label="Format-Specific Analysis">
+    <SectionCard id="format" label="Format-Specific Analysis"
+      defaultOpen={false}
+      summary={[pe && 'PE', off && 'Office', pdf && 'PDF', ar && 'Archive', sc && 'Script']
+        .filter(Boolean).join(' · ') || null}>
       {pe && <PEDetails pe={pe}/>}
       {off && <OfficeDetails office={off}/>}
       {pdf && <PdfDetails pdf={pdf}/>}
@@ -1554,7 +1625,9 @@ function Anomalies({ result }) {
   const items = result.ai_analyst?.deep?.anomalies || [];
   if (!items.length) return null;
   return (
-    <SectionCard id="anomalies" label="Anomalies" accent="#E6700F">
+    <SectionCard id="anomalies" label="Anomalies" accent="#E6700F"
+      defaultOpen={items.length > 0}
+      summary={`${items.length} anomal${items.length === 1 ? 'y' : 'ies'}`}>
       {items.map((a, i) => (
         <Box key={i} sx={{
           display: 'grid', gridTemplateColumns: '24px 1fr', gap: 1.25,
@@ -1596,7 +1669,8 @@ function DetectionContent({ result }) {
   ].filter(([, b]) => b);
   if (!blocks.length) return null;
   return (
-    <SectionCard id="detect" label="Detection Content">
+    <SectionCard id="detect" label="Detection Content" defaultOpen={false}
+      summary={`${blocks.length} rule${blocks.length === 1 ? '' : 's'}`}>
       {blocks.map(([title, body], i) => (
         <Box key={title} sx={{ mb: i < blocks.length - 1 ? 1.75 : 0 }}>
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
@@ -1627,7 +1701,8 @@ function HuntingLeads({ result }) {
   const items = result.ai_analyst?.deep?.hunting_leads || [];
   if (!items.length) return null;
   return (
-    <SectionCard id="hunting" label="Hunting Leads">
+    <SectionCard id="hunting" label="Hunting Leads" defaultOpen={false}
+      summary={`${items.length} lead${items.length === 1 ? '' : 's'}`}>
       {items.map((h, i) => (
         <Box key={i} sx={{
           py: 1.25, borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.04)}` : 'none',
@@ -1667,7 +1742,8 @@ function ActionsSection({ result }) {
   });
   const color = { IMMEDIATE: '#EE3838', SHORTTERM: '#E6700F', LONGTERM: '#E1B823' };
   return (
-    <SectionCard id="actions" label="Recommended Actions">
+    <SectionCard id="actions" label="Recommended Actions" defaultOpen={true}
+      summary={all.length ? `${all.length} action${all.length === 1 ? '' : 's'}` : null}>
       {Object.entries(buckets).map(([k, items]) => items.length > 0 && (
         <Box key={k} sx={{ mb: 1.75 }}>
           <Typography sx={{ fontSize: 10, color: color[k], fontWeight: 700,
@@ -1735,7 +1811,8 @@ function NotesAndRefinement({ result, onRefreshScan }) {
   const confPct = Math.round((confAssess?.overall_confidence || 0) * 100);
 
   return (
-    <SectionCard id="notes" label="Notes & Refinement">
+    <SectionCard id="notes" label="Notes & Refinement" defaultOpen={false}
+      summary={questions.length ? `${questions.length} question${questions.length === 1 ? '' : 's'}` : 'analyst notes'}>
       {ci && (
         <MuiPaper elevation={0} sx={{
           backgroundColor: muiAlpha('#16AD34', 0.06),
