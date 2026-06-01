@@ -3688,7 +3688,10 @@ function Detection({ result }) {
   const mitre = rs.mitre_techniques || [];
   // On-demand generation state — detection content is generated from the
   // Detection card via /api/detection rather than auto-generated every run.
-  const [g, setG] = useState(null);      // { sigma, kql, spl, sigma_valid }
+  // Now fans out to every supported platform (Sigma, KQL, Splunk SPL,
+  // Elastic EQL, Snort/Suricata, Chronicle YARA-L, CrowdStrike FQL, YARA)
+  // in parallel on click.
+  const [g, setG] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
   const [active, setActive] = useState(null);
@@ -3699,26 +3702,63 @@ function Detection({ result }) {
   const siem  = result?.response_summary?.siem_queries || {};
   const sigmaValid = g ? g.sigma_valid : rs.sigma_valid;
   const tabs = [
-    sigma                  && { id:'sigma',       label:'Sigma',                 content:sigma,                  badge: sigmaValid===true?'validated':sigmaValid===false?'invalid':null },
-    kql                    && { id:'kql',         label:'KQL · Sentinel',        content:kql },
-    (g?.spl || siem.splunk_spl) && { id:'spl',    label:'Splunk SPL',            content:g?.spl || siem.splunk_spl },
-    siem.elastic_eql       && { id:'eql',         label:'Elastic EQL',           content:siem.elastic_eql },
-    siem.chronicle_yara_l  && { id:'yaral',       label:'Chronicle YARA-L',      content:siem.chronicle_yara_l },
-    siem.crowdstrike_fql   && { id:'fql',         label:'CrowdStrike Falcon',    content:siem.crowdstrike_fql },
+    sigma                                            && { id:'sigma',    label:'Sigma',              content:sigma, badge: sigmaValid===true?'validated':sigmaValid===false?'invalid':null },
+    kql                                              && { id:'kql',      label:'KQL · Sentinel',     content:kql },
+    (g?.spl || siem.splunk_spl)                      && { id:'spl',      label:'Splunk SPL',         content:g?.spl || siem.splunk_spl },
+    (g?.eql || siem.elastic_eql)                     && { id:'eql',      label:'Elastic EQL',        content:g?.eql || siem.elastic_eql },
+    (g?.suricata)                                    && { id:'suricata', label:'Snort / Suricata',   content:g.suricata },
+    (g?.yaral || siem.chronicle_yara_l)              && { id:'yaral',    label:'Chronicle YARA-L',   content:g?.yaral || siem.chronicle_yara_l },
+    (g?.fql || siem.crowdstrike_fql)                 && { id:'fql',      label:'CrowdStrike Falcon', content:g?.fql || siem.crowdstrike_fql },
+    g?.yara                                          && { id:'yara',     label:'YARA',               content:g.yara },
   ].filter(Boolean);
 
   const generate = async () => {
     setLoading(true); setErr(null);
     try {
-      const analysis = { threatLevel: rs.threat_level, summary: rs.summary, mitreTechniques: mitre };
+      const analysis = {
+        threatLevel:     rs.threat_level,
+        summary:         rs.summary,
+        mitreTechniques: mitre,
+        malwareFamily:   rs.malware_family || result?.malware_family,
+      };
       const base = { iocs: result?.iocs || {}, analysis };
       const post = (action) => fetch('/api/detection', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...base, action }),
-      }).then(r => r.json());
-      const [sg, kq] = await Promise.all([post('sigma'), post('kql')]);
-      setG({ sigma: sg.result, kql: kq.result, spl: sg.splunk_spl, sigma_valid: sg.valid });
-      setActive('sigma');
+      }).then(r => r.json()).catch(() => ({ result: '', error: 'request failed' }));
+
+      // Fire every detection-rule format in parallel. The YARA call is
+      // only useful when we have a malware family — backend returns a
+      // generic rule otherwise, which we skip on the frontend.
+      const familyKnown = !!analysis.malwareFamily;
+      const calls = {
+        sigma:    post('sigma'),
+        kql:      post('kql'),
+        spl:      post('splunk_spl'),
+        eql:      post('elastic_eql'),
+        suricata: post('suricata'),
+        yaral:    post('chronicle_yara_l'),
+        fql:      post('crowdstrike_fql'),
+        ...(familyKnown ? { yara: post('yara') } : {}),
+      };
+      const keys = Object.keys(calls);
+      const out  = await Promise.all(Object.values(calls));
+      const next = {};
+      keys.forEach((k, i) => {
+        const v = out[i] || {};
+        if (k === 'sigma') {
+          next.sigma = v.result; next.sigma_valid = v.valid;
+          // Backend's sigma path also returns a piggy-backed SPL — only
+          // overwrite if the dedicated SPL call didn't succeed.
+          if (v.splunk_spl && !next.spl) next.spl = v.splunk_spl;
+        } else if (k === 'spl' && v.result) {
+          next.spl = v.result;
+        } else if (v.result) {
+          next[k] = v.result;
+        }
+      });
+      setG(next);
+      setActive(next.sigma ? 'sigma' : Object.keys(next).find(k => next[k]) || 'sigma');
     } catch (e) { setErr(e.message || 'Generation failed'); }
     finally { setLoading(false); }
   };
