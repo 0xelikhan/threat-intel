@@ -2221,10 +2221,13 @@ function AnalystSummary({ result, rs }) {
           AI used to set the threat level. Calibration fix from S8: if this
           block is empty or only lists benign indicators, the threat level
           should be INFORMATIONAL/LOW. The analyst can verify the reasoning
-          before acting. */}
+          before acting. The threat_level_reasoning paragraph below the
+          badge is ALWAYS visible (not collapsed) so the analyst sees the
+          justification at a glance. */}
       {(rs?.assessment_basis?.length > 0 || rs?.threat_level) && (
         <WhyThisRating
           threatLevel={rs?.threat_level}
+          reasoning={rs?.threat_level_reasoning || ''}
           basis={rs?.assessment_basis || []}
           fpCheck={rs?.false_positive_check}
           aiUnavailable={rs?.ai_unavailable}
@@ -2284,8 +2287,10 @@ function AnalystSummary({ result, rs }) {
 }
 
 /* ─── Why this rating — surfaces the AI's assessment_basis under the threat
-       level so analysts can verify the reasoning. Calibration fix from S8. */
-function WhyThisRating({ threatLevel, basis, fpCheck, aiUnavailable }) {
+       level so analysts can verify the reasoning. The threat_level_reasoning
+       paragraph below the badge is always visible (no toggle) so the analyst
+       sees the justification at a glance. Calibration fix from S8.         */
+function WhyThisRating({ threatLevel, reasoning, basis, fpCheck, aiUnavailable }) {
   const [open, setOpen] = useState(false);
   const lvl = (threatLevel || 'INFORMATIONAL').toUpperCase();
   const color = lvl === 'CRITICAL' ? '#ff2d2d'
@@ -2295,6 +2300,7 @@ function WhyThisRating({ threatLevel, basis, fpCheck, aiUnavailable }) {
               :                       '#74c0fc';
   const items = Array.isArray(basis) ? basis.filter(Boolean) : [];
   const hasItems = items.length > 0;
+  const reasoningText = (reasoning || '').trim();
   const showCalibrationNote = items.some(s => /\[recon calibration\]/i.test(String(s)));
 
   return (
@@ -2322,6 +2328,29 @@ function WhyThisRating({ threatLevel, basis, fpCheck, aiUnavailable }) {
           {open ? '−' : '+'}
         </Typography>
       </Box>
+      {/* ALWAYS-VISIBLE reasoning paragraph — short prose explaining why
+          THIS specific threat level was chosen. The analyst should never
+          have to click to expand a panel to see this. */}
+      {reasoningText && (
+        <Typography sx={{
+          mt: 0.6, ml: 0.5, fontSize: 12, color: 'text.tertiary',
+          lineHeight: 1.6, fontStyle: 'normal',
+          borderLeft: `2px solid ${muiAlpha(color, 0.25)}`,
+          pl: 1.25, py: 0.25, whiteSpace: 'pre-wrap',
+        }}>
+          {reasoningText}
+        </Typography>
+      )}
+      {!reasoningText && aiUnavailable && (
+        <Typography sx={{
+          mt: 0.6, ml: 0.5, fontSize: 12, color: 'text.tertiary',
+          fontStyle: 'italic', lineHeight: 1.6, pl: 1.25,
+          borderLeft: `2px solid ${muiAlpha(color, 0.25)}`,
+        }}>
+          AI analysis was unavailable for this run — the level shown is a
+          fallback default. Restore the AI provider key and re-run.
+        </Typography>
+      )}
       {open && (
         <Box sx={{
           mt: 0.5, pl: 1.5, pr: 1, py: 1,

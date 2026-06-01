@@ -616,17 +616,19 @@ async def _stream(raw_input: str, input_type: str, label: str = ""):
         # before the response stage runs — give the analyst the verdict ASAP.
         inv = state.get("investigation_result") or {}
         early_rs = {
-            "threat_level":         inv.get("threat_level"),
-            "confidence":           inv.get("confidence"),
-            "summary":              inv.get("summary"),
-            "key_findings":         inv.get("key_findings", []),
-            "ioc_assessments":      inv.get("ioc_assessments", []),
-            "mitre_techniques":     inv.get("mitre_techniques", []),
-            "attack_patterns":      inv.get("attack_patterns", []),
-            "chain_of_thought":     inv.get("chain_of_thought", []),
-            "recommended_actions":  inv.get("recommended_actions", []),
-            "cross_refs":           state.get("cross_refs", {}),
-            "timestamp":            _ts(),
+            "threat_level":            inv.get("threat_level"),
+            "threat_level_reasoning":  inv.get("threat_level_reasoning", ""),
+            "confidence":              inv.get("confidence"),
+            "summary":                 inv.get("summary"),
+            "key_findings":            inv.get("key_findings", []),
+            "ioc_assessments":         inv.get("ioc_assessments", []),
+            "mitre_techniques":        inv.get("mitre_techniques", []),
+            "attack_patterns":         inv.get("attack_patterns", []),
+            "chain_of_thought":        inv.get("chain_of_thought", []),
+            "recommended_actions":     inv.get("recommended_actions", []),
+            "log_correlation":         inv.get("log_correlation"),
+            "cross_refs":              state.get("cross_refs", {}),
+            "timestamp":               _ts(),
         }
         state["response_summary"] = early_rs
         yield f"data: {json.dumps({'event': 'partial_result', 'runId': run_id, 'result': _strip(state, run_id, label)})}\n\n"
