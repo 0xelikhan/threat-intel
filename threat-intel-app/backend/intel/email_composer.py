@@ -367,8 +367,96 @@ def parse_log(log_text: str) -> Dict:
         out["target_user_principal_name"] = out["ep_added_member_name"]
     if not out.get("risk_event_type") and out.get("ep_admin_alert_title"):
         out["risk_event_type"] = out["ep_admin_alert_title"]
+    # Many impossible-travel exports surface the two login IPs inside the
+    # FirstLogin / SecondLogin sub-sections (SourceIp / IpAddress fields)
+    # rather than at the top level. Fall back into the sections so the
+    # facts block + AI summary actually see the IPs.
+    if not out.get("first_login_ip"):
+        out["first_login_ip"] = (
+            _extract_section_value(lines, "FirstLogin", "SourceIp")
+            or _extract_section_value(lines, "FirstLogin", "IpAddress")
+            or _extract_section_value(lines, "FirstLogin", "IP")
+        )
+    if not out.get("second_login_ip"):
+        out["second_login_ip"] = (
+            _extract_section_value(lines, "SecondLogin", "SourceIp")
+            or _extract_section_value(lines, "SecondLogin", "IpAddress")
+            or _extract_section_value(lines, "SecondLogin", "IP")
+        )
+
+    # Per-login ASN + ASN name — used by the AI summary to flag VPN /
+    # bulletproof / anonymising provider names (PacketHub, Cogent abuse
+    # ranges, etc.) without requiring an enrichment-source call.
+    out["first_login_asn"]      = _extract_section_value(lines, "FirstLogin", "ASN")
+    out["first_login_asn_name"] = _extract_section_value(lines, "FirstLogin", "ASNName")
+    out["second_login_asn"]      = _extract_section_value(lines, "SecondLogin", "ASN")
+    out["second_login_asn_name"] = _extract_section_value(lines, "SecondLogin", "ASNName")
+
+    # AssetNamePair often holds "Unknown,RealHost" or "RealHost,Unknown"
+    # — pick the non-Unknown side over the literal "Unknown" the section
+    # parser would otherwise return. Same trick for the IPv6/IPv4 pair.
+    pair = raw_fields.get("AssetNamePair") or raw_fields.get("assetNamePair") or ""
+    if pair and "," in pair:
+        sides = [s.strip() for s in pair.split(",", 1)]
+        real = next((s for s in sides if s and s.lower() != "unknown"), "")
+        if real and (not out.get("asset_name")
+                     or out["asset_name"].lower() == "unknown"):
+            out["asset_name"] = real
+    # Promote per-section AssetName when the top-level one was "Unknown".
+    if (not out.get("asset_name") or out["asset_name"].lower() == "unknown"):
+        for sec in ("SecondLogin", "FirstLogin"):
+            v = _extract_section_value(lines, sec, "AssetName")
+            if v and v.lower() != "unknown":
+                out["asset_name"] = v
+                break
+
+    # Impossible-travel signal — both logins present, different cities or
+    # countries, both within a short window. Computed cheaply here so the
+    # AI prompt doesn't have to derive it.
+    out["impossible_travel"] = bool(
+        out.get("first_login_ip") and out.get("second_login_ip")
+        and (
+            (out.get("first_login_city") and out.get("second_login_city")
+             and out["first_login_city"].lower() != out["second_login_city"].lower())
+            or (out.get("first_login_country") and out.get("second_login_country")
+                and out["first_login_country"].lower() != out["second_login_country"].lower())
+        )
+    )
+
+    # Known VPN / anonymising / bulletproof ASN-name fragments. Lifted
+    # from the second-login ASN name when present (that's typically the
+    # follow-up suspicious login). Used by the AI prompt as a "flag this"
+    # hint without needing live TI enrichment.
+    _VPN_ASN_KEYWORDS = (
+        "packethub", "vpn", "njalla", "1337 services", "cogent abuse",
+        "ddos-guard", "stark industries", "frantech", "abelohost",
+        "buyvm", "private internet access", "nordvpn", "expressvpn",
+        "mullvad", "proton vpn", "surfshark", "ipvanish", "windscribe",
+        "warp", "cloudflare warp", "datacamp",
+    )
+    _second_asn = (out.get("second_login_asn_name") or "").lower()
+    out["second_login_is_vpn"] = any(
+        kw in _second_asn for kw in _VPN_ASN_KEYWORDS
+    ) if _second_asn else False
+
+    # ep_date / timestamp aliases — the template-field timeline toggle
+    # reads these, so populate them from whichever login timestamp the
+    # parser captured first.
+    if not out.get("ep_date"):
+        out["ep_date"] = (out.get("first_login_created_raw")
+                          or out.get("second_login_created_raw")
+                          or out.get("detected_dt_raw")
+                          or out.get("activity_dt_raw")
+                          or "")
+
     if not out.get("ip_address") and out.get("first_login_ip"):
         out["ip_address"] = out["first_login_ip"]
+    if not out.get("ip_address") and out.get("second_login_ip"):
+        # Promote the second-login IP when the first wasn't extracted —
+        # otherwise the Source IP row stays empty even though we have a
+        # perfectly good IP from the second leg of an impossible-travel
+        # event.
+        out["ip_address"] = out["second_login_ip"]
     if not out.get("ip_address") and out.get("ep_member_account_name"):
         try:
             import ipaddress
@@ -2464,13 +2552,55 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
             "omit it entirely rather than describing it."
         )
 
+    # Impossible-travel / VPN-anonymiser hint — derived deterministically
+    # in parse_log() so the AI summary calls it out instead of saying
+    # "common behaviour for legitimate users" when two logins clearly came
+    # from geographically incompatible locations within hours.
+    impossible_travel_hint = ""
+    if parsed.get("impossible_travel"):
+        first_loc = ", ".join([x for x in (
+            parsed.get("first_login_city"),
+            parsed.get("first_login_country"),
+        ) if x]) or "unknown location"
+        second_loc = ", ".join([x for x in (
+            parsed.get("second_login_city"),
+            parsed.get("second_login_country"),
+        ) if x]) or "unknown location"
+        first_ts   = parsed.get("first_login_created_raw") or ""
+        second_ts  = parsed.get("second_login_created_raw") or ""
+        first_ip   = parsed.get("first_login_ip") or "(unknown IP)"
+        second_ip  = parsed.get("second_login_ip") or "(unknown IP)"
+        second_asn = (parsed.get("second_login_asn_name") or "").strip()
+        is_vpn     = bool(parsed.get("second_login_is_vpn"))
+
+        first_at  = f" at {first_ts}"  if first_ts  else ""
+        second_at = f" at {second_ts}" if second_ts else ""
+        asn_tag   = f" (ASN: {second_asn})" if second_asn else ""
+        vpn_line  = (
+            "The second-login ASN matches a known VPN / anonymising "
+            "provider — name it explicitly in the summary as a "
+            "credibility hit.\n"
+        ) if is_vpn else ""
+
+        impossible_travel_hint = (
+            "\n\n## IMPOSSIBLE-TRAVEL SIGNAL (server-derived — DO NOT IGNORE)\n"
+            f"First login: {first_loc}{first_at} from {first_ip}.\n"
+            f"Second login: {second_loc}{second_at} from {second_ip}{asn_tag}.\n"
+            f"{vpn_line}"
+            "The summary MUST call this out as an impossible-travel pattern "
+            "(or explain why it isn't, if the analyst's commentary in the raw "
+            "log overrides it). Do NOT frame this as 'common behaviour for "
+            "legitimate users' — even VPN-backed travel between continents in "
+            "a few hours warrants verification with the user before clearing."
+        )
+
     user_msg = (
         f"## Alert facts (already rendered as the email's top block — DO NOT "
         "re-narrate these in the summary or guidance)\n"
         f"{facts_block or '(no structured fields)'}\n\n"
         f"## Raw log (for context only)\n"
         f"```\n{log_text[:3500]}\n```\n"
-        f"{action_hint}{template_hint}\n\n"
+        f"{action_hint}{template_hint}{impossible_travel_hint}\n\n"
         f"{classified_as}Return ONLY the JSON object with 'summary' and "
         "'guidance' keys."
     )

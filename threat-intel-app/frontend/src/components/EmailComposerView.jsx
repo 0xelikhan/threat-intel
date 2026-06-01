@@ -89,7 +89,12 @@ const TEMPLATE_FIELD_TO_KEYS = {
   action_taken:        ['response_action', 'action_name'],
   detection_source:    ['detection_source', 'ep_defender_source',
                         'ep_admin_alert_provider'],
-  timeline:            ['ep_date', 'timestamp'],
+  // Timeline: any timestamp the parser captured counts, including the
+  // FirstLogin / SecondLogin section timestamps from impossible-travel
+  // exports.
+  timeline:            ['ep_date', 'timestamp', 'activity_dt_raw',
+                        'detected_dt_raw', 'first_login_created_raw',
+                        'second_login_created_raw'],
   mitre_techniques:    ['mitre_techniques'],
   enrichment_summary:  ['enrichment_summary'],
   recommended_actions: ['recommended_actions'],
@@ -100,7 +105,12 @@ const TEMPLATE_FIELD_TO_KEYS = {
                         'privileged_role_display_name',
                         'privileged_role_well_known',
                         'forwarding_address',
-                        'location_city', 'location_state', 'location_country'],
+                        'location_city', 'location_state', 'location_country',
+                        'first_login_city', 'first_login_country',
+                        'first_login_asn_name',
+                        'second_login_city', 'second_login_country',
+                        'second_login_asn_name',
+                        'impossible_travel'],
 };
 
 // Decide which template fields to surface as checkboxes given the parsed
