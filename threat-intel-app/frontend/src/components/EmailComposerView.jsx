@@ -33,6 +33,72 @@ const RESPONSE_OPTIONS = [
   { id: 'lock_account_and_revoke_session',  label: 'Lock account & revoke session' },
 ];
 
+// ─── Custom email templates (spec §8) ───────────────────────────────────────
+// Templates control which email body fields are included when the AI builds
+// the message. Disabled fields are completely excluded from the rendered
+// body AND from the AI prompt — the model never sees them, so it can't
+// hallucinate content for fields the analyst chose to suppress.
+//
+// Built-in templates ("All Details", "Minimal") cannot be deleted; the
+// analyst can save additional named templates (stored in localStorage
+// under `recon.email_templates`).
+const TEMPLATE_FIELDS = [
+  { id: 'alert_summary',       label: 'Alert summary' },
+  { id: 'severity',            label: 'Severity' },
+  { id: 'malware_name',        label: 'Malware / threat name' },
+  { id: 'affected_host',       label: 'Affected host' },
+  { id: 'username',            label: 'Username' },
+  { id: 'source_ip',           label: 'Source IP' },
+  { id: 'destination_ip',      label: 'Destination IP' },
+  { id: 'file_path',           label: 'File path / artifact' },
+  { id: 'process_name',        label: 'Process name' },
+  { id: 'process_path',        label: 'Process path' },
+  { id: 'action_taken',        label: 'Action taken' },
+  { id: 'detection_source',    label: 'Detection source' },
+  { id: 'timeline',            label: 'Timeline' },
+  { id: 'mitre_techniques',    label: 'MITRE techniques' },
+  { id: 'enrichment_summary',  label: 'Enrichment summary' },
+  { id: 'recommended_actions', label: 'Recommended actions' },
+  { id: 'technical_details',   label: 'Technical details' },
+];
+const ALL_FIELD_IDS     = TEMPLATE_FIELDS.map(f => f.id);
+const MINIMAL_FIELD_IDS = [
+  'alert_summary', 'severity', 'malware_name', 'affected_host', 'recommended_actions',
+];
+
+const BUILT_IN_TEMPLATES = [
+  {
+    id: '__all_details',
+    name: 'All Details',
+    description: 'Every email field included — full triage hand-off.',
+    enabled_fields: ALL_FIELD_IDS,
+    builtIn: true,
+  },
+  {
+    id: '__minimal',
+    name: 'Minimal',
+    description: 'Alert summary, severity, malware name, affected host, and recommended actions.',
+    enabled_fields: MINIMAL_FIELD_IDS,
+    builtIn: true,
+  },
+];
+
+const TEMPLATES_KEY = 'recon.email_templates';
+const SELECTED_TEMPLATE_KEY = 'recon.email_templates.selected';
+
+function loadStoredTemplates() {
+  try {
+    const raw = localStorage.getItem(TEMPLATES_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(t => t && t.id && t.name && Array.isArray(t.enabled_fields));
+  } catch { return []; }
+}
+function saveStoredTemplates(arr) {
+  try { localStorage.setItem(TEMPLATES_KEY, JSON.stringify(arr || [])); } catch {}
+}
+
 
 function CopyBtn({ text, label = 'Copy', size = 'small' }) {
   const [copied, setCopied] = useState(false);
@@ -101,6 +167,77 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
   const [remediation, setRemediation] = useState(null);
   const [remLoading, setRemLoading]   = useState(false);
   const [remError, setRemError]       = useState(null);
+
+  // ─── Custom email templates state (spec §8) ──────────────────────────────
+  // Templates are stored in localStorage so they persist across sessions and
+  // are available to every analyst using this browser. Built-in templates
+  // (All Details, Minimal) are merged in at load time and cannot be deleted.
+  const [customTemplates, setCustomTemplates] = useState(() => loadStoredTemplates());
+  const allTemplates = [...BUILT_IN_TEMPLATES, ...customTemplates];
+  const [selectedTemplateId, setSelectedTemplateId] = useState(() => {
+    try { return localStorage.getItem(SELECTED_TEMPLATE_KEY) || '__all_details'; }
+    catch { return '__all_details'; }
+  });
+  const selectedTemplate = allTemplates.find(t => t.id === selectedTemplateId)
+                            || BUILT_IN_TEMPLATES[0];
+  const [enabledFields, setEnabledFields] = useState(() => selectedTemplate.enabled_fields);
+  const [templateMode, setTemplateMode] = useState('idle'); // 'idle' | 'create' | 'edit'
+  const [draftName, setDraftName] = useState('');
+  const [draftDescription, setDraftDescription] = useState('');
+
+  // Sync enabled_fields whenever the selected template changes.
+  useEffect(() => {
+    setEnabledFields(selectedTemplate.enabled_fields);
+    try { localStorage.setItem(SELECTED_TEMPLATE_KEY, selectedTemplateId); } catch {}
+  }, [selectedTemplateId]); // eslint-disable-line
+
+  const toggleField = useCallback((fid) => {
+    setEnabledFields(curr => curr.includes(fid)
+      ? curr.filter(f => f !== fid)
+      : [...curr, fid]);
+  }, []);
+
+  const saveAsTemplate = useCallback(() => {
+    const name = (draftName || '').trim();
+    if (!name) return;
+    const editing = templateMode === 'edit';
+    const baseId = editing ? selectedTemplateId : `custom_${Date.now()}`;
+    const next = {
+      id: baseId,
+      name,
+      description: (draftDescription || '').trim(),
+      enabled_fields: [...enabledFields],
+      builtIn: false,
+    };
+    let updated;
+    if (editing) {
+      updated = customTemplates.map(t => t.id === baseId ? next : t);
+    } else {
+      updated = [...customTemplates, next];
+    }
+    setCustomTemplates(updated);
+    saveStoredTemplates(updated);
+    setSelectedTemplateId(baseId);
+    setTemplateMode('idle');
+    setDraftName(''); setDraftDescription('');
+  }, [draftName, draftDescription, enabledFields, templateMode,
+      customTemplates, selectedTemplateId]);
+
+  const deleteTemplate = useCallback((tid) => {
+    const tpl = allTemplates.find(t => t.id === tid);
+    if (!tpl || tpl.builtIn) return;
+    const updated = customTemplates.filter(t => t.id !== tid);
+    setCustomTemplates(updated);
+    saveStoredTemplates(updated);
+    if (selectedTemplateId === tid) setSelectedTemplateId('__all_details');
+  }, [customTemplates, selectedTemplateId, allTemplates]);
+
+  const startEdit = useCallback(() => {
+    if (selectedTemplate.builtIn) return;
+    setTemplateMode('edit');
+    setDraftName(selectedTemplate.name);
+    setDraftDescription(selectedTemplate.description || '');
+  }, [selectedTemplate]);
 
   const _REM_SECTIONS = [
     { key: 'executive_summary',    label: 'Executive summary' },
@@ -175,7 +312,10 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
         body: JSON.stringify({
           log_text: rawLog,
           parsed,
-          options: { response_action: responseAction },
+          options: {
+            response_action: responseAction,
+            enabled_fields:  enabledFields,
+          },
         }),
       });
       const d = await r.json();
@@ -190,7 +330,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
     } finally {
       setComposing(false);
     }
-  }, [rawLog, responseAction, initialParsed]);
+  }, [rawLog, responseAction, enabledFields, initialParsed]);
 
   // Debounced auto-classify: as the analyst pastes, hit /api/email/parse to
   // learn the alert type. The compose-ai backend uses this to pick the right
@@ -326,6 +466,195 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
             </Stack>
           )}
         </Stack>
+      </MuiPaper>
+
+      {/* ─── Templates panel (spec §8) ────────────────────────────────────
+          Lets the analyst pick which email body fields are included. The
+          enabled_fields list is sent to the backend with compose-ai so
+          disabled fields are excluded from the rendered email AND from the
+          AI prompt (the model never sees them and can't hallucinate them).
+          Built-in "All Details" and "Minimal" templates are merged with
+          custom analyst-saved templates from localStorage.                */}
+      <MuiPaper elevation={0} sx={{
+        backgroundColor: '#09253d',
+        border: theme => `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+        borderRadius: '4px', p: 2, mb: 2,
+      }}>
+        <SectionHeader title="Template"
+          badge={enabledFields.length === ALL_FIELD_IDS.length
+            ? 'all fields enabled'
+            : `${enabledFields.length} / ${ALL_FIELD_IDS.length} fields enabled`}/>
+
+        <Stack direction="row" spacing={1} alignItems="flex-end" flexWrap="wrap"
+          useFlexGap sx={{ mb: 1.5 }}>
+          <Box sx={{ minWidth: 280, flex: '1 1 auto' }}>
+            <MuiTextField
+              select fullWidth size="small"
+              value={selectedTemplateId}
+              onChange={e => {
+                const v = e.target.value;
+                if (v === '__create_new') {
+                  setTemplateMode('create');
+                  setDraftName(''); setDraftDescription('');
+                } else {
+                  setSelectedTemplateId(v);
+                  setTemplateMode('idle');
+                }
+              }}
+              InputProps={{ sx: { fontSize: 13 } }}
+            >
+              {allTemplates.map(t => (
+                <MenuItem key={t.id} value={t.id} sx={{ fontSize: 13, display: 'block' }}>
+                  <Box>
+                    <Typography sx={{ fontSize: 13, fontWeight: 500 }}>
+                      {t.name}
+                      {t.builtIn && (
+                        <Box component="span" sx={{ ml: 1, fontSize: 10,
+                          color: 'text.tertiary', textTransform: 'uppercase',
+                          letterSpacing: '0.06em' }}>built-in</Box>
+                      )}
+                    </Typography>
+                    {t.description && (
+                      <Typography sx={{ fontSize: 11, color: 'text.tertiary',
+                        lineHeight: 1.4, whiteSpace: 'normal' }}>
+                        {t.description}
+                      </Typography>
+                    )}
+                  </Box>
+                </MenuItem>
+              ))}
+              <MenuItem value="__create_new"
+                sx={{ fontSize: 13, color: 'primary.main', fontWeight: 500 }}>
+                + Create new template…
+              </MenuItem>
+            </MuiTextField>
+          </Box>
+          <MuiButton variant="outlined" size="small"
+            onClick={() => {
+              setTemplateMode('create');
+              setDraftName(''); setDraftDescription('');
+            }}
+            sx={{ textTransform: 'none', fontSize: 12 }}>
+            Save as template
+          </MuiButton>
+          {!selectedTemplate.builtIn && (
+            <>
+              <MuiButton variant="outlined" size="small"
+                onClick={startEdit}
+                sx={{ textTransform: 'none', fontSize: 12 }}>
+                Edit
+              </MuiButton>
+              <MuiButton variant="outlined" size="small" color="error"
+                onClick={() => {
+                  if (window.confirm(`Delete template "${selectedTemplate.name}"?`)) {
+                    deleteTemplate(selectedTemplate.id);
+                  }
+                }}
+                sx={{ textTransform: 'none', fontSize: 12 }}>
+                Delete
+              </MuiButton>
+            </>
+          )}
+        </Stack>
+
+        {selectedTemplate.description && (
+          <Typography sx={{ fontSize: 11, color: 'text.tertiary',
+            lineHeight: 1.55, mb: 1.5, fontStyle: 'italic' }}>
+            {selectedTemplate.description}
+          </Typography>
+        )}
+
+        {/* Field toggle grid */}
+        <Box sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+          gap: 0.75,
+        }}>
+          {TEMPLATE_FIELDS.map(f => {
+            const on = enabledFields.includes(f.id);
+            return (
+              <Box key={f.id}
+                onClick={() => toggleField(f.id)}
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 0.75,
+                  cursor: 'pointer', userSelect: 'none',
+                  p: '6px 10px', borderRadius: '4px',
+                  backgroundColor: on
+                    ? muiAlpha('#0fbcff', 0.12)
+                    : muiAlpha('#ffffff', 0.03),
+                  border: `1px solid ${on
+                    ? muiAlpha('#0fbcff', 0.4)
+                    : muiAlpha('#ffffff', 0.08)}`,
+                  '&:hover': {
+                    backgroundColor: on
+                      ? muiAlpha('#0fbcff', 0.18)
+                      : muiAlpha('#ffffff', 0.06),
+                  },
+                }}>
+                <Box sx={{
+                  width: 14, height: 14, borderRadius: '3px',
+                  border: `1px solid ${on ? '#0fbcff' : muiAlpha('#ffffff', 0.3)}`,
+                  backgroundColor: on ? '#0fbcff' : 'transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  {on && <Check size={10} color="#0a1929"/>}
+                </Box>
+                <Typography sx={{
+                  fontSize: 12,
+                  color: on ? 'text.primary' : 'text.tertiary',
+                  fontWeight: on ? 500 : 400,
+                }}>
+                  {f.label}
+                </Typography>
+              </Box>
+            );
+          })}
+        </Box>
+
+        {/* Save-as / Edit modal-ish inline form */}
+        {(templateMode === 'create' || templateMode === 'edit') && (
+          <Box sx={{
+            mt: 2, p: 1.5, borderRadius: '4px',
+            backgroundColor: muiAlpha('#B286FF', 0.06),
+            border: `1px solid ${muiAlpha('#B286FF', 0.3)}`,
+            borderLeft: `3px solid #B286FF`,
+          }}>
+            <Typography sx={{ fontSize: 11, color: '#B286FF', fontWeight: 600,
+              textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1 }}>
+              {templateMode === 'edit' ? 'Edit template' : 'New template'}
+            </Typography>
+            <Stack spacing={1}>
+              <MuiTextField size="small" fullWidth
+                value={draftName}
+                onChange={e => setDraftName(e.target.value)}
+                placeholder="Template name (e.g. Defender Alerts)"
+                InputProps={{ sx: { fontSize: 13 } }}/>
+              <MuiTextField size="small" fullWidth
+                value={draftDescription}
+                onChange={e => setDraftDescription(e.target.value)}
+                placeholder="One-line description"
+                InputProps={{ sx: { fontSize: 13 } }}/>
+              <Stack direction="row" spacing={1}>
+                <MuiButton size="small" variant="contained"
+                  disabled={!draftName.trim()}
+                  onClick={saveAsTemplate}
+                  sx={{ textTransform: 'none', fontSize: 12 }}>
+                  {templateMode === 'edit' ? 'Save changes' : 'Save template'}
+                </MuiButton>
+                <MuiButton size="small" variant="text"
+                  onClick={() => {
+                    setTemplateMode('idle');
+                    setDraftName(''); setDraftDescription('');
+                  }}
+                  sx={{ textTransform: 'none', fontSize: 12,
+                    color: 'text.tertiary' }}>
+                  Cancel
+                </MuiButton>
+              </Stack>
+            </Stack>
+          </Box>
+        )}
       </MuiPaper>
 
       {/* ─── AI Remediation reference panel ──────────────────────────────

@@ -2193,6 +2193,81 @@ def _is_real_value(v) -> bool:
     return True
 
 
+# ─── Custom email templates (spec §8) ────────────────────────────────────────
+# Map a template field-id (the UI's toggle name) to the list of parsed-dict
+# keys it controls. When `options["enabled_fields"]` is a non-empty list,
+# `_filter_parsed_for_template()` keeps ONLY keys mentioned by enabled
+# field-ids — disabled fields are completely excluded from the rendered
+# email body and from the AI prompt, not just visually hidden.
+TEMPLATE_FIELD_TO_KEYS = {
+    "alert_summary":       [],   # rendered by the AI summary sentence, not a parsed key
+    "affected_host":       ["asset_name", "ep_domain"],
+    "severity":            ["severity", "threat_level"],
+    "malware_name":        ["ep_defender_type", "ep_admin_alert_title", "ep_message",
+                            "malware_name", "threat_name"],
+    "file_path":           ["ep_defender_path", "ep_defender_file", "ep_full_path",
+                            "infected_path"],
+    "source_ip":           ["ip_address", "first_login_ip", "second_login_ip",
+                            "source_ip"],
+    "destination_ip":      ["destination_ip", "dest_ip"],
+    "username":            ["user_principal_name", "ep_user", "user_display_name",
+                            "target_user_principal_name"],
+    "process_path":        ["ep_process_path"],
+    "process_name":        ["ep_application_name", "process_name"],
+    "action_taken":        ["response_action", "action_name"],
+    "detection_source":    ["detection_source", "ep_defender_source",
+                            "ep_admin_alert_provider"],
+    "timeline":            ["ep_date", "timestamp"],
+    "mitre_techniques":    ["mitre_techniques"],
+    "enrichment_summary":  ["enrichment_summary"],
+    "recommended_actions": ["recommended_actions"],
+    "technical_details":   ["ep_cmd_line", "ep_process_id", "ep_sha256",
+                            "additional_info_user_agent",
+                            "risk_event_type", "risk_level", "risk_state",
+                            "additional_info_risk_reasons",
+                            "privileged_role_display_name",
+                            "privileged_role_well_known",
+                            "forwarding_address",
+                            "location_city", "location_state", "location_country"],
+}
+
+# Field-ids the analyst sees in the UI. Order matters for the rendered
+# email body — kept aligned with the natural triage flow.
+TEMPLATE_FIELD_ORDER = (
+    "alert_summary", "severity", "malware_name", "affected_host",
+    "username", "source_ip", "destination_ip",
+    "file_path", "process_name", "process_path",
+    "action_taken", "detection_source", "timeline",
+    "mitre_techniques", "enrichment_summary",
+    "recommended_actions", "technical_details",
+)
+
+
+def _filter_parsed_for_template(parsed: dict, enabled_fields) -> dict:
+    """Return a copy of `parsed` containing only keys mapped to enabled
+    field-ids. When `enabled_fields` is None / empty / not a list, no
+    filtering happens (the email keeps the original full-detail behaviour
+    so existing callers are unaffected)."""
+    if not enabled_fields or not isinstance(enabled_fields, (list, tuple, set)):
+        return dict(parsed or {})
+    enabled = {str(f) for f in enabled_fields}
+    keep = set()
+    for fid, keys in TEMPLATE_FIELD_TO_KEYS.items():
+        if fid in enabled:
+            keep.update(keys)
+    # Always keep housekeeping keys the renderer uses (raw_fields,
+    # suggested_alert_type) and any key under control of a field that has
+    # no parsed mapping (e.g. alert_summary is AI-rendered, not parsed).
+    out = {}
+    for k, v in (parsed or {}).items():
+        if k.startswith("_") or k in ("raw_fields", "suggested_alert_type"):
+            out[k] = v
+            continue
+        if k in keep:
+            out[k] = v
+    return out
+
+
 def _render_facts_block(parsed: dict, options: dict) -> str:
     """Build the labelled 'Label: value' block from parsed alert fields.
     Returns a multi-line string ready to slot at the top of the email body.
@@ -2202,6 +2277,12 @@ def _render_facts_block(parsed: dict, options: dict) -> str:
     have to worry about robotic narration or hallucinated fields."""
     p = parsed or {}
     o = options or {}
+    # Custom-template filtering — when options carries an enabled_fields
+    # list, drop every parsed key that isn't mapped to an enabled field-id
+    # so disabled fields are excluded from the rendered email entirely.
+    enabled_fields = (options or {}).get("enabled_fields")
+    if enabled_fields:
+        p = _filter_parsed_for_template(p, enabled_fields)
     seen_values = set()
     lines = []
 
@@ -2270,6 +2351,14 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     model    = config.get("FAST_AI_MODEL") or config.get("AI_MODEL") or "gpt-4o-mini"
     parsed   = parsed or {}
     options  = options or {}
+
+    # Custom-template filtering — when the analyst picked a template that
+    # disables certain fields (e.g. "Defender Alerts" with username +
+    # process_path off), drop those parsed keys BEFORE the AI sees them so
+    # the model can't hallucinate content for fields the template excludes.
+    enabled_fields = options.get("enabled_fields")
+    if enabled_fields:
+        parsed = _filter_parsed_for_template(parsed, enabled_fields)
 
     # Compact parsed-fields summary for the AI (drop empty + housekeeping keys)
     parsed_view = {k: v for k, v in parsed.items()
@@ -2361,13 +2450,27 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "NO em/en dashes."
     )
 
+    # When a custom email template is active, tell the AI which fields are
+    # ENABLED. The AI must not generate content for disabled fields (it
+    # would hallucinate values the template explicitly wants excluded).
+    template_hint = ""
+    if enabled_fields:
+        enabled_str = ", ".join(sorted(str(f) for f in enabled_fields))
+        template_hint = (
+            "\n\n## TEMPLATE: only these fields are enabled for this email — "
+            f"{enabled_str}.\n"
+            "Do NOT generate content for fields outside this list. If a "
+            "disabled field would normally be mentioned (e.g. process path), "
+            "omit it entirely rather than describing it."
+        )
+
     user_msg = (
         f"## Alert facts (already rendered as the email's top block — DO NOT "
         "re-narrate these in the summary or guidance)\n"
         f"{facts_block or '(no structured fields)'}\n\n"
         f"## Raw log (for context only)\n"
         f"```\n{log_text[:3500]}\n```\n"
-        f"{action_hint}\n\n"
+        f"{action_hint}{template_hint}\n\n"
         f"{classified_as}Return ONLY the JSON object with 'summary' and "
         "'guidance' keys."
     )
