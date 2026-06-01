@@ -19,7 +19,7 @@ import {
   ToggleButton, ToggleButtonGroup, MenuItem, Chip as MuiChip,
 } from '@mui/material';
 import { alpha as muiAlpha } from '@mui/material/styles';
-import { Mail, Copy, Check, Eye, RefreshCcw, AlertCircle, Sparkles, Zap, Wand2 } from 'lucide-react';
+import { Mail, Copy, Check, Eye, RefreshCcw, AlertCircle, Sparkles, Zap, Wand2, ChevronRight } from 'lucide-react';
 
 const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
 
@@ -272,6 +272,14 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
     } catch {}
     return [...CATEGORY_ORDER];
   });
+  // Categories start COLLAPSED by default — analyst expands the ones
+  // they want to inspect. Mirrors the file-analyzer card pattern.
+  const [expandedCategories, setExpandedCategories] = useState([]);
+  const toggleExpanded = useCallback((cat) => {
+    setExpandedCategories(curr => curr.includes(cat)
+      ? curr.filter(c => c !== cat)
+      : [...curr, cat]);
+  }, []);
 
   // Sync enabled_fields whenever the selected template changes.
   useEffect(() => {
@@ -658,14 +666,10 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
           }
           return (
             <Stack spacing={1}>
-              <Typography sx={{ fontSize: 11, color: 'text.tertiary',
-                lineHeight: 1.55, mb: 0.5 }}>
-                Toggle categories to add or remove field groups from the
-                email. Categories not present in this log are hidden.
-              </Typography>
               {presentCats.map(cat => {
                 const items = categorized[cat] || [];
                 const on = enabledCategories.includes(cat);
+                const expanded = expandedCategories.includes(cat);
                 return (
                   <Box key={cat} sx={{
                     p: '8px 12px', borderRadius: '4px',
@@ -676,34 +680,49 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
                       ? muiAlpha('#0fbcff', 0.35)
                       : muiAlpha('#ffffff', 0.08)}`,
                   }}>
-                    <Box
-                      onClick={() => toggleCategory(cat)}
-                      sx={{
-                        display: 'flex', alignItems: 'center', gap: 1,
-                        cursor: 'pointer', userSelect: 'none',
-                      }}>
-                      <Box sx={{
-                        width: 14, height: 14, borderRadius: '3px',
-                        border: `1px solid ${on ? '#0fbcff' : muiAlpha('#ffffff', 0.3)}`,
-                        backgroundColor: on ? '#0fbcff' : 'transparent',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        flexShrink: 0,
-                      }}>
+                    <Box sx={{
+                      display: 'flex', alignItems: 'center', gap: 1,
+                      userSelect: 'none',
+                    }}>
+                      {/* Checkbox toggles inclusion; clicking the label
+                          area expands/collapses the field preview. */}
+                      <Box
+                        onClick={() => toggleCategory(cat)}
+                        sx={{
+                          width: 14, height: 14, borderRadius: '3px',
+                          border: `1px solid ${on ? '#0fbcff' : muiAlpha('#ffffff', 0.3)}`,
+                          backgroundColor: on ? '#0fbcff' : 'transparent',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          flexShrink: 0, cursor: 'pointer',
+                        }}>
                         {on && <Check size={10} color="#0a1929"/>}
                       </Box>
-                      <Typography sx={{
-                        fontSize: 12.5,
-                        fontWeight: 600,
-                        color: on ? 'text.primary' : 'text.tertiary',
-                      }}>
-                        {cat}
-                      </Typography>
-                      <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
-                        · {items.length} field{items.length === 1 ? '' : 's'}
-                      </Typography>
+                      <Box
+                        onClick={() => toggleExpanded(cat)}
+                        sx={{ display: 'flex', alignItems: 'center', gap: 0.75,
+                          cursor: 'pointer', flex: 1, minWidth: 0 }}>
+                        <Box sx={{
+                          color: 'text.tertiary',
+                          transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.18s ease',
+                          display: 'flex', alignItems: 'center',
+                        }}>
+                          <ChevronRight size={12}/>
+                        </Box>
+                        <Typography sx={{
+                          fontSize: 12.5,
+                          fontWeight: 600,
+                          color: on ? 'text.primary' : 'text.tertiary',
+                        }}>
+                          {cat}
+                        </Typography>
+                        <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
+                          · {items.length} field{items.length === 1 ? '' : 's'}
+                        </Typography>
+                      </Box>
                     </Box>
-                    {on && (
-                      <Box sx={{ mt: 0.75, pl: 2.75 }}>
+                    {expanded && (
+                      <Box sx={{ mt: 0.75, pl: 3 }}>
                         {items.slice(0, 12).map((it, i) => (
                           <Typography key={i} sx={{ fontSize: 11,
                             color: 'text.tertiary', lineHeight: 1.55,
