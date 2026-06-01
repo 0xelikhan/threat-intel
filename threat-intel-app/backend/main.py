@@ -751,8 +751,31 @@ async def attribution_hashes(family: str, limit: int = 10):
     if cached and (now - cached["ts"] < 21600):   # 6h cache
         return cached["payload"]
 
+    # abuse.ch added required authentication on the MalwareBazaar API in
+    # late 2023 — every endpoint now needs an Auth-Key header. The key is
+    # free at https://auth.abuse.ch but it must be provisioned by the
+    # operator. Look it up under multiple config aliases so existing
+    # deployments don't have to rename their stored key.
+    auth_key = (config.get("MALWAREBAZAAR_API_KEY")
+                or config.get("ABUSE_CH_AUTH_KEY")
+                or config.get("ABUSECH_AUTH_KEY")
+                or os.environ.get("MALWAREBAZAAR_API_KEY")
+                or os.environ.get("ABUSE_CH_AUTH_KEY")
+                or "").strip()
+    if not auth_key:
+        return {"family": fam, "hashes": [],
+                "error": ("MalwareBazaar requires an Auth-Key as of Nov 2023. "
+                          "Get a free key at https://auth.abuse.ch and save "
+                          "it under Settings → MALWAREBAZAAR_API_KEY."),
+                "source": "MalwareBazaar (abuse.ch)",
+                "needs_auth_key": True}
+
     import aiohttp
     limit = max(1, min(int(limit or 10), 50))
+    headers = {
+        "User-Agent": "RECON/1.0 (+attribution-pivot)",
+        "Auth-Key":   auth_key,
+    }
     try:
         async with aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=12),
@@ -761,13 +784,20 @@ async def attribution_hashes(family: str, limit: int = 10):
                 "https://mb-api.abuse.ch/api/v1/",
                 data={"query": "get_siginfo", "signature": fam,
                       "limit": str(limit)},
-                headers={"User-Agent": "RECON/1.0 (+attribution-pivot)"},
+                headers=headers,
             ) as r:
+                if r.status == 401:
+                    return {"family": fam, "hashes": [],
+                            "error": ("MalwareBazaar rejected the Auth-Key "
+                                      "(HTTP 401). Verify the key under "
+                                      "Settings → MALWAREBAZAAR_API_KEY is "
+                                      "still active at auth.abuse.ch."),
+                            "source": "MalwareBazaar (abuse.ch)",
+                            "needs_auth_key": True}
                 if r.status != 200:
-                    payload = {"family": fam, "hashes": [],
-                               "error": f"MalwareBazaar HTTP {r.status}",
-                               "source": "MalwareBazaar (abuse.ch)"}
-                    return payload
+                    return {"family": fam, "hashes": [],
+                            "error": f"MalwareBazaar HTTP {r.status}",
+                            "source": "MalwareBazaar (abuse.ch)"}
                 body = await r.json(content_type=None)
     except asyncio.TimeoutError:
         return {"family": fam, "hashes": [],

@@ -145,13 +145,22 @@ async def translate_log(raw: str, config) -> Optional[Dict]:
     # rather than discarding the whole step (which gates IOC extraction).
     from agents.investigation import _loads_lenient
     out = _loads_lenient(resp.message)
-    # Defensive shape — ensure callers can always access expected keys
+    # Defensive shape — ensure callers can always access expected keys.
+    # normalized_summary feeds the analyst-facing Summary paragraph, so
+    # strip em / en dashes per the UI prose convention.
+    _norm = out.get("normalized_summary", "") or ""
+    try:
+        from intel.email_composer import _strip_em_dashes
+        if isinstance(_norm, str):
+            _norm = _strip_em_dashes(_norm)
+    except Exception:
+        pass
     return {
         "detected_format":    out.get("detected_format", "unknown"),
         "confidence":         out.get("confidence", 0.5),
         "extracted_fields":   out.get("extracted_fields") or {},
         "anomalies":          out.get("anomalies") or [],
-        "normalized_summary": out.get("normalized_summary", ""),
+        "normalized_summary": _norm,
     }
 
 
