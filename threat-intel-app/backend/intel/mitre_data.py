@@ -3,6 +3,7 @@ MITRE ATT&CK Data Layer
 Source: github.com/mitre-attack/mitreattack-python (Apache 2.0)
 Falls back gracefully if enterprise-attack.json is not present.
 """
+import re
 from pathlib import Path
 from functools import lru_cache
 
@@ -77,12 +78,28 @@ _TACTIC_POS = {t: i for i, t in enumerate(_KILL_CHAIN_ORDER)}
 
 @lru_cache(maxsize=1)
 def _group_index() -> dict:
-    """Build { mitre_group_id (G####): [ {id, name, tactic}, ... ] } once.
-    Cached for the process lifetime — every subsequent attribution lookup
-    is a dict access."""
+    """Build a per-actor index of TTPs + tools, once. Each entry:
+      { "techniques": [ {id, name, tactic}, ... ],
+        "software":   [ {id, name, type, aliases, labels, description}, ... ],
+        "process_names": [ "powershell.exe", ... ]  # derived from technique +
+                                                    # software aliases
+      }
+    Cached for the process lifetime; subsequent lookups are dict access."""
     m = _mitre()
     if not m:
         return {}
+    # Concrete-artifact keywords we lift from technique names so an analyst
+    # gets actual process names to hunt for instead of bare MITRE codes.
+    _PROC_RE = re.compile(
+        r"\b("
+        r"powershell|pwsh|cmd|wmic|wscript|cscript|mshta|rundll32|regsvr32|"
+        r"certutil|bitsadmin|msbuild|installutil|msiexec|schtasks|"
+        r"psexec|net1?\.exe|dsquery|ntdsutil|wbadmin|vssadmin|"
+        r"lsass|svchost|services|explorer|winlogon|spoolsv|"
+        r"mimikatz|cobaltstrike|sliver|brute\s*ratel|metasploit"
+        r")\b",
+        re.IGNORECASE,
+    )
     out: dict = {}
     for group in m.get_groups():
         gid = next((r["external_id"] for r in group.get("external_references", [])
@@ -90,6 +107,7 @@ def _group_index() -> dict:
         if not gid:
             continue
         techs = []
+        proc_set: set = set()
         for t in m.get_techniques_used_by_group(group["id"]):
             obj = t.get("object", {})
             tid = next((r["external_id"] for r in obj.get("external_references", [])
@@ -99,13 +117,64 @@ def _group_index() -> dict:
             tactics = [p["phase_name"].replace("-", " ").title()
                        for p in obj.get("kill_chain_phases", [])
                        if p.get("kill_chain_name") == "mitre-attack"]
+            tname = obj.get("name", "")
             techs.append({
                 "id":     tid,
-                "name":   obj.get("name", ""),
+                "name":   tname,
                 "tactic": tactics[0] if tactics else "Unknown",
             })
-        out[gid] = techs
+            # Lift concrete process names from the technique name (e.g.
+            # "PowerShell" -> "powershell.exe").
+            for hit in _PROC_RE.findall(tname or ""):
+                bare = hit.lower().replace(" ", "")
+                if not bare.endswith(".exe"):
+                    bare = bare + ".exe"
+                proc_set.add(bare)
+
+        # Software (S####) the group is known to use. Aliases on a Software
+        # record are typically the binary's filenames / tool names, which
+        # is exactly the concrete artifact analysts want to hunt for.
+        sw_list = []
+        try:
+            for sw in m.get_software_used_by_group(group["id"]):
+                obj = sw.get("object", {})
+                sid = next((r["external_id"] for r in obj.get("external_references", [])
+                            if r.get("source_name") == "mitre-attack"), "")
+                aliases = [a for a in (obj.get("aliases") or []) if a]
+                sw_list.append({
+                    "id":          sid,
+                    "name":        obj.get("name", ""),
+                    "type":        obj.get("type", ""),   # malware / tool
+                    "labels":      obj.get("labels", []),
+                    "aliases":     aliases,
+                    "description": (obj.get("description") or "")
+                                   .split(". ")[0][:280],
+                })
+                # Aliases sometimes include filenames like "Mimikatz.exe" or
+                # "psexec.exe"; pull those into the process_names set so the
+                # UI lists them as "look for X" without further parsing.
+                for a in aliases[:6]:
+                    if re.search(r"\.(exe|dll|bat|ps1|scr|vbs)$", a, re.IGNORECASE):
+                        proc_set.add(a.lower())
+        except Exception:
+            sw_list = []
+
+        out[gid] = {
+            "techniques":    techs,
+            "software":      sw_list,
+            "process_names": sorted(proc_set),
+        }
     return out
+
+
+def _index_techs(entry: dict) -> list:
+    """Backwards-compat helper: old call sites that expected a flat list
+    of techniques from _group_index() still work."""
+    if isinstance(entry, dict) and "techniques" in entry:
+        return entry["techniques"]
+    if isinstance(entry, list):
+        return entry
+    return []
 
 
 def get_actor_ttps_by_phase(mitre_group_id: str,
@@ -114,17 +183,23 @@ def get_actor_ttps_by_phase(mitre_group_id: str,
     the techniques that already matched THIS alert. Returns:
 
       {
-        "before":   [ {id, name, tactic}, … ],   # earlier in kill-chain
-        "after":    [ {id, name, tactic}, … ],   # later in kill-chain
-        "matched":  [ {id, name, tactic}, … ],   # already-fired techniques
-        "all_count": N,
+        "before":          [ {id, name, tactic}, … ],   # earlier in kill-chain
+        "after":           [ {id, name, tactic}, … ],   # later in kill-chain
+        "matched":         [ {id, name, tactic}, … ],   # already-fired
+        "all_count":       N,
+        "process_names":   [ "powershell.exe", "mimikatz.exe", … ],
+        "software":        [ {id, name, type, aliases, description}, … ],
       }
 
     Empty buckets when MITRE data is unavailable or the group is unknown."""
     idx = _group_index()
-    techs = idx.get(mitre_group_id or "")
-    if not techs:
-        return {"before": [], "after": [], "matched": [], "all_count": 0}
+    entry = idx.get(mitre_group_id or "")
+    techs = _index_techs(entry)
+    software = (entry.get("software") if isinstance(entry, dict) else None) or []
+    process_names = (entry.get("process_names") if isinstance(entry, dict) else None) or []
+    if not techs and not software:
+        return {"before": [], "after": [], "matched": [], "all_count": 0,
+                "process_names": [], "software": []}
     matched_set = {str(t).strip().upper() for t in (matched_technique_ids or [])}
     # Pivot tactic = the LATEST kill-chain position among matched techniques.
     # Everything earlier becomes "before"; everything later becomes "after".
@@ -162,10 +237,12 @@ def get_actor_ttps_by_phase(mitre_group_id: str,
     before.sort(key=lambda t: (_TACTIC_POS.get(t["tactic"], 99), t["id"]))
     after.sort (key=lambda t: (_TACTIC_POS.get(t["tactic"], 99), t["id"]))
     return {
-        "before":    before[:10],
-        "after":     after[:10],
-        "matched":   matched_tts,
-        "all_count": len(techs),
+        "before":        before[:10],
+        "after":         after[:10],
+        "matched":       matched_tts,
+        "all_count":     len(techs),
+        "process_names": process_names[:20],
+        "software":      software[:12],
     }
 
 

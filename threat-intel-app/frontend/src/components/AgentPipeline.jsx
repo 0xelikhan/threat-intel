@@ -31,7 +31,7 @@ function isBareUrl(text) {
   return !!trimmed && !trimmed.includes('\n') && _URL_ONLY_RE.test(trimmed);
 }
 
-function AgentPipeline({ logText, analystFeedback, label, onComplete, onStart, onPartial, onScanUrl }) {
+function AgentPipeline({ logText, label, onComplete, onStart, onPartial, onScanUrl }) {
   const [running, setRunning] = useState(false);
   const [trace, setTrace]     = useState([]);
   const [error, setError]     = useState(null);
@@ -65,17 +65,7 @@ function AgentPipeline({ logText, analystFeedback, label, onComplete, onStart, o
       const resp = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          logText,
-          inputType: 'log',
-          label: label || '',
-          // Optional operator context — when non-empty the investigation
-          // prompt prepends it as the highest-weight ANALYST VERDICT AND
-          // CONTEXT block. Same field the post-analysis Feedback flow uses.
-          ...(analystFeedback?.trim()
-            ? { analystFeedback: analystFeedback.trim() }
-            : {}),
-        }),
+        body: JSON.stringify({ logText, inputType: 'log', label: label || '' }),
       });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: 'Unknown error' }));

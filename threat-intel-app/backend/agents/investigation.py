@@ -1323,6 +1323,33 @@ async def run_investigation(state: dict, on_event=None) -> dict:
             f"\"\"\"\n{analyst_feedback[:2000]}\n\"\"\"\n"
         )
 
+    # Anti-hallucination reinforcement — the analyze input may now mix raw
+    # log content with analyst commentary in the same field. Make it
+    # impossible for the AI to invent facts not grounded in the input.
+    no_hallucinate_block = (
+        "## GROUND-TRUTH DISCIPLINE — read before you start writing\n"
+        "\n"
+        "The 'Alert content' below may contain a raw log, analyst commentary\n"
+        "about that log, or both interleaved. Whatever the analyst typed is\n"
+        "their environmental knowledge and you must respect it. THREE rules:\n"
+        "\n"
+        "  1. Every claim you make in summary / key_findings / confirmed_facts\n"
+        "     / ioc_assessments MUST be traceable to either (a) a literal\n"
+        "     value from the input text, (b) a value from a named enrichment\n"
+        "     source under ENRICHED IOC DATA, or (c) the analyst's commentary\n"
+        "     in the input. If you cannot point to one of those three, DO NOT\n"
+        "     write the claim.\n"
+        "  2. Do not invent IPs, hashes, domains, usernames, hostnames, file\n"
+        "     paths, process names, malware family names, threat actors,\n"
+        "     campaign names, CVE IDs, or MITRE techniques that are not in\n"
+        "     the input or in the enrichment payload. If a field would\n"
+        "     normally be filled but the data is absent, set it to null /\n"
+        "     empty array and say so in plain language.\n"
+        "  3. Do not name a threat-intel source (VirusTotal, AbuseIPDB,\n"
+        "     MalwareBazaar, etc.) unless that source actually appears in\n"
+        "     the ENRICHED IOC DATA payload with a non-error value.\n"
+    )
+
     result = None
     tool_call_log = []
     openai_key = config.get("OPENAI_API_KEY")
@@ -1362,8 +1389,8 @@ Tool-budget tips:
 - phishing_kit / rmm / lolbas are fast offline checks
 - Don't call lookup_ip/domain/hash for IOCs already in the baseline — only for new ones the AI surfaces
 {type_focus}"""
-                user_msg = f"""{feedback_block}
-## Alert content (first 1500 chars)
+                user_msg = f"""{feedback_block}{no_hallucinate_block}
+## Alert content (first 1500 chars — may include analyst commentary mixed with the raw log)
 {(state.get("raw_input") or "")[:1500]}
 
 ## ENRICHMENT SUMMARY (server-side empirical baseline — quote in your summary)

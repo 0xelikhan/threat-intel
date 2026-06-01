@@ -46,7 +46,9 @@ const ANALYSIS_STEPS = [
   'Building report',
 ];
 
-// All 15 result sections in display order — used both by render + nav
+// File analyzer sections in display order. Hunting Leads, Recommended
+// Actions, Notes & Refinement, Format-Specific and standalone YARA were
+// removed per analyst request — YARA now lives inside Detection Content.
 const SECTIONS = [
   { id: 'verdict',     label: 'AI Verdict' },
   { id: 'technical',   label: 'Technical Assessment' },
@@ -56,13 +58,8 @@ const SECTIONS = [
   { id: 'ti',          label: 'Threat Intelligence' },
   { id: 'caps',        label: 'Behavioral Capabilities' },
   { id: 'strings',     label: 'Strings & IOCs' },
-  { id: 'yara',        label: 'YARA Analysis' },
-  { id: 'format',      label: 'Format-Specific' },
   { id: 'anomalies',   label: 'Anomalies' },
   { id: 'detect',      label: 'Detection Content' },
-  { id: 'hunting',     label: 'Hunting Leads' },
-  { id: 'actions',     label: 'Recommended Actions' },
-  { id: 'notes',       label: 'Notes & Refinement' },
 ];
 
 const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
@@ -1660,7 +1657,7 @@ function Anomalies({ result }) {
 }
 
 
-// ─── 12. Detection Content ───────────────────────────────────────────────────
+// ─── 12. Detection Content — now also hosts YARA matches ─────────────────────
 function DetectionContent({ result }) {
   const d = result.detections || {};
   const blocks = [
@@ -1670,10 +1667,102 @@ function DetectionContent({ result }) {
     ['Snort / Suricata', d.suricata?.rules],
     ['Volatility / Rekall', d.volatility?.rule],
   ].filter(([, b]) => b);
-  if (!blocks.length) return null;
+  const yaraMatches = (result.yara_matches || []).filter(m => m && !m.error);
+  const aiYara = result.ai_yara || {};
+  if (!blocks.length && !yaraMatches.length && !aiYara.rule) return null;
+  const totalCount = blocks.length + yaraMatches.length + (aiYara.rule ? 1 : 0);
   return (
     <SectionCard id="detect" label="Detection Content" defaultOpen={false}
-      summary={`${blocks.length} rule${blocks.length === 1 ? '' : 's'}`}>
+      summary={`${totalCount} item${totalCount === 1 ? '' : 's'}`}>
+
+      {/* YARA matches first — they're concrete signals on this specific
+          sample, while the Sigma/KQL/SPL rules below are generated
+          detections to deploy elsewhere. */}
+      {yaraMatches.length > 0 && (
+        <Box sx={{ mb: blocks.length || aiYara.rule ? 2 : 0 }}>
+          <Typography sx={{ fontSize: 11, color: 'primary.main', fontWeight: 600,
+            textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
+            YARA matches · {yaraMatches.length}
+          </Typography>
+          {yaraMatches.map((m, i) => (
+            <Box key={i} sx={{
+              p: '8px 12px', mb: 0.75, borderRadius: '4px',
+              backgroundColor: muiAlpha('#EE3838', 0.05),
+              border: `1px solid ${muiAlpha('#EE3838', 0.25)}`,
+              borderLeft: `3px solid #EE3838`,
+            }}>
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <Typography sx={{ fontSize: 12.5, fontWeight: 600,
+                  color: 'text.primary', ...monoSx }}>
+                  {m.rule}
+                </Typography>
+                {m.source && (
+                  <Typography sx={{ fontSize: 10, color: 'text.tertiary' }}>
+                    · {m.source}
+                  </Typography>
+                )}
+              </Stack>
+              {m.description && (
+                <Typography sx={{ fontSize: 11.5, color: 'text.secondary',
+                  mt: 0.5, lineHeight: 1.55 }}>
+                  {m.description}
+                </Typography>
+              )}
+              {m.matched_strings?.length > 0 && (
+                <Box sx={{ mt: 0.75 }}>
+                  <Typography sx={{ fontSize: 10, color: 'text.tertiary',
+                    textTransform: 'uppercase', letterSpacing: '0.06em',
+                    mb: 0.25 }}>
+                    Matched strings
+                  </Typography>
+                  <Box component="pre" sx={{ ...monoSx, fontSize: 11, m: 0,
+                    backgroundColor: muiAlpha('#000000', 0.3),
+                    border: `1px solid ${muiAlpha('#ffffff', 0.06)}`,
+                    borderRadius: '3px', p: '6px 10px', maxHeight: 180,
+                    overflow: 'auto', color: 'text.primary',
+                    whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                  }}>
+                    {m.matched_strings.slice(0, 8).join('\n')}
+                  </Box>
+                </Box>
+              )}
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      {/* AI-generated YARA rule (when one was synthesized) */}
+      {aiYara.rule && (
+        <Box sx={{ mb: blocks.length ? 2 : 0 }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+            <Typography sx={{ fontSize: 11, color: 'primary.main', fontWeight: 600,
+              textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              AI-generated YARA
+              {aiYara.valid === false && (
+                <Box component="span" sx={{ color: 'error.main', ml: 1,
+                  textTransform: 'none' }}>
+                  · invalid
+                </Box>
+              )}
+            </Typography>
+            <Box sx={{ ml: 'auto !important' }}>
+              <CopyBtn text={aiYara.rule}/>
+            </Box>
+            <MuiIconButton size="small" title="Download"
+              onClick={() => downloadText('recon_ai_yara.yar', aiYara.rule)}
+              sx={{ color: 'text.tertiary', '&:hover': { color: 'primary.main' } }}>
+              <Download size={12}/>
+            </MuiIconButton>
+          </Stack>
+          <Box component="pre" sx={{ ...monoSx, fontSize: 11, m: 0,
+            backgroundColor: muiAlpha('#000000', 0.3),
+            border: `1px solid ${muiAlpha('#ffffff', 0.06)}`,
+            borderRadius: '4px', p: 1.25, maxHeight: 240, overflow: 'auto',
+            color: 'text.primary', whiteSpace: 'pre-wrap',
+          }}>{aiYara.rule}</Box>
+        </Box>
+      )}
+
       {blocks.map(([title, body], i) => (
         <Box key={title} sx={{ mb: i < blocks.length - 1 ? 1.75 : 0 }}>
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
@@ -2091,7 +2180,9 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
     finally { stopProgress(); setLocalScanning(false); }
   });
 
-  // Track which section is currently in view (for the side nav)
+  // Track which section is currently in view (for the side nav). Sections
+  // removed per analyst request (hunting / actions / notes / format / yara)
+  // no longer register here.
   const visibleSections = useMemo(() => {
     if (!result) return new Set();
     const has = new Set();
@@ -2101,19 +2192,15 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
       if (result.ai_analyst.deep?.execution_narrative) has.add('narrative');
       if (result.ai_analyst.deep?.key_findings?.length) has.add('findings');
       if (result.ai_analyst.deep?.anomalies?.length) has.add('anomalies');
-      if (result.ai_analyst.deep?.hunting_leads?.length) has.add('hunting');
-      if (result.ai_analyst.deep?.recommended_actions?.length) has.add('actions');
-      if (result.ai_analyst.deep?.analyst_notes
-          || result.ai_analyst.deep?.clarifying_questions?.length
-          || result.ai_analyst.deep?.confidence_assessment) has.add('notes');
     }
     if (result.hashes) has.add('identity');
     if (result.threat_intel && Object.keys(result.threat_intel).length) has.add('ti');
     if (result.capabilities?.tags?.length || result.capabilities?.mitre_techniques?.length) has.add('caps');
     if (result.iocs || result.suspicious_strings?.length) has.add('strings');
-    if ((result.yara_matches || []).length || result.ai_yara?.rule) has.add('yara');
-    if (result.format_specific && Object.keys(result.format_specific).length) has.add('format');
-    if (result.detections && Object.keys(result.detections).length) has.add('detect');
+    // YARA + AI YARA now live inside Detection Content.
+    if ((result.detections && Object.keys(result.detections).length)
+        || (result.yara_matches || []).length
+        || result.ai_yara?.rule) has.add('detect');
     return has;
   }, [result]);
 
@@ -2228,13 +2315,10 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
                 <ThreatIntelSection result={result}/>
                 <CapabilitiesSection result={result}/>
                 <StringsSection result={result}/>
-                <YaraSection result={result}/>
-                <FormatSection result={result}/>
                 <Anomalies result={result}/>
+                {/* Detection Content now also hosts the YARA matches —
+                    they're detection content, kept together. */}
                 <DetectionContent result={result}/>
-                <HuntingLeads result={result}/>
-                <ActionsSection result={result}/>
-                <NotesAndRefinement result={result} onRefreshScan={onRefreshScan}/>
               </Stack>
             );
           })()}
