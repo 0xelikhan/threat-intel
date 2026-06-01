@@ -1765,6 +1765,40 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
     except Exception:
         pass
 
+    # ── Backfill threat_level_reasoning when the AI omitted it ───────────────
+    # The frontend renders this paragraph directly under the threat-level
+    # badge with no toggle, so leaving it empty leaves the analyst with no
+    # justification at a glance. Derive a one-line fallback from the facts
+    # already on the result (enrichment line, assessment basis, key
+    # findings, AI summary) so the slot is always populated.
+    if not (result.get("threat_level_reasoning") or "").strip():
+        _lvl         = (result.get("threat_level") or "INFORMATIONAL").upper()
+        _enrich_line = (result.get("enrichment_summary") or {}).get("line") or ""
+        _basis_list  = [b for b in (result.get("assessment_basis") or []) if b]
+        _findings    = [f for f in (result.get("key_findings") or []) if f]
+        _summary     = (result.get("summary") or "").strip()
+        parts = [f"This alert is {_lvl}."]
+        if _basis_list:
+            parts.append("Driven by: " + "; ".join(str(b) for b in _basis_list[:2]) + ".")
+        elif _findings:
+            parts.append("Driven by: " + "; ".join(str(f)[:140] for f in _findings[:2]) + ".")
+        elif _summary:
+            parts.append(_summary[:200])
+        if _enrich_line and _enrich_line not in " ".join(parts):
+            parts.append(_enrich_line)
+        if len(parts) == 1:
+            # Truly nothing else to say — explain why the level is what it is.
+            if _lvl in ("INFORMATIONAL", "LOW"):
+                parts.append("No enrichment source flagged any IOC and no "
+                             "behavioural signal exceeded the evidence threshold, "
+                             "so the alert did not warrant a higher rating.")
+            else:
+                parts.append("The AI did not return an explicit rationale for "
+                             "this rating; review the confirmed facts and "
+                             "assessment basis (toggle 'Why this rating' to "
+                             "expand) before acting on the level.")
+        result["threat_level_reasoning"] = " ".join(parts)
+
     trace.append({
         "agent": "investigation",
         "status": "complete",
