@@ -765,7 +765,7 @@ function hasOsintContent(result) {
   return hasRows || hasGeo || hasHoneypot || hasNet || hasUrlscan;
 }
 
-function InfrastructureIntel({ result, bare }) {
+function InfrastructureIntel({ result, bare, hideUrlscan = false }) {
   const enr = result?.enrichments || {};
   const rows = [];
   for (const cat of ['ips', 'domains', 'hashes']) {
@@ -781,7 +781,9 @@ function InfrastructureIntel({ result, bare }) {
   const hasHoneypot = Object.values(result?.enrichments?.ips || {})
     .some(p => p?.deception && (p.deception.flagged_count > 0 || p.deception.greynoise_riot?.is_known_good));
   const hasNet = !!(result?.response_summary?.ja_fingerprints || []).length;
-  const hasUrlscan = !!(result?.iocs?.urls || []).length;
+  // When URL detonation has been lifted to its own top-of-Triage section,
+  // suppress the duplicate inside OSINT so it doesn't render twice.
+  const hasUrlscan = !hideUrlscan && !!(result?.iocs?.urls || []).length;
   if (!rows.length && !hasGeo && !hasHoneypot && !hasNet && !hasUrlscan) return null;
 
   const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
@@ -1183,6 +1185,10 @@ function Triage({ result, rs }) {
     (rs?.atomic_examples || []).length || (cr.phishing_kits || []).length ||
     (cr.loldrivers || []).length || (cr.rmm_abuse || []).length ||
     (cr.suspicious_paths || []).length);
+  // URL detonation gets its own top-of-Triage section whenever the
+  // alert contained URLs — analysts want the URLScan verdict + screenshot
+  // ahead of everything else.
+  const hasUrlscan = !!(result?.iocs?.urls || []).length;
   const hasSandbox = Object.values(result?.enrichments?.hashes || {})
     .some(p => p?.sandbox_deep && p.sandbox_deep.process_tree);
 
@@ -1192,7 +1198,8 @@ function Triage({ result, rs }) {
   const hasNotes = !!(rs?.analyst_notes || '').trim();
 
   if (!hasLogs && !hasSup && !hasOsint && !hasBehavior
-      && !hasCross && !hasSandbox && !hasRec && !hasNotes) return null;
+      && !hasCross && !hasSandbox && !hasRec && !hasNotes
+      && !hasUrlscan) return null;
 
   const Label = ({ children }) => (
     <Typography sx={{ fontSize: 11, fontWeight: 600, color: 'text.tertiary',
@@ -1219,19 +1226,38 @@ function Triage({ result, rs }) {
   //  6. What did the FP filter strip? (MISP — audit trail, lowest urgency).
   //  7. What to do next (AI recommended actions).
   //  8. Senior-analyst context paragraph (analyst notes).
+  // OSINT shouldn't claim there's content when its only signal was the
+  // URLScan we just lifted to the top — keep it hidden in that case.
+  const osintHasOtherSignals = hasOsint
+    && (!hasUrlscan || (() => {
+      const enr = result?.enrichments || {};
+      const anyOsintRow = ['ips', 'domains', 'hashes'].some(cat =>
+        Object.values(enr[cat] || {}).some(p =>
+          p?.osint && Object.keys(p.osint).length));
+      const gp = result?.geopolitical;
+      const hasGeo = !!(gp && !gp.error && (gp.countries?.length || gp.attribution));
+      const hasHoneypot = Object.values(enr.ips || {})
+        .some(p => p?.deception && (p.deception.flagged_count > 0
+          || p.deception.greynoise_riot?.is_known_good));
+      const hasNet = !!(result?.response_summary?.ja_fingerprints || []).length;
+      return anyOsintRow || hasGeo || hasHoneypot || hasNet;
+    })());
+
   return (
     <Card title="Triage" accent="#0fbcff" defaultOpen={false}>
+      {/* URL detonation ALWAYS sits at the top of Triage when the alert
+          contained URLs — analysts want the URLScan verdict + screenshot
+          before anything else. Hidden if no URLs were extracted. */}
+      <Section show={hasUrlscan}  label="Live URL detonation · URLScan.io">
+        <URLScanLive result={result} bare/></Section>
       <Section show={hasLogs}     label="Log normalization">
         <LogTranslation result={result} bare/></Section>
       <Section show={hasCross}    label="Threat-intel cross-references">
         <CrossRefs rs={rs} bare/></Section>
-      {/* MITRE-mapped TTPs · D3FEND mitigations section removed per
-          analyst request — the AttributionChip's "Hunt for" tab and the
-          per-actor TTP buckets already surface the actionable mapping. */}
       <Section show={hasSandbox}  label="Sandbox detonation · process tree">
         <SandboxBehavioral result={result} bare/></Section>
-      <Section show={hasOsint}    label="OSINT">
-        <InfrastructureIntel result={result} bare/></Section>
+      <Section show={osintHasOtherSignals} label="OSINT">
+        <InfrastructureIntel result={result} bare hideUrlscan/></Section>
       <Section show={hasSup}      label="Filtered as benign · MISP warninglists">
         <SuppressedIOCs result={result} bare/></Section>
       <Section show={hasRec}      label="Recommended actions">
