@@ -972,8 +972,8 @@ function hasOsintContent(result) {
     Object.values(enr[cat] || {}).some(p => p?.osint && Object.keys(p.osint).length));
   const hasHoneypot = Object.values(enr.ips || {})
     .some(p => p?.deception && (p.deception.flagged_count > 0 || p.deception.greynoise_riot?.is_known_good));
-  const hasNet = !!(result?.response_summary?.ja_fingerprints || []).length;
-  return hasRows || hasHoneypot || hasNet;
+  // JA3 / JA4 fingerprints live under Detection Rules now, not OSINT.
+  return hasRows || hasHoneypot;
 }
 
 function InfrastructureIntel({ result, bare, hideUrlscan = false, hideGeopolitical = true }) {
@@ -994,11 +994,10 @@ function InfrastructureIntel({ result, bare, hideUrlscan = false, hideGeopolitic
     && !!(gp && !gp.error && (gp.countries?.length || gp.attribution));
   const hasHoneypot = Object.values(result?.enrichments?.ips || {})
     .some(p => p?.deception && (p.deception.flagged_count > 0 || p.deception.greynoise_riot?.is_known_good));
-  const hasNet = !!(result?.response_summary?.ja_fingerprints || []).length;
   // When URL detonation has been lifted to its own top-of-Triage section,
   // suppress the duplicate inside OSINT so it doesn't render twice.
   const hasUrlscan = !hideUrlscan && !!(result?.iocs?.urls || []).length;
-  if (!rows.length && !hasGeo && !hasHoneypot && !hasNet && !hasUrlscan) return null;
+  if (!rows.length && !hasGeo && !hasHoneypot && !hasUrlscan) return null;
 
   const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
   const Label = ({ children }) => (
@@ -1141,14 +1140,11 @@ function InfrastructureIntel({ result, bare, hideUrlscan = false, hideGeopolitic
           <HoneypotActivity result={result} bare/>
         </Box>
       )}
-      {hasNet && (
-        <Box sx={divSx(rows.length || hasGeo || hasHoneypot)}>
-          <Label>Network detection · JA3/JA4 C2 fingerprints</Label>
-          <NetworkDetection result={result} bare/>
-        </Box>
-      )}
+      {/* JA3/JA4 network detection lives under the Detection Rules card
+          now — Sigma + KQL snippets belong with the other detection
+          content, not OSINT. */}
       {hasUrlscan && (
-        <Box sx={divSx(rows.length || hasGeo || hasHoneypot || hasNet)}>
+        <Box sx={divSx(rows.length || hasGeo || hasHoneypot)}>
           <Label>Live URL detonation · URLScan.io</Label>
           <URLScanLive result={result} bare/>
         </Box>
@@ -3905,6 +3901,15 @@ function Detection({ result }) {
         <CopyBtn text={cur.content}/>
       </Box>
       <MuiCodeBlock>{cur.content}</MuiCodeBlock>
+      {/* JA3 / JA4 TLS fingerprints — moved out of OSINT into Detection
+          Rules since they ARE detection rules (Sigma + KQL snippets
+          analysts can append to their existing rules). Renders nothing
+          when no relevant frameworks were matched. */}
+      {(result?.response_summary?.ja_fingerprints || []).length > 0 && (
+        <Box sx={{ mt: 2, pt: 2, borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
+          <NetworkDetection result={result} bare/>
+        </Box>
+      )}
     </Card>
   );
 }
