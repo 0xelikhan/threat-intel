@@ -2630,6 +2630,150 @@ function LogCorrelationCard({ multiLog, correlation }) {
 }
 
 
+/* ─── Provide Feedback — analyst-driven re-analysis with operator context.
+       Surfaces a textarea + button below all result cards. When the analyst
+       submits feedback, the original raw input plus their statement is sent
+       back through /api/analyze with analystFeedback set; the AI prompt
+       prepends an "ANALYST VERDICT AND CONTEXT" block flagged as the
+       highest-weight input. When the re-run completes the prior result is
+       replaced and an "Updated based on analyst feedback" banner appears.  */
+function FeedbackPanel({ result, onStart, onPartial, onComplete }) {
+  const [feedback, setFeedback] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  const updated = !!result?.response_summary?.analyst_feedback;
+
+  // The original raw input is preserved on the state snapshot (state.raw_input).
+  const originalLog = result?.raw_input || '';
+
+  const reanalyze = async () => {
+    const trimmed = feedback.trim();
+    if (!trimmed || !originalLog) return;
+    setError(null);
+    setSubmitting(true);
+    onStart?.();
+    try {
+      const resp = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          logText: originalLog,
+          inputType: 'log',
+          label: result?.label || '',
+          analystFeedback: trimmed,
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(err.error || err.detail || `HTTP ${resp.status}`);
+      }
+      const reader = resp.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { done: d, value } = await reader.read();
+        if (d) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (raw === '[DONE]') break;
+          try {
+            const ev = JSON.parse(raw);
+            if (ev.event === 'partial_result' && ev.result) onPartial?.(ev.result);
+            if (ev.event === 'complete') {
+              onComplete?.(ev.result);
+              setSubmitting(false);
+              setFeedback('');
+            }
+            if (ev.event === 'error') {
+              setError(ev.error || 'analysis failed');
+              setSubmitting(false);
+            }
+          } catch {}
+        }
+      }
+    } catch (e) {
+      setError(e.message);
+      setSubmitting(false);
+    }
+  };
+
+  if (!originalLog) return null;
+
+  return (
+    <Card title="Provide Feedback" accent="#B286FF" defaultOpen={false}>
+      {updated && (
+        <MuiPaper elevation={0} sx={{
+          backgroundColor: muiAlpha('#B286FF', 0.08),
+          border: `1px solid ${muiAlpha('#B286FF', 0.35)}`,
+          borderLeft: `3px solid #B286FF`,
+          borderRadius: '4px', p: '10px 14px', mb: 1.5,
+        }}>
+          <Typography sx={{ fontSize: 12, color: '#B286FF', fontWeight: 600, mb: 0.5 }}>
+            Updated based on analyst feedback
+          </Typography>
+          <Typography sx={{ fontSize: 12, color: 'text.tertiary',
+            lineHeight: 1.55, fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>
+            “{result.response_summary.analyst_feedback}”
+          </Typography>
+        </MuiPaper>
+      )}
+      <Typography sx={{ fontSize: 12, color: 'text.tertiary',
+        lineHeight: 1.55, mb: 1 }}>
+        Tell the AI what you found. Your verdict overrides the AI's inference
+        when the two conflict — the platform re-runs the analysis with your
+        context labelled as the highest-weight input.
+      </Typography>
+      <MuiTextField
+        multiline minRows={3} maxRows={8} fullWidth
+        value={feedback} onChange={e => setFeedback(e.target.value)}
+        placeholder={"Tell the AI what you found — e.g. this alert is a false "
+          + "positive because the hash belongs to Dell SupportAssist, or this IS "
+          + "malicious — the user account was compromised and this IP is a known "
+          + "attacker infrastructure, or the MSI file is legitimate Microsoft "
+          + "Entra migration tooling deployed by IT."}
+        disabled={submitting}
+        sx={{
+          mb: 1,
+          '& .MuiOutlinedInput-root': {
+            fontSize: 13, fontFamily: '"IBM Plex Sans", sans-serif',
+            backgroundColor: 'background.default',
+          },
+        }}
+      />
+      {error && (
+        <Typography sx={{ fontSize: 12, color: 'error.main', mb: 1 }}>
+          {error}
+        </Typography>
+      )}
+      <Stack direction="row" alignItems="center" spacing={1}>
+        <MuiButton
+          variant="contained"
+          size="small"
+          onClick={reanalyze}
+          disabled={!feedback.trim() || submitting}
+          sx={{ textTransform: 'none', fontSize: 12, fontWeight: 500 }}
+        >
+          {submitting ? 'Re-analyzing…' : 'Re-analyze with Feedback'}
+        </MuiButton>
+        {feedback.trim() && !submitting && (
+          <MuiButton
+            variant="text" size="small"
+            onClick={() => { setFeedback(''); setError(null); }}
+            sx={{ textTransform: 'none', fontSize: 11, color: 'text.tertiary' }}
+          >
+            Clear
+          </MuiButton>
+        )}
+      </Stack>
+    </Card>
+  );
+}
+
+
 /* ─── Chat with RECON · conversational follow-up on the investigation ───────── */
 function ChatWithRecon({ result, bare }) {
   const [messages, setMessages] = useState([]);
@@ -4612,6 +4756,14 @@ function AppMain({ authUser, setAuthState }) {
               </Card>
             )}
             <Detection result={result}/>
+            <ErrorBoundary label="Analyst feedback">
+              <FeedbackPanel
+                result={result}
+                onStart={() => { setAnalyzing(true); }}
+                onPartial={mergePartial}
+                onComplete={(r) => { setAnalyzing(false); setResult(r); }}
+              />
+            </ErrorBoundary>
             </CardDefaultOpenContext.Provider>
           </>
         )}

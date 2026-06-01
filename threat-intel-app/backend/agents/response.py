@@ -374,6 +374,10 @@ the evidence points to benign activity."""
         "multi_log":           state.get("multi_log"),
         "log_count":           state.get("log_count", 1),
         "log_correlation":     investigation.get("log_correlation"),
+        # Analyst-provided feedback (post-analysis re-run). Echoed back so
+        # the frontend can render an "Updated based on analyst feedback"
+        # banner and the case file persists the operator's verdict.
+        "analyst_feedback":    state.get("analyst_feedback") or "",
     }
 
     trace.append({
