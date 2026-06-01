@@ -2407,6 +2407,29 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
             if (isUrlScan) {
               return (
                 <Stack spacing={3}>
+                  {/* Soft-fail download banner — when the remote site
+                      refused the GET (403 / 404 / timeout etc.), we
+                      didn't get the file body. URL reputation + WHOIS
+                      + Wayback + URLScan submission still ran; explain
+                      that to the analyst so they know what's missing. */}
+                  {result.download_warning && (
+                    <MuiPaper elevation={0} sx={{
+                      backgroundColor: muiAlpha('#E6700F', 0.06),
+                      border: `1px solid ${muiAlpha('#E6700F', 0.3)}`,
+                      borderLeft: '3px solid #E6700F',
+                      borderRadius: '4px', p: '10px 14px',
+                    }}>
+                      <Typography sx={{ fontSize: 11, color: '#E6700F',
+                        fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.06em', mb: 0.5 }}>
+                        File body unavailable
+                      </Typography>
+                      <Typography sx={{ fontSize: 12.5, color: 'text.primary',
+                        lineHeight: 1.55 }}>
+                        {result.download_warning}
+                      </Typography>
+                    </MuiPaper>
+                  )}
                   <UrlReputationReport result={result}/>
                   {/* Live URL detonation — the analyst wants this in the
                       URL scanner view too, not just the analyze flow.

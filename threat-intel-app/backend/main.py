@@ -1688,30 +1688,53 @@ async def scan_hash(req: dict):
 
 @app.post("/api/scan/url")
 async def scan_url_endpoint(req: dict):
-    """Download a URL safely (30s timeout, 50MB cap) and run the file scanner on it."""
+    """Scan a URL: try to download (30s timeout, 50MB cap) for static
+    file analysis, but soft-fail to URL-reputation-only when the remote
+    site blocks the fetch. Many security URLs (abuseipdb / virustotal /
+    urlscan) return 403 to non-browser clients — we still want to run
+    URL enrichment + URLScan submission on those, not error out."""
     url = (req or {}).get("url", "").strip()
     if not url:
         raise HTTPException(400, "url required")
     if not url.startswith(("http://", "https://")):
         raise HTTPException(400, "url must be http(s)")
     import aiohttp
+    # Pretend to be a recent Chrome — many sites geo/UA-gate non-browser
+    # GETs straight to 403. Doesn't make us look legitimate to a real
+    # bot-detection layer, just gets past the basic checks.
+    _UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+           "AppleWebKit/537.36 (KHTML, like Gecko) "
+           "Chrome/127.0.0.0 Safari/537.36")
+    data = b""
+    download_warning = ""
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=30),
+            headers={"User-Agent": _UA, "Accept": "*/*"},
+        ) as session:
             async with session.get(url, allow_redirects=True) as r:
                 if r.status != 200:
-                    raise HTTPException(400, f"download HTTP {r.status}")
-                chunks = []
-                total = 0
-                async for chunk in r.content.iter_chunked(64 * 1024):
-                    chunks.append(chunk)
-                    total += len(chunk)
-                    if total > 50 * 1024 * 1024:
-                        raise HTTPException(413, "remote file exceeds 50 MB cap")
-                data = b"".join(chunks)
+                    download_warning = (
+                        f"Remote returned HTTP {r.status} so the file body "
+                        f"could not be analysed — URL reputation, WHOIS, "
+                        f"Wayback, and URLScan enrichment still ran."
+                    )
+                else:
+                    chunks = []
+                    total = 0
+                    async for chunk in r.content.iter_chunked(64 * 1024):
+                        chunks.append(chunk)
+                        total += len(chunk)
+                        if total > 50 * 1024 * 1024:
+                            raise HTTPException(413, "remote file exceeds 50 MB cap")
+                    data = b"".join(chunks)
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(400, f"download failed: {e}")
+        download_warning = (
+            f"Could not download the URL body ({str(e)[:140]}) — URL "
+            f"reputation, WHOIS, Wayback, and URLScan enrichment still ran."
+        )
 
     filename = url.rstrip("/").rsplit("/", 1)[-1].split("?", 1)[0] or "downloaded"
     from intel.file_analyzer import analyze_file
@@ -1719,8 +1742,25 @@ async def scan_url_endpoint(req: dict):
     # event loop, the full AI suite (triage badge, summary, YARA-gen, split deep
     # analyst) runs in the background on the two-tier models, and we return
     # immediately so the frontend can poll /api/scan/by-hash for progressive fill.
-    analysis = await asyncio.to_thread(analyze_file, data, filename)
+    # If the download soft-failed (data == b""), the analyser produces a stub
+    # with empty hashes; the URL enrichment block below still runs.
+    if data:
+        analysis = await asyncio.to_thread(analyze_file, data, filename)
+    else:
+        analysis = {
+            "filename": filename,
+            "size": 0,
+            "hashes": {},
+            "type": {"detected_mime": "n/a (no body)", "detected_desc": ""},
+            "entropy": {"overall": 0, "band": "n/a"},
+            "iocs": {}, "suspicious_strings": [], "yara_matches": [],
+            "format_specific": {},
+            "verdict": "UNKNOWN",
+            "_download_skipped": True,
+        }
     analysis["source_url"] = url
+    if download_warning:
+        analysis["download_warning"] = download_warning
     analysis["_file_bytes"] = data
     try:
         from intel.yara_custom import scan_combined
@@ -1763,7 +1803,10 @@ async def scan_url_endpoint(req: dict):
         }
     except Exception as e:
         analysis["enrichments"] = {"error": str(e)}
-    analysis["ai_pending"] = True
+    # Only schedule the AI pipeline when we actually have bytes to analyse.
+    # Soft-fail downloads produce a stub analysis; the URL-reputation +
+    # WHOIS + Wayback + URLScan submission paths still work without AI.
+    analysis["ai_pending"] = bool(data)
     analysis.pop("_file_bytes", None)
     try:
         from intel.file_correlation import append_scan_history
@@ -1771,7 +1814,7 @@ async def scan_url_endpoint(req: dict):
     except Exception:
         pass
     sha256 = (analysis.get("hashes") or {}).get("sha256")
-    if sha256:
+    if sha256 and data:
         asyncio.create_task(_finish_ai_in_background(sha256, data))
     return analysis
 
