@@ -14,7 +14,7 @@ import {
   Box, Stack, Typography, Paper as MuiPaper,
   Button as MuiButton, Chip as MuiChip, TextField as MuiTextField,
   IconButton as MuiIconButton, Table as MuiTable, TableHead, TableBody,
-  TableRow, TableCell, Tooltip, LinearProgress, CircularProgress,
+  TableRow, TableCell, Tooltip, LinearProgress,
 } from '@mui/material';
 import { alpha as muiAlpha, useTheme } from '@mui/material/styles';
 import { Skeleton, SkeletonFileScanner } from './Skeleton';
@@ -178,12 +178,6 @@ function _defangUrl(u) {
   if (!u) return '';
   return u.replace(/^https?:\/\//i, m => m.toLowerCase().startsWith('https') ? 'hxxps://' : 'hxxp://')
           .replace(/\./g, '[.]');
-}
-function _ageDaysFromIso(iso) {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (isNaN(d)) return null;
-  return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
 }
 function _formatDate(iso) {
   if (!iso) return '—';
@@ -1176,7 +1170,9 @@ function FileIdentity({ result }) {
 
 // ─── 6. Threat Intelligence (per-source expandable) ──────────────────────────
 function ThreatIntelSection({ result }) {
-  const ti = result.threat_intel || {};
+  // useMemo'd so the deps array on `sources` doesn't see a fresh
+  // identity every render when result.threat_intel is undefined.
+  const ti = useMemo(() => result.threat_intel || {}, [result.threat_intel]);
   const [openSource, setOpenSource] = useState(null);
 
   const sources = useMemo(() => {
@@ -1346,9 +1342,11 @@ function CapabilitiesSection({ result }) {
 // ─── 8. Strings + IOCs ───────────────────────────────────────────────────────
 function StringsSection({ result }) {
   const [query, setQuery] = useState('');
-  const iocs = result.iocs || {};
-  const sus  = result.suspicious_strings || [];
-  const ti   = result.threat_intel || {};
+  // useMemo'd so downstream useMemo / useCallback deps arrays don't
+  // see a fresh `|| {}` / `|| []` identity on every parent render.
+  const iocs = useMemo(() => result.iocs || {}, [result.iocs]);
+  const sus  = useMemo(() => result.suspicious_strings || [], [result.suspicious_strings]);
+  const ti   = useMemo(() => result.threat_intel || {}, [result.threat_intel]);
 
   const verdictForIoc = useCallback((ioc) => {
     // Quick verdict overlay from feed_cache hits for known IPs/domains
