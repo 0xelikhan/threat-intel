@@ -186,66 +186,96 @@ function _formatDate(iso) {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-// One detail row inside a source card.
+// One detail row inside a source card. Stack-style: label on top in
+// dim caps, value below in primary text. Reads cleaner than the old
+// 140px-label-grid layout on long values (URLs, name-server lists).
 function ReportField({ label, value, mono = false, color }) {
   if (value == null || value === '') return null;
   return (
-    <Box sx={{
-      display: 'grid', gridTemplateColumns: '140px 1fr',
-      gap: 1.25, alignItems: 'baseline', py: 0.375,
+    <Box sx={{ py: 0.5,
+      '&:not(:last-child)': {
+        borderBottom: `1px solid ${muiAlpha('#ffffff', 0.04)}`,
+      },
     }}>
       <Typography sx={{
-        fontSize: 10, color: 'text.tertiary', fontWeight: 600,
-        textTransform: 'uppercase', letterSpacing: '0.06em',
+        fontSize: 9.5, color: 'text.disabled', fontWeight: 600,
+        textTransform: 'uppercase', letterSpacing: '0.08em',
+        mb: 0.25,
       }}>{label}</Typography>
       <Typography sx={{
         fontSize: 12, color: color || 'text.primary',
-        wordBreak: 'break-all',
+        wordBreak: 'break-all', lineHeight: 1.4,
         fontFamily: mono ? '"IBM Plex Mono", monospace' : undefined,
       }}>{value}</Typography>
     </Box>
   );
 }
 
-// Compact accent strip + title + status pill at the top of each source card.
-function SourceHeader({ title, status, statusColor, count }) {
-  return (
-    <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-      <Box sx={{ width: 3, height: 14, backgroundColor: statusColor, borderRadius: 0.5 }}/>
-      <Typography sx={{
-        fontSize: 12, color: 'text.primary', fontWeight: 600,
-        textTransform: 'uppercase', letterSpacing: '0.06em',
-      }}>{title}</Typography>
-      {count != null && (
-        <Typography sx={{ fontSize: 11, color: 'text.disabled' }}>· {count}</Typography>
-      )}
-      <Box sx={{ ml: 'auto !important' }}>
-        <MuiChip
-          label={status}
-          size="small"
-          sx={{
-            height: 18, fontSize: 10, fontWeight: 600,
-            backgroundColor: muiAlpha(statusColor, 0.18),
-            color: statusColor,
-            borderRadius: '3px',
-            textTransform: 'uppercase', letterSpacing: '0.05em',
-          }}
-        />
-      </Box>
-    </Stack>
-  );
-}
-
-function SourceCard({ children, sx = {} }) {
+// One collapsible source card. Header is always visible (chevron + title +
+// optional count + status pill); body collapses. Default closed so the
+// analyst opens only the sources they want to investigate — verdict
+// drivers in the top panel already summarise the why.
+function CollapsibleSource({
+  title, status, statusColor = '#848592', count,
+  defaultOpen = false, children,
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <MuiPaper elevation={0} sx={{
       backgroundColor: '#0C1524',
       border: `1px solid ${muiAlpha('#ffffff', 0.10)}`,
+      borderLeft: `3px solid ${muiAlpha(statusColor, 0.7)}`,
       borderRadius: '4px',
-      p: '12px 14px',
-      ...sx,
+      overflow: 'hidden',
     }}>
-      {children}
+      <Box onClick={() => setOpen(o => !o)} sx={{
+        display: 'flex', alignItems: 'center', gap: 1.25,
+        p: '9px 14px',
+        cursor: 'pointer', userSelect: 'none',
+        '&:hover': { backgroundColor: muiAlpha('#ffffff', 0.025) },
+      }}>
+        <Box sx={{
+          color: 'text.tertiary', opacity: 0.55,
+          transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+          transition: 'transform 0.18s ease',
+          display: 'flex', alignItems: 'center',
+        }}>
+          <ChevronRight size={11}/>
+        </Box>
+        <Typography sx={{
+          fontSize: 11.5, color: 'text.primary', fontWeight: 600,
+          textTransform: 'uppercase', letterSpacing: '0.06em', flex: 1,
+        }}>
+          {title}
+        </Typography>
+        {count != null && (
+          <Typography sx={{ fontSize: 10.5, color: 'text.tertiary' }}>
+            {count}
+          </Typography>
+        )}
+        {status && (
+          <Box sx={{
+            px: 0.875, py: 0.25,
+            backgroundColor: muiAlpha(statusColor, 0.18),
+            color: statusColor,
+            border: `1px solid ${muiAlpha(statusColor, 0.4)}`,
+            borderRadius: '3px',
+            fontSize: 9.5, fontWeight: 700,
+            textTransform: 'uppercase', letterSpacing: '0.06em',
+            whiteSpace: 'nowrap',
+          }}>
+            {status}
+          </Box>
+        )}
+      </Box>
+      {open && (
+        <Box sx={{
+          p: '10px 14px 12px 14px',
+          borderTop: `1px solid ${muiAlpha('#ffffff', 0.06)}`,
+        }}>
+          {children}
+        </Box>
+      )}
     </MuiPaper>
   );
 }
@@ -369,57 +399,62 @@ function UrlReputationReport({ result }) {
   // ── render ──────────────────────────────────────────────────────────────
   return (
     <Box>
-      {/* Headline panel */}
+      {/* Headline panel — verdict pill with inline score, host on its own
+          row, URL clamped to two lines so a marketing tracker-laden URL
+          can't push the whole panel 4 lines tall. */}
       <MuiPaper elevation={0} sx={{
         backgroundColor: '#09253d',
         border: `1px solid ${muiAlpha(verdict.color, 0.35)}`,
         borderLeft: `3px solid ${verdict.color}`,
-        borderRadius: '4px', p: '18px 20px', mb: 2,
+        borderRadius: '4px', p: '14px 18px', mb: 2,
       }}>
-        <Stack direction="row" alignItems="center" spacing={2.5} sx={{ mb: drivers.length ? 2 : 0 }} flexWrap="wrap">
-          <Box>
-            <Typography sx={{ fontSize: 36, fontWeight: 700, color: verdict.color, lineHeight: 1,
-              fontFamily: '"IBM Plex Mono", monospace' }}>
-              {score}
+        <Stack direction="row" alignItems="center" spacing={1.25}
+          sx={{ mb: host || url ? 1.25 : 0 }} flexWrap="wrap">
+          <Box sx={{
+            display: 'inline-flex', alignItems: 'baseline', gap: 1,
+            px: 1.25, py: 0.5,
+            backgroundColor: muiAlpha(verdict.color, 0.15),
+            border: `1px solid ${muiAlpha(verdict.color, 0.5)}`,
+            borderRadius: '3px',
+          }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 700,
+              color: verdict.color, letterSpacing: '0.05em' }}>
+              {verdict.label}
             </Typography>
-            <Typography sx={{ fontSize: 10, color: 'text.disabled', mt: 0.25,
-              textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              / 100
-            </Typography>
-          </Box>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
-              <Typography sx={{ fontSize: 18, fontWeight: 700, color: verdict.color,
-                letterSpacing: '0.04em' }}>
-                {verdict.label}
-              </Typography>
-              <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
-                · {signalCount} source{signalCount === 1 ? '' : 's'} responded
-              </Typography>
-            </Stack>
-            {host && (
-              <Typography sx={{ fontSize: 12, color: 'text.tertiary',
-                mb: 0.25, ...monoSx }}>
-                {_defangHost(host)}
-              </Typography>
-            )}
-            <Typography sx={{ ...monoSx, fontSize: 11, color: 'text.disabled',
-              wordBreak: 'break-all' }}>
-              {_defangUrl(url)}
+            <Typography sx={{ fontSize: 12, color: verdict.color,
+              ...monoSx, opacity: 0.85 }}>
+              {score}/100
             </Typography>
           </Box>
+          <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
+            {signalCount} source{signalCount === 1 ? '' : 's'} responded
+          </Typography>
         </Stack>
+        {host && (
+          <Typography sx={{ fontSize: 13, color: 'text.primary',
+            fontWeight: 500, ...monoSx, mb: 0.25, wordBreak: 'break-all' }}>
+            {_defangHost(host)}
+          </Typography>
+        )}
+        <Typography sx={{ ...monoSx, fontSize: 11, color: 'text.disabled',
+          wordBreak: 'break-all',
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden' }}>
+          {_defangUrl(url)}
+        </Typography>
         {topDrivers.length > 0 && (
-          <Box sx={{ pt: 1.5, borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
-            <Typography sx={{ fontSize: 10, color: 'text.disabled', fontWeight: 600,
-              textTransform: 'uppercase', letterSpacing: '0.08em', mb: 0.75 }}>
-              What drove the verdict
-            </Typography>
+          <Box sx={{ mt: 1.5, pt: 1.5,
+            borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
             <Stack spacing={0.5}>
               {topDrivers.map((d, i) => (
                 <Stack key={i} direction="row" alignItems="center" spacing={1}>
-                  <Box sx={{ width: 4, height: 4, borderRadius: 99, backgroundColor: d.color }}/>
-                  <Typography sx={{ fontSize: 12, color: 'text.primary' }}>{d.text}</Typography>
+                  <Box sx={{ width: 5, height: 5, borderRadius: 99,
+                    backgroundColor: d.color, flexShrink: 0 }}/>
+                  <Typography sx={{ fontSize: 12, color: 'text.primary' }}>
+                    {d.text}
+                  </Typography>
                 </Stack>
               ))}
             </Stack>
@@ -461,115 +496,106 @@ function UrlReputationReport({ result }) {
       <GroupHeader>Reputation</GroupHeader>
       <Stack spacing={1.25} sx={{ mb: 2.5 }}>
         {/* VirusTotal */}
-        <SourceCard>
-          {(() => {
-            const mal = vt?.malicious ?? 0;
-            const susp = vt?.suspicious ?? 0;
-            const harm = vt?.harmless ?? 0;
-            const undet = vt?.undetected ?? 0;
-            const total = mal + susp + harm + undet;
-            const st = sourceState(vt, mal > 0 ? true : total > 0 ? false : null);
-            return (
-              <>
-                <SourceHeader title="VirusTotal" status={total ? `${mal}/${total} flagged` : st.status}
-                  statusColor={st.color}/>
-                {vt && !vt.error && total > 0 && (
-                  <Box>
-                    <ReportField label="Detection ratio" value={`${mal + susp} / ${total}`} mono
-                      color={st.color}/>
-                    <ReportField label="Breakdown" mono
-                      value={`${mal} malicious · ${susp} suspicious · ${harm} harmless · ${undet} undetected`}/>
-                    {vt.reputation != null && <ReportField label="Community" mono
-                      value={String(vt.reputation)}/>}
-                    {vt.categories && Object.values(vt.categories).length > 0 && (
-                      <ReportField label="Categories"
-                        value={[...new Set(Object.values(vt.categories))].slice(0, 4).join(', ')}/>
-                    )}
-                    {vt.creation_date && (
-                      <ReportField label="VT first seen" value={_formatDate(
-                        typeof vt.creation_date === 'number'
-                          ? new Date(vt.creation_date * 1000).toISOString()
-                          : vt.creation_date)}/>
-                    )}
-                  </Box>
-                )}
-                {(!vt || vt.error || total === 0) && (
-                  <Typography sx={{ fontSize: 12, color: 'text.tertiary', fontStyle: 'italic' }}>
-                    {vt?.error ? `error: ${vt.error}` : 'No data returned for this URL.'}
-                  </Typography>
-                )}
-              </>
-            );
-          })()}
-        </SourceCard>
+        {(() => {
+          const mal = vt?.malicious ?? 0;
+          const susp = vt?.suspicious ?? 0;
+          const harm = vt?.harmless ?? 0;
+          const undet = vt?.undetected ?? 0;
+          const total = mal + susp + harm + undet;
+          const st = sourceState(vt, mal > 0 ? true : total > 0 ? false : null);
+          return (
+            <CollapsibleSource title="VirusTotal"
+              status={total ? `${mal}/${total} flagged` : st.status}
+              statusColor={st.color}>
+              {vt && !vt.error && total > 0 ? (
+                <Box>
+                  <ReportField label="Detection ratio" value={`${mal + susp} / ${total}`} mono
+                    color={st.color}/>
+                  <ReportField label="Breakdown" mono
+                    value={`${mal} malicious · ${susp} suspicious · ${harm} harmless · ${undet} undetected`}/>
+                  {vt.reputation != null && <ReportField label="Community" mono
+                    value={String(vt.reputation)}/>}
+                  {vt.categories && Object.values(vt.categories).length > 0 && (
+                    <ReportField label="Categories"
+                      value={[...new Set(Object.values(vt.categories))].slice(0, 4).join(', ')}/>
+                  )}
+                  {vt.creation_date && (
+                    <ReportField label="VT first seen" value={_formatDate(
+                      typeof vt.creation_date === 'number'
+                        ? new Date(vt.creation_date * 1000).toISOString()
+                        : vt.creation_date)}/>
+                  )}
+                </Box>
+              ) : (
+                <Typography sx={{ fontSize: 12, color: 'text.tertiary', fontStyle: 'italic' }}>
+                  {vt?.error ? `error: ${vt.error}` : 'No data returned for this URL.'}
+                </Typography>
+              )}
+            </CollapsibleSource>
+          );
+        })()}
 
         {/* OTX */}
-        <SourceCard>
-          {(() => {
-            const c = otx?.pulseCount ?? otx?.pulse_count ?? 0;
-            const st = sourceState(otx, c > 0 ? true : null);
-            const status = otx?.error ? 'error' : c > 0 ? `${c} pulses` : 'no pulses';
-            return (
-              <>
-                <SourceHeader title="AlienVault OTX" status={status} statusColor={st.color}/>
-                {c > 0 && (
-                  <Box>
-                    <ReportField label="Pulse count" value={`${c}`} mono color={st.color}/>
-                    {Array.isArray(otx.relatedPulses) && otx.relatedPulses.length > 0 && (
-                      <ReportField label="Recent pulses"
-                        value={otx.relatedPulses.slice(0, 3).join(' · ')}/>
-                    )}
-                  </Box>
-                )}
-                {c === 0 && !otx?.error && (
-                  <Typography sx={{ fontSize: 12, color: 'text.tertiary', fontStyle: 'italic' }}>
-                    No threat intelligence pulses found.
-                  </Typography>
-                )}
-              </>
-            );
-          })()}
-        </SourceCard>
+        {(() => {
+          const c = otx?.pulseCount ?? otx?.pulse_count ?? 0;
+          const st = sourceState(otx, c > 0 ? true : null);
+          const status = otx?.error ? 'error' : c > 0 ? `${c} pulses` : 'no pulses';
+          return (
+            <CollapsibleSource title="AlienVault OTX"
+              status={status} statusColor={st.color}>
+              {c > 0 ? (
+                <Box>
+                  <ReportField label="Pulse count" value={`${c}`} mono color={st.color}/>
+                  {Array.isArray(otx.relatedPulses) && otx.relatedPulses.length > 0 && (
+                    <ReportField label="Recent pulses"
+                      value={otx.relatedPulses.slice(0, 3).join(' · ')}/>
+                  )}
+                </Box>
+              ) : (
+                <Typography sx={{ fontSize: 12, color: 'text.tertiary', fontStyle: 'italic' }}>
+                  {otx?.error ? `error: ${otx.error}` : 'No threat intelligence pulses found.'}
+                </Typography>
+              )}
+            </CollapsibleSource>
+          );
+        })()}
 
         {/* Maltiverse */}
-        <SourceCard>
-          {(() => {
-            const cls = maltiverse?.classification || '';
-            const isBad = /malicious|suspicious/i.test(cls);
-            const st = sourceState(maltiverse, isBad);
-            return (
-              <>
-                <SourceHeader title="Maltiverse" status={cls || st.status} statusColor={st.color}/>
-                {maltiverse && !maltiverse.error && cls && (
-                  <Box>
-                    <ReportField label="Classification" value={cls} color={st.color}/>
-                    {maltiverse.tag?.length > 0 && (
-                      <ReportField label="Tags" value={maltiverse.tag.slice(0, 6).join(', ')}/>
-                    )}
-                    {maltiverse.blacklist?.length > 0 && (
-                      <ReportField label="Blacklists"
-                        value={maltiverse.blacklist.slice(0, 4).join(', ')}/>
-                    )}
-                    {maltiverse.first_seen && (
-                      <ReportField label="First seen" value={_formatDate(maltiverse.first_seen)}/>
-                    )}
-                  </Box>
-                )}
-                {(!maltiverse || maltiverse.error) && (
-                  <Typography sx={{ fontSize: 12, color: 'text.tertiary', fontStyle: 'italic' }}>
-                    {maltiverse?.error ? `error: ${maltiverse.error}` : 'No data returned.'}
-                  </Typography>
-                )}
-              </>
-            );
-          })()}
-        </SourceCard>
+        {(() => {
+          const cls = maltiverse?.classification || '';
+          const isBad = /malicious|suspicious/i.test(cls);
+          const st = sourceState(maltiverse, isBad);
+          return (
+            <CollapsibleSource title="Maltiverse"
+              status={cls || st.status} statusColor={st.color}>
+              {maltiverse && !maltiverse.error && cls ? (
+                <Box>
+                  <ReportField label="Classification" value={cls} color={st.color}/>
+                  {maltiverse.tag?.length > 0 && (
+                    <ReportField label="Tags" value={maltiverse.tag.slice(0, 6).join(', ')}/>
+                  )}
+                  {maltiverse.blacklist?.length > 0 && (
+                    <ReportField label="Blacklists"
+                      value={maltiverse.blacklist.slice(0, 4).join(', ')}/>
+                  )}
+                  {maltiverse.first_seen && (
+                    <ReportField label="First seen" value={_formatDate(maltiverse.first_seen)}/>
+                  )}
+                </Box>
+              ) : (
+                <Typography sx={{ fontSize: 12, color: 'text.tertiary', fontStyle: 'italic' }}>
+                  {maltiverse?.error ? `error: ${maltiverse.error}` : 'No data returned.'}
+                </Typography>
+              )}
+            </CollapsibleSource>
+          );
+        })()}
 
         {/* Spamhaus DBL */}
         {spamhaus && (
-          <SourceCard>
-            <SourceHeader title="Spamhaus DBL" status={spamhaus.hit ? 'listed' : 'clean'}
-              statusColor={spamhaus.hit ? '#EE3838' : '#16AD34'}/>
+          <CollapsibleSource title="Spamhaus DBL"
+            status={spamhaus.hit ? 'listed' : 'clean'}
+            statusColor={spamhaus.hit ? '#EE3838' : '#16AD34'}>
             {spamhaus.hit ? (
               <Box>
                 <ReportField label="Verdict" value={spamhaus.verdict || 'listed'} color="#EE3838"/>
@@ -581,33 +607,33 @@ function UrlReputationReport({ result }) {
                 Domain not on the Spamhaus blocklist.
               </Typography>
             )}
-          </SourceCard>
+          </CollapsibleSource>
         )}
 
         {/* Pulsedive (only when something to show) */}
         {pulsedive && !pulsedive.error && pulsedive.risk && pulsedive.risk !== 'none' && (
-          <SourceCard>
-            <SourceHeader title="Pulsedive" status={`risk ${pulsedive.risk}`}
-              statusColor={/critical|high/i.test(pulsedive.risk) ? '#EE3838'
-                : /medium|moderate/i.test(pulsedive.risk) ? '#E6700F' : '#E1B823'}/>
+          <CollapsibleSource title="Pulsedive"
+            status={`risk ${pulsedive.risk}`}
+            statusColor={/critical|high/i.test(pulsedive.risk) ? '#EE3838'
+              : /medium|moderate/i.test(pulsedive.risk) ? '#E6700F' : '#E1B823'}>
             <ReportField label="Risk level" value={pulsedive.risk}/>
             {pulsedive.threats?.length > 0 && (
               <ReportField label="Threats" value={pulsedive.threats.slice(0, 4).join(', ')}/>
             )}
-          </SourceCard>
+          </CollapsibleSource>
         )}
 
         {/* Google Safe Browsing (only when something to show) */}
         {safeBrowse?.verdict && (
-          <SourceCard>
-            <SourceHeader title="Google Safe Browsing" status={safeBrowse.verdict}
-              statusColor={safeBrowse.verdict === 'MALICIOUS' ? '#EE3838' : '#16AD34'}/>
+          <CollapsibleSource title="Google Safe Browsing"
+            status={safeBrowse.verdict}
+            statusColor={safeBrowse.verdict === 'MALICIOUS' ? '#EE3838' : '#16AD34'}>
             <ReportField label="Verdict" value={safeBrowse.verdict}/>
             {safeBrowse.threat_types?.length > 0 && (
               <ReportField label="Threat types" value={safeBrowse.threat_types.join(', ')}/>
             )}
             <ReportField label="Matches" mono value={String(safeBrowse.match_count || 0)}/>
-          </SourceCard>
+          </CollapsibleSource>
         )}
       </Stack>
 
@@ -615,81 +641,77 @@ function UrlReputationReport({ result }) {
       <GroupHeader>Identity</GroupHeader>
       <Stack spacing={1.25} sx={{ mb: 2.5 }}>
         {/* WHOIS — the big one. */}
-        <SourceCard>
-          {(() => {
-            const age = whois?.age_days;
-            const ageColor = age == null ? '#848592'
-              : age < 1   ? '#EE3838'
-              : age < 30  ? '#E6700F'
-              : age < 180 ? '#E1B823'
-              :             '#16AD34';
-            const st = whois && !whois.error
-              ? { status: age != null ? `${age}d old` : 'ok', color: ageColor }
-              : sourceState(whois, null);
-            return (
-              <>
-                <SourceHeader title="WHOIS" status={st.status} statusColor={st.color}/>
-                {whois && !whois.error ? (
-                  <Box>
-                    {whois.registrar && <ReportField label="Registrar" value={whois.registrar}/>}
-                    {whois.registrant_org && (
-                      <ReportField label="Registrant" value={whois.registrant_org}/>
-                    )}
-                    {whois.registrant_country && (
-                      <ReportField label="Country" value={whois.registrant_country} mono/>
-                    )}
-                    {whois.privacy_protected && (
-                      <ReportField label="Privacy" value="Redacted / withheld" color="#E1B823"/>
-                    )}
-                    {whois.created && (
-                      <ReportField label="Created"
-                        value={`${_formatDate(whois.created)}${age != null ? ` (${age}d ago)` : ''}`}
-                        color={ageColor}/>
-                    )}
-                    {whois.updated && (
-                      <ReportField label="Updated" value={_formatDate(whois.updated)}/>
-                    )}
-                    {whois.expires && (
-                      <ReportField label="Expires"
-                        value={`${_formatDate(whois.expires)}${whois.days_to_expiry != null ? ` (${whois.days_to_expiry}d)` : ''}`}/>
-                    )}
-                    {whois.registrant_email && (
-                      <ReportField label="Emails" value={whois.registrant_email} mono/>
-                    )}
-                    {whois.name_servers?.length > 0 && (
-                      <ReportField label="Name servers"
-                        value={whois.name_servers.join(' · ')} mono/>
-                    )}
-                    {whois.status?.length > 0 && (
-                      <ReportField label="Status" value={whois.status.slice(0, 3).join(' · ')} mono/>
-                    )}
-                  </Box>
-                ) : (
-                  <Typography sx={{ fontSize: 12, color: 'text.tertiary', fontStyle: 'italic' }}>
-                    {whois?.error ? `error: ${whois.error}` : 'No WHOIS data returned.'}
-                  </Typography>
-                )}
-              </>
-            );
-          })()}
-        </SourceCard>
+        {(() => {
+          const age = whois?.age_days;
+          const ageColor = age == null ? '#848592'
+            : age < 1   ? '#EE3838'
+            : age < 30  ? '#E6700F'
+            : age < 180 ? '#E1B823'
+            :             '#16AD34';
+          const st = whois && !whois.error
+            ? { status: age != null ? `${age}d old` : 'ok', color: ageColor }
+            : sourceState(whois, null);
+          return (
+            <CollapsibleSource title="WHOIS" status={st.status} statusColor={st.color}>
+              {whois && !whois.error ? (
+                <Box>
+                  {whois.registrar && <ReportField label="Registrar" value={whois.registrar}/>}
+                  {whois.registrant_org && (
+                    <ReportField label="Registrant" value={whois.registrant_org}/>
+                  )}
+                  {whois.registrant_country && (
+                    <ReportField label="Country" value={whois.registrant_country} mono/>
+                  )}
+                  {whois.privacy_protected && (
+                    <ReportField label="Privacy" value="Redacted / withheld" color="#E1B823"/>
+                  )}
+                  {whois.created && (
+                    <ReportField label="Created"
+                      value={`${_formatDate(whois.created)}${age != null ? ` (${age}d ago)` : ''}`}
+                      color={ageColor}/>
+                  )}
+                  {whois.updated && (
+                    <ReportField label="Updated" value={_formatDate(whois.updated)}/>
+                  )}
+                  {whois.expires && (
+                    <ReportField label="Expires"
+                      value={`${_formatDate(whois.expires)}${whois.days_to_expiry != null ? ` (${whois.days_to_expiry}d)` : ''}`}/>
+                  )}
+                  {whois.registrant_email && (
+                    <ReportField label="Emails" value={whois.registrant_email} mono/>
+                  )}
+                  {whois.name_servers?.length > 0 && (
+                    <ReportField label="Name servers"
+                      value={whois.name_servers.join(' · ')} mono/>
+                  )}
+                  {whois.status?.length > 0 && (
+                    <ReportField label="Status" value={whois.status.slice(0, 3).join(' · ')} mono/>
+                  )}
+                </Box>
+              ) : (
+                <Typography sx={{ fontSize: 12, color: 'text.tertiary', fontStyle: 'italic' }}>
+                  {whois?.error ? `error: ${whois.error}` : 'No WHOIS data returned.'}
+                </Typography>
+              )}
+            </CollapsibleSource>
+          );
+        })()}
 
         {/* Certificate Transparency */}
         {crt && (
-          <SourceCard>
-            <SourceHeader title="Certificate Transparency (crt.sh)"
-              status={`${crt.totalCerts || 0} cert${(crt.totalCerts || 0) === 1 ? '' : 's'}`}
-              statusColor="#0fbcff"
-              count={crt.subdomains?.length ? `${crt.subdomains.length} subdomains` : null}/>
+          <CollapsibleSource title="Certificate Transparency"
+            status={`${crt.totalCerts || 0} cert${(crt.totalCerts || 0) === 1 ? '' : 's'}`}
+            statusColor="#0fbcff"
+            count={crt.subdomains?.length ? `${crt.subdomains.length} subdomains` : null}>
             {crt.subdomains?.length > 0 && (
-              <Box sx={{ mb: 1 }}>
+              <Box>
                 <ReportField label="Subdomains" value={crt.subdomains.slice(0, 6).join(' · ')} mono/>
               </Box>
             )}
             {Array.isArray(crt.recent) && crt.recent.length > 0 && (
-              <Box>
-                <Typography sx={{ fontSize: 10, color: 'text.disabled', fontWeight: 600,
-                  textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.5 }}>
+              <Box sx={{ mt: crt.subdomains?.length > 0 ? 1 : 0 }}>
+                <Typography sx={{ fontSize: 9.5, color: 'text.disabled', fontWeight: 600,
+                  textTransform: 'uppercase', letterSpacing: '0.08em', mb: 0.5 }}>
                   Recent certificates
                 </Typography>
                 {crt.recent.slice(0, 4).map((c, i) => (
@@ -707,34 +729,37 @@ function UrlReputationReport({ result }) {
                 ))}
               </Box>
             )}
-          </SourceCard>
+          </CollapsibleSource>
         )}
 
         {/* Passive DNS (DNS records) */}
         {dnsRecords?.total_records > 0 && (
-          <SourceCard>
-            <SourceHeader title="DNS Records"
-              status={`${dnsRecords.total_records} record${dnsRecords.total_records === 1 ? '' : 's'}`}
-              statusColor="#0fbcff"/>
+          <CollapsibleSource title="DNS Records"
+            status={`${dnsRecords.total_records} record${dnsRecords.total_records === 1 ? '' : 's'}`}
+            statusColor="#0fbcff">
             {Object.entries(dnsRecords.records || {}).slice(0, 6).map(([rt, vals]) => (
               <ReportField key={rt} label={rt} value={(vals || []).join(', ')} mono/>
             ))}
-          </SourceCard>
+          </CollapsibleSource>
         )}
 
         {/* Wayback archive presence */}
         {wayback && (wayback.has_snapshots != null || wayback.first_snapshot) && (
-          <SourceCard>
-            <SourceHeader title="Wayback Machine"
-              status={wayback.has_snapshots ? `${wayback.snapshot_count || ''} snapshots`.trim() : 'no snapshots'}
-              statusColor={wayback.has_snapshots ? '#16AD34' : '#E6700F'}/>
+          <CollapsibleSource title="Wayback Machine"
+            status={wayback.has_snapshots ? `${wayback.snapshot_count || ''} snapshots`.trim() : 'no snapshots'}
+            statusColor={wayback.has_snapshots ? '#16AD34' : '#E6700F'}>
             {wayback.first_snapshot && (
               <ReportField label="First snapshot" value={_formatDate(wayback.first_snapshot)}/>
             )}
             {wayback.last_snapshot && (
               <ReportField label="Last snapshot" value={_formatDate(wayback.last_snapshot)}/>
             )}
-          </SourceCard>
+            {!wayback.first_snapshot && !wayback.last_snapshot && (
+              <Typography sx={{ fontSize: 12, color: 'text.tertiary', fontStyle: 'italic' }}>
+                No snapshots archived for this URL.
+              </Typography>
+            )}
+          </CollapsibleSource>
         )}
       </Stack>
 
@@ -745,10 +770,9 @@ function UrlReputationReport({ result }) {
           <Stack spacing={1.25} sx={{ mb: 2.5 }}>
             {/* URLScan.io */}
             {urlscan && (
-              <SourceCard>
-                <SourceHeader title="URLScan.io"
-                  status={urlscan.total ? `${urlscan.total} scans` : 'no scans'}
-                  statusColor={urlscan.total ? '#0fbcff' : '#848592'}/>
+              <CollapsibleSource title="URLScan.io"
+                status={urlscan.total ? `${urlscan.total} scans` : 'no scans'}
+                statusColor={urlscan.total ? '#0fbcff' : '#848592'}>
                 {urlscan.total ? (
                   <Box>
                     {urlscan.last_scan_date && (
@@ -767,21 +791,20 @@ function UrlReputationReport({ result }) {
                     No scans found for this domain.
                   </Typography>
                 )}
-              </SourceCard>
+              </CollapsibleSource>
             )}
 
             {/* BGP ranking */}
             {bgp && (
-              <SourceCard>
-                <SourceHeader title="BGP / ASN (CIRCL)"
-                  status={bgp.rank != null ? `rank ${bgp.rank}` : 'ok'}
-                  statusColor="#0fbcff"/>
+              <CollapsibleSource title="BGP / ASN (CIRCL)"
+                status={bgp.rank != null ? `rank ${bgp.rank}` : 'ok'}
+                statusColor="#0fbcff">
                 {bgp.asn && <ReportField label="ASN" value={`AS${bgp.asn} · ${bgp.asn_description || ''}`}/>}
                 {bgp.country && <ReportField label="Country" value={bgp.country} mono/>}
                 {bgp.rank != null && (
                   <ReportField label="Rank" value={`${bgp.rank} (lower = worse reputation)`} mono/>
                 )}
-              </SourceCard>
+              </CollapsibleSource>
             )}
           </Stack>
         </>
