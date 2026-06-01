@@ -49,6 +49,106 @@ def _match_actors(mitre_techniques: list) -> list:
     return sorted(matched, key=lambda x: x["score"], reverse=True)[:5]
 
 
+def _attribution_evidence(mitre_techniques: list,
+                          mitre_evidence: list,
+                          behavioral_indicators: dict) -> dict:
+    """Build a {technique_id -> [evidence_entry, ...]} map combining the AI's
+    mitre_evidence strings with regex hits from behavior_extractor. Each
+    evidence_entry is a dict {source, text, snippet} so the UI can label
+    where the evidence came from (AI inference vs. raw-log regex match).
+
+    technique_id is the bare ID ("T1566"), parsed off the "T1566 - Phishing"
+    form that travels through the pipeline. Both an exact match and a parent
+    match (T1059 covers T1059.001) populate the same key, so an actor whose
+    profile lists T1059 gets the powershell-specific evidence too.
+    """
+    out: dict = {}
+
+    def _push(tid: str, entry: dict):
+        if not tid:
+            return
+        key = tid.split(" ")[0].strip().upper()
+        out.setdefault(key, []).append(entry)
+        # Parent-technique key — keeps T1059 matches surfaced under T1059.001
+        # actor profiles (and vice versa).
+        if "." in key:
+            out.setdefault(key.split(".", 1)[0], []).append(entry)
+
+    # AI-derived evidence sentences (one per technique the AI cited)
+    for me in (mitre_evidence or []):
+        if not isinstance(me, dict):
+            continue
+        tid  = me.get("technique") or ""
+        text = (me.get("evidence") or "").strip()
+        if not text:
+            continue
+        _push(tid, {
+            "source":  "ai",
+            "text":    text[:280],
+            "snippet": "",
+            "confidence": (me.get("confidence") or "").strip(),
+        })
+
+    # Raw-log regex hits from intel.behavior_extractor — quotes the exact
+    # substring from the original log so the analyst sees evidence anchored
+    # to the literal characters that triggered the inference.
+    cats = ((behavioral_indicators or {}).get("categories") or {})
+    for _cat, entries in cats.items():
+        if not isinstance(entries, list):
+            continue
+        for ent in entries:
+            if not isinstance(ent, dict):
+                continue
+            tid = ent.get("mitre") or ent.get("mitre_id") or ""
+            name = (ent.get("name") or "").strip()
+            match = (ent.get("match") or "").strip()
+            why  = (ent.get("explanation") or "").strip()
+            if not tid:
+                continue
+            _push(tid, {
+                "source":  "log_pattern",
+                "text":    f"{name}{(' — ' + why) if why else ''}".strip(),
+                "snippet": match[:160] if match else "",
+                "confidence": "",
+            })
+
+    return out
+
+
+def _attach_attribution_evidence(matched_actors: list,
+                                 mitre_techniques: list,
+                                 mitre_evidence: list,
+                                 behavioral_indicators: dict) -> list:
+    """Annotate each matched actor with evidence_by_technique so the
+    AttributionChip can show exactly what in the log matched each TTP."""
+    if not matched_actors:
+        return matched_actors
+    ev_map = _attribution_evidence(mitre_techniques, mitre_evidence,
+                                   behavioral_indicators)
+    # technique_id -> human label (parsed from "T1566 - Phishing")
+    name_map: dict = {}
+    for t in mitre_techniques or []:
+        if not isinstance(t, str):
+            continue
+        parts = t.split(" - ", 1)
+        if len(parts) == 2:
+            name_map[parts[0].strip().upper()] = parts[1].strip()
+    for actor in matched_actors:
+        matched_tids = actor.get("matchedTechniques") or []
+        per_tech = []
+        for tid in matched_tids:
+            tid_key = str(tid).strip().upper()
+            entries = ev_map.get(tid_key) or ev_map.get(tid_key.split(".", 1)[0]) or []
+            per_tech.append({
+                "id":       tid_key,
+                "name":     name_map.get(tid_key) or
+                            name_map.get(tid_key.split(".", 1)[0], ""),
+                "evidence": entries[:4],   # cap per technique to keep payload small
+            })
+        actor["evidence_by_technique"] = per_tech
+    return matched_actors
+
+
 def _build_stix(iocs: dict, investigation: dict) -> dict:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     objects = []
@@ -171,6 +271,16 @@ async def run_response(state: dict) -> dict:
 
     # ── Actor attribution must happen BEFORE the evidence pack uses it ──
     matched_actors = _match_actors(mitre)
+    # Annotate each actor with the specific log evidence that triggered each
+    # matched TTP — combines AI mitre_evidence sentences with regex matches
+    # from intel.behavior_extractor so the AttributionChip can quote both
+    # the AI's inference AND the literal log snippet that fired the pattern.
+    matched_actors = _attach_attribution_evidence(
+        matched_actors,
+        mitre,
+        investigation.get("mitre_evidence") or [],
+        state.get("behavioral_indicators") or {},
+    )
 
     # ── Build a rich evidence pack so the AI can cite specifics ──
     rs_cross = state.get("cross_refs", {})

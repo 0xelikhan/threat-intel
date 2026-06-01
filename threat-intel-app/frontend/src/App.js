@@ -2060,13 +2060,19 @@ function PerIndicatorList({ sorted, result }) {
 // see in vendor reports (CrowdStrike/FireEye/MITRE/Microsoft). Aliases hide
 // behind a click so the chip stays compact when there are 12 of them.
 function AttributionChip({ actor }) {
-  const [open, setOpen] = useState(false);
+  const [openAliases, setOpenAliases] = useState(false);
+  const [openEvidence, setOpenEvidence] = useState(false);
   if (!actor) return null;
   const display = actor.ms_name || actor.name;
   const aliases = (actor.aliases || []).filter(a => a && a !== display);
+  const evByTech = Array.isArray(actor.evidence_by_technique)
+    ? actor.evidence_by_technique : [];
+  const evidenceCount = evByTech.reduce((n, t) => n + (t.evidence?.length || 0), 0);
+  const hasEvidence = evidenceCount > 0;
+
   return (
     <Box sx={{
-      display: 'inline-flex', flexDirection: 'column', gap: 0.5,
+      display: 'flex', flexDirection: 'column', gap: 0.5,
       backgroundColor: muiAlpha('#0fbcff', 0.08),
       border: `1px solid ${muiAlpha('#0fbcff', 0.35)}`,
       borderRadius: '4px', p: '8px 12px', mb: 1.5, maxWidth: '100%',
@@ -2088,16 +2094,17 @@ function AttributionChip({ actor }) {
           </Typography>
         )}
         {aliases.length > 0 && (
-          <Box component="button" onClick={() => setOpen(o => !o)} sx={{
+          <Box component="button" onClick={() => setOpenAliases(o => !o)} sx={{
             ml: 'auto', background: 'none', border: 'none', cursor: 'pointer',
             color: 'text.tertiary', fontSize: 11, fontFamily: 'inherit',
             '&:hover': { color: 'primary.main' },
           }}>
-            {open ? 'hide' : `also known as · ${aliases.length}`}
+            {openAliases ? 'hide aliases' : `also known as · ${aliases.length}`}
           </Box>
         )}
       </Box>
-      {open && (
+
+      {openAliases && (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.25 }}>
           {aliases.map(a => (
             <Box key={a} sx={{
@@ -2110,11 +2117,109 @@ function AttributionChip({ actor }) {
           ))}
         </Box>
       )}
+
+      {/* Matched techniques summary — always visible */}
       {actor.matchedTechniques?.length > 0 && (
-        <Typography sx={{ fontSize: 10, color: 'text.disabled', mt: 0.25 }}>
-          matched on {actor.matchedTechniques.slice(0, 4).join(', ')}
-          {actor.matchedTechniques.length > 4 ? ` + ${actor.matchedTechniques.length - 4} more` : ''}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75,
+          flexWrap: 'wrap', mt: 0.25 }}>
+          <Typography sx={{ fontSize: 10, color: 'text.disabled' }}>
+            matched on {actor.matchedTechniques.slice(0, 6).join(', ')}
+            {actor.matchedTechniques.length > 6
+              ? ` + ${actor.matchedTechniques.length - 6} more`
+              : ''}
+          </Typography>
+          {hasEvidence && (
+            <Box component="button" onClick={() => setOpenEvidence(o => !o)} sx={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: openEvidence ? 'primary.main' : 'text.tertiary',
+              fontSize: 11, fontFamily: 'inherit', textDecoration: 'underline',
+              p: 0,
+              '&:hover': { color: 'primary.main' },
+            }}>
+              {openEvidence
+                ? 'hide log evidence'
+                : `· show log evidence (${evidenceCount})`}
+            </Box>
+          )}
+        </Box>
+      )}
+
+      {/* Per-technique log evidence — what in THIS alert matched the actor's TTPs */}
+      {openEvidence && hasEvidence && (
+        <Box sx={{ mt: 0.75, pt: 0.75,
+          borderTop: `1px solid ${muiAlpha('#0fbcff', 0.18)}` }}>
+          <Typography sx={{ fontSize: 10, color: '#0fbcff', fontWeight: 600,
+            textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
+            What in THIS log matched the actor's TTPs
+          </Typography>
+          <Stack spacing={1}>
+            {evByTech.filter(t => (t.evidence?.length || 0) > 0).map((t, i) => (
+              <Box key={i}>
+                <Stack direction="row" alignItems="center" spacing={0.75}
+                  sx={{ mb: 0.5 }}>
+                  <Box component="span" sx={{
+                    fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
+                    color: '#0fbcff', fontWeight: 600,
+                  }}>
+                    {t.id}
+                  </Box>
+                  {t.name && (
+                    <Typography sx={{ fontSize: 11, color: 'text.primary',
+                      fontWeight: 500 }}>
+                      · {t.name}
+                    </Typography>
+                  )}
+                </Stack>
+                <Stack spacing={0.5} sx={{ pl: 1.5,
+                  borderLeft: `2px solid ${muiAlpha('#0fbcff', 0.25)}` }}>
+                  {(t.evidence || []).map((e, j) => (
+                    <Box key={j}>
+                      <Typography sx={{ fontSize: 12, color: 'text.primary',
+                        lineHeight: 1.55 }}>
+                        {e.text}
+                        {e.confidence && (
+                          <Box component="span" sx={{ ml: 0.75,
+                            fontSize: 10, color: 'text.disabled',
+                            textTransform: 'lowercase' }}>
+                            · {e.confidence}
+                          </Box>
+                        )}
+                      </Typography>
+                      {e.snippet && (
+                        <Typography sx={{
+                          fontFamily: '"IBM Plex Mono", monospace',
+                          fontSize: 11, color: 'text.tertiary',
+                          mt: 0.25, lineHeight: 1.5,
+                          backgroundColor: muiAlpha('#000000', 0.25),
+                          border: `1px solid ${muiAlpha('#ffffff', 0.06)}`,
+                          borderRadius: '3px', px: 0.875, py: '3px',
+                          whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                        }}>
+                          {e.snippet}
+                        </Typography>
+                      )}
+                      <Typography sx={{ fontSize: 10, color: 'text.disabled',
+                        mt: 0.25 }}>
+                        {e.source === 'log_pattern'
+                          ? 'from log pattern match'
+                          : 'AI inference'}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Stack>
+              </Box>
+            ))}
+            {evByTech.some(t => (t.evidence?.length || 0) === 0) && (
+              <Typography sx={{ fontSize: 11, color: 'text.disabled',
+                fontStyle: 'italic' }}>
+                {evByTech.filter(t => !t.evidence?.length).length} additional
+                technique{evByTech.filter(t => !t.evidence?.length).length === 1 ? '' : 's'}
+                {' '}matched the actor profile but had no specific log
+                evidence — they came from broader behavioural inference.
+              </Typography>
+            )}
+          </Stack>
+        </Box>
       )}
     </Box>
   );
