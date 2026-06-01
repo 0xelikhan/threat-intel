@@ -1767,42 +1767,90 @@ async def scan_url_endpoint(req: dict):
     if not url.startswith(("http://", "https://")):
         raise HTTPException(400, "url must be http(s)")
     import aiohttp
-    # Pretend to be a recent Chrome — many sites geo/UA-gate non-browser
-    # GETs straight to 403. Doesn't make us look legitimate to a real
-    # bot-detection layer, just gets past the basic checks.
-    _UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-           "AppleWebKit/537.36 (KHTML, like Gecko) "
-           "Chrome/127.0.0.0 Safari/537.36")
-    data = b""
-    download_warning = ""
-    try:
-        async with aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=30),
-            headers={"User-Agent": _UA, "Accept": "*/*"},
-        ) as session:
-            async with session.get(url, allow_redirects=True) as r:
-                if r.status != 200:
-                    download_warning = (
-                        f"Remote returned HTTP {r.status} so the file body "
-                        f"could not be analysed — URL reputation, WHOIS, "
-                        f"Wayback, and URLScan enrichment still ran."
-                    )
-                else:
+    # Most sites bot-detect on either UA or missing browser headers.
+    # We send a full Chrome header set first; on 403/406/429 we retry
+    # once with Firefox in case the first signature was fingerprinted.
+    # Real anti-bot stacks (Cloudflare turnstile, PerimeterX, DataDome)
+    # we cannot beat without a headless browser — we soft-fail and
+    # surface URLScan's screenshot as the visual evidence instead.
+    _CHROME_HEADERS = {
+        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                       "AppleWebKit/537.36 (KHTML, like Gecko) "
+                       "Chrome/127.0.0.0 Safari/537.36"),
+        "Accept": ("text/html,application/xhtml+xml,application/xml;q=0.9,"
+                   "image/avif,image/webp,image/apng,*/*;q=0.8,"
+                   "application/signed-exchange;v=b3;q=0.7"),
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Sec-Ch-Ua": '"Chromium";v="127", "Not;A=Brand";v="24", "Google Chrome";v="127"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Windows"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1",
+    }
+    _FIREFOX_HEADERS = {
+        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) "
+                       "Gecko/20100101 Firefox/131.0"),
+        "Accept": ("text/html,application/xhtml+xml,application/xml;q=0.9,"
+                   "image/avif,image/webp,*/*;q=0.8"),
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+    }
+    _SOFT_BLOCK_STATUSES = {401, 403, 406, 429, 503}
+
+    async def _try_fetch(headers):
+        """Returns (data_bytes, status_code, exc_str). data is empty on
+        any non-200. Caller decides whether the result is a soft fail."""
+        try:
+            async with aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=30),
+                headers=headers,
+            ) as session:
+                async with session.get(url, allow_redirects=True) as r:
+                    if r.status != 200:
+                        return b"", r.status, ""
                     chunks = []
                     total = 0
                     async for chunk in r.content.iter_chunked(64 * 1024):
                         chunks.append(chunk)
                         total += len(chunk)
                         if total > 50 * 1024 * 1024:
-                            raise HTTPException(413, "remote file exceeds 50 MB cap")
-                    data = b"".join(chunks)
-    except HTTPException:
-        raise
-    except Exception as e:
-        download_warning = (
-            f"Could not download the URL body ({str(e)[:140]}) — URL "
-            f"reputation, WHOIS, Wayback, and URLScan enrichment still ran."
-        )
+                            return b"", 413, "remote file exceeds 50 MB cap"
+                    return b"".join(chunks), 200, ""
+        except Exception as e:
+            return b"", 0, str(e)[:160]
+
+    data, last_status, last_err = await _try_fetch(_CHROME_HEADERS)
+    if not data and last_status in _SOFT_BLOCK_STATUSES:
+        data, last_status, last_err = await _try_fetch(_FIREFOX_HEADERS)
+    if last_status == 413:
+        raise HTTPException(413, "remote file exceeds 50 MB cap")
+    download_warning = ""
+    if not data:
+        if last_status in _SOFT_BLOCK_STATUSES:
+            download_warning = (
+                f"Remote site is gated behind bot protection (HTTP {last_status}). "
+                f"This is normal for sites using Cloudflare, Akamai, or similar — "
+                f"see URLScan's screenshot below for the rendered page."
+            )
+        elif last_status and last_status != 200:
+            download_warning = (
+                f"Remote returned HTTP {last_status}. The page may have been "
+                f"removed or the URL requires authentication."
+            )
+        elif last_err:
+            download_warning = (
+                f"Couldn't reach the URL: {last_err}. Check that the host is "
+                f"resolvable and the link is still live."
+            )
 
     filename = url.rstrip("/").rsplit("/", 1)[-1].split("?", 1)[0] or "downloaded"
     from intel.file_analyzer import analyze_file

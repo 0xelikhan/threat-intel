@@ -2438,21 +2438,22 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
               return (
                 <Stack spacing={3}>
                   {/* Soft-fail download banner — when the remote site
-                      refused the GET (403 / 404 / timeout etc.), we
-                      didn't get the file body. URL reputation + WHOIS
-                      + Wayback + URLScan submission still ran; explain
-                      that to the analyst so they know what's missing. */}
+                      refused the GET, we didn't get the file body. URL
+                      reputation + WHOIS + Wayback + URLScan submission
+                      still ran. Styled as a neutral note (not a warning)
+                      because bot-protected HTML pages are the common
+                      case here, not a real problem. */}
                   {result.download_warning && (
                     <MuiPaper elevation={0} sx={{
-                      backgroundColor: muiAlpha('#E6700F', 0.06),
-                      border: `1px solid ${muiAlpha('#E6700F', 0.3)}`,
-                      borderLeft: '3px solid #E6700F',
+                      backgroundColor: muiAlpha('#0fbcff', 0.05),
+                      border: `1px solid ${muiAlpha('#0fbcff', 0.25)}`,
+                      borderLeft: '3px solid #0fbcff',
                       borderRadius: '4px', p: '10px 14px',
                     }}>
-                      <Typography sx={{ fontSize: 11, color: '#E6700F',
+                      <Typography sx={{ fontSize: 11, color: '#0fbcff',
                         fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.06em', mb: 0.5 }}>
-                        File body unavailable
+                        Page not downloadable
                       </Typography>
                       <Typography sx={{ fontSize: 12.5, color: 'text.primary',
                         lineHeight: 1.55 }}>
