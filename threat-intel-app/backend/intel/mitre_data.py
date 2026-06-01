@@ -247,9 +247,18 @@ def get_actor_ttps_by_phase(mitre_group_id: str,
 
 
 def get_groups_by_techniques(technique_ids: list[str]) -> list[dict]:
+    """Score = precision-style: `matched / N_alert_techniques * 100`.
+
+    Reads as "of the techniques observed in THIS alert, what fraction line
+    up with this actor's documented profile?" — independent of how huge
+    the actor's full TTP catalogue is. The old `matched / max(...)` formula
+    lowballed every score because mature APT profiles list 30-100+
+    techniques, making 75%+ effectively unreachable for normal alerts.
+    """
     m = _mitre()
     if not m or not technique_ids:
         return []
+    n_alert = len(technique_ids) or 1
     results = []
     for group in m.get_groups():
         group_tids = set()
@@ -260,7 +269,10 @@ def get_groups_by_techniques(technique_ids: list[str]) -> list[dict]:
         matches = [t for t in technique_ids if t in group_tids]
         if not matches:
             continue
-        score = round(len(matches) / max(len(technique_ids), len(group_tids)) * 100)
+        # Precision: how much of THIS alert's TTPs are explained by this
+        # actor's playbook. Capped at 100. Bounded floor avoids divide-by-0
+        # when the alert had zero MITRE matches.
+        score = round(len(matches) / n_alert * 100)
         gid = next((r["external_id"] for r in group.get("external_references", [])
                     if r.get("source_name") == "mitre-attack"), "")
         results.append({

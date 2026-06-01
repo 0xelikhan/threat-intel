@@ -38,13 +38,17 @@ def _match_actors(mitre_techniques: list) -> list:
             return rich[:5]
     except Exception:
         pass
-    # Fallback: hardcoded list
+    # Fallback: hardcoded list. Same precision-style score as the
+    # primary MITRE path — matches / N_alert_techniques * 100 — so the
+    # gate threshold has consistent meaning regardless of which data
+    # source produced the match.
     tech_ids = [t.split(" ")[0] for t in mitre_techniques]
+    n_alert = len(tech_ids) or 1
     matched = []
     for actor in ACTORS:
         hits = [t for t in actor["techniques"] if t in tech_ids]
         if hits:
-            score = round(len(hits) / max(len(tech_ids), len(actor["techniques"])) * 100)
+            score = round(len(hits) / n_alert * 100)
             matched.append({**actor, "matchedTechniques": hits, "score": score})
     return sorted(matched, key=lambda x: x["score"], reverse=True)[:5]
 
