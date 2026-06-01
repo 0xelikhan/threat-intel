@@ -351,35 +351,11 @@ function UrlReputationReport({ result }) {
           : { label: 'UNKNOWN', color: '#848592' };
   const topDrivers = [...drivers].sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight)).slice(0, 3);
 
-  // Headline-row factoids — the analyst wanted the Wayback "last snapshot"
-  // and the WHOIS registration date visible at the top of the report
-  // without scrolling down to the per-source cards.
+  // Headline-row factoids previously lived here but they're now rendered
+  // in the top-of-page URL identity banner in the URL-scan branch. Keep
+  // an empty list so the factoids-block render below short-circuits and
+  // doesn't paint a duplicate.
   const factoids = [];
-  if (whois?.created) {
-    const age = whois.age_days;
-    factoids.push({
-      label: 'Domain registered',
-      value: age != null
-        ? `${_formatDate(whois.created)} (${age}d ago)`
-        : _formatDate(whois.created),
-    });
-  }
-  if (whois?.registrar) {
-    factoids.push({ label: 'Registrar', value: whois.registrar });
-  }
-  if (wayback?.last_snapshot) {
-    factoids.push({
-      label: 'Last Wayback snapshot',
-      value: _formatDate(wayback.last_snapshot),
-    });
-  } else if (wayback?.first_snapshot) {
-    factoids.push({
-      label: 'First Wayback snapshot',
-      value: _formatDate(wayback.first_snapshot),
-    });
-  } else if (wayback && wayback.has_snapshots === false) {
-    factoids.push({ label: 'Wayback Machine', value: 'no snapshots on record' });
-  }
 
   // ── helpers for per-source status pills ─────────────────────────────────
   const sourceState = (data, malicious) => {
@@ -421,9 +397,12 @@ function UrlReputationReport({ result }) {
                 · {signalCount} source{signalCount === 1 ? '' : 's'} responded
               </Typography>
             </Stack>
-            <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 0.25 }}>
-              {host ? `${_defangHost(host)} · ` : ''}URL reputation
-            </Typography>
+            {host && (
+              <Typography sx={{ fontSize: 12, color: 'text.tertiary',
+                mb: 0.25, ...monoSx }}>
+                {_defangHost(host)}
+              </Typography>
+            )}
             <Typography sx={{ ...monoSx, fontSize: 11, color: 'text.disabled',
               wordBreak: 'break-all' }}>
               {_defangUrl(url)}
@@ -2403,6 +2382,36 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
               || ['MALICIOUS','SUSPICIOUS'].includes(result.verdict);
 
             if (isUrlScan) {
+              // Compact identity banner — Domain registered + Registrar +
+              // Last Wayback snapshot. Lives at the very top of the URL
+              // scanner so the analyst sees domain age / first-seen
+              // before they kick off detonation or scroll through the
+              // reputation report.
+              let _host = '';
+              try { _host = new URL(result.source_url || '').hostname; }
+              catch { _host = ''; }
+              const _dom    = result?.enrichments?.domains?.[_host] || {};
+              const _whois  = _dom.whois || null;
+              const _wb     = _dom.wayback || null;
+              const _ageDays = _whois?.age_days;
+              const _topFactoids = [
+                _whois?.created && {
+                  label: 'Domain registered',
+                  value: _ageDays != null
+                    ? `${_formatDate(_whois.created)}  (${_ageDays}d ago)`
+                    : _formatDate(_whois.created),
+                  accent: _ageDays != null && _ageDays < 30 ? '#E6700F' : null,
+                },
+                _whois?.registrar && {
+                  label: 'Registrar',
+                  value: _whois.registrar,
+                },
+                _wb?.last_snapshot && {
+                  label: 'Last Wayback snapshot',
+                  value: _formatDate(_wb.last_snapshot),
+                },
+              ].filter(Boolean);
+
               return (
                 <Stack spacing={3}>
                   {/* Soft-fail download banner — when the remote site
@@ -2428,6 +2437,47 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
                       </Typography>
                     </MuiPaper>
                   )}
+
+                  {/* URL identity banner — Domain registered / Registrar /
+                      Last Wayback snapshot. Pinned at the very top so the
+                      analyst sees domain-age signal before doing anything
+                      else. Hidden when none of the three factoids has a
+                      value. */}
+                  {_topFactoids.length > 0 && (
+                    <MuiPaper elevation={0} sx={{
+                      backgroundColor: '#09253d',
+                      border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+                      borderLeft: '3px solid #0fbcff',
+                      borderRadius: '4px', p: '12px 16px',
+                    }}>
+                      <Typography sx={{ fontSize: 10, color: 'text.disabled',
+                        fontWeight: 600, textTransform: 'uppercase',
+                        letterSpacing: '0.08em', mb: 1 }}>
+                        URL identity · {_host || '(unknown host)'}
+                      </Typography>
+                      <Box sx={{ display: 'grid',
+                        gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' },
+                        gap: '6px 18px' }}>
+                        {_topFactoids.map((f, i) => (
+                          <Box key={i}>
+                            <Typography sx={{ fontSize: 10,
+                              color: 'text.disabled', fontWeight: 600,
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.07em' }}>
+                              {f.label}
+                            </Typography>
+                            <Typography sx={{ fontSize: 12.5,
+                              color: f.accent || 'text.primary',
+                              ...monoSx, wordBreak: 'break-word',
+                              fontWeight: f.accent ? 600 : 400 }}>
+                              {f.value}
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Box>
+                    </MuiPaper>
+                  )}
+
                   {/* Live URL detonation pinned near the top — the
                       analyst wants to kick the detonation off and see
                       its progress before scrolling through reputation
