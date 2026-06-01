@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect, lazy, Suspense } from 'react';
 import {
-  Copy, ArrowUpRight, AlertCircle, X, FileSearch, Mail, Activity,
+  ArrowUpRight, AlertCircle, X, FileSearch, Mail, Activity,
 } from 'lucide-react';
 
 import AgentPipeline     from './components/AgentPipeline';
@@ -8,7 +8,7 @@ import URLScanLive       from './components/URLScanLive';
 import ErrorBoundary     from './components/ErrorBoundary';
 import ToastHost         from './components/Toast';
 import {
-  SkeletonLazyFallback, SkeletonAnalyze, SkeletonFileScanner,
+  SkeletonLazyFallback, SkeletonAnalyze,
 } from './components/Skeleton';
 
 // MUI-based primitives (adapted from OpenCTI's Tag.tsx + theme) — every chip,
@@ -33,7 +33,6 @@ import {
   MenuItem       as MuiMenuItem,
   ToggleButton   as MuiToggleButton,
   ToggleButtonGroup as MuiToggleButtonGroup,
-  Tooltip,
 } from '@mui/material';
 import { alpha as muiAlpha } from '@mui/material/styles';
 import {
@@ -1155,169 +1154,6 @@ function InfrastructureIntel({ result, bare, hideUrlscan = false, hideGeopolitic
   return (
     <Card title="OSINT" accent="#0fbcff"
       badge={`${rows.length} IOC${rows.length === 1 ? '' : 's'}`} defaultOpen={false}>
-      {body}
-    </Card>
-  );
-}
-
-/* ─── behavioral indicators (spec §1) ────────────────────────────────────────
- * Pattern-matched TTPs extracted from the raw input — PowerShell tradecraft,
- * LOLBin abuse, persistence, lateral movement, credential access, C2. Each
- * indicator carries the MITRE technique it represents plus a plain-English
- * reason it is suspicious.
- */
-// MITRE ATT&CK technique → plain-English defensive counter-measure (D3FEND-
-// flavoured). Indexed by the technique IDs behavior_extractor.py actually
-// emits, so every TTP we render can carry a "what do I do about it" line —
-// closes the gap that made the old Behavior tab feel observational-only.
-const D3FEND_MITIGATIONS = {
-  'T1059.001':     'PowerShell Constrained Language Mode, AMSI, ScriptBlock logging (4104).',
-  'T1059.005':     'Disable Windows Script Host for non-admins; block .vbs/.js execution by file association.',
-  'T1564.003':     'Alert on PowerShell launched with -WindowStyle Hidden / -NonInteractive flags.',
-  'T1105':         'Egress filtering, DNS sinkholing; block known C2 IPs at the perimeter.',
-  'T1562.001':     'Defender Tamper Protection; alert on Set-MpPreference / Add-MpPreference exclusion creation.',
-  'T1620':         'WDAC to block reflective DLL loading; alert on .NET Assembly.Load from PowerShell.',
-  'T1140':         'Sysmon EventID 7 + YARA on staging dirs; alert on decoded strings matching MZ headers.',
-  'T1197':         'Audit Microsoft-Windows-Bits-Client/Operational EventID 59; alert on bitsadmin /transfer from user processes.',
-  'T1218.005':     'WDAC block on mshta.exe; alert when parent is not explorer.exe.',
-  'T1218.010':     'WDAC block on regsvr32 with /i:http* (squiblydoo); alert on remote scrObj usage.',
-  'T1218.011':     'Alert when rundll32 invokes a non-system DLL or unsigned path.',
-  'T1053.005':     'Audit TaskScheduler/Operational EventID 106/200; alert on tasks created by non-admin users.',
-  'T1047':         'Enable WMI-Activity tracing; alert on `wmic process call create` from a cmd.exe parent.',
-  'T1127.001':     'WDAC to block MSBuild for non-developer users.',
-  'T1218.004':     'WDAC to block InstallUtil for non-admin users.',
-  'T1547.001':     'Periodic Run-key audit; alert on HKCU/HKLM Run additions.',
-  'T1543.003':     'Audit service-create (EventID 7045); alert on non-vendor binPath values.',
-  'T1546.003':     'Audit WMI permanent event subscriptions; alert on EventConsumer creation.',
-  'T1021.002':     'Disable lateral SMB where possible; alert on admin-share access from non-admin hosts.',
-  'T1569.002':     'Alert on PSEXESVC service install; block PsExec via AppLocker for non-admins.',
-  'T1135':         'Alert on network-share enumeration patterns; restrict null SMB sessions.',
-  'T1003.001':     'Credential Guard + RunAsPPL on LSASS; alert on LSASS handle access from non-system processes.',
-  'T1003.002':     'Alert on `reg save` of SAM/SECURITY hives; restrict registry-hive backup permissions.',
-  'T1003.003':     'Alert on NTDS.dit copy via VSS shadow outside the DC backup window.',
-  'T1003.006':     'Audit DRSReplicateNCChanges; alert on DCSync sources that aren\'t DCs.',
-  'T1568.002':     'Block dynamic-DNS providers via DNS filtering; alert on DGA-like beaconing patterns.',
-  'T1071.001':     'TLS-inspecting egress proxy; alert on non-browser User-Agents to web endpoints.',
-  'T1071.004':     'DNS tunneling detection — alert on long sub-domains with high entropy.',
-  'T1571':         'Egress filtering; alert on outbound to non-standard ports (4444/8080/1080/8888/9001/9050).',
-};
-
-function BehavioralIndicators({ result, bare }) {
-  const bi = result?.behavioral_indicators || {};
-  const cats = bi.categories || {};
-  const total = bi.total || 0;
-  if (!total && !(bi.decoded_payloads || []).length) return null;
-
-  const sevColor = {
-    CRITICAL: '#EE3838', HIGH: '#E6700F', MEDIUM: '#E1B823', LOW: '#0fbcff',
-  };
-  const catLabel = {
-    powershell:  'PowerShell tradecraft',
-    lolbin:      'Windows LOLBin abuse',
-    persistence: 'Persistence mechanisms',
-    lateral:     'Lateral movement',
-    credentials: 'Credential access',
-    c2:          'C2 communication',
-  };
-
-  const body = (
-    <>
-      <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
-        Pattern-matched directly from the raw input — captures attacker tradecraft
-        that wouldn't show up via IOC enrichment alone. Each hit is mapped to the
-        specific MITRE ATT&CK technique it represents.
-      </Typography>
-      <Box sx={{ mb: 1.75 }}>
-        <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
-          textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
-          Decoded base64 payloads
-        </Typography>
-        {(bi.decoded_payloads || []).length > 0 ? (
-          bi.decoded_payloads.map((p, i) => (
-            <Box key={i} component="pre" sx={{
-              fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
-              backgroundColor: '#070d19', border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-              borderRadius: '4px', p: '8px 10px', m: 0, mb: 0.75,
-              whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-              color: 'primary.main', maxHeight: 120, overflow: 'auto',
-            }}>{p}</Box>
-          ))
-        ) : (
-          <Typography sx={{ fontSize: 12, color: 'text.disabled', fontStyle: 'italic' }}>
-            None — no readable base64-encoded content found.
-          </Typography>
-        )}
-      </Box>
-      {Object.entries(cats).map(([cat, hits]) => (
-        <Box key={cat} sx={{ mb: 1.75 }}>
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
-            <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
-              textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              {catLabel[cat] || cat}
-            </Typography>
-            <Typography sx={{ fontSize: 11, color: 'text.disabled' }}>{hits.length}</Typography>
-          </Stack>
-          {hits.map((h, i) => (
-            <MuiPaper key={i} elevation={0} sx={{
-              backgroundColor: '#0C1524',
-              border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-              borderLeft: `3px solid ${sevColor[h.severity] || '#848592'}`,
-              borderRadius: '4px', p: '10px 12px', mb: 0.75,
-            }}>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }} flexWrap="wrap">
-                <Typography sx={{ fontSize: 12, fontWeight: 600, color: 'text.primary' }}>
-                  {h.name}
-                </Typography>
-                <Box component="a" href={`https://attack.mitre.org/techniques/${(h.mitre || '').replace('.', '/')}/`}
-                  target="_blank" rel="noreferrer"
-                  sx={{
-                    fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
-                    color: 'primary.main', textDecoration: 'none',
-                    '&:hover': { textDecoration: 'underline' },
-                  }}>
-                  {h.mitre}{h.mitre_name ? ` · ${h.mitre_name}` : ''}
-                </Box>
-                <Box component="span" sx={{
-                  ml: 'auto !important', fontSize: 10, color: sevColor[h.severity] || '#848592',
-                  fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em',
-                }}>{h.severity}</Box>
-              </Stack>
-              <Typography sx={{ fontSize: 11, color: 'text.tertiary', lineHeight: 1.55, mb: 0.5 }}>
-                {h.explanation}
-              </Typography>
-              <Box sx={{
-                fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
-                color: 'text.primary',
-                backgroundColor: '#070d19',
-                border: `1px solid ${muiAlpha('#ffffff', 0.06)}`,
-                borderRadius: '3px',
-                p: '4px 8px',
-                wordBreak: 'break-all',
-              }}>{h.match}</Box>
-              {D3FEND_MITIGATIONS[h.mitre] && (
-                <Stack direction="row" alignItems="flex-start" spacing={0.75} sx={{
-                  mt: 0.75, pt: 0.75,
-                  borderTop: `1px dashed ${muiAlpha('#ffffff', 0.08)}`,
-                }}>
-                  <Box component="span" sx={{
-                    fontSize: 9, color: 'success.main', fontWeight: 700,
-                    letterSpacing: '0.08em', mt: '2px',
-                  }}>D3FEND</Box>
-                  <Typography sx={{ fontSize: 11, color: 'text.tertiary', lineHeight: 1.5 }}>
-                    {D3FEND_MITIGATIONS[h.mitre]}
-                  </Typography>
-                </Stack>
-              )}
-            </MuiPaper>
-          ))}
-        </Box>
-      ))}
-    </>
-  );
-  if (bare) return body;
-  return (
-    <Card title="Behavioral indicators · MITRE-mapped TTPs" accent="#B286FF"
-      badge={`${total} signals · ${(bi.techniques || []).length} techniques`}>
       {body}
     </Card>
   );
@@ -3532,7 +3368,7 @@ function ChatWithRecon({ result, bare,
 /* ─── email analysis (when input is an EML) ───────────────────────────────────── */
 function EmailAnalysis({ result }) {
   const e = result?.email_analysis;
-  if (!e || !e.subject && !e.from) return null;
+  if (!e || (!e.subject && !e.from)) return null;
 
   const auth = e.auth_results || {};
   const authChip = (label, value) => {

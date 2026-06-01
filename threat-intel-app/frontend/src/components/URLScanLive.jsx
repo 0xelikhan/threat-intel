@@ -12,7 +12,7 @@
  * circular dependency App.js ↔ FileScannerView.jsx that a re-export
  * would have introduced.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Stack, Typography, Paper as MuiPaper,
   Button as MuiButton, TextField as MuiTextField,
@@ -26,7 +26,12 @@ export default function URLScanLive({ result, bare, urls: urlsProp }) {
   // exact URL (the URL scanner passing source_url) don't have to mutate
   // a fake IOC list. Falls back to result.iocs.urls for the analyze flow
   // where multiple URLs may have been extracted from a log.
-  const urls = Array.isArray(urlsProp) ? urlsProp : (result?.iocs?.urls || []);
+  // useMemo: holding a stable reference so the useEffect's deps array
+  // doesn't see a fresh array identity on every parent render.
+  const urls = useMemo(
+    () => Array.isArray(urlsProp) ? urlsProp : (result?.iocs?.urls || []),
+    [urlsProp, result?.iocs?.urls],
+  );
   const [target, setTarget] = useState(urls[0] || '');
   const [submission, setSubmission] = useState(null);
 

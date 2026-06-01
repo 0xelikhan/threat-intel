@@ -11,7 +11,7 @@
  * log, generates a tailored body via OpenAI/Azure, and renders it through
  * the same signature pipeline as static composes.
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Box, Stack, Typography, Paper as MuiPaper,
   Button as MuiButton, TextField as MuiTextField,
@@ -66,71 +66,12 @@ const MINIMAL_FIELD_IDS = [
   'alert_summary', 'severity', 'malware_name', 'affected_host', 'recommended_actions',
 ];
 
-// Map each template field-id to the parsed-dict keys that populate it.
-// Used to decide which checkboxes to RENDER once the log has been parsed
-// — fields with no backing data in the current alert get hidden so the
-// analyst only sees toggles for things that actually exist in the log.
-// Kept aligned with backend/intel/email_composer.TEMPLATE_FIELD_TO_KEYS.
-const TEMPLATE_FIELD_TO_KEYS = {
-  alert_summary:       [],   // AI summary sentence; always available
-  severity:            ['severity', 'threat_level'],
-  malware_name:        ['ep_defender_type', 'ep_admin_alert_title', 'ep_message',
-                        'malware_name', 'threat_name'],
-  affected_host:       ['asset_name', 'ep_domain'],
-  username:            ['user_principal_name', 'ep_user', 'user_display_name',
-                        'target_user_principal_name'],
-  source_ip:           ['ip_address', 'first_login_ip', 'second_login_ip',
-                        'source_ip'],
-  destination_ip:      ['destination_ip', 'dest_ip'],
-  file_path:           ['ep_defender_path', 'ep_defender_file', 'ep_full_path',
-                        'infected_path'],
-  process_name:        ['ep_application_name', 'process_name'],
-  process_path:        ['ep_process_path'],
-  action_taken:        ['response_action', 'action_name'],
-  detection_source:    ['detection_source', 'ep_defender_source',
-                        'ep_admin_alert_provider'],
-  // Timeline: any timestamp the parser captured counts, including the
-  // FirstLogin / SecondLogin section timestamps from impossible-travel
-  // exports.
-  timeline:            ['ep_date', 'timestamp', 'activity_dt_raw',
-                        'detected_dt_raw', 'first_login_created_raw',
-                        'second_login_created_raw'],
-  mitre_techniques:    ['mitre_techniques'],
-  enrichment_summary:  ['enrichment_summary'],
-  recommended_actions: ['recommended_actions'],
-  technical_details:   ['ep_cmd_line', 'ep_process_id', 'ep_sha256',
-                        'additional_info_user_agent',
-                        'risk_event_type', 'risk_level', 'risk_state',
-                        'additional_info_risk_reasons',
-                        'privileged_role_display_name',
-                        'privileged_role_well_known',
-                        'forwarding_address',
-                        'location_city', 'location_state', 'location_country',
-                        'first_login_city', 'first_login_country',
-                        'first_login_asn_name',
-                        'second_login_city', 'second_login_country',
-                        'second_login_asn_name',
-                        'impossible_travel'],
-};
-
-// Decide which template fields to surface as checkboxes given the parsed
-// alert. Fields whose backing keys are empty/missing in parsed are hidden
-// so the analyst only sees toggles for things that actually exist in this
-// specific log. alert_summary always shows (the AI writes it regardless).
-function availableTemplateFields(parsed) {
-  if (!parsed || typeof parsed !== 'object') return TEMPLATE_FIELDS;
-  return TEMPLATE_FIELDS.filter(f => {
-    const keys = TEMPLATE_FIELD_TO_KEYS[f.id];
-    if (!keys || keys.length === 0) return true;
-    return keys.some(k => {
-      const v = parsed[k];
-      if (v == null || v === '' || v === 'N/A' || v === '-') return false;
-      if (Array.isArray(v)) return v.length > 0;
-      if (typeof v === 'object') return Object.keys(v).length > 0;
-      return true;
-    });
-  });
-}
+// The per-field TEMPLATE_FIELD_TO_KEYS map and availableTemplateFields()
+// helper used to power a per-field checkbox grid; replaced by the
+// category-toggle UI (CATEGORY_ORDER + the backend's _categorized
+// breakdown). The backend's intel/email_composer.TEMPLATE_FIELD_TO_KEYS
+// stays as the canonical mapping consumed by enabled_categories
+// filtering on compose.
 
 const BUILT_IN_TEMPLATES = [
   {
@@ -200,20 +141,19 @@ function CopyBtn({ text, label = 'Copy', size = 'small' }) {
 }
 
 
-function SectionHeader({ title, badge, accent = '#0fbcff' }) {
-  return (
-    <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.25 }}>
-      <Box sx={{ width: 3, height: 14, backgroundColor: accent, borderRadius: 0.5 }}/>
-      <Typography sx={{ fontSize: 12, fontWeight: 600, color: 'text.primary',
-        textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-        {title}
-      </Typography>
-      {badge && (
-        <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>· {badge}</Typography>
-      )}
-    </Stack>
-  );
-}
+// SectionHeader removed — replaced by PanelCard's built-in collapsible
+// header. Kept as a comment marker so the diff history reads cleanly.
+
+// AI remediation section labels — module scope so callers can pass it to
+// useCallback / useEffect deps arrays without a stale-reference warning.
+const REM_SECTIONS = [
+  { key: 'executive_summary',    label: 'Executive summary' },
+  { key: 'immediate_actions',    label: 'Immediate actions (next 15 minutes)' },
+  { key: 'investigation_steps',  label: 'Investigation steps' },
+  { key: 'containment_guidance', label: 'Containment' },
+  { key: 'recovery_guidance',    label: 'Recovery' },
+  { key: 'detection_guidance',   label: 'Detection hardening' },
+];
 
 
 /* PanelCard — chevron-toggled collapsible wrapper. Mirrors the file
@@ -303,7 +243,13 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
   // are available to every analyst using this browser. Built-in templates
   // (All Details, Minimal) are merged in at load time and cannot be deleted.
   const [customTemplates, setCustomTemplates] = useState(() => loadStoredTemplates());
-  const allTemplates = [...BUILT_IN_TEMPLATES, ...customTemplates];
+  // useMemo: keeps the array reference stable across renders so the
+  // deleteTemplate useCallback's deps array doesn't see a new identity
+  // every paint.
+  const allTemplates = useMemo(
+    () => [...BUILT_IN_TEMPLATES, ...customTemplates],
+    [customTemplates],
+  );
   const [selectedTemplateId, setSelectedTemplateId] = useState(() => {
     try { return localStorage.getItem(SELECTED_TEMPLATE_KEY) || '__all_details'; }
     catch { return '__all_details'; }
@@ -341,11 +287,6 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
     try { localStorage.setItem(SELECTED_TEMPLATE_KEY, selectedTemplateId); } catch {}
   }, [selectedTemplateId]); // eslint-disable-line
 
-  const toggleField = useCallback((fid) => {
-    setEnabledFields(curr => curr.includes(fid)
-      ? curr.filter(f => f !== fid)
-      : [...curr, fid]);
-  }, []);
   const toggleCategory = useCallback((cat) => {
     setEnabledCategories(curr => {
       const next = curr.includes(cat)
@@ -398,14 +339,8 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
     setDraftDescription(selectedTemplate.description || '');
   }, [selectedTemplate]);
 
-  const _REM_SECTIONS = [
-    { key: 'executive_summary',    label: 'Executive summary' },
-    { key: 'immediate_actions',    label: 'Immediate actions (next 15 minutes)' },
-    { key: 'investigation_steps',  label: 'Investigation steps' },
-    { key: 'containment_guidance', label: 'Containment' },
-    { key: 'recovery_guidance',    label: 'Recovery' },
-    { key: 'detection_guidance',   label: 'Detection hardening' },
-  ];
+  // REM_SECTIONS moved to module scope (REM_SECTIONS, declared above) so
+  // the useCallback below doesn't list it as a missing dep.
 
   const generateRemediation = useCallback(async () => {
     if (!rawLog.trim()) { setRemError('Paste the alert log first'); return; }
@@ -435,7 +370,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
   const copyAllRemediation = useCallback(() => {
     if (!remediation) return;
     const lines = [];
-    for (const s of _REM_SECTIONS) {
+    for (const s of REM_SECTIONS) {
       const v = remediation[s.key];
       if (!v) continue;
       lines.push(`# ${s.label}`);
@@ -876,7 +811,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
           )}
         </Stack>
 
-        {remediation && _REM_SECTIONS.map(s => {
+        {remediation && REM_SECTIONS.map(s => {
           const v = remediation[s.key];
           if (!v) return null;
           return (
