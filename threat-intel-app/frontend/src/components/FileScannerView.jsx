@@ -868,7 +868,8 @@ function TechnicalAssessment({ result }) {
   const soph = deep?.sophistication_level;
   const vec  = deep?.infection_vector;
   return (
-    <SectionCard id="technical" label="Technical Assessment" defaultOpen={true}>
+    <SectionCard id="technical" label="Technical Assessment" defaultOpen={false}
+      summary={result?.ai_analyst?.deep?.technical_summary ? 'AI assessment' : null}>
       {!tech && <AILoading text="Synthesizing technical assessment…"/>}
       {tech && (
         <>
@@ -923,7 +924,9 @@ function ExecutionNarrative({ result }) {
   const text = result.ai_analyst?.deep?.execution_narrative;
   if (!text && !result.ai_analyst) return null;
   return (
-    <SectionCard id="narrative" label="Execution Narrative" accent="#B286FF" defaultOpen={true} sx={{
+    <SectionCard id="narrative" label="Execution Narrative" accent="#B286FF" defaultOpen={false}
+      summary={result?.ai_analyst?.deep?.execution_narrative ? 'narrative ready' : null}
+      sx={{
       backgroundColor: muiAlpha('#B286FF', 0.04),
     }}>
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.25 }}>
@@ -951,7 +954,7 @@ function KeyFindings({ result }) {
   const items = result.ai_analyst?.deep?.key_findings || [];
   if (!items.length && !result.ai_analyst) return null;
   return (
-    <SectionCard id="findings" label="Key Findings" defaultOpen={true}
+    <SectionCard id="findings" label="Key Findings" defaultOpen={false}
       summary={items.length ? `${items.length} finding${items.length > 1 ? 's' : ''}` : null}>
       {!items.length && <AILoading text="Identifying analytical insights…"/>}
       {items.map((f, i) => (
@@ -1102,7 +1105,7 @@ function ThreatIntelSection({ result }) {
   const hitCount = sources.reduce((n, [, d, fn]) => n + (d && fn(d) ? 1 : 0), 0);
   return (
     <SectionCard id="ti" label="Threat Intelligence" defaultPad={false}
-      defaultOpen={true}
+      defaultOpen={false}
       summary={hitCount > 0 ? `${hitCount} source hit${hitCount > 1 ? 's' : ''}` : 'no hits'}>
       {sources.map(([name, data, summarize], i) => {
         const open = openSource === name;
@@ -1159,7 +1162,7 @@ function CapabilitiesSection({ result }) {
   if (!cap.tags?.length && !cap.mitre_techniques?.length) return null;
   return (
     <SectionCard id="caps" label="Behavioral Capabilities"
-      defaultOpen={(cap.tags?.length || 0) > 0 || (cap.mitre_techniques?.length || 0) > 0}
+      defaultOpen={false}
       summary={(cap.tags?.length || 0) + (cap.mitre_techniques?.length || 0) > 0
         ? `${cap.tags?.length || 0} caps · ${cap.mitre_techniques?.length || 0} MITRE`
         : 'none'}>
@@ -1269,7 +1272,7 @@ function StringsSection({ result }) {
   const totalStrings = Object.values(groups).reduce((n, g) => n + g.length, 0);
   return (
     <SectionCard id="strings" label="Strings & IOCs"
-      defaultOpen={totalStrings > 0 && sus.length > 0}
+      defaultOpen={false}
       summary={totalStrings > 0 ? `${totalStrings} indicator${totalStrings !== 1 ? 's' : ''}` : 'none'}>
       <MuiTextField size="small" fullWidth
         value={query} onChange={e => setQuery(e.target.value)}
@@ -1331,7 +1334,7 @@ function YaraSection({ result }) {
   if (!matches.length && !ai.rule) return null;
   return (
     <SectionCard id="yara" label="YARA Analysis"
-      defaultOpen={matches.length > 0}
+      defaultOpen={false}
       summary={matches.length > 0
         ? `${matches.length} match${matches.length > 1 ? 'es' : ''}`
         : 'no matches'}>
@@ -1626,7 +1629,7 @@ function Anomalies({ result }) {
   if (!items.length) return null;
   return (
     <SectionCard id="anomalies" label="Anomalies" accent="#E6700F"
-      defaultOpen={items.length > 0}
+      defaultOpen={false}
       summary={`${items.length} anomal${items.length === 1 ? 'y' : 'ies'}`}>
       {items.map((a, i) => (
         <Box key={i} sx={{
@@ -1742,7 +1745,7 @@ function ActionsSection({ result }) {
   });
   const color = { IMMEDIATE: '#EE3838', SHORTTERM: '#E6700F', LONGTERM: '#E1B823' };
   return (
-    <SectionCard id="actions" label="Recommended Actions" defaultOpen={true}
+    <SectionCard id="actions" label="Recommended Actions" defaultOpen={false}
       summary={all.length ? `${all.length} action${all.length === 1 ? '' : 's'}` : null}>
       {Object.entries(buckets).map(([k, items]) => items.length > 0 && (
         <Box key={k} sx={{ mb: 1.75 }}>
