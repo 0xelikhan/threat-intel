@@ -1053,6 +1053,74 @@ async def detection(req: DetectionRequest):
             "elastic": search_existing_elastic(techniques),
         }
 
+    # Additional detection-rule formats — analysts wanted the Detection
+    # card to cover EVERY platform, not just Sigma + KQL + YARA. Each
+    # action below produces one platform's rule as plain text.
+    if req.action in ("splunk_spl", "elastic_eql", "suricata",
+                       "chronicle_yara_l", "crowdstrike_fql"):
+        a = req.analysis or {}
+        ioc_json = json.dumps({k: v[:3] for k, v in (req.iocs or {}).items() if v})
+        mitre_str = ", ".join(a.get("mitreTechniques", []))
+        common_ctx = (
+            f"Threat Level: {a.get('threatLevel','MEDIUM')}\n"
+            f"Summary: {a.get('summary','')}\n"
+            f"MITRE: {mitre_str}\n"
+            f"IOCs: {ioc_json}\n"
+        )
+        _PROMPTS = {
+            "splunk_spl": (
+                "Generate a Splunk SPL detection search.\n"
+                "CHARACTER: Senior Detection Engineer specialising in Splunk.\n"
+                "CONSTRAINTS: Output ONLY valid SPL. Inline `\"...\"` comments.\n"
+                f"{common_ctx}"
+                "Requirements: use realistic sourcetype filters (e.g. WinEventLog:Sysmon, "
+                "wineventlog:security, suricata, zeek, aws_cloudtrail, o365_management_activity), "
+                "include relevant field extractions, stats / tstats aggregations where useful, "
+                "and a final | table or | sort line. Begin with a one-line `# Title` comment."
+            ),
+            "elastic_eql": (
+                "Generate an Elastic EQL detection query.\n"
+                "CHARACTER: Senior Detection Engineer specialising in Elastic Security.\n"
+                "CONSTRAINTS: Output ONLY valid EQL syntax. Inline `// ...` comments.\n"
+                f"{common_ctx}"
+                "Requirements: use sequence by host.id with maxspan when the alert is "
+                "multi-step, otherwise a single process/network/file event match. Use ECS "
+                "field names (process.name, process.parent.name, destination.ip, "
+                "file.path, host.name). Wildcard glob patterns where appropriate."
+            ),
+            "suricata": (
+                "Generate Snort / Suricata IDS rules.\n"
+                "CHARACTER: Senior Detection Engineer specialising in network IDS.\n"
+                "CONSTRAINTS: Output ONLY rule lines. One rule per line. No prose.\n"
+                f"{common_ctx}"
+                "Requirements: each rule should have `alert <proto> <src> <port> -> <dst> <port>` "
+                "header, content / pcre / flowbits matchers, msg, classtype, sid (use 9000000+ "
+                "as the analyst-allocated range), rev:1. Reference the IOCs or MITRE-implied "
+                "tradecraft (e.g. C2 beacon timing, suspicious User-Agent, ja3 hash)."
+            ),
+            "chronicle_yara_l": (
+                "Generate a Google Chronicle YARA-L 2.0 rule.\n"
+                "CHARACTER: Senior Detection Engineer specialising in Chronicle.\n"
+                "CONSTRAINTS: Output ONLY valid YARA-L 2.0 syntax. No markdown fences.\n"
+                f"{common_ctx}"
+                "Requirements: rule block with meta / events / match / condition sections. "
+                "Use UDM field paths (principal.process.command_line, target.ip, "
+                "metadata.event_type). Add a `match` window for multi-event sequences. "
+                "Include meta fields: author = 'RECON Platform', severity, mitre_attack."
+            ),
+            "crowdstrike_fql": (
+                "Generate a CrowdStrike Falcon FQL (Falcon Query Language) custom IOA rule.\n"
+                "CHARACTER: Senior Detection Engineer specialising in CrowdStrike Falcon.\n"
+                "CONSTRAINTS: Output ONLY the FQL pattern + IOA metadata. No markdown fences.\n"
+                f"{common_ctx}"
+                "Requirements: emit a Custom IOA expression using FileName, CommandLine, "
+                "ParentBaseFileName, ImageFileName fields. Add `Severity`, `Description`, "
+                "`Disposition` (Block or Detect) metadata as // comments above the rule. "
+                "Reference the matched MITRE techniques in the description."
+            ),
+        }
+        return {"result": await _ai_gen(_PROMPTS[req.action])}
+
     raise HTTPException(400, f"Unknown action: {req.action}")
 
 
