@@ -2330,27 +2330,46 @@ function WhyThisRating({ threatLevel, reasoning, basis, fpCheck, aiUnavailable }
       </Box>
       {/* ALWAYS-VISIBLE reasoning paragraph — short prose explaining why
           THIS specific threat level was chosen. The analyst should never
-          have to click to expand a panel to see this. */}
-      {reasoningText && (
-        <Typography sx={{
-          mt: 0.6, ml: 0.5, fontSize: 12, color: 'text.tertiary',
-          lineHeight: 1.6, fontStyle: 'normal',
-          borderLeft: `2px solid ${muiAlpha(color, 0.25)}`,
-          pl: 1.25, py: 0.25, whiteSpace: 'pre-wrap',
-        }}>
-          {reasoningText}
-        </Typography>
-      )}
-      {!reasoningText && aiUnavailable && (
-        <Typography sx={{
-          mt: 0.6, ml: 0.5, fontSize: 12, color: 'text.tertiary',
-          fontStyle: 'italic', lineHeight: 1.6, pl: 1.25,
-          borderLeft: `2px solid ${muiAlpha(color, 0.25)}`,
-        }}>
-          AI analysis was unavailable for this run — the level shown is a
-          fallback default. Restore the AI provider key and re-run.
-        </Typography>
-      )}
+          have to click to expand a panel to see this. When the AI didn't
+          return a reasoning string and the backend fallback didn't fire
+          yet (e.g. early SSE snapshot before investigation finishes), we
+          still surface a useful one-liner derived from the assessment_basis
+          or a level-appropriate default so the panel is never blank. */}
+      {(() => {
+        if (reasoningText) {
+          return (
+            <Typography sx={{
+              mt: 0.6, ml: 0.5, fontSize: 12, color: 'text.tertiary',
+              lineHeight: 1.6, fontStyle: 'normal',
+              borderLeft: `2px solid ${muiAlpha(color, 0.25)}`,
+              pl: 1.25, py: 0.25, whiteSpace: 'pre-wrap',
+            }}>{reasoningText}</Typography>
+          );
+        }
+        let fallback = '';
+        if (aiUnavailable) {
+          fallback = 'AI analysis was unavailable for this run — the level shown '
+                  + 'is a fallback default. Restore the AI provider key and re-run.';
+        } else if (hasItems) {
+          fallback = `Driven by: ${items.slice(0, 2).map(String).join('; ')}.`;
+        } else if (lvl === 'INFORMATIONAL' || lvl === 'LOW') {
+          fallback = `This alert is ${lvl} because no enrichment source flagged `
+                  + 'any IOC and no behavioural signal exceeded the evidence '
+                  + 'threshold, so the alert did not warrant a higher rating.';
+        } else {
+          fallback = `Threat level set to ${lvl}. The AI did not return an explicit `
+                  + 'rationale for this rating yet; the full assessment basis '
+                  + "will populate once the investigation stage completes.";
+        }
+        return (
+          <Typography sx={{
+            mt: 0.6, ml: 0.5, fontSize: 12, color: 'text.tertiary',
+            lineHeight: 1.6, fontStyle: aiUnavailable ? 'italic' : 'normal',
+            borderLeft: `2px solid ${muiAlpha(color, 0.25)}`,
+            pl: 1.25, py: 0.25, whiteSpace: 'pre-wrap',
+          }}>{fallback}</Typography>
+        );
+      })()}
       {open && (
         <Box sx={{
           mt: 0.5, pl: 1.5, pr: 1, py: 1,
