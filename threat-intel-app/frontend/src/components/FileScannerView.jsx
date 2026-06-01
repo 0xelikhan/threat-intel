@@ -18,6 +18,7 @@ import {
 } from '@mui/material';
 import { alpha as muiAlpha, useTheme } from '@mui/material/styles';
 import { Skeleton, SkeletonFileScanner } from './Skeleton';
+import URLScanLive from './URLScanLive';
 import {
   FileSearch, Copy, Check, Search, Download,
   ArrowUpRight, AlertTriangle, Shield, Play, Plus,
@@ -2407,6 +2408,11 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
               return (
                 <Stack spacing={3}>
                   <UrlReputationReport result={result}/>
+                  {/* Live URL detonation — the analyst wants this in the
+                      URL scanner view too, not just the analyze flow.
+                      Passes [source_url] directly so the dropdown comes
+                      pre-populated with the URL that was just scanned. */}
+                  <URLScanLive result={result} urls={[result.source_url]}/>
                   {fileHasSignal && (
                     <UrlFileAnalysisExpander result={result} onRefreshScan={onRefreshScan}
                       autoOpen={['MALICIOUS','SUSPICIOUS'].includes(result.verdict)}/>
