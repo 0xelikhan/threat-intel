@@ -1257,7 +1257,10 @@ function ThreatIntelSection({ result }) {
                 <Box component="pre" sx={{ ...monoSx, fontSize: 11,
                   color: 'text.primary', whiteSpace: 'pre-wrap',
                   wordBreak: 'break-all', m: 0, maxHeight: 320, overflow: 'auto',
-                }}>{JSON.stringify(data, null, 2)}</Box>
+                }}>{(() => {
+                  try { return JSON.stringify(data, null, 2); }
+                  catch { return '(value could not be serialised)'; }
+                })()}</Box>
               </Box>
             )}
           </Box>
@@ -1549,9 +1552,10 @@ function YaraSection({ result }) {
                       rule: ai.rule,
                     }),
                   });
-                  const d = await r.json();
-                  alert(r.ok ? `Saved as ${d.name}.yar` : `Failed: ${JSON.stringify(d)}`);
-                } catch (e) { alert(`Failed: ${e.message}`); }
+                  const d = await r.json().catch(() => ({}));
+                  if (r.ok) alert(`Saved as ${d.name}.yar`);
+                  else alert(`Failed: ${d.detail || d.error || `HTTP ${r.status}`}`);
+                } catch (e) { alert(`Failed: ${e.message || 'network error'}`); }
               }}>
               Save to library
             </MuiButton>

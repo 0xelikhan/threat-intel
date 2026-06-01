@@ -44,6 +44,54 @@ configure_logging()
 import logging as _logging
 _log = _logging.getLogger("recon.main")
 
+
+def _clean_exc(e: BaseException, *, prefix: str = "") -> str:
+    """Map any exception to a short analyst-readable string. Drops SDK
+    reprs like aiohttp's '0, message='', url=URL(...)' or OpenAI's
+    'APIError' wrappers. Use this any time an exception is going into a
+    user-visible field (HTTPException detail, SSE error event, persisted
+    'error' key in a scan result). `prefix` is prepended verbatim so
+    callers can give context: _clean_exc(e, prefix='MalwareBazaar') →
+    'MalwareBazaar: request timed out after 30s'."""
+    try:
+        import aiohttp
+    except Exception:
+        aiohttp = None
+
+    def _label(label: str) -> str:
+        return f"{prefix}: {label}" if prefix else label
+
+    if isinstance(e, asyncio.TimeoutError):
+        return _label("request timed out")
+    if aiohttp is not None:
+        if isinstance(e, getattr(aiohttp, "TooManyRedirects", ())):
+            return _label("too many redirects")
+        if isinstance(e, getattr(aiohttp, "InvalidURL", ())):
+            return _label("URL is malformed")
+        if isinstance(e, getattr(aiohttp, "ClientConnectorError", ())):
+            return _label("could not connect (DNS or refused)")
+        if isinstance(e, getattr(aiohttp, "ServerDisconnectedError", ())):
+            return _label("server closed the connection before responding")
+        if isinstance(e, getattr(aiohttp, "ClientPayloadError", ())):
+            return _label("malformed or truncated response body")
+        if isinstance(e, getattr(aiohttp, "ClientResponseError", ())):
+            status = getattr(e, "status", 0) or 0
+            if status > 0:
+                msg = getattr(e, "message", "") or ""
+                return _label(f"HTTP {status}" + (f" ({msg})" if msg else ""))
+            return _label("server returned an empty or malformed response")
+    msg = str(e).strip()
+    if (not msg
+            or msg.startswith("0, message=")
+            or "message='', url=URL(" in msg):
+        # SDK noise — surface the class name in a human shape.
+        cls = type(e).__name__
+        human = (cls.replace("Error", " error")
+                    .replace("Exception", " exception")
+                    .replace("Client", "client ").strip().lower())
+        return _label(human or "unknown error")
+    return _label(msg[:200])
+
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
@@ -313,12 +361,12 @@ async def health():
         from intel.cache import global_stats as _cache_stats
         cache_block = _cache_stats()
     except Exception as e:
-        cache_block = {"error": str(e)}
+        cache_block = {"error": _clean_exc(e, prefix="cache stats")}
     try:
         from intel.circuit_breaker import get_breaker as _get_breaker
         breaker_block = _get_breaker().stats()
     except Exception as e:
-        breaker_block = {"error": str(e)}
+        breaker_block = {"error": _clean_exc(e, prefix="breaker stats")}
     # Live diagnosis snapshot — updated by the 15-min background loop
     # so /api/health reflects current source / AI provider state, not
     # the boot-time snapshot. Additive — old fields preserved.
@@ -326,7 +374,7 @@ async def health():
         from intel.diagnose import get_current_health
         diagnosis_block = get_current_health()
     except Exception as e:
-        diagnosis_block = {"error": str(e)}
+        diagnosis_block = {"error": _clean_exc(e, prefix="health probe")}
     return {
         "status":          "ready" if config.is_configured() else "setup_required",
         "version":         "3.0.0",
@@ -663,7 +711,7 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
     except Exception as e:
         import traceback
         traceback.print_exc()
-        yield f"data: {json.dumps({'event': 'error', 'runId': run_id, 'error': str(e)})}\n\n"
+        yield f"data: {json.dumps({'event': 'error', 'runId': run_id, 'error': _clean_exc(e)})}\n\n"
     yield "data: [DONE]\n\n"
 
 @app.post("/api/analyze")
@@ -805,7 +853,7 @@ async def attribution_hashes(family: str, limit: int = 10):
                 "source": "MalwareBazaar (abuse.ch)"}
     except Exception as e:
         return {"family": fam, "hashes": [],
-                "error": f"MalwareBazaar call failed: {str(e)[:160]}",
+                "error": _clean_exc(e, prefix="MalwareBazaar"),
                 "source": "MalwareBazaar (abuse.ch)"}
 
     status = (body or {}).get("query_status") or ""
@@ -1349,7 +1397,7 @@ async def _chat_stream(run_id: str, user_msg: str):
 
         yield f"data: {json.dumps({'event': 'done', 'tool_calls': tool_calls_made, 'reply': final_content})}\n\n"
     except Exception as e:
-        yield f"data: {json.dumps({'event': 'error', 'error': str(e)})}\n\n"
+        yield f"data: {json.dumps({'event': 'error', 'error': _clean_exc(e)})}\n\n"
     yield "data: [DONE]\n\n"
 
 
@@ -1510,7 +1558,7 @@ async def scan_file(file: UploadFile = File(...)):
         from intel.yara_scanner import scan_bytes
         yara_hits = scan_bytes(data)
     except Exception as e:
-        yara_hits = [{"error": str(e)}]
+        yara_hits = [{"error": _clean_exc(e, prefix="YARA")}]
     # Also check the SHA-256 against LOLDrivers BYOVD catalog
     driver_hit = None
     try:
@@ -1585,7 +1633,7 @@ async def scan_file_v2(file: UploadFile = File(...)):
         from intel.file_correlation import correlate
         analysis["threat_intel"] = await correlate(analysis, config)
     except Exception as e:
-        analysis["threat_intel"] = {"error": str(e)}
+        analysis["threat_intel"] = {"error": _clean_exc(e, prefix="threat-intel")}
 
     # Mark AI as pending so the frontend knows to poll. The three AI
     # workflows then run in a background task; the persisted scan is
@@ -1719,7 +1767,10 @@ async def scan_hash(req: dict):
     vt = mb = ha = {}
     try:
         import aiohttp
-        async with aiohttp.ClientSession() as session:
+        # 30s total cap so a hung TI source can't lock the request forever.
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=30),
+        ) as session:
             from intel.file_correlation import _vt_file, _malwarebazaar, _hybrid_analysis
             r_vt, r_mb, r_ha = await asyncio.gather(
                 _vt_file(session, h, config.get("VIRUSTOTAL_KEY", "")),
@@ -1731,7 +1782,7 @@ async def scan_hash(req: dict):
             mb = r_mb if isinstance(r_mb, dict) else {}
             ha = r_ha if isinstance(r_ha, dict) else {}
     except Exception as e:
-        out["error"] = str(e)
+        out["error"] = _clean_exc(e, prefix="hash lookup")
 
     threat_intel = {"virustotal": vt, "malwarebazaar": mb, "hybrid_analysis": ha}
     vt_mal = vt.get("malicious") if isinstance(vt.get("malicious"), int) else 0
@@ -1806,41 +1857,6 @@ async def scan_url_endpoint(req: dict):
     }
     _SOFT_BLOCK_STATUSES = {401, 403, 406, 429, 503}
 
-    def _err_summary(e: Exception) -> str:
-        """aiohttp's default str() produces noise like
-        '0, message='', url=URL(...)'. Map common exception types to
-        analyst-readable phrasing. Subclass order matters here —
-        TooManyRedirects extends ClientResponseError, ContentTypeError
-        extends ClientResponseError, etc. Specific checks first."""
-        if isinstance(e, asyncio.TimeoutError):
-            return "request timed out after 30s"
-        if isinstance(e, aiohttp.TooManyRedirects):
-            return "too many redirects following the URL"
-        if isinstance(e, aiohttp.InvalidURL):
-            return "URL is malformed"
-        if isinstance(e, aiohttp.ClientConnectorError):
-            return "could not connect — DNS failed or host refused the request"
-        if isinstance(e, aiohttp.ServerDisconnectedError):
-            return "server closed the connection before responding (common with anti-bot layers)"
-        if isinstance(e, aiohttp.ClientPayloadError):
-            return "the server's response body was malformed or truncated"
-        if isinstance(e, aiohttp.ClientResponseError):
-            if e.status and e.status > 0:
-                return f"server returned HTTP {e.status}" + (
-                    f" ({e.message})" if e.message else "")
-            return ("server returned an empty or malformed response "
-                    "(common when anti-bot layers drop the connection)")
-        # Generic fallback — strip aiohttp's noisy default repr and
-        # surface the exception class name in a human form.
-        msg = str(e).strip()
-        if (not msg or msg.startswith("0, message=")
-                or "message='', url=URL(" in msg):
-            return (type(e).__name__
-                    .replace("Error", " error")
-                    .replace("Client", "client ")
-                    .strip().lower()) or "unknown network error"
-        return msg[:160]
-
     async def _try_fetch(headers):
         """Returns (data_bytes, status_code, exc_str). data is empty on
         any non-200. Caller decides whether the result is a soft fail."""
@@ -1861,7 +1877,7 @@ async def scan_url_endpoint(req: dict):
                             return b"", 413, "remote file exceeds 50 MB cap"
                     return b"".join(chunks), 200, ""
         except Exception as e:
-            return b"", 0, _err_summary(e)
+            return b"", 0, _clean_exc(e)
 
     data, last_status, last_err = await _try_fetch(_CHROME_HEADERS)
     if not data and last_status in _SOFT_BLOCK_STATUSES:
@@ -1931,7 +1947,7 @@ async def scan_url_endpoint(req: dict):
         from intel.file_correlation import correlate
         analysis["threat_intel"] = await correlate(analysis, config)
     except Exception as e:
-        analysis["threat_intel"] = {"error": str(e)}
+        analysis["threat_intel"] = {"error": _clean_exc(e, prefix="threat-intel")}
     try:
         import aiohttp
         from urllib.parse import urlparse
@@ -1953,7 +1969,7 @@ async def scan_url_endpoint(req: dict):
             "domains": {host: dom_enr if (host and isinstance(dom_enr, dict)) else {}},
         }
     except Exception as e:
-        analysis["enrichments"] = {"error": str(e)}
+        analysis["enrichments"] = {"error": _clean_exc(e, prefix="enrichment")}
     # Only schedule the AI pipeline when we actually have bytes to analyse.
     # Soft-fail downloads produce a stub analysis; the URL-reputation +
     # WHOIS + Wayback + URLScan submission paths still work without AI.
@@ -2205,7 +2221,7 @@ async def sandbox_lookup(sha256: str):
         from intel.sandbox import lookup_all
         return {"sha256": sha256, "sandbox": await lookup_all(sha256, config)}
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise HTTPException(503, _clean_exc(e, prefix="sandbox lookup"))
 
 
 @app.post("/api/urlscan/submit")
@@ -2298,7 +2314,7 @@ async def status_check():
         except asyncio.TimeoutError:
             return {"state": "timeout"}
         except Exception as e:
-            return {"state": "error", "detail": str(e)[:120]}
+            return {"state": "error", "detail": _clean_exc(e)}
 
     checks = []
     if config.get("VIRUSTOTAL_KEY"):
@@ -2736,7 +2752,7 @@ async def email_remediate(req: EmailRemediateRequest):
             max_tokens=1800,
         )
     except Exception as e:
-        raise HTTPException(503, f"AI remediation unavailable: {e}")
+        raise HTTPException(503, _clean_exc(e, prefix="AI remediation"))
 
     if resp.error:
         raise HTTPException(503, resp.error)

@@ -415,15 +415,15 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
           },
         }),
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.detail || d.error || `HTTP ${r.status}`);
       // The AI guidance is woven into the body by compose_ai's prompt
       // (see backend/intel/email_composer.py::_AI_SYSTEM — four-part
       // structure: details, action taken, recommended next steps,
       // closing). Nothing to append here.
       setComposed(d);
     } catch (e) {
-      setComposeError(e.message);
+      setComposeError(e.message || 'compose failed');
     } finally {
       setComposing(false);
     }

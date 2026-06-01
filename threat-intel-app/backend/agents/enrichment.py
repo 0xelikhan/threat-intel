@@ -31,6 +31,39 @@ from intel.circuit_breaker import get_breaker, host_of
 
 _log = logging.getLogger("recon.enrichment")
 
+
+def _humanise_exc(e: BaseException) -> str:
+    """aiohttp's default str() leaks `0, message='', url=URL(...)` which is
+    meaningless in a user-visible 'error' field. Map common exception
+    types to a short phrase, fall back to the exception class name."""
+    if isinstance(e, asyncio.TimeoutError):
+        return "request timed out"
+    if isinstance(e, getattr(aiohttp, "TooManyRedirects", ())):
+        return "too many redirects"
+    if isinstance(e, getattr(aiohttp, "InvalidURL", ())):
+        return "URL is malformed"
+    if isinstance(e, getattr(aiohttp, "ClientConnectorError", ())):
+        return "could not connect (DNS or refused)"
+    if isinstance(e, getattr(aiohttp, "ServerDisconnectedError", ())):
+        return "server closed the connection"
+    if isinstance(e, getattr(aiohttp, "ClientPayloadError", ())):
+        return "malformed response body"
+    if isinstance(e, getattr(aiohttp, "ClientResponseError", ())):
+        s = getattr(e, "status", 0) or 0
+        m = getattr(e, "message", "") or ""
+        if s > 0:
+            return f"HTTP {s}" + (f" ({m})" if m else "")
+        return "server returned an empty or malformed response"
+    msg = str(e).strip()
+    if (not msg
+            or msg.startswith("0, message=")
+            or "message='', url=URL(" in msg):
+        cls = type(e).__name__
+        return (cls.replace("Error", " error")
+                   .replace("Exception", " exception")
+                   .strip().lower()) or "unknown error"
+    return msg[:200]
+
 # Transport timeout (aiohttp-internal — covers connect + read body).
 _TIMEOUT = aiohttp.ClientTimeout(total=10)
 # Outer safety-net timeout (wraps the whole call, including parsing).
@@ -124,7 +157,7 @@ async def _get(session, url, **kw):
                 "error_type": "timed_out"}
     except Exception as e:
         if host: breaker.record_failure(host)
-        return {"error": str(e), "error_type": "unreachable"}
+        return {"error": _humanise_exc(e), "error_type": "unreachable"}
 
 
 async def _post(session, url, **kw):
@@ -165,7 +198,7 @@ async def _post(session, url, **kw):
                 "error_type": "timed_out"}
     except Exception as e:
         if host: breaker.record_failure(host)
-        return {"error": str(e), "error_type": "unreachable"}
+        return {"error": _humanise_exc(e), "error_type": "unreachable"}
 
 
 async def _noop():
