@@ -140,15 +140,23 @@ export default function URLScanLive({ result, bare, urls: urlsProp }) {
         </Typography>
       )}
       {submission?.state === 'timeout' && (
-        <Typography sx={{ fontSize: 12, color: 'warning.main' }}>
-          Scan still processing after 3 min. View it directly:{' '}
-          <Box component="a" href={submission.result_url}
-            target="_blank" rel="noreferrer"
-            sx={{ color: 'primary.main', textDecoration: 'none',
-              '&:hover': { textDecoration: 'underline' } }}>
-            {submission.result_url}
-          </Box>
-        </Typography>
+        <Box>
+          <Typography sx={{ fontSize: 12, color: 'warning.main', mb: 0.5 }}>
+            Scan didn't finish within 3 minutes. URLScan sometimes deletes
+            very-short-lived submissions before they complete, especially
+            for URLs behind auth gates.
+          </Typography>
+          <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
+            Re-submit to try again, or check URLScan directly:{' '}
+            <Box component="a"
+              href={`https://urlscan.io/search/#${encodeURIComponent(target || '')}`}
+              target="_blank" rel="noreferrer"
+              sx={{ color: 'primary.main', textDecoration: 'none',
+                '&:hover': { textDecoration: 'underline' } }}>
+              search urlscan.io for {target}
+            </Box>
+          </Typography>
+        </Box>
       )}
       {submission?.state === 'error' && (
         <Typography sx={{ fontSize: 12, color: 'error.main' }}>
