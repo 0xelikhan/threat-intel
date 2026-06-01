@@ -391,6 +391,7 @@ class ConfigManager:
     def __init__(self):
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         self._config: dict = {}
+        self._mtime: float = 0.0
         self._load()
 
     def _load(self):
@@ -399,6 +400,7 @@ class ConfigManager:
             try:
                 with open(CONFIG_FILE) as f:
                     self._config = json.load(f)
+                self._mtime = CONFIG_FILE.stat().st_mtime
             except Exception:
                 self._config = {}
 
@@ -407,12 +409,31 @@ class ConfigManager:
             if key in os.environ and os.environ[key]:
                 self._config[key] = os.environ[key]
 
+    def _maybe_reload(self):
+        """Re-read config.json when the file's mtime advances. Lets the
+        operator edit data/config.json with the backend running and have
+        new keys (MalwareBazaar Auth-Key, etc.) picked up immediately
+        without a restart. Cheap — one stat() call per get()."""
+        if not CONFIG_FILE.exists():
+            return
+        try:
+            mtime = CONFIG_FILE.stat().st_mtime
+        except OSError:
+            return
+        if mtime > self._mtime:
+            self._load()
+
     def _save(self):
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         with open(CONFIG_FILE, "w") as f:
             json.dump(self._config, f, indent=2)
+        try:
+            self._mtime = CONFIG_FILE.stat().st_mtime
+        except OSError:
+            pass
 
     def get(self, key: str, default: str = "") -> str:
+        self._maybe_reload()
         defn = API_KEY_DEFINITIONS.get(key, {})
         return self._config.get(key) or defn.get("default") or default
 
