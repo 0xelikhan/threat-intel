@@ -1809,23 +1809,36 @@ async def scan_url_endpoint(req: dict):
     def _err_summary(e: Exception) -> str:
         """aiohttp's default str() produces noise like
         '0, message='', url=URL(...)'. Map common exception types to
-        analyst-readable phrasing."""
-        cls = type(e).__name__
+        analyst-readable phrasing. Subclass order matters here —
+        TooManyRedirects extends ClientResponseError, ContentTypeError
+        extends ClientResponseError, etc. Specific checks first."""
         if isinstance(e, asyncio.TimeoutError):
             return "request timed out after 30s"
-        if isinstance(e, aiohttp.ClientConnectorError):
-            return "host refused the connection or DNS failed"
-        if isinstance(e, aiohttp.ServerDisconnectedError):
-            return "server closed the connection before responding"
-        if isinstance(e, aiohttp.ClientResponseError):
-            return f"HTTP {e.status} ({e.message or 'no message'})"
         if isinstance(e, aiohttp.TooManyRedirects):
-            return "the URL bounced through too many redirects"
+            return "too many redirects following the URL"
         if isinstance(e, aiohttp.InvalidURL):
             return "URL is malformed"
+        if isinstance(e, aiohttp.ClientConnectorError):
+            return "could not connect — DNS failed or host refused the request"
+        if isinstance(e, aiohttp.ServerDisconnectedError):
+            return "server closed the connection before responding (common with anti-bot layers)"
+        if isinstance(e, aiohttp.ClientPayloadError):
+            return "the server's response body was malformed or truncated"
+        if isinstance(e, aiohttp.ClientResponseError):
+            if e.status and e.status > 0:
+                return f"server returned HTTP {e.status}" + (
+                    f" ({e.message})" if e.message else "")
+            return ("server returned an empty or malformed response "
+                    "(common when anti-bot layers drop the connection)")
+        # Generic fallback — strip aiohttp's noisy default repr and
+        # surface the exception class name in a human form.
         msg = str(e).strip()
-        if not msg or msg.startswith("0, message="):
-            return cls.replace("Error", "").lower() or "unknown network error"
+        if (not msg or msg.startswith("0, message=")
+                or "message='', url=URL(" in msg):
+            return (type(e).__name__
+                    .replace("Error", " error")
+                    .replace("Client", "client ")
+                    .strip().lower()) or "unknown network error"
         return msg[:160]
 
     async def _try_fetch(headers):
