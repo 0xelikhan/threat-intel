@@ -300,6 +300,14 @@ async def run_response(state: dict) -> dict:
     trace = state.get("agent_trace", [])
 
     summary = investigation.get("summary", "")
+    # Strip em / en dashes from the AI summary — the analyst-facing Summary
+    # card renders this in plain prose alongside the disposition reason,
+    # both of which look "AI-written" with em dashes scattered through.
+    try:
+        from intel.email_composer import _strip_em_dashes as _ed
+        summary = _ed(summary) if isinstance(summary, str) else summary
+    except Exception:
+        pass
     mitre_str = ", ".join(mitre[:8])
 
     # ── Actor attribution must happen BEFORE the evidence pack uses it ──
@@ -360,13 +368,26 @@ async def run_response(state: dict) -> dict:
             # Bound to the first 600 chars to keep the prompt slot small.
             _operator_note = _trailing[:600].strip()
 
+    # Ground-truth lookup of WHICH source flagged WHICH IOC — pulled from
+    # the deterministic enrichment summary. The analyst_prompt cites these
+    # verbatim so it cannot hallucinate "VirusTotal + MalwareBazaar
+    # corroborated this hash" when actually only AbuseIPDB flagged the IP.
+    _enr_sum = investigation.get("enrichment_summary") or {}
+    _flagged_map = (_enr_sum.get("flagged_per_ioc") or {})
+    _enr_line    = (_enr_sum.get("line") or "").strip()
+
     evidence_pack = {
         "alert_text_first_300": (state.get("raw_input") or "")[:300],
         # Analyst commentary the operator typed in the analyze textbox
         # (mixed inline with the log). Authoritative — the AI must respect
         # this when picking disposition.
         "operator_analyst_note": _operator_note,
-        "key_findings":         investigation.get("key_findings", [])[:6],
+        # AUTHORITATIVE source→IOC flag map. The ONLY pairs the AI is
+        # allowed to cite as "<source> flagged <ioc>". If a pair isn't
+        # in this dict it didn't happen.
+        "ground_truth_flagged":  _flagged_map,
+        "enrichment_summary":    _enr_line,
+        "key_findings":          investigation.get("key_findings", [])[:6],
         "correlated_signals":   investigation.get("correlated_signals", [])[:5],
         "ioc_assessments":      investigation.get("ioc_assessments", [])[:8],
         "mitre_evidence":       investigation.get("mitre_evidence", [])[:6],
@@ -481,7 +502,27 @@ RESPOND with this EXACT JSON (no markdown fences, no commentary):
 
 Every disposition_reason and clear_justification claim must trace back to the
 evidence pack. No generic phrasing. No hedging with 'potential misuse' when
-the evidence points to benign activity."""
+the evidence points to benign activity.
+
+SOURCE CITATION TRUTH RULES (read carefully — analysts catch this):
+* "ground_truth_flagged" in the evidence pack is the ONLY authoritative
+  source→IOC flag map. Each key is an IOC value; each value is the list
+  of sources that flagged it. If you want to write "<Source> flagged
+  <ioc>", the (source, ioc) pair MUST appear in that map.
+* DO NOT write composite citations like "(MalwareBazaar, VirusTotal)"
+  or "corroborated by multiple sources" unless ground_truth_flagged
+  actually shows multiple sources for the same IOC.
+* DO NOT name a hash as "flagged by X" when the only flagged IOC in the
+  map is an IP or domain.
+* If ground_truth_flagged is empty AND the threat_level is still
+  HIGH/CRITICAL because of behavioural evidence (KEV CVE, named
+  malware family in the AI summary, lateral movement pattern), CITE THAT
+  evidence by name (e.g. "vssadmin shadow-copy deletion + ransom-note
+  drop"). Don't fabricate TI sources to justify the verdict.
+
+PROSE STYLE: do NOT use em dashes (—) or en dashes (–) anywhere in the
+output. Use commas, periods, or restructure the sentence instead. The
+analyst's UI strips them out, so writing them is wasted tokens."""
 
     # Detection content (Sigma/KQL/multi-SIEM) is generated ON DEMAND from the UI
     # via /api/detection — it's the slowest part of this stage and isn't needed on
@@ -489,6 +530,26 @@ the evidence points to benign activity."""
     # which keeps the response stage to a single AI call. The trimmed schema (no
     # client email / IR playbook — neither is shown in the UI) needs little headroom.
     analyst_summary = await _ai_call_json(analyst_prompt, config, max_tokens=700)
+    # Strip em / en dashes from every prose field the analyst will read in
+    # the Summary card. The AI tends to insert " — " between clauses; the
+    # CLAUDE.md convention is to avoid em dashes in user-facing strings
+    # because they signal "AI wrote this". Reuse the helper that already
+    # handles this for email composer output.
+    try:
+        from intel.email_composer import _strip_em_dashes
+        if isinstance(analyst_summary, dict):
+            for _k in ("disposition_reason", "clear_justification"):
+                _v = analyst_summary.get(_k)
+                if isinstance(_v, str):
+                    analyst_summary[_k] = _strip_em_dashes(_v)
+            _steps = analyst_summary.get("escalation_steps")
+            if isinstance(_steps, list):
+                analyst_summary["escalation_steps"] = [
+                    _strip_em_dashes(s) if isinstance(s, str) else s
+                    for s in _steps
+                ]
+    except Exception:
+        pass
     sigma_rule, kql_query, siem_queries = "", "", {}
     sigma_valid, sigma_error = False, "on-demand: generate from the Detection card"
 

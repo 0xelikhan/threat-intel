@@ -1339,7 +1339,7 @@ async def run_investigation(state: dict, on_event=None) -> dict:
         "\n"
         "The 'Alert content' below may contain a raw log, analyst commentary\n"
         "about that log, or both interleaved. Whatever the analyst typed is\n"
-        "their environmental knowledge and you must respect it. THREE rules:\n"
+        "their environmental knowledge and you must respect it. FOUR rules:\n"
         "\n"
         "  1. Every claim you make in summary / key_findings / confirmed_facts\n"
         "     / ioc_assessments MUST be traceable to either (a) a literal\n"
@@ -1356,6 +1356,13 @@ async def run_investigation(state: dict, on_event=None) -> dict:
         "  3. Do not name a threat-intel source (VirusTotal, AbuseIPDB,\n"
         "     MalwareBazaar, etc.) unless that source actually appears in\n"
         "     the ENRICHED IOC DATA payload with a non-error value.\n"
+        "  4. Do NOT write composite source citations like\n"
+        "     '(MalwareBazaar, VirusTotal)' or 'corroborated by multiple\n"
+        "     sources' unless the enrichment payload shows MULTIPLE sources\n"
+        "     flagging the SAME IOC. Cite only the source–IOC pairs that\n"
+        "     actually appear in the data.\n"
+        "  5. PROSE STYLE: do not use em dashes (—) or en dashes (–). Use\n"
+        "     commas, periods, or restructure. The UI strips them.\n"
     )
 
     result = None

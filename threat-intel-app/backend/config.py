@@ -85,6 +85,17 @@ API_KEY_DEFINITIONS = {
         "placeholder": "AbuseIPDB API key",
         "group": "API Keys"
     },
+    "MALWAREBAZAAR_API_KEY": {
+        "label": "MalwareBazaar Auth-Key",
+        "description": "abuse.ch MalwareBazaar requires authentication for "
+                       "every API call (since Nov 2023). Free, takes a "
+                       "minute to provision. Drives the attribution chip's "
+                       "malware-hash pivot.",
+        "required": False,
+        "url": "https://auth.abuse.ch",
+        "placeholder": "MalwareBazaar Auth-Key",
+        "group": "API Keys"
+    },
     "IPINFO_TOKEN": {
         "label": "ipinfo.io Token",
         "description": "IP geolocation, ASN. Required for Geo Map. Free: 50,000/month.",
