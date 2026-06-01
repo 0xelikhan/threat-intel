@@ -2430,12 +2430,13 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
                       </Typography>
                     </MuiPaper>
                   )}
-                  <UrlReputationReport result={result}/>
-                  {/* Live URL detonation — the analyst wants this in the
-                      URL scanner view too, not just the analyze flow.
-                      Passes [source_url] directly so the dropdown comes
-                      pre-populated with the URL that was just scanned. */}
+                  {/* Live URL detonation pinned near the top — the
+                      analyst wants to kick the detonation off and see
+                      its progress before scrolling through reputation
+                      details. Pre-populated with [source_url] so the
+                      Submit button is one click away. */}
                   <URLScanLive result={result} urls={[result.source_url]}/>
+                  <UrlReputationReport result={result}/>
                   {fileHasSignal && (
                     <UrlFileAnalysisExpander result={result} onRefreshScan={onRefreshScan}
                       autoOpen={['MALICIOUS','SUSPICIOUS'].includes(result.verdict)}/>

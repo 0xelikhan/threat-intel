@@ -482,12 +482,21 @@ RESPOND with this EXACT JSON (no markdown fences, no commentary):
 ══════════════════════════════════════════════════════════════════════════════════
 {{
   "disposition":        "ESCALATE|CLEAR|MONITOR",
-  "disposition_reason": "<2-3 sentences. Cite at least TWO specific evidence
-                          items from the pack (e.g. 'EPSS 94% on the matched
-                          KEV CVE', 'domain registered 4h ago + EvilProxy URL
-                          pattern', 'process matches Dell SupportAssist known-
-                          good pattern + hash clean across all sources').
-                          Must support the disposition choice.>",
+  "disposition_reason": "<2-3 sentences of flowing prose. The Summary card
+                          renders this DIRECTLY AFTER the AI's main summary
+                          paragraph as part of one analyst-readable narrative —
+                          so do NOT repeat what the summary already said, do
+                          NOT lead with phrases like 'This alert is ESCALATE
+                          because' (the disposition chip above the paragraph
+                          already says that). Add NEW information beyond the
+                          summary: cite at least TWO specific evidence items
+                          from the pack ('EPSS 94% on the matched KEV CVE',
+                          'domain registered 4h ago + EvilProxy URL pattern',
+                          'process matches Dell SupportAssist known-good
+                          pattern + hash clean across all sources') and weave
+                          them into prose that naturally continues the
+                          summary. Active voice, no em dashes, no
+                          'Recommended action:' prefix.>",
   "clear_justification":"<If CLEAR: cite the specific signal that makes this
                           benign. If MONITOR/ESCALATE: state 'Not a false
                           positive:' then explain why benign-signal hypotheses

@@ -2642,42 +2642,46 @@ function AnalystSummary({ result, rs }) {
   // card so the analyst gets the human-readable read before the dial.
   const plainEnglish = (result?.log_translation?.normalized_summary || '').trim();
 
-  // Combined Summary — plain-English read + AI summary + recommended
-  // action + the empirical enrichment line are stitched into ONE flowing
-  // paragraph (single space joiner, not double-newline) so the analyst
-  // reads a single coherent narrative instead of stacked panels.
-  // De-duplicate: if the plain-English read and the AI summary say the
-  // same thing, keep only the longer one.
-  const dispLine = hasDisposition
-    ? (a.disposition === 'CLEAR'
-        ? 'Recommended action: CLEAR'
-        : a.disposition === 'ESCALATE'
-          ? 'Recommended action: ESCALATE'
-          : `Recommended action: ${a.disposition}`)
-    : '';
+  // Summary structure rebuilt for prose flow:
+  //   1. Disposition rendered as a coloured chip + reason — visually
+  //      separate from the AI prose so we don't have to bolt
+  //      "Recommended action: X — Y" into the middle of the paragraph.
+  //   2. Plain-English + AI summary fused into ONE flowing paragraph,
+  //      with aggressive de-dupe so the two AI calls don't repeat each
+  //      other's content.
+  //   3. Enrichment-summary line rendered as a small mono footer
+  //      underneath, not as a trailing prose sentence.
   const dispReason = (a?.disposition_reason || '').trim();
   const enrichLine = (rs?.enrichment_summary?.line || '').trim();
+  const _toks = (s) => new Set((s.toLowerCase().match(/[a-z0-9@.-]{4,}/g) || []));
+  const _overlap = (x, y) => {
+    if (!x || !y) return 0;
+    const a_ = _toks(x), b_ = _toks(y);
+    if (!a_.size || !b_.size) return 0;
+    const inter = [...a_].filter(t => b_.has(t)).length;
+    return inter / Math.max(1, Math.min(a_.size, b_.size));
+  };
+  // Drop overlapping pieces — plainEnglish vs summary, summary vs
+  // dispReason. Threshold 50% catches paraphrased duplicates the old
+  // 60% threshold missed.
+  let _summary    = summary;
+  let _dispReason = dispReason;
+  if (_overlap(plainEnglish, _summary)    >= 0.5) _summary = '';
+  if (_overlap(plainEnglish, _dispReason) >= 0.5) _dispReason = '';
+  if (_overlap(_summary, _dispReason)     >= 0.5) {
+    // Keep whichever is longer — usually disp_reason is denser/more useful.
+    if ((_summary || '').length > (_dispReason || '').length) _dispReason = '';
+    else _summary = '';
+  }
   const _ensurePeriod = (s) => {
     const t = (s || '').trim();
     if (!t) return '';
     return /[.!?]$/.test(t) ? t : t + '.';
   };
-  // Drop the AI summary when it is substantially the same idea as the
-  // plain-English read (>= 60% word overlap) — keeps the paragraph from
-  // saying the same thing twice in slightly different wording.
-  let _summary = summary;
-  if (plainEnglish && summary) {
-    const _toks = (s) => new Set((s.toLowerCase().match(/[a-z0-9@.-]{4,}/g) || []));
-    const a_ = _toks(plainEnglish), b_ = _toks(summary);
-    const inter = [...a_].filter(t => b_.has(t)).length;
-    const ratio = inter / Math.max(1, Math.min(a_.size, b_.size));
-    if (ratio >= 0.6) _summary = '';
-  }
   const combined = [
     _ensurePeriod(plainEnglish),
     _ensurePeriod(_summary),
-    dispLine && _ensurePeriod(dispReason ? `${dispLine} — ${dispReason}` : dispLine),
-    _ensurePeriod(enrichLine),
+    _ensurePeriod(_dispReason),
   ].filter(Boolean).join(' ');
 
   return (
@@ -2685,13 +2689,30 @@ function AnalystSummary({ result, rs }) {
       {/* Order per analyst request:
             1. Threat score (top — the empirical headline)
             2. Possible attribution (only shows when TTP overlap ≥ 75%)
-            3. AI summary paragraph (combined plain-English + verdict +
-               recommended action + enrichment line)
-            4. Confirmed facts / analyst assessment split
-            5. Log correlation (when multi-log input was submitted)        */}
+            3. Disposition pill (when set) — visual separator, not prose
+            4. Flowing AI prose paragraph (plain-English + AI summary +
+               disposition reason, de-duplicated)
+            5. Enrichment-summary mono footer
+            6. Confirmed facts / analyst assessment split
+            7. Log correlation (when multi-log input was submitted)        */}
       {hasGti && <ThreatScore result={result}/>}
 
       {topActor && <AttributionChip actor={topActor}/>}
+
+      {hasDisposition && (
+        <Stack direction="row" alignItems="center" spacing={1}
+          sx={{ mb: 1.25 }}>
+          <Box sx={{
+            fontSize: 11, fontWeight: 700, color: dispColor,
+            backgroundColor: muiAlpha(dispColor, 0.12),
+            border: `1px solid ${muiAlpha(dispColor, 0.4)}`,
+            borderRadius: '4px', px: 1, py: '3px',
+            textTransform: 'uppercase', letterSpacing: '0.06em',
+          }}>
+            Recommended action · {a.disposition}
+          </Box>
+        </Stack>
+      )}
 
       {combined && (
         <Typography sx={{
@@ -2701,6 +2722,19 @@ function AnalystSummary({ result, rs }) {
                                   pl: 1.5 } : {}),
         }}>
           {combined}
+        </Typography>
+      )}
+
+      {enrichLine && (
+        <Typography sx={{
+          fontFamily: '"IBM Plex Mono", monospace',
+          fontSize: 11, color: 'text.tertiary', lineHeight: 1.55,
+          mb: 1.5, pl: hasDisposition ? 1.5 : 0,
+          borderLeft: hasDisposition
+            ? `3px solid ${muiAlpha(dispColor, 0.3)}`
+            : 'none',
+        }}>
+          {enrichLine}
         </Typography>
       )}
 
