@@ -481,7 +481,13 @@ def analyze_script(file_bytes: bytes, filename: str) -> Dict:
     out["source_preview"] = text[:4000]
     out["line_count"]     = text.count("\n") + 1
     out["urls"]           = sorted({u for u in re.findall(r"https?://[^\s\"'<>]+", text)})[:20]
-    out["ips"]            = sorted({i for i in re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", text)})[:20]
+    # IPv4 octet validation — drop matches where any octet > 255 (Defender
+    # / vendor version strings have the same shape but are not IPs).
+    def _v4_ok(ip):
+        p = ip.split(".")
+        return len(p) == 4 and all(x.isdigit() and int(x) <= 255 for x in p)
+    out["ips"]            = sorted({i for i in re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", text)
+                                       if _v4_ok(i)})[:20]
 
     obfusc_flags = []
     if re.search(r"FromBase64String|-enc(?:oded)?\b", text, re.IGNORECASE):

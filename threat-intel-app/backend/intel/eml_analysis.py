@@ -38,11 +38,26 @@ def _parse_auth_results(value: str) -> dict:
     return out
 
 
+def _valid_ipv4_octets(ip: str) -> bool:
+    """Every IPv4 octet must be 0-255. Discard any v4-shaped match that
+    fails — Defender / vendor-version strings slip past the regex but are
+    not IP addresses."""
+    parts = (ip or "").split(".")
+    if len(parts) != 4:
+        return False
+    for p in parts:
+        if not p.isdigit() or int(p) > 255:
+            return False
+    return True
+
+
 def _received_chain_ips(received_headers: list[str]) -> list[str]:
     """Pull sender IPs from each Received: header (most recent → oldest)."""
     ips = []
     for h in received_headers:
         for ip in re.findall(r"\[(\d{1,3}(?:\.\d{1,3}){3})\]", h or ""):
+            if not _valid_ipv4_octets(ip):
+                continue
             if ip not in ips:
                 ips.append(ip)
     return ips

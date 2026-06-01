@@ -66,6 +66,45 @@ def _noise_ip(ip: str) -> bool:
             or a.is_multicast or a.is_reserved or a.is_private)
 
 
+def _valid_ipv4_octets(ip: str) -> bool:
+    """Explicit IPv4 octet validation: every octet must be 0-255. Defender
+    Security Intelligence Version strings ("AV: 1.451.195.0") match the
+    dotted-quad regex but are not IPs — their second octet exceeds 255."""
+    if not ip or ":" in ip:
+        return False
+    parts = ip.split(".")
+    if len(parts) != 4:
+        return False
+    for p in parts:
+        if not p.isdigit() or int(p) > 255:
+            return False
+    return True
+
+
+# Microsoft Defender Event ID 1116/1117 emits Security Intelligence and
+# Engine version strings shaped like dotted-quads. Strip them before regex
+# extraction so they never become IOC candidates. Kept in sync with
+# agents/triage._DEFENDER_VERSION_RE.
+_DEFENDER_VERSION_RE = re.compile(
+    r"\b(?:AV|AS|NIS|AM|AntiSpyware|AntiVirus|Engine|"
+    r"Security\s+Intelligence|Anti(?:malware|spyware|virus))\s+"
+    r"(?:Version|Signature\s+Version)?\s*:\s*"
+    r"\d{1,5}(?:\.\d{1,5}){2,3}",
+    re.IGNORECASE,
+)
+_DEFENDER_AV_KV_RE = re.compile(
+    r"\b(?:AV|AS|NIS|AM)\s*:\s*\d{1,5}(?:\.\d{1,5}){2,3}\b",
+)
+
+
+def _strip_defender_versions(text: str) -> str:
+    if not text:
+        return text
+    text = _DEFENDER_VERSION_RE.sub(" ", text)
+    text = _DEFENDER_AV_KV_RE.sub(" ", text)
+    return text
+
+
 def _extract_ipv6(text: str) -> set:
     """Pull IPv6 addresses out of text and normalise through
     ipaddress.ip_address(). Drops regex-prefix substrings (when both
@@ -140,8 +179,12 @@ class ExtractIOCsSkill(Skill):
         if not isinstance(raw, str):
             raw = str(raw)
 
-        ips     = sorted({m for m in _RE_IPV4.findall(raw) if not _noise_ip(m)} |
-                         {m for m in _extract_ipv6(raw)        if not _noise_ip(m)})
+        # Scrub Defender version strings before any IPv4 regex match.
+        raw = _strip_defender_versions(raw)
+
+        ips     = sorted({m for m in _RE_IPV4.findall(raw)
+                            if _valid_ipv4_octets(m) and not _noise_ip(m)} |
+                         {m for m in _extract_ipv6(raw) if not _noise_ip(m)})
         domains = sorted({m for m in _RE_DOMAIN.findall(raw) if not _noise_domain(m)})
         urls    = sorted(set(_RE_URL.findall(raw)))
         emails  = sorted({m.lower() for m in _RE_EMAIL.findall(raw)})
