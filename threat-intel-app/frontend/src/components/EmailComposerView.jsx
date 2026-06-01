@@ -216,6 +216,60 @@ function SectionHeader({ title, badge, accent = '#0fbcff' }) {
 }
 
 
+/* PanelCard — chevron-toggled collapsible wrapper. Mirrors the file
+   analyzer's SectionCard pattern: header click toggles open/closed,
+   chevron rotates 90° when expanded, optional right-aligned summary
+   indicator next to the title. State is local per card.            */
+function PanelCard({ title, accent = '#0fbcff', badge, summary,
+                     defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <MuiPaper elevation={0} sx={{
+      backgroundColor: '#09253d',
+      border: theme => `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+      borderRadius: '4px', mb: 2,
+    }}>
+      <Box
+        onClick={() => setOpen(o => !o)}
+        sx={{
+          display: 'flex', alignItems: 'center', gap: 1,
+          cursor: 'pointer', userSelect: 'none',
+          p: '12px 16px',
+          borderBottom: open ? `1px solid ${muiAlpha('#ffffff', 0.08)}` : 'none',
+        }}>
+        <Box sx={{
+          color: accent,
+          transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+          transition: 'transform 0.18s ease',
+          display: 'flex', alignItems: 'center',
+        }}>
+          <ChevronRight size={14}/>
+        </Box>
+        <Box sx={{ width: 3, height: 14, backgroundColor: accent, borderRadius: 0.5 }}/>
+        <Typography sx={{ fontSize: 12, fontWeight: 600, color: 'text.primary',
+          textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          {title}
+        </Typography>
+        {badge && (
+          <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>· {badge}</Typography>
+        )}
+        {summary && (
+          <Typography sx={{ ml: 'auto !important', fontSize: 11,
+            color: 'text.tertiary', textTransform: 'none' }}>
+            {summary}
+          </Typography>
+        )}
+      </Box>
+      {open && (
+        <Box sx={{ p: 2 }}>
+          {children}
+        </Box>
+      )}
+    </MuiPaper>
+  );
+}
+
+
 export default function EmailComposerView({ initialLog = '', initialParsed = null, onClose }) {
   const [rawLog, setRawLog]                 = useState(initialLog);
   const [responseAction, setResponseAction] = useState('');
@@ -500,12 +554,10 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
       </Stack>
 
       {/* ─── 1 · Paste ────────────────────────────────────────────────────── */}
-      <MuiPaper elevation={0} sx={{
-        backgroundColor: '#09253d',
-        border: theme => `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-        borderRadius: '4px', p: 2, mb: 2,
-      }}>
-        <SectionHeader title="1 · Raw alert log"/>
+      <PanelCard
+        title="1 · Raw alert log"
+        defaultOpen
+        summary={rawLog ? `${rawLog.length.toLocaleString()} chars` : 'empty'}>
         <MuiTextField
           value={rawLog}
           onChange={e => setRawLog(e.target.value)}
@@ -530,16 +582,15 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
             />
           </Stack>
         )}
-      </MuiPaper>
+      </PanelCard>
 
       {/* ─── 2 · Response action + compose button ───────────────────────── */}
-      <MuiPaper elevation={0} sx={{
-        backgroundColor: '#09253d',
-        border: theme => `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-        borderRadius: '4px', p: 2, mb: 2,
-      }}>
-        <SectionHeader title="2 · Response action"/>
-
+      <PanelCard
+        title="2 · Response action"
+        summary={(() => {
+          const r = RESPONSE_OPTIONS.find(o => o.id === responseAction);
+          return r && r.id ? r.label : 'none selected';
+        })()}>
         <Box sx={{ maxWidth: 360, mb: 2 }}>
           <MuiTextField
             select fullWidth size="small"
@@ -574,7 +625,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
             </Stack>
           )}
         </Stack>
-      </MuiPaper>
+      </PanelCard>
 
       {/* ─── Templates panel (spec §8) ────────────────────────────────────
           Lets the analyst pick which email body fields are included. The
@@ -583,12 +634,9 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
           AI prompt (the model never sees them and can't hallucinate them).
           Built-in "All Details" and "Minimal" templates are merged with
           custom analyst-saved templates from localStorage.                */}
-      <MuiPaper elevation={0} sx={{
-        backgroundColor: '#09253d',
-        border: theme => `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-        borderRadius: '4px', p: 2, mb: 2,
-      }}>
-        <SectionHeader title="Template"/>
+      <PanelCard
+        title="Template"
+        summary={selectedTemplate?.name || ''}>
 
         <Stack direction="row" spacing={1} alignItems="flex-end" flexWrap="wrap"
           useFlexGap sx={{ mb: 1.5 }}>
@@ -785,7 +833,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
             </Stack>
           </Box>
         )}
-      </MuiPaper>
+      </PanelCard>
 
       {/* ─── AI Remediation reference panel ──────────────────────────────
           Display-only view of the structured guidance the AI uses to weave
@@ -793,12 +841,9 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
           the email's recommendations came from. The email itself ALREADY
           contains this guidance as flowing prose — this panel doesn't
           change the body; it only surfaces the structured source.        */}
-      <MuiPaper elevation={0} sx={{
-        backgroundColor: '#09253d',
-        border: theme => `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-        borderRadius: '4px', p: 2, mb: 2,
-      }}>
-        <SectionHeader title="AI Remediation"/>
+      <PanelCard
+        title="AI Remediation"
+        summary={remediation ? 'ready' : 'not generated'}>
         <Stack direction="row" spacing={1} alignItems="center"
           flexWrap="wrap" useFlexGap sx={{ mb: remediation ? 1.5 : 0 }}>
           <MuiButton
@@ -881,16 +926,14 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
             </Box>
           );
         })}
-      </MuiPaper>
+      </PanelCard>
 
       {/* ─── 3 · Preview ──────────────────────────────────────────────────── */}
       {composed && (
-        <MuiPaper elevation={0} sx={{
-          backgroundColor: '#09253d',
-          border: theme => `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-          borderRadius: '4px', p: 2, mb: 2,
-        }}>
-          <SectionHeader title="3 · Preview"/>
+        <PanelCard
+          title="3 · Preview"
+          defaultOpen
+          summary={composed.subject ? `subject: ${composed.subject.slice(0, 60)}` : ''}>
 
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap"
             useFlexGap sx={{ mb: 1.5, rowGap: 1 }}>
@@ -945,7 +988,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
               maxHeight: 720, overflow: 'auto',
             }}>{composed.text}</Box>
           )}
-        </MuiPaper>
+        </PanelCard>
       )}
     </Box>
   );

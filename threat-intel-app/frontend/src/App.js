@@ -594,9 +594,105 @@ function SandboxBehavioral({ result, bare }) {
 function HoneypotActivity({ result, bare }) {
   const ips = result?.enrichments?.ips || {};
   const rows = Object.entries(ips)
-    .map(([ip, payload]) => ({ ip, dec: payload?.deception }))
+    .map(([ip, payload]) => ({ ip, dec: payload?.deception, full: payload }))
     .filter(r => r.dec && (r.dec.flagged_count > 0 || r.dec.greynoise_riot?.is_known_good));
   if (!rows.length) return null;
+
+  const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
+
+  // Per-source rich-detail renderer. Each branch returns null when the
+  // source didn't run or had no data; the parent only emits rows for
+  // sources that actually produced something.
+  const renderSource = (key, payload) => {
+    if (!payload) return null;
+    switch (key) {
+      case 'greynoise_riot': {
+        if (!payload.is_known_good) return null;
+        return {
+          name: 'GreyNoise RIOT', good: true,
+          headline: 'known-good infrastructure',
+          rows: [
+            payload.name        && ['Service',     payload.name],
+            payload.category    && ['Category',    payload.category],
+            payload.trust_level && ['Trust level', String(payload.trust_level)],
+            payload.description && ['Description', payload.description],
+            payload.last_updated && ['Last updated', payload.last_updated.slice(0, 10)],
+          ].filter(Boolean),
+        };
+      }
+      case 'shodan_internetdb': {
+        const cves = payload.vulns || [];
+        const ports = payload.ports || [];
+        const tags = payload.tags || [];
+        const hosts = payload.hostnames || [];
+        if (!cves.length && !ports.length && !tags.length && !hosts.length) return null;
+        return {
+          name: 'Shodan InternetDB', good: false,
+          headline: [
+            ports.length && `${ports.length} open port${ports.length === 1 ? '' : 's'}`,
+            cves.length && `${cves.length} CVE${cves.length === 1 ? '' : 's'}`,
+            tags.length && `${tags.length} tag${tags.length === 1 ? '' : 's'}`,
+          ].filter(Boolean).join(' · '),
+          rows: [
+            ports.length && ['Open ports', ports.slice(0, 20).join(', ')],
+            cves.length && ['CVEs', cves.slice(0, 8).join(', ')],
+            tags.length && ['Tags', tags.join(', ')],
+            hosts.length && ['Hostnames', hosts.slice(0, 5).join(', ')],
+          ].filter(Boolean),
+        };
+      }
+      case 'dshield': {
+        if (!payload.flagged) return null;
+        return {
+          name: 'DShield · SANS ISC', good: false,
+          headline: payload.summary,
+          rows: [
+            payload.attack_count != null && ['Attacks', String(payload.attack_count)],
+            payload.report_count != null && ['Reports', String(payload.report_count)],
+            payload.threat_level && ['Threat level', String(payload.threat_level)],
+            payload.comment && ['Comment', payload.comment],
+          ].filter(Boolean),
+        };
+      }
+      case 'stopforumspam': {
+        if (!payload.flagged) return null;
+        return {
+          name: 'StopForumSpam', good: false,
+          headline: payload.summary,
+          rows: [
+            payload.appears    != null && ['Reports',    String(payload.appears)],
+            payload.frequency  != null && ['Frequency',  String(payload.frequency)],
+            payload.confidence != null && ['Confidence', String(payload.confidence)],
+            payload.last_seen          && ['Last seen',  payload.last_seen.slice(0, 10)],
+          ].filter(Boolean),
+        };
+      }
+      case 'emerging_threats': {
+        if (!payload.flagged) return null;
+        return {
+          name: 'Emerging Threats blocklist', good: false,
+          headline: 'On the ET compromised-ips list',
+          rows: [
+            payload.source && ['Source list', payload.source],
+          ].filter(Boolean),
+        };
+      }
+      case 'project_honeypot': {
+        if (!payload.flagged) return null;
+        return {
+          name: 'Project Honeypot HTTP:BL', good: false,
+          headline: payload.classification || '',
+          rows: [
+            payload.last_seen_days != null && ['Last seen',   `${payload.last_seen_days} day${payload.last_seen_days === 1 ? '' : 's'} ago`],
+            payload.threat_score   != null && ['Threat score', `${payload.threat_score} / 255`],
+            payload.classification && ['Classification', payload.classification],
+          ].filter(Boolean),
+        };
+      }
+      default:
+        return null;
+    }
+  };
 
   const body = (
     <>
@@ -604,47 +700,161 @@ function HoneypotActivity({ result, bare }) {
         Cross-checked against GreyNoise RIOT, Shodan InternetDB, DShield SANS ISC,
         StopForumSpam, Emerging Threats compromised IPs, and Project Honeypot HTTP:BL.
       </Typography>
-      {rows.map(({ ip, dec }) => {
-        const sources = [
-          dec.greynoise_riot?.is_known_good   && { name: 'GreyNoise RIOT — known-good',  good: true,  detail: dec.greynoise_riot.name },
-          dec.shodan_internetdb?.vuln_count   && { name: 'Shodan InternetDB',            good: false, detail: `${dec.shodan_internetdb.vuln_count} CVE${dec.shodan_internetdb.vuln_count === 1 ? '' : 's'} on ${dec.shodan_internetdb.ports?.length || 0} open ports` },
-          dec.dshield?.flagged                && { name: 'DShield · SANS ISC',           good: false, detail: dec.dshield.summary },
-          dec.stopforumspam?.flagged          && { name: 'StopForumSpam',                good: false, detail: dec.stopforumspam.summary },
-          dec.emerging_threats?.flagged       && { name: 'Emerging Threats blocklist',   good: false, detail: dec.emerging_threats.summary },
-          dec.project_honeypot?.flagged       && { name: 'Project Honeypot HTTP:BL',     good: false, detail: dec.project_honeypot.classification },
+      {rows.map(({ ip, dec, full }) => {
+        // ── Per-IP context (ASN / country / ISP / AbuseIPDB) — already
+        // enriched by the analyze pipeline, surfaced here so the analyst
+        // sees the IP's identity alongside the deception findings.
+        const ipinfo  = full?.ipinfo || {};
+        const abuse   = full?.abuseipdb || {};
+        const country = ipinfo.country || abuse.countryCode || '';
+        const asn     = ipinfo.asn || ipinfo.org || '';
+        const isp     = ipinfo.org || abuse.isp || '';
+        const city    = ipinfo.city || '';
+        const region  = ipinfo.region || '';
+        const usage   = abuse.usageType || '';
+        const abuseScore = abuse.abuseConfidenceScore;
+        const recentReports = abuse.totalReports;
+        const lastReportedAt = abuse.lastReportedAt;
+        const headerChips = [
+          country && { label: country, color: '#848592' },
+          asn && { label: asn, color: '#848592' },
+          usage && { label: usage, color: '#848592' },
+          abuseScore != null && abuseScore > 0 && {
+            label: `AbuseIPDB ${abuseScore}%`,
+            color: abuseScore >= 75 ? '#EE3838'
+              : abuseScore >= 25 ? '#E6700F' : '#E1B823',
+          },
         ].filter(Boolean);
+
+        const renderedSources = [
+          renderSource('greynoise_riot',    dec.greynoise_riot),
+          renderSource('shodan_internetdb', dec.shodan_internetdb),
+          renderSource('dshield',           dec.dshield),
+          renderSource('stopforumspam',     dec.stopforumspam),
+          renderSource('emerging_threats',  dec.emerging_threats),
+          renderSource('project_honeypot',  dec.project_honeypot),
+        ].filter(Boolean);
+
         return (
           <MuiPaper key={ip} elevation={0} sx={{
             backgroundColor: '#0C1524',
             border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-            borderRadius: '4px', p: '10px 12px', mb: 0.75,
+            borderRadius: '4px', p: '12px 14px', mb: 1,
           }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }} flexWrap="wrap">
+            {/* Header — IP + identity context + flag count + pivots */}
+            <Stack direction="row" alignItems="center" spacing={1}
+              sx={{ mb: 1 }} flexWrap="wrap">
               <TypeTag type="ips"/>
-              <Box sx={{
-                fontFamily: '"IBM Plex Mono", monospace', fontSize: 12,
-                color: 'text.primary',
-              }}>{ip}</Box>
+              <Box sx={{ ...monoSx, fontSize: 12.5, color: 'text.primary',
+                fontWeight: 600 }}>{ip}</Box>
+              {headerChips.map((c, i) => (
+                <Box key={i} sx={{
+                  fontSize: 10.5, fontWeight: 500, color: c.color,
+                  border: `1px solid ${muiAlpha(c.color, 0.4)}`,
+                  backgroundColor: muiAlpha(c.color, 0.08),
+                  borderRadius: '3px', px: 0.75, py: '1px',
+                }}>{c.label}</Box>
+              ))}
               <Box component="span" sx={{
                 ml: 'auto !important', fontSize: 11, color: 'text.tertiary',
               }}>
                 {dec.flagged_count} of {dec.sources_consulted} sources flagged
               </Box>
             </Stack>
-            {sources.map((s, i) => (
+
+            {/* Secondary identity line — ISP / city / abuse history */}
+            {(isp || city || recentReports || lastReportedAt) && (
+              <Stack direction="row" spacing={2} sx={{ mb: 1,
+                fontSize: 11, color: 'text.tertiary',
+                flexWrap: 'wrap', rowGap: 0.25 }}>
+                {isp && <Box>ISP: <Box component="span" sx={{ color: 'text.primary' }}>{isp}</Box></Box>}
+                {city && <Box>Location: <Box component="span" sx={{ color: 'text.primary' }}>{[city, region, country].filter(Boolean).join(', ')}</Box></Box>}
+                {recentReports != null && recentReports > 0 && (
+                  <Box>AbuseIPDB reports: <Box component="span" sx={{ color: 'text.primary' }}>{recentReports}</Box></Box>
+                )}
+                {lastReportedAt && (
+                  <Box>Last reported: <Box component="span" sx={{ color: 'text.primary' }}>{String(lastReportedAt).slice(0, 10)}</Box></Box>
+                )}
+              </Stack>
+            )}
+
+            {/* Pivot links */}
+            <Stack direction="row" spacing={1.25} sx={{ mb: renderedSources.length ? 1 : 0,
+              flexWrap: 'wrap', rowGap: 0.5 }}>
+              <Box component="a" target="_blank" rel="noreferrer"
+                href={`https://www.abuseipdb.com/check/${ip}`}
+                sx={{ fontSize: 10.5, color: '#0fbcff', textDecoration: 'none',
+                  '&:hover': { textDecoration: 'underline' } }}>
+                AbuseIPDB ↗
+              </Box>
+              <Box component="a" target="_blank" rel="noreferrer"
+                href={`https://www.virustotal.com/gui/ip-address/${ip}`}
+                sx={{ fontSize: 10.5, color: '#0fbcff', textDecoration: 'none',
+                  '&:hover': { textDecoration: 'underline' } }}>
+                VirusTotal ↗
+              </Box>
+              <Box component="a" target="_blank" rel="noreferrer"
+                href={`https://internetdb.shodan.io/${ip}`}
+                sx={{ fontSize: 10.5, color: '#0fbcff', textDecoration: 'none',
+                  '&:hover': { textDecoration: 'underline' } }}>
+                Shodan ↗
+              </Box>
+              <Box component="a" target="_blank" rel="noreferrer"
+                href={`https://isc.sans.edu/ipinfo.html?ip=${ip}`}
+                sx={{ fontSize: 10.5, color: '#0fbcff', textDecoration: 'none',
+                  '&:hover': { textDecoration: 'underline' } }}>
+                DShield ↗
+              </Box>
+              <Box component="a" target="_blank" rel="noreferrer"
+                href={`https://www.greynoise.io/viz/ip/${ip}`}
+                sx={{ fontSize: 10.5, color: '#0fbcff', textDecoration: 'none',
+                  '&:hover': { textDecoration: 'underline' } }}>
+                GreyNoise ↗
+              </Box>
+            </Stack>
+
+            {/* Per-source rich detail */}
+            {renderedSources.map((s, i) => (
               <Box key={i} sx={{
-                display: 'grid', gridTemplateColumns: 'auto 1fr',
-                gap: 1, py: 0.375, alignItems: 'baseline',
-                borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.04)}` : 'none',
+                py: 0.875,
+                borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
               }}>
-                <Box component="span" sx={{
-                  fontSize: 11, fontWeight: 600,
-                  color: s.good ? 'success.main' : 'error.main',
-                  whiteSpace: 'nowrap',
-                }}>{s.name}</Box>
-                <Box component="span" sx={{ fontSize: 11, color: 'text.tertiary' }}>
-                  {s.detail || ''}
-                </Box>
+                <Stack direction="row" alignItems="baseline" spacing={1}
+                  flexWrap="wrap" sx={{ rowGap: 0.25 }}>
+                  <Box component="span" sx={{
+                    fontSize: 11.5, fontWeight: 700,
+                    color: s.good ? 'success.main' : 'error.main',
+                    whiteSpace: 'nowrap',
+                  }}>{s.name}</Box>
+                  {s.headline && (
+                    <Box component="span" sx={{ fontSize: 11, color: 'text.tertiary' }}>
+                      {s.headline}
+                    </Box>
+                  )}
+                </Stack>
+                {s.rows.length > 0 && (
+                  <Box sx={{ mt: 0.5, pl: 1.25,
+                    borderLeft: `2px solid ${muiAlpha(s.good ? '#16AD34' : '#EE3838', 0.25)}`,
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(110px, max-content) 1fr',
+                    columnGap: 1.25, rowGap: 0.25,
+                  }}>
+                    {s.rows.map(([k, v], j) => (
+                      <React.Fragment key={j}>
+                        <Box component="span" sx={{ fontSize: 10.5,
+                          color: 'text.disabled',
+                          textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          {k}
+                        </Box>
+                        <Box component="span" sx={{ fontSize: 11.5,
+                          color: 'text.primary', wordBreak: 'break-word',
+                          ...(/^(Open ports|CVEs|Hostnames)$/.test(k) ? monoSx : {}) }}>
+                          {v}
+                        </Box>
+                      </React.Fragment>
+                    ))}
+                  </Box>
+                )}
               </Box>
             ))}
           </MuiPaper>
