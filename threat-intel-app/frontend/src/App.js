@@ -2060,9 +2060,9 @@ function PerIndicatorList({ sorted, result }) {
 // see in vendor reports (CrowdStrike/FireEye/MITRE/Microsoft). Aliases hide
 // behind a click so the chip stays compact when there are 12 of them.
 function AttributionChip({ actor }) {
-  const [openAliases, setOpenAliases]   = useState(false);
-  const [openEvidence, setOpenEvidence] = useState(false);
-  const [openHunt, setOpenHunt]         = useState(false);
+  // Single-tab visibility state — keep it above the early return so the
+  // hook order is stable across renders.
+  const [activeTab, setActiveTab] = useState(null);
   if (!actor) return null;
   const display = actor.ms_name || actor.name;
   const aliases = (actor.aliases || []).filter(a => a && a !== display);
@@ -2077,19 +2077,32 @@ function AttributionChip({ actor }) {
   const huntSw     = Array.isArray(huntTtps.software)      ? huntTtps.software      : [];
   const hasHunt    = huntBefore.length + huntAfter.length + huntProcs.length + huntSw.length > 0;
 
+  // Tab model — one tab visible at a time so the chip never sprawls.
+  const tabs = [
+    hasEvidence && { id: 'evidence', label: `Log evidence · ${evidenceCount}` },
+    hasHunt     && { id: 'hunt',     label: 'Hunt for' },
+    aliases.length > 0
+                 && { id: 'aliases',  label: `Aliases · ${aliases.length}` },
+  ].filter(Boolean);
+  const showEvidence = activeTab === 'evidence';
+  const showHunt     = activeTab === 'hunt';
+  const showAliases  = activeTab === 'aliases';
+
   return (
     <Box sx={{
-      display: 'flex', flexDirection: 'column', gap: 0.5,
-      backgroundColor: muiAlpha('#0fbcff', 0.08),
-      border: `1px solid ${muiAlpha('#0fbcff', 0.35)}`,
-      borderRadius: '4px', p: '8px 12px', mb: 1.5, maxWidth: '100%',
+      display: 'flex', flexDirection: 'column', gap: 0.75,
+      backgroundColor: muiAlpha('#0fbcff', 0.05),
+      border: `1px solid ${muiAlpha('#0fbcff', 0.25)}`,
+      borderLeft: `3px solid #0fbcff`,
+      borderRadius: '4px', p: '10px 14px', mb: 1.5, maxWidth: '100%',
     }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+      {/* Header — name, country, score. Compact, no aliases counter here. */}
+      <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
         <Typography sx={{ fontSize: 10, color: 'text.tertiary', fontWeight: 600,
-          textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          textTransform: 'uppercase', letterSpacing: '0.07em' }}>
           Possible attribution
         </Typography>
-        <Typography sx={{ fontSize: 13, color: 'primary.main', fontWeight: 600 }}>
+        <Typography sx={{ fontSize: 14, color: 'primary.main', fontWeight: 600 }}>
           {display}
         </Typography>
         {actor.origin && (
@@ -2100,339 +2113,162 @@ function AttributionChip({ actor }) {
             · {actor.score}% TTP overlap
           </Typography>
         )}
-        {aliases.length > 0 && (
-          <Box component="button" onClick={() => setOpenAliases(o => !o)} sx={{
-            ml: 'auto', background: 'none', border: 'none', cursor: 'pointer',
-            color: 'text.tertiary', fontSize: 11, fontFamily: 'inherit',
-            '&:hover': { color: 'primary.main' },
-          }}>
-            {openAliases ? 'hide aliases' : `also known as · ${aliases.length}`}
-          </Box>
-        )}
-      </Box>
+      </Stack>
 
-      {openAliases && (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.25 }}>
+      {/* Single tab strip — click to reveal one section at a time. */}
+      {tabs.length > 0 && (
+        <Stack direction="row" spacing={0.75} flexWrap="wrap"
+          sx={{ rowGap: 0.5 }}>
+          {tabs.map(t => {
+            const on = activeTab === t.id;
+            return (
+              <Box key={t.id}
+                onClick={() => setActiveTab(on ? null : t.id)}
+                sx={{
+                  cursor: 'pointer', userSelect: 'none',
+                  fontSize: 11, fontWeight: 500,
+                  px: 1, py: '3px', borderRadius: '4px',
+                  color: on ? '#0fbcff' : 'text.tertiary',
+                  backgroundColor: on
+                    ? muiAlpha('#0fbcff', 0.14)
+                    : muiAlpha('#ffffff', 0.03),
+                  border: `1px solid ${on
+                    ? muiAlpha('#0fbcff', 0.4)
+                    : muiAlpha('#ffffff', 0.1)}`,
+                  '&:hover': { color: '#0fbcff' },
+                }}>
+                {t.label}
+              </Box>
+            );
+          })}
+        </Stack>
+      )}
+
+      {/* Aliases */}
+      {showAliases && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4 }}>
           {aliases.map(a => (
             <Box key={a} sx={{
               fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
               color: 'text.primary',
-              backgroundColor: 'background.secondary',
+              backgroundColor: muiAlpha('#ffffff', 0.04),
               border: `1px solid ${muiAlpha('#ffffff', 0.08)}`,
-              borderRadius: '3px', px: 0.875, py: '2px',
+              borderRadius: '3px', px: 0.75, py: '2px',
             }}>{a}</Box>
           ))}
         </Box>
       )}
 
-      {/* Matched techniques summary — always visible */}
-      {actor.matchedTechniques?.length > 0 && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75,
-          flexWrap: 'wrap', mt: 0.25 }}>
-          <Typography sx={{ fontSize: 10, color: 'text.disabled' }}>
-            matched on {actor.matchedTechniques.slice(0, 6).join(', ')}
-            {actor.matchedTechniques.length > 6
-              ? ` + ${actor.matchedTechniques.length - 6} more`
-              : ''}
-            {huntTtps.all_count
-              ? ` (of ${huntTtps.all_count} known TTPs for this actor)`
-              : ''}
-          </Typography>
-          {hasEvidence && (
-            <Box component="button" onClick={() => setOpenEvidence(o => !o)} sx={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: openEvidence ? 'primary.main' : 'text.tertiary',
-              fontSize: 11, fontFamily: 'inherit', textDecoration: 'underline',
-              p: 0,
-              '&:hover': { color: 'primary.main' },
-            }}>
-              {openEvidence
-                ? 'hide log evidence'
-                : `· show log evidence (${evidenceCount})`}
+      {/* Log evidence — only render entries that actually have evidence
+          attached. No "X additional techniques matched but no evidence"
+          footer; that was noise. */}
+      {showEvidence && hasEvidence && (
+        <Stack spacing={0.75}>
+          {evByTech.filter(t => (t.evidence?.length || 0) > 0).map((t, i) => (
+            <Box key={i}>
+              <Stack direction="row" alignItems="baseline" spacing={0.75}>
+                <Box component="span" sx={{
+                  fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
+                  color: '#0fbcff', fontWeight: 600,
+                }}>
+                  {t.id}
+                </Box>
+                {t.name && (
+                  <Typography sx={{ fontSize: 11.5, color: 'text.primary' }}>
+                    {t.name}
+                  </Typography>
+                )}
+              </Stack>
+              <Stack spacing={0.4} sx={{ pl: 1.25, mt: 0.25,
+                borderLeft: `2px solid ${muiAlpha('#0fbcff', 0.2)}` }}>
+                {(t.evidence || []).map((e, j) => (
+                  <Typography key={j} sx={{ fontSize: 12,
+                    color: 'text.primary', lineHeight: 1.55 }}>
+                    {e.text}
+                  </Typography>
+                ))}
+              </Stack>
             </Box>
-          )}
-          {hasHunt && (
-            <Box component="button" onClick={() => setOpenHunt(o => !o)} sx={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: openHunt ? 'primary.main' : 'text.tertiary',
-              fontSize: 11, fontFamily: 'inherit', textDecoration: 'underline',
-              p: 0,
-              '&:hover': { color: 'primary.main' },
-            }}>
-              {openHunt
-                ? 'hide hunt guidance'
-                : `· what to look for before / after (${huntBefore.length + huntAfter.length})`}
-            </Box>
-          )}
-        </Box>
+          ))}
+        </Stack>
       )}
 
-      {/* Per-technique log evidence — what in THIS alert matched the actor's TTPs */}
-      {openEvidence && hasEvidence && (
-        <Box sx={{ mt: 0.75, pt: 0.75,
-          borderTop: `1px solid ${muiAlpha('#0fbcff', 0.18)}` }}>
-          <Typography sx={{ fontSize: 10, color: '#0fbcff', fontWeight: 600,
-            textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
-            What in THIS log matched the actor's TTPs
-          </Typography>
-          <Stack spacing={1}>
-            {evByTech.filter(t => (t.evidence?.length || 0) > 0).map((t, i) => (
-              <Box key={i}>
-                <Stack direction="row" alignItems="center" spacing={0.75}
-                  sx={{ mb: 0.5 }}>
-                  <Box component="span" sx={{
-                    fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
-                    color: '#0fbcff', fontWeight: 600,
-                  }}>
-                    {t.id}
-                  </Box>
-                  {t.name && (
-                    <Typography sx={{ fontSize: 11, color: 'text.primary',
-                      fontWeight: 500 }}>
-                      · {t.name}
-                    </Typography>
-                  )}
-                </Stack>
-                <Stack spacing={0.5} sx={{ pl: 1.5,
-                  borderLeft: `2px solid ${muiAlpha('#0fbcff', 0.25)}` }}>
-                  {(t.evidence || []).map((e, j) => (
-                    <Box key={j}>
-                      <Typography sx={{ fontSize: 12, color: 'text.primary',
-                        lineHeight: 1.55 }}>
-                        {e.text}
-                        {e.confidence && (
-                          <Box component="span" sx={{ ml: 0.75,
-                            fontSize: 10, color: 'text.disabled',
-                            textTransform: 'lowercase' }}>
-                            · {e.confidence}
-                          </Box>
-                        )}
-                      </Typography>
-                      {e.snippet && (
-                        <Typography sx={{
-                          fontFamily: '"IBM Plex Mono", monospace',
-                          fontSize: 11, color: 'text.tertiary',
-                          mt: 0.25, lineHeight: 1.5,
-                          backgroundColor: muiAlpha('#000000', 0.25),
-                          border: `1px solid ${muiAlpha('#ffffff', 0.06)}`,
-                          borderRadius: '3px', px: 0.875, py: '3px',
-                          whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-                        }}>
-                          {e.snippet}
-                        </Typography>
-                      )}
-                      <Typography sx={{ fontSize: 10, color: 'text.disabled',
-                        mt: 0.25 }}>
-                        {e.source === 'log_pattern'
-                          ? 'from log pattern match'
-                          : 'AI inference'}
-                      </Typography>
-                    </Box>
-                  ))}
-                </Stack>
-              </Box>
-            ))}
-            {evByTech.some(t => (t.evidence?.length || 0) === 0) && (
-              <Typography sx={{ fontSize: 11, color: 'text.disabled',
-                fontStyle: 'italic' }}>
-                {evByTech.filter(t => !t.evidence?.length).length} additional
-                technique{evByTech.filter(t => !t.evidence?.length).length === 1 ? '' : 's'}
-                {' '}matched the actor profile but had no specific log
-                evidence — they came from broader behavioural inference.
-              </Typography>
-            )}
-          </Stack>
-        </Box>
-      )}
-
-      {/* Hunt guidance — concrete artifacts first (process names + software
-          / malware aliases) so the analyst gets actual hunt terms instead
-          of abstract MITRE codes. MITRE technique lists are kept but
-          demoted below the artifacts. */}
-      {openHunt && hasHunt && (
-        <Box sx={{ mt: 0.75, pt: 0.75,
-          borderTop: `1px solid ${muiAlpha('#0fbcff', 0.18)}` }}>
-          <Typography sx={{ fontSize: 10, color: '#0fbcff', fontWeight: 600,
-            textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
-            What to look for in this investigation
-          </Typography>
-
-          {actor.description && (
-            <Typography sx={{ fontSize: 11.5, color: 'text.tertiary',
-              lineHeight: 1.6, mb: 1.25, fontStyle: 'italic' }}>
-              {String(actor.description).slice(0, 320)}
-              {String(actor.description).length > 320 ? '…' : ''}
-            </Typography>
-          )}
-
-          {/* Concrete artifact targets — search SIEM / EDR for these */}
+      {/* Hunt guidance — concrete artifacts only. No actor description,
+          no MITRE technique buckets, no helper italics. Two compact
+          sections: process / binary names as red mono chips, then a
+          tight tool/malware list with optional MalwareBazaar pivot. */}
+      {showHunt && hasHunt && (
+        <Stack spacing={1.25}>
           {huntProcs.length > 0 && (
-            <Box sx={{ mb: 1.25 }}>
-              <Typography sx={{ fontSize: 11, color: 'text.primary',
-                fontWeight: 600, mb: 0.5 }}>
-                Processes / binaries to hunt for
+            <Box>
+              <Typography sx={{ fontSize: 10, color: 'text.tertiary',
+                fontWeight: 600, textTransform: 'uppercase',
+                letterSpacing: '0.07em', mb: 0.5 }}>
+                Processes / binaries
               </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4 }}>
                 {huntProcs.map((p, i) => (
                   <Box key={i} sx={{
                     fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
                     color: '#EE3838',
                     backgroundColor: muiAlpha('#EE3838', 0.08),
                     border: `1px solid ${muiAlpha('#EE3838', 0.3)}`,
-                    borderRadius: '3px', px: 0.875, py: '2px',
+                    borderRadius: '3px', px: 0.75, py: '2px',
                   }}>{p}</Box>
                 ))}
               </Box>
-              <Typography sx={{ fontSize: 10, color: 'text.disabled',
-                mt: 0.5, fontStyle: 'italic' }}>
-                Pivot your SIEM / EDR on these process names — any execution
-                on related hosts is a high-signal hunt lead.
-              </Typography>
             </Box>
           )}
 
           {huntSw.length > 0 && (
-            <Box sx={{ mb: 1.25 }}>
-              <Typography sx={{ fontSize: 11, color: 'text.primary',
-                fontWeight: 600, mb: 0.5 }}>
-                Tools / malware {display} is known to use
+            <Box>
+              <Typography sx={{ fontSize: 10, color: 'text.tertiary',
+                fontWeight: 600, textTransform: 'uppercase',
+                letterSpacing: '0.07em', mb: 0.5 }}>
+                Tools / malware
               </Typography>
-              <Stack spacing={0.6} sx={{ pl: 1,
-                borderLeft: `2px solid ${muiAlpha('#EE3838', 0.25)}` }}>
-                {huntSw.map((s, i) => (
-                  <Box key={i}>
-                    <Stack direction="row" alignItems="center"
-                      spacing={0.75} flexWrap="wrap">
+              <Stack spacing={0.4}>
+                {huntSw.map((s, i) => {
+                  const isMalware = (s.type || '').toLowerCase().includes('malware')
+                    || (s.labels || []).some(l => /malware/i.test(l));
+                  const familyQuery = encodeURIComponent(
+                    (s.name || '').replace(/[^\w\s.-]/g, '').trim()
+                  );
+                  return (
+                    <Stack key={i} direction="row" alignItems="baseline"
+                      spacing={0.75} flexWrap="wrap" sx={{ rowGap: 0.25 }}>
                       <Box component="a"
                         href={s.id ? `https://attack.mitre.org/software/${s.id}/` : undefined}
                         target="_blank" rel="noreferrer"
                         sx={{ fontFamily: '"IBM Plex Mono", monospace',
-                          fontSize: 11, color: '#EE3838',
+                          fontSize: 11.5,
+                          color: isMalware ? '#EE3838' : '#0fbcff',
                           textDecoration: 'none', fontWeight: 600,
                           '&:hover': { textDecoration: 'underline' } }}>
                         {s.name || s.id}
                       </Box>
-                      {s.id && (
-                        <Box component="span" sx={{ fontSize: 10,
-                          color: 'text.disabled',
-                          fontFamily: '"IBM Plex Mono", monospace' }}>
-                          {s.id}
-                        </Box>
-                      )}
-                      {s.type && (
-                        <Box component="span" sx={{ fontSize: 10,
-                          color: 'text.tertiary',
-                          textTransform: 'lowercase' }}>
-                          · {s.type}
+                      <Box component="span" sx={{ fontSize: 10,
+                        color: 'text.disabled',
+                        textTransform: 'lowercase' }}>
+                        {s.type || 'tool'}
+                      </Box>
+                      {isMalware && familyQuery && (
+                        <Box component="a"
+                          href={`https://bazaar.abuse.ch/browse.php?search=${familyQuery}`}
+                          target="_blank" rel="noreferrer"
+                          sx={{ fontSize: 10, color: '#0fbcff',
+                            textDecoration: 'none',
+                            '&:hover': { textDecoration: 'underline' } }}>
+                          hashes →
                         </Box>
                       )}
                     </Stack>
-                    {s.aliases?.length > 0 && (
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4,
-                        mt: 0.4 }}>
-                        {s.aliases.slice(0, 6).map((a, j) => (
-                          <Box key={j} sx={{
-                            fontFamily: '"IBM Plex Mono", monospace',
-                            fontSize: 10.5,
-                            color: 'text.primary',
-                            backgroundColor: muiAlpha('#ffffff', 0.04),
-                            border: `1px solid ${muiAlpha('#ffffff', 0.08)}`,
-                            borderRadius: '3px', px: 0.625, py: '1px',
-                          }}>{a}</Box>
-                        ))}
-                      </Box>
-                    )}
-                    {s.description && (
-                      <Typography sx={{ fontSize: 11, color: 'text.tertiary',
-                        lineHeight: 1.5, mt: 0.4 }}>
-                        {s.description}
-                      </Typography>
-                    )}
-                  </Box>
-                ))}
-              </Stack>
-              <Typography sx={{ fontSize: 10, color: 'text.disabled',
-                mt: 0.5, fontStyle: 'italic' }}>
-                Aliases above are the binary / tool names this software
-                ships under — use them as hash-set seeds and filename
-                hunts in your EDR.
-              </Typography>
-            </Box>
-          )}
-
-          {/* MITRE technique buckets — secondary detail. */}
-          {(huntBefore.length > 0 || huntAfter.length > 0) && (
-            <Typography sx={{ fontSize: 11, color: 'text.tertiary',
-              fontWeight: 600, mb: 0.5, mt: 1,
-              textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              MITRE ATT&CK techniques · before / after
-            </Typography>
-          )}
-
-          {huntBefore.length > 0 && (
-            <Box sx={{ mb: 1 }}>
-              <Typography sx={{ fontSize: 11, color: 'text.primary',
-                fontWeight: 600, mb: 0.5 }}>
-                ↤ Look earlier in the kill chain
-              </Typography>
-              <Stack spacing={0.4} sx={{ pl: 1,
-                borderLeft: `2px solid ${muiAlpha('#0fbcff', 0.2)}` }}>
-                {huntBefore.map((t, i) => (
-                  <Stack key={i} direction="row" spacing={0.75}
-                    alignItems="flex-start">
-                    <Box component="a"
-                      href={`https://attack.mitre.org/techniques/${(t.id || '').replace('.', '/')}/`}
-                      target="_blank" rel="noreferrer"
-                      sx={{ fontFamily: '"IBM Plex Mono", monospace',
-                        fontSize: 11, color: '#0fbcff', textDecoration: 'none',
-                        minWidth: 72, '&:hover': { textDecoration: 'underline' } }}>
-                      {t.id}
-                    </Box>
-                    <Typography sx={{ fontSize: 11.5, color: 'text.primary',
-                      flex: 1, lineHeight: 1.55 }}>
-                      {t.name}
-                      <Box component="span" sx={{ color: 'text.tertiary', ml: 0.75 }}>
-                        · {t.tactic}
-                      </Box>
-                    </Typography>
-                  </Stack>
-                ))}
+                  );
+                })}
               </Stack>
             </Box>
           )}
-
-          {huntAfter.length > 0 && (
-            <Box>
-              <Typography sx={{ fontSize: 11, color: 'text.primary',
-                fontWeight: 600, mb: 0.5 }}>
-                ↦ Look later in the kill chain
-              </Typography>
-              <Stack spacing={0.4} sx={{ pl: 1,
-                borderLeft: `2px solid ${muiAlpha('#E6700F', 0.25)}` }}>
-                {huntAfter.map((t, i) => (
-                  <Stack key={i} direction="row" spacing={0.75}
-                    alignItems="flex-start">
-                    <Box component="a"
-                      href={`https://attack.mitre.org/techniques/${(t.id || '').replace('.', '/')}/`}
-                      target="_blank" rel="noreferrer"
-                      sx={{ fontFamily: '"IBM Plex Mono", monospace',
-                        fontSize: 11, color: '#E6700F', textDecoration: 'none',
-                        minWidth: 72, '&:hover': { textDecoration: 'underline' } }}>
-                      {t.id}
-                    </Box>
-                    <Typography sx={{ fontSize: 11.5, color: 'text.primary',
-                      flex: 1, lineHeight: 1.55 }}>
-                      {t.name}
-                      <Box component="span" sx={{ color: 'text.tertiary', ml: 0.75 }}>
-                        · {t.tactic}
-                      </Box>
-                    </Typography>
-                  </Stack>
-                ))}
-              </Stack>
-            </Box>
-          )}
-        </Box>
+        </Stack>
       )}
     </Box>
   );
@@ -3234,7 +3070,7 @@ function ChatWithRecon({ result, bare,
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
           }}
           placeholder={feedbackMode
-            ? 'Tell the AI what you found — RECON re-runs the analysis with your verdict as ground truth.'
+            ? 'If the AI analysis is wrong, teach it what is right.'
             : (pendingQuestion
               ? 'Type what you found when checking this — RECON will interpret your answer…'
               : 'Ask anything — "Is this likely a vulnerability scanner?", "Look up this hash in sandbox"…')}
