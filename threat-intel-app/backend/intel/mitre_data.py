@@ -53,6 +53,122 @@ def search_techniques(query: str) -> list[dict]:
             or q in t["tactic"].lower()][:30]
 
 
+# Kill-chain ordering — used to bucket an actor's TTPs as "look for before
+# this alert" vs "look for after this alert" relative to the techniques that
+# actually matched the log. Lower index = earlier in the attack lifecycle.
+_KILL_CHAIN_ORDER = (
+    "Reconnaissance",
+    "Resource Development",
+    "Initial Access",
+    "Execution",
+    "Defense Evasion",
+    "Persistence",
+    "Privilege Escalation",
+    "Credential Access",
+    "Discovery",
+    "Lateral Movement",
+    "Collection",
+    "Command And Control",
+    "Exfiltration",
+    "Impact",
+)
+_TACTIC_POS = {t: i for i, t in enumerate(_KILL_CHAIN_ORDER)}
+
+
+@lru_cache(maxsize=1)
+def _group_index() -> dict:
+    """Build { mitre_group_id (G####): [ {id, name, tactic}, ... ] } once.
+    Cached for the process lifetime — every subsequent attribution lookup
+    is a dict access."""
+    m = _mitre()
+    if not m:
+        return {}
+    out: dict = {}
+    for group in m.get_groups():
+        gid = next((r["external_id"] for r in group.get("external_references", [])
+                    if r.get("source_name") == "mitre-attack"), "")
+        if not gid:
+            continue
+        techs = []
+        for t in m.get_techniques_used_by_group(group["id"]):
+            obj = t.get("object", {})
+            tid = next((r["external_id"] for r in obj.get("external_references", [])
+                        if r.get("source_name") == "mitre-attack"), None)
+            if not tid:
+                continue
+            tactics = [p["phase_name"].replace("-", " ").title()
+                       for p in obj.get("kill_chain_phases", [])
+                       if p.get("kill_chain_name") == "mitre-attack"]
+            techs.append({
+                "id":     tid,
+                "name":   obj.get("name", ""),
+                "tactic": tactics[0] if tactics else "Unknown",
+            })
+        out[gid] = techs
+    return out
+
+
+def get_actor_ttps_by_phase(mitre_group_id: str,
+                            matched_technique_ids: list[str]) -> dict:
+    """For a given actor (MITRE G####), bucket their full TTP list relative to
+    the techniques that already matched THIS alert. Returns:
+
+      {
+        "before":   [ {id, name, tactic}, … ],   # earlier in kill-chain
+        "after":    [ {id, name, tactic}, … ],   # later in kill-chain
+        "matched":  [ {id, name, tactic}, … ],   # already-fired techniques
+        "all_count": N,
+      }
+
+    Empty buckets when MITRE data is unavailable or the group is unknown."""
+    idx = _group_index()
+    techs = idx.get(mitre_group_id or "")
+    if not techs:
+        return {"before": [], "after": [], "matched": [], "all_count": 0}
+    matched_set = {str(t).strip().upper() for t in (matched_technique_ids or [])}
+    # Pivot tactic = the LATEST kill-chain position among matched techniques.
+    # Everything earlier becomes "before"; everything later becomes "after".
+    matched_positions = []
+    for t in techs:
+        if t["id"].upper() in matched_set:
+            pos = _TACTIC_POS.get(t["tactic"])
+            if pos is not None:
+                matched_positions.append(pos)
+    pivot = max(matched_positions) if matched_positions else None
+
+    before: list = []
+    after:  list = []
+    matched_tts: list = []
+    for t in techs:
+        is_match = t["id"].upper() in matched_set
+        if is_match:
+            matched_tts.append(t)
+            continue
+        pos = _TACTIC_POS.get(t["tactic"])
+        if pos is None:
+            continue
+        if pivot is None or pos < pivot:
+            before.append(t)
+        elif pos > pivot:
+            after.append(t)
+        else:
+            # Same tactic as the matched pivot — surface as "after" since
+            # it's a sibling technique within the same phase the alert
+            # represents.
+            after.append(t)
+
+    # Deterministic ordering by kill-chain position then technique id so the
+    # UI list is stable across renders.
+    before.sort(key=lambda t: (_TACTIC_POS.get(t["tactic"], 99), t["id"]))
+    after.sort (key=lambda t: (_TACTIC_POS.get(t["tactic"], 99), t["id"]))
+    return {
+        "before":    before[:10],
+        "after":     after[:10],
+        "matched":   matched_tts,
+        "all_count": len(techs),
+    }
+
+
 def get_groups_by_techniques(technique_ids: list[str]) -> list[dict]:
     m = _mitre()
     if not m or not technique_ids:
