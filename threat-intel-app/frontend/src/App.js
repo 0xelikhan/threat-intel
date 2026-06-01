@@ -2391,145 +2391,56 @@ function AnalystSummary({ result, rs }) {
   );
 }
 
-/* ─── Why this rating — surfaces the AI's assessment_basis under the threat
-       level so analysts can verify the reasoning. The threat_level_reasoning
-       paragraph below the badge is always visible (no toggle) so the analyst
-       sees the justification at a glance. Calibration fix from S8.         */
-function WhyThisRating({ threatLevel, reasoning, basis, fpCheck, aiUnavailable }) {
-  const [open, setOpen] = useState(false);
+/* ─── Threat-level badge — non-collapsible. Shows the rating and the
+       always-visible reasoning paragraph. The old "Why this rating · +/−"
+       toggle was removed because the expanded panel was routinely empty
+       ("No assessment basis provided for this run.") and added no value
+       on top of the reasoning sentence already visible below the badge. */
+function WhyThisRating({ threatLevel, reasoning, aiUnavailable }) {
   const lvl = (threatLevel || 'INFORMATIONAL').toUpperCase();
   const color = lvl === 'CRITICAL' ? '#ff2d2d'
               : lvl === 'HIGH'     ? '#ff8c00'
               : lvl === 'MEDIUM'   ? '#ffd700'
               : lvl === 'LOW'      ? '#00b4d8'
               :                       '#74c0fc';
-  const items = Array.isArray(basis) ? basis.filter(Boolean) : [];
-  const hasItems = items.length > 0;
   const reasoningText = (reasoning || '').trim();
-  const showCalibrationNote = items.some(s => /\[recon calibration\]/i.test(String(s)));
-
   return (
     <Box sx={{ mb: 1.5 }}>
-      <Box
-        onClick={() => setOpen(o => !o)}
-        sx={{
-          display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer',
-          py: 0.75, px: 1, borderRadius: '4px',
-          backgroundColor: muiAlpha(color, 0.06),
-          border: `1px solid ${muiAlpha(color, 0.25)}`,
-          borderLeft: `3px solid ${color}`,
-          '&:hover': { backgroundColor: muiAlpha(color, 0.10) },
-        }}>
+      <Box sx={{
+        display: 'flex', alignItems: 'center', gap: 1,
+        py: 0.75, px: 1, borderRadius: '4px',
+        backgroundColor: muiAlpha(color, 0.06),
+        border: `1px solid ${muiAlpha(color, 0.25)}`,
+        borderLeft: `3px solid ${color}`,
+      }}>
         <Box sx={{ width: 6, height: 6, borderRadius: 99, backgroundColor: color }}/>
         <Typography sx={{ fontSize: 11, color, fontWeight: 700,
           letterSpacing: '0.06em', textTransform: 'uppercase' }}>
           {lvl}
         </Typography>
         <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
-          · Why this rating
-        </Typography>
-        <Box sx={{ flex: 1 }}/>
-        <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
-          {open ? '−' : '+'}
+          · threat level
         </Typography>
       </Box>
-      {/* ALWAYS-VISIBLE reasoning paragraph — short prose explaining why
-          THIS specific threat level was chosen. The analyst should never
-          have to click to expand a panel to see this. When the AI didn't
-          return a reasoning string and the backend fallback didn't fire
-          yet (e.g. early SSE snapshot before investigation finishes), we
-          still surface a useful one-liner derived from the assessment_basis
-          or a level-appropriate default so the panel is never blank. */}
-      {(() => {
-        if (reasoningText) {
-          return (
-            <Typography sx={{
-              mt: 0.6, ml: 0.5, fontSize: 12, color: 'text.tertiary',
-              lineHeight: 1.6, fontStyle: 'normal',
-              borderLeft: `2px solid ${muiAlpha(color, 0.25)}`,
-              pl: 1.25, py: 0.25, whiteSpace: 'pre-wrap',
-            }}>{reasoningText}</Typography>
-          );
-        }
-        let fallback = '';
-        if (aiUnavailable) {
-          fallback = 'AI analysis was unavailable for this run — the level shown '
-                  + 'is a fallback default. Restore the AI provider key and re-run.';
-        } else if (hasItems) {
-          fallback = `Driven by: ${items.slice(0, 2).map(String).join('; ')}.`;
-        } else if (lvl === 'INFORMATIONAL' || lvl === 'LOW') {
-          fallback = `This alert is ${lvl} because no enrichment source flagged `
-                  + 'any IOC and no behavioural signal exceeded the evidence '
-                  + 'threshold, so the alert did not warrant a higher rating.';
-        } else {
-          fallback = `Threat level set to ${lvl}. The AI did not return an explicit `
-                  + 'rationale for this rating yet; the full assessment basis '
-                  + "will populate once the investigation stage completes.";
-        }
-        return (
-          <Typography sx={{
-            mt: 0.6, ml: 0.5, fontSize: 12, color: 'text.tertiary',
-            lineHeight: 1.6, fontStyle: aiUnavailable ? 'italic' : 'normal',
-            borderLeft: `2px solid ${muiAlpha(color, 0.25)}`,
-            pl: 1.25, py: 0.25, whiteSpace: 'pre-wrap',
-          }}>{fallback}</Typography>
-        );
-      })()}
-      {open && (
-        <Box sx={{
-          mt: 0.5, pl: 1.5, pr: 1, py: 1,
+      {reasoningText && (
+        <Typography sx={{
+          mt: 0.6, ml: 0.5, fontSize: 12, color: 'text.tertiary',
+          lineHeight: 1.6,
+          borderLeft: `2px solid ${muiAlpha(color, 0.25)}`,
+          pl: 1.25, py: 0.25, whiteSpace: 'pre-wrap',
+        }}>
+          {reasoningText}
+        </Typography>
+      )}
+      {!reasoningText && aiUnavailable && (
+        <Typography sx={{
+          mt: 0.6, ml: 0.5, fontSize: 12, color: 'text.tertiary',
+          fontStyle: 'italic', lineHeight: 1.6, pl: 1.25,
           borderLeft: `2px solid ${muiAlpha(color, 0.25)}`,
         }}>
-          {!hasItems && (
-            <Typography sx={{ fontSize: 12, color: 'text.tertiary', fontStyle: 'italic' }}>
-              {aiUnavailable
-                ? 'AI analysis was unavailable for this run — threat level is a fallback default.'
-                : 'No assessment basis provided for this run.'}
-            </Typography>
-          )}
-          {hasItems && (
-            <Stack spacing={0.75}>
-              {items.map((item, i) => {
-                const isCalibration = /\[recon calibration\]/i.test(String(item));
-                return (
-                  <Stack key={i} direction="row" spacing={1} alignItems="flex-start">
-                    <Box sx={{
-                      width: 4, height: 4, borderRadius: 99,
-                      backgroundColor: isCalibration ? '#0fbcff' : color,
-                      mt: '7px', flexShrink: 0,
-                    }}/>
-                    <Typography sx={{
-                      fontSize: 12.5, color: 'text.primary', lineHeight: 1.55,
-                      fontStyle: isCalibration ? 'italic' : 'normal',
-                      opacity: isCalibration ? 0.85 : 1,
-                    }}>
-                      {String(item)}
-                    </Typography>
-                  </Stack>
-                );
-              })}
-            </Stack>
-          )}
-          {fpCheck && (
-            <Box sx={{ mt: 1, pt: 0.75,
-              borderTop: `1px solid ${muiAlpha('#ffffff', 0.06)}` }}>
-              <Typography sx={{ fontSize: 10, color: 'text.tertiary',
-                textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.25 }}>
-                False-positive check
-              </Typography>
-              <Typography sx={{ fontSize: 12, color: 'text.secondary', lineHeight: 1.55 }}>
-                {fpCheck}
-              </Typography>
-            </Box>
-          )}
-          {showCalibrationNote && (
-            <Typography sx={{ mt: 1, fontSize: 10, color: '#0fbcff',
-              fontStyle: 'italic', lineHeight: 1.4 }}>
-              The [RECON calibration] note above means the platform lowered the
-              threat level because the evidence pointed to benign activity.
-            </Typography>
-          )}
-        </Box>
+          AI analysis was unavailable for this run — the level shown is a
+          fallback default. Restore the AI provider key and re-run.
+        </Typography>
       )}
     </Box>
   );
@@ -3999,6 +3910,12 @@ function URLScanLive({ result, bare }) {
  */
 function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScanFile, onScanHash, onScanUrl, scanState, onHome, onOpenEmail, emailActive, onOpenAnalyze, analyzeAvailable, analyzeActive, authUser, onLogout }) {
   const [logText, setLogText] = useState('');
+  // Optional analyst-provided context that travels alongside the log on the
+  // first analyze run. The investigation prompt prepends it as the
+  // highest-weight "ANALYST VERDICT AND CONTEXT" block, same as the
+  // post-analysis Feedback flow.
+  const [analystContext, setAnalystContext] = useState('');
+  const [contextOpen, setContextOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
   const handleFile = useCallback(file => {
@@ -4222,7 +4139,7 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
             }}/>
           {logText && (
             <MuiIconButton
-              onClick={()=>setLogText('')}
+              onClick={()=>{ setLogText(''); setAnalystContext(''); setContextOpen(false); }}
               title="Clear input"
               size="small"
               sx={{ position: 'absolute', top: 4, right: 4, color: 'text.tertiary',
@@ -4233,11 +4150,83 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
           )}
         </Box>
 
+        {/* Analyst context (optional) — what the analyst thinks about the
+            alert OR additional context the platform can't see (e.g.
+            "scheduled vuln scan from 10.0.1.45 is running 14:00-15:00 UTC",
+            "this user is on a sanctioned IT remote-access tool"). Travels
+            to the investigation prompt as the same highest-weight
+            "ANALYST VERDICT AND CONTEXT" block the Feedback flow uses. */}
+        <Box sx={{ mb: 1.25 }}>
+          {!contextOpen && !analystContext && (
+            <MuiButton
+              variant="text" size="small"
+              onClick={() => setContextOpen(true)}
+              sx={{
+                textTransform: 'none', fontSize: 11, color: '#B286FF',
+                fontWeight: 500, p: '2px 6px', minWidth: 0,
+                '&:hover': { backgroundColor: muiAlpha('#B286FF', 0.08) },
+              }}
+            >
+              + Add analyst context (optional)
+            </MuiButton>
+          )}
+          {(contextOpen || analystContext) && (
+            <Box sx={{ position: 'relative' }}>
+              <Typography sx={{
+                fontSize: 10, color: '#B286FF', fontWeight: 600,
+                textTransform: 'uppercase', letterSpacing: '0.06em',
+                mb: 0.5,
+              }}>
+                Analyst context (optional)
+              </Typography>
+              <Box component="textarea"
+                value={analystContext}
+                onChange={e => setAnalystContext(e.target.value)}
+                placeholder={"What do you think about this alert? Any context "
+                  + "the platform can't see — e.g. scheduled vuln scan in "
+                  + "this window, sanctioned RMM tool, known false positive…"}
+                sx={{
+                  width: '100%',
+                  backgroundColor: muiAlpha('#B286FF', 0.04),
+                  border: `1px solid ${muiAlpha('#B286FF', 0.3)}`,
+                  color: 'text.primary',
+                  p: '8px 10px',
+                  borderRadius: '4px',
+                  fontFamily: '"IBM Plex Sans", sans-serif',
+                  fontSize: 12,
+                  resize: 'vertical',
+                  outline: 'none',
+                  lineHeight: 1.55,
+                  minHeight: 56,
+                  boxSizing: 'border-box',
+                  '&:focus': { borderColor: '#B286FF' },
+                }}/>
+              {analystContext && (
+                <MuiIconButton
+                  onClick={() => { setAnalystContext(''); setContextOpen(false); }}
+                  title="Clear context"
+                  size="small"
+                  sx={{ position: 'absolute', top: 18, right: 4,
+                    color: 'text.tertiary',
+                    '&:hover': { color: 'text.primary' } }}
+                >
+                  <X size={12}/>
+                </MuiIconButton>
+              )}
+              <Typography sx={{ fontSize: 10, color: 'text.tertiary',
+                mt: 0.5, lineHeight: 1.5 }}>
+                Travels as the highest-weight input to the investigation —
+                the AI treats it as ground truth.
+              </Typography>
+            </Box>
+          )}
+        </Box>
+
         {/* Hash + URL lookups now live inside the Analyze textarea — the
             AgentPipeline button detects a bare URL and routes to
             /api/scan/url, otherwise it runs the log-analysis pipeline. */}
 
-        <AgentPipeline logText={logText} label=""
+        <AgentPipeline logText={logText} analystFeedback={analystContext} label=""
           onComplete={(r) => { onAnalyzing?.(false); onResult(r); }}
           onPartial={(p) => { onAnalyzing?.(false); onPartialResult(p); }}
           onStart={() => { onResult(null); onAnalyzing?.(true); }}
