@@ -382,6 +382,18 @@ async def run_triage(state: dict) -> dict:
     except Exception:
         defender_parse = None
 
+    # Multi-log detection — split the input into individual entries when
+    # the analyst pasted multiple distinct logs into the same field. The
+    # investigation prompt uses this to ask the AI for an explicit log
+    # correlation analysis; the frontend renders a Log Correlation card
+    # only when log_count > 1.
+    multi_log = None
+    try:
+        from intel.multi_log import analyze_multi_log
+        multi_log = analyze_multi_log(raw)
+    except Exception:
+        multi_log = None
+
     # AI log translation (spec §4) — runs before IOC extraction and behavioral
     # analysis so they operate on structured fields rather than just raw text.
     # Fails open: if no API key or the call errors out, translation is None and
@@ -583,6 +595,8 @@ async def run_triage(state: dict) -> dict:
         "behavioral_indicators": behavioral_indicators,  # TTP / pattern extraction (spec §1)
         "log_translation":       log_translation,        # AI log format detection (spec §4)
         "defender_parse":        defender_parse,         # Defender 1116/1117 structured parse
+        "multi_log":             multi_log,              # Multi-log split + anchors
+        "log_count":             (multi_log or {}).get("log_count", 1),
         "triage_score":          final_score,
         "should_proceed":        ai_result.get("should_proceed", True) and final_score > 0.15,
         "triage_reasoning":      ai_result.get("reasoning", ""),
