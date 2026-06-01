@@ -165,6 +165,16 @@ function saveStoredTemplates(arr) {
   try { localStorage.setItem(TEMPLATES_KEY, JSON.stringify(arr || [])); } catch {}
 }
 
+// Display order for the dynamic category toggles. Categories not present
+// in the parsed log are filtered out before rendering.
+const CATEGORY_ORDER = [
+  'Identity', 'Network', 'Process', 'File',
+  'Detection', 'Time', 'Action', 'Other',
+];
+// Persistence key for the analyst's last category-toggle choices so the
+// UI doesn't reset every paste.
+const CATS_KEY = 'recon.email_enabled_categories';
+
 
 function CopyBtn({ text, label = 'Copy', size = 'small' }) {
   const [copied, setCopied] = useState(false);
@@ -250,6 +260,18 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
   const [templateMode, setTemplateMode] = useState('idle'); // 'idle' | 'create' | 'edit'
   const [draftName, setDraftName] = useState('');
   const [draftDescription, setDraftDescription] = useState('');
+  // Dynamic category toggles — replaces the old fixed 17-field grid.
+  // Categories present in the parsed log become checkboxes; the analyst
+  // turns whole groups on/off. Defaults to "everything on" so a fresh
+  // paste produces the full email, and the analyst trims down from there.
+  const [enabledCategories, setEnabledCategories] = useState(() => {
+    try {
+      const raw = localStorage.getItem(CATS_KEY);
+      const arr = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(arr) && arr.length) return arr;
+    } catch {}
+    return [...CATEGORY_ORDER];
+  });
 
   // Sync enabled_fields whenever the selected template changes.
   useEffect(() => {
@@ -261,6 +283,15 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
     setEnabledFields(curr => curr.includes(fid)
       ? curr.filter(f => f !== fid)
       : [...curr, fid]);
+  }, []);
+  const toggleCategory = useCallback((cat) => {
+    setEnabledCategories(curr => {
+      const next = curr.includes(cat)
+        ? curr.filter(c => c !== cat)
+        : [...curr, cat];
+      try { localStorage.setItem(CATS_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
   }, []);
 
   const saveAsTemplate = useCallback(() => {
@@ -379,8 +410,11 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
           log_text: rawLog,
           parsed,
           options: {
-            response_action: responseAction,
-            enabled_fields:  enabledFields,
+            response_action:     responseAction,
+            enabled_fields:      enabledFields,
+            // Category toggles — only categories present in the parsed
+            // log AND turned on by the analyst land in the email body.
+            enabled_categories:  enabledCategories,
           },
         }),
       });
@@ -396,7 +430,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
     } finally {
       setComposing(false);
     }
-  }, [rawLog, responseAction, enabledFields, initialParsed]);
+  }, [rawLog, responseAction, enabledFields, enabledCategories, initialParsed]);
 
   // Debounced auto-classify: as the analyst pastes, hit /api/email/parse to
   // learn the alert type. The compose-ai backend uses this to pick the right
@@ -605,68 +639,92 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
           )}
         </Stack>
 
-        {/* Field toggle grid — only renders toggles for fields the parsed
-            log actually contains. Until the log is parsed (parsedFields
-            empty), we hide the grid entirely with a one-line nudge so the
-            analyst doesn't see toggles for fields that can never apply. */}
+        {/* Dynamic category toggles — one per category the parser actually
+            extracted from THIS log. Hidden until the log is parsed. Each
+            toggle expands to show the labels + values it controls so the
+            analyst sees what's about to land in the email. */}
         {(() => {
-          const visibleFields = availableTemplateFields(parsedFields);
-          if (Object.keys(parsedFields || {}).length === 0) {
+          const categorized = parsedFields?._categorized || {};
+          const presentCats = CATEGORY_ORDER.filter(c =>
+            Array.isArray(categorized[c]) && categorized[c].length > 0);
+          if (Object.keys(parsedFields || {}).length === 0 || presentCats.length === 0) {
             return (
               <Typography sx={{ fontSize: 11, color: 'text.tertiary',
                 fontStyle: 'italic', mt: 0.5 }}>
-                Paste the alert log first — field toggles will appear here
+                Paste the alert log first — category toggles will appear here
                 based on what the log actually contains.
               </Typography>
             );
           }
           return (
-        <Box sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
-          gap: 0.75,
-        }}>
-          {visibleFields.map(f => {
-            const on = enabledFields.includes(f.id);
-            return (
-              <Box key={f.id}
-                onClick={() => toggleField(f.id)}
-                sx={{
-                  display: 'flex', alignItems: 'center', gap: 0.75,
-                  cursor: 'pointer', userSelect: 'none',
-                  p: '6px 10px', borderRadius: '4px',
-                  backgroundColor: on
-                    ? muiAlpha('#0fbcff', 0.12)
-                    : muiAlpha('#ffffff', 0.03),
-                  border: `1px solid ${on
-                    ? muiAlpha('#0fbcff', 0.4)
-                    : muiAlpha('#ffffff', 0.08)}`,
-                  '&:hover': {
+            <Stack spacing={1}>
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary',
+                lineHeight: 1.55, mb: 0.5 }}>
+                Toggle categories to add or remove field groups from the
+                email. Categories not present in this log are hidden.
+              </Typography>
+              {presentCats.map(cat => {
+                const items = categorized[cat] || [];
+                const on = enabledCategories.includes(cat);
+                return (
+                  <Box key={cat} sx={{
+                    p: '8px 12px', borderRadius: '4px',
                     backgroundColor: on
-                      ? muiAlpha('#0fbcff', 0.18)
-                      : muiAlpha('#ffffff', 0.06),
-                  },
-                }}>
-                <Box sx={{
-                  width: 14, height: 14, borderRadius: '3px',
-                  border: `1px solid ${on ? '#0fbcff' : muiAlpha('#ffffff', 0.3)}`,
-                  backgroundColor: on ? '#0fbcff' : 'transparent',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0,
-                }}>
-                  {on && <Check size={10} color="#0a1929"/>}
-                </Box>
-                <Typography sx={{
-                  fontSize: 12,
-                  color: on ? 'text.primary' : 'text.tertiary',
-                  fontWeight: on ? 500 : 400,
-                }}>
-                  {f.label}
-                </Typography>
-              </Box>
-            );
-          })}
-        </Box>
+                      ? muiAlpha('#0fbcff', 0.08)
+                      : muiAlpha('#ffffff', 0.02),
+                    border: `1px solid ${on
+                      ? muiAlpha('#0fbcff', 0.35)
+                      : muiAlpha('#ffffff', 0.08)}`,
+                  }}>
+                    <Box
+                      onClick={() => toggleCategory(cat)}
+                      sx={{
+                        display: 'flex', alignItems: 'center', gap: 1,
+                        cursor: 'pointer', userSelect: 'none',
+                      }}>
+                      <Box sx={{
+                        width: 14, height: 14, borderRadius: '3px',
+                        border: `1px solid ${on ? '#0fbcff' : muiAlpha('#ffffff', 0.3)}`,
+                        backgroundColor: on ? '#0fbcff' : 'transparent',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        flexShrink: 0,
+                      }}>
+                        {on && <Check size={10} color="#0a1929"/>}
+                      </Box>
+                      <Typography sx={{
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                        color: on ? 'text.primary' : 'text.tertiary',
+                      }}>
+                        {cat}
+                      </Typography>
+                      <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
+                        · {items.length} field{items.length === 1 ? '' : 's'}
+                      </Typography>
+                    </Box>
+                    {on && (
+                      <Box sx={{ mt: 0.75, pl: 2.75 }}>
+                        {items.slice(0, 12).map((it, i) => (
+                          <Typography key={i} sx={{ fontSize: 11,
+                            color: 'text.tertiary', lineHeight: 1.55,
+                            wordBreak: 'break-word' }}>
+                            <Box component="span" sx={{ color: 'text.primary' }}>
+                              {it.label}:
+                            </Box>{' '}{String(it.value).slice(0, 120)}
+                          </Typography>
+                        ))}
+                        {items.length > 12 && (
+                          <Typography sx={{ fontSize: 10,
+                            color: 'text.disabled', mt: 0.25 }}>
+                            + {items.length - 12} more
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
+                  </Box>
+                );
+              })}
+            </Stack>
           );
         })()}
 

@@ -482,6 +482,13 @@ def parse_log(log_text: str) -> Dict:
         action = suggest_response_action(suggested)
         if action:
             out["suggested_response_action"] = action
+    # Category breakdown of every present field — the frontend renders one
+    # toggle per category and sends enabled_categories back on compose to
+    # control which categories make it into the email body.
+    try:
+        out["_categorized"] = categorize_parsed(out)
+    except Exception:
+        out["_categorized"] = {}
     return out
 
 
@@ -2228,37 +2235,153 @@ def _strip_filler_phrases(body: str) -> str:
 # Field ordering follows the natural triage flow: WHO -> WHERE -> WHAT ->
 # OUTCOME -> WHEN. Within each group, the most specific field wins (e.g.
 # user_principal_name beats user_display_name when both are present).
+# Semantic categories the analyst toggles in the UI. Each fact field now
+# declares its category; enabled_categories on the compose request filters
+# the facts block (and, transitively, what the AI summary references).
+#
+# Categories:
+#   Identity   — user / account / asset / host
+#   Network    — IPs, ASN, location, user-agent
+#   Process    — process name / path / cmdline / id
+#   File       — file path, hash, artifact
+#   Detection  — alert name, rule name, malware family, risk type/level
+#   Time       — timestamps
+#   Action     — what was done about the event (response action, forwarding)
+#   Other      — privileged role / TAP / risk reasons / catch-all
+ALL_CATEGORIES = (
+    "Identity", "Network", "Process", "File", "Detection",
+    "Time", "Action", "Other",
+)
+
 _FACT_FIELDS = (
-    # (label, [candidate keys in priority order], optional formatter)
-    ("User",                 ["user_principal_name", "ep_user", "user_display_name"]),
+    # (label, [candidate keys in priority order], optional formatter, category)
+    ("User",                 ["user_principal_name", "ep_user", "user_display_name"], None, "Identity"),
     ("User display name",    ["user_display_name"], lambda v, p: v if (p.get("user_principal_name")
                                                                         or p.get("ep_user"))
                                                                         and v != (p.get("user_principal_name")
                                                                                   or p.get("ep_user"))
-                                                                        else None),
-    ("Target user",          ["target_user_principal_name"]),
-    ("Asset",                ["asset_name", "ep_domain"]),
-    ("Host",                 ["ep_domain"], lambda v, p: v if not p.get("asset_name") else None),
-    ("Process",              ["ep_application_name"]),
-    ("Process path",         ["ep_process_path", "ep_full_path"]),
-    ("Process ID",           ["ep_process_id"]),
-    ("Command line",         ["ep_cmd_line"], lambda v, p: (v[:200] + "...") if isinstance(v, str) and len(v) > 200 else v),
-    ("File path",            ["ep_defender_path", "ep_defender_file"]),
-    ("File hash (SHA-256)",  ["ep_sha256"]),
-    ("Detection",            ["ep_defender_type", "ep_message", "ep_admin_alert_title"]),
-    ("Source IP",            ["ip_address"]),
-    ("First login IP",       ["first_login_ip"]),
-    ("Second login IP",      ["second_login_ip"]),
-    ("Source location",      ["location_city", "location_country"], lambda v, p: _join_location(p)),
-    ("User agent",           ["additional_info_user_agent"]),
-    ("Risk type",            ["risk_event_type"]),
-    ("Risk level",           ["risk_level"]),
-    ("Risk state",           ["risk_state"]),
-    ("Risk reasons",         ["additional_info_risk_reasons"]),
-    ("Forwarding to",        ["forwarding_address"]),
-    ("Privileged role",      ["privileged_role_display_name", "privileged_role_well_known"]),
-    ("Time",                 ["ep_date"]),
+                                                                        else None, "Identity"),
+    ("Target user",          ["target_user_principal_name"], None, "Identity"),
+    ("Asset",                ["asset_name", "ep_domain"], None, "Identity"),
+    ("Host",                 ["ep_domain"], lambda v, p: v if not p.get("asset_name") else None, "Identity"),
+    ("Process",              ["ep_application_name"], None, "Process"),
+    ("Process path",         ["ep_process_path", "ep_full_path"], None, "Process"),
+    ("Process ID",           ["ep_process_id"], None, "Process"),
+    ("Command line",         ["ep_cmd_line"], lambda v, p: (v[:200] + "...") if isinstance(v, str) and len(v) > 200 else v, "Process"),
+    ("File path",            ["ep_defender_path", "ep_defender_file"], None, "File"),
+    ("File hash (SHA-256)",  ["ep_sha256"], None, "File"),
+    ("Detection",            ["ep_defender_type", "ep_message", "ep_admin_alert_title"], None, "Detection"),
+    ("Source IP",            ["ip_address"], None, "Network"),
+    ("First login IP",       ["first_login_ip"], None, "Network"),
+    ("Second login IP",      ["second_login_ip"], None, "Network"),
+    ("First login location", ["first_login_city", "first_login_country"],
+        lambda v, p: ", ".join([x for x in (p.get("first_login_city"),
+                                             p.get("first_login_country")) if x]) or None,
+        "Network"),
+    ("Second login location",["second_login_city", "second_login_country"],
+        lambda v, p: ", ".join([x for x in (p.get("second_login_city"),
+                                             p.get("second_login_country")) if x]) or None,
+        "Network"),
+    ("First login ASN",      ["first_login_asn_name"], None, "Network"),
+    ("Second login ASN",     ["second_login_asn_name"], None, "Network"),
+    ("Source location",      ["location_city", "location_country"], lambda v, p: _join_location(p), "Network"),
+    ("User agent",           ["additional_info_user_agent"], None, "Network"),
+    ("Risk type",            ["risk_event_type"], None, "Detection"),
+    ("Risk level",           ["risk_level"], None, "Detection"),
+    ("Risk state",           ["risk_state"], None, "Detection"),
+    ("Risk reasons",         ["additional_info_risk_reasons"], None, "Other"),
+    ("Forwarding to",        ["forwarding_address"], None, "Action"),
+    ("Privileged role",      ["privileged_role_display_name", "privileged_role_well_known"], None, "Other"),
+    ("Time",                 ["ep_date"], None, "Time"),
+    ("First login time",     ["first_login_created_raw"], None, "Time"),
+    ("Second login time",    ["second_login_created_raw"], None, "Time"),
 )
+
+
+# Keyword → category for the catch-all "Other parsed fields" classifier.
+# Used when we see a raw_field key the hardcoded _FACT_FIELDS doesn't
+# cover — keeps the categorisation working on arbitrary log formats.
+_CATEGORY_KEYWORDS = (
+    ("Network",    ("ip", "addr", "host", "url", "domain", "asn",
+                    "country", "city", "region", "latitude", "longitude",
+                    "useragent", "user_agent", "port", "dns", "netflow",
+                    "geo")),
+    ("Identity",   ("user", "account", "upn", "principal", "subject",
+                    "target", "asset", "machine", "device", "workstation",
+                    "endpoint", "computer", "tenant")),
+    ("Process",    ("process", "cmd", "command", "exec", "parent", "pid",
+                    "image")),
+    ("File",       ("file", "hash", "sha1", "sha256", "sha512", "md5",
+                    "imphash", "filename", "filepath", "path", "size")),
+    ("Detection",  ("alert", "detect", "rule", "signature", "policy",
+                    "malware", "threat", "verdict", "severity", "risk",
+                    "category", "vendor", "ttp", "mitre")),
+    ("Time",       ("date", "time", "created", "modified", "issued",
+                    "timestamp", "when", "duration")),
+    ("Action",     ("action", "response", "remediation", "blocked",
+                    "permit", "allow", "deny", "quarantine", "remediated")),
+)
+
+
+def _categorize_key(key: str) -> str:
+    """Best-effort category guess from a raw_field key name. Falls back
+    to 'Other' so nothing gets dropped on the floor."""
+    k = (key or "").lower().replace("-", "_")
+    for cat, kws in _CATEGORY_KEYWORDS:
+        if any(kw in k for kw in kws):
+            return cat
+    return "Other"
+
+
+def categorize_parsed(parsed: dict) -> dict:
+    """Return {category: [{key, label, value}, ...]} for every parsed field
+    that has a non-trivial value. Combines the hardcoded _FACT_FIELDS
+    (rendered with their human labels) AND every raw_fields entry the
+    parser didn't already cover (classified via keyword heuristics).
+
+    Empty when parsed is empty / has no usable values."""
+    if not parsed:
+        return {}
+    out: dict = {c: [] for c in ALL_CATEGORIES}
+    covered_keys: set = set()
+
+    # Pass 1 — hardcoded fact fields with formatters + canonical labels.
+    for entry in _FACT_FIELDS:
+        label, keys = entry[0], entry[1]
+        fmt = entry[2] if len(entry) > 2 else None
+        cat = entry[3] if len(entry) > 3 else _categorize_key(keys[0] if keys else "")
+        for k in keys:
+            covered_keys.add(k)
+            raw = parsed.get(k)
+            if not _is_real_value(raw):
+                continue
+            v = fmt(raw, parsed) if fmt else raw
+            if not _is_real_value(v):
+                continue
+            out.setdefault(cat, []).append({
+                "key":   keys[0],
+                "label": label,
+                "value": str(v),
+            })
+            break
+
+    # Pass 2 — every other raw_fields key that the hardcoded list didn't
+    # already cover. Lets arbitrary log shapes still surface their fields.
+    raw_fields = parsed.get("raw_fields") or {}
+    for raw_key, raw_val in raw_fields.items():
+        if not _is_real_value(raw_val):
+            continue
+        if raw_key.lower() in {k.lower() for k in covered_keys}:
+            continue
+        cat = _categorize_key(raw_key)
+        out.setdefault(cat, []).append({
+            "key":   raw_key,
+            "label": raw_key,
+            "value": str(raw_val)[:200],
+        })
+
+    # Drop empty buckets so the frontend doesn't render zero-item toggles.
+    return {c: items for c, items in out.items() if items}
 
 
 def _join_location(p: dict) -> str:
@@ -2371,6 +2494,46 @@ def _render_facts_block(parsed: dict, options: dict) -> str:
     enabled_fields = (options or {}).get("enabled_fields")
     if enabled_fields:
         p = _filter_parsed_for_template(p, enabled_fields)
+    # Category-toggle filtering — when options carries enabled_categories,
+    # render ONLY the fact rows + raw_fields entries whose category is on.
+    # Lets the analyst dynamically include/exclude whole groups (Identity,
+    # Network, Process, etc.) without editing the per-field list. When
+    # enabled_categories is None or empty list it acts as "all categories
+    # on" (no filtering).
+    enabled_categories = (options or {}).get("enabled_categories")
+    if enabled_categories:
+        enabled_set = {str(c).strip() for c in enabled_categories}
+        categorized = categorize_parsed(p)
+        # Build a fresh dict containing only the keys the categorizer
+        # placed under an enabled category. Everything else gets dropped.
+        kept_keys: set = set()
+        for cat, items in categorized.items():
+            if cat in enabled_set:
+                for it in items:
+                    kept_keys.add(it["key"])
+                    # _FACT_FIELDS sometimes has multiple candidate keys
+                    # per row; widen the keep-set to all keys the row
+                    # might pull from.
+                    for entry in _FACT_FIELDS:
+                        if it["key"] == entry[1][0]:
+                            for k in entry[1]:
+                                kept_keys.add(k)
+        # Always preserve housekeeping + raw_fields so downstream renderers
+        # (suggest_alert_type, AI context) still have what they need.
+        always_keep = {"raw_fields", "suggested_alert_type", "_alert_label",
+                       "suggested_response_action"}
+        new_parsed = {}
+        for k, v in p.items():
+            if k.startswith("_") or k in always_keep or k in kept_keys:
+                new_parsed[k] = v
+        # raw_fields gets pruned to matching-category keys only.
+        if isinstance(new_parsed.get("raw_fields"), dict):
+            new_parsed["raw_fields"] = {
+                rk: rv for rk, rv in new_parsed["raw_fields"].items()
+                if rk in kept_keys
+                or _categorize_key(rk) in enabled_set
+            }
+        p = new_parsed
     seen_values = set()
     lines = []
 
@@ -2398,6 +2561,30 @@ def _render_facts_block(parsed: dict, options: dict) -> str:
             continue
         seen_values.add(value_str)
         lines.append(f"{label}: {value_str}")
+
+    # Catch-all — any raw_fields key the hardcoded _FACT_FIELDS list didn't
+    # cover but whose category survived the enabled-categories filter still
+    # gets a row. Keeps the email accurate for arbitrary log shapes without
+    # requiring every new log format to be hardcoded.
+    covered_keys = set()
+    for entry in _FACT_FIELDS:
+        for k in entry[1]:
+            covered_keys.add(k.lower())
+    raw_fields = p.get("raw_fields") or {}
+    for raw_key, raw_val in raw_fields.items():
+        if not _is_real_value(raw_val):
+            continue
+        if raw_key.lower() in covered_keys:
+            continue
+        value_str = str(raw_val).strip()[:200]
+        if value_str in seen_values:
+            continue
+        # Skip housekeeping-shaped keys (long opaque IDs the analyst
+        # doesn't want in the body).
+        if len(raw_key) > 60:
+            continue
+        seen_values.add(value_str)
+        lines.append(f"{raw_key}: {value_str}")
 
     # Response action — what was already done about the alert, if anything
     response_action = (o or {}).get("response_action") or ""
@@ -2500,31 +2687,36 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     # small, so prompt-following stays reliable. The model never has the
     # chance to robotic-narrate the facts (because we render them itself).
     sys_msg = (
-        "You are a senior SOC analyst writing two small pieces of an email "
-        "body. Output STRICT JSON with exactly two string fields: 'summary' "
-        "and 'guidance'. No other keys. No markdown fences.\n\n"
-        "summary: ONE plain-English sentence (max 25 words) naming what the "
-        "alert actually is. Example: 'Sign-in failure against a disabled "
-        "account, most likely a stale automation still calling the "
-        "deactivated identity.' Example: 'A scheduled Dell SupportAssist "
-        "task ran successfully against the system registry, which is "
-        "expected vendor maintenance behaviour.'\n\n"
-        "guidance: ONE tight paragraph (3-5 sentences, max 90 words) of "
-        "specific investigation + containment + remediation + detection "
-        "advice for THIS alert. Reference the specific artefacts by name "
-        "(the actual user, IP, process, hash, etc. from the parsed "
-        "fields). For clearing notifications / confirmed false positives, "
-        "ONE sentence of verification advice is enough. For genuine "
-        "incidents, give concrete steps in the order they should happen.\n\n"
+        "You are a senior SOC analyst writing the body of a customer alert "
+        "email. Output STRICT JSON with exactly one string field: "
+        "'analysis'. No other keys. No markdown fences.\n\n"
+        "The analysis paragraph is the ENTIRE email body the customer reads "
+        "below the facts block. There is no separate summary, no separate "
+        "guidance, no separate closing — bake verification asks and any "
+        "recommended next steps into the same paragraph. The signature is "
+        "appended deterministically afterwards.\n\n"
+        "analysis: 4-6 sentences. Reflect the ACTUAL log content using the "
+        "parsed fields below — specific user, host, IPs, processes, hashes, "
+        "timestamps. Walk through what happened in order. State the verdict "
+        "(this is benign / this looks suspicious / this needs investigation) "
+        "with reasoning grounded in the facts. End with a concrete "
+        "verification ask if any uncertainty remains, OR a clean close if "
+        "the verdict is decisive. No greeting. No closing courtesy line.\n\n"
+        "GROUNDING:\n"
+        "* Every claim MUST trace back to a parsed field or the raw log. "
+        "Do not invent IPs, hashes, users, processes, malware names, or "
+        "campaigns that aren't in the input.\n"
+        "* Reflect what the log actually shows — don't reach for a generic "
+        "'common behaviour' framing when concrete signals contradict it "
+        "(impossible-travel hint below is the canonical example).\n\n"
         "CALIBRATION:\n"
         "* When the evidence shows a known-good vendor pattern (Dell "
         "SupportAssist, Microsoft Defender, SCCM, CrowdStrike, etc.), say "
-        "so explicitly in the summary and skew the guidance toward "
-        "verification rather than containment.\n"
+        "so plainly and recommend verification rather than containment.\n"
         "* Only treat an event as confirmed-malicious with concrete "
         "evidence (named malware hash, malicious infrastructure callout, "
-        "lateral movement, credential access). Otherwise the guidance is "
-        "verification + monitoring.\n\n"
+        "lateral movement, credential access). Otherwise: verification + "
+        "monitoring.\n\n"
         "BANNED PHRASES (the analyst will reject the email if you produce "
         "any of these): 'indicates that', 'associated with this event', "
         "'in terms of', 'ensure that', 'consider whether', 'may be "
@@ -2532,10 +2724,9 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "continue monitoring', 'we are here to help', 'please contact "
         "us', 'feel free to', 'do not hesitate', 'rest assured', 'as "
         "always', 'in light of', 'in response to this alert'. Use direct "
-        "active voice instead.\n\n"
+        "active voice.\n\n"
         "NO references to 'our team', 'the team', 'our analysts', or any "
-        "group self-reference. NO greeting. NO closing courtesy line. "
-        "NO em/en dashes."
+        "group self-reference. NO greeting. NO em/en dashes."
     )
 
     # When a custom email template is active, tell the AI which fields are
@@ -2596,13 +2787,13 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
 
     user_msg = (
         f"## Alert facts (already rendered as the email's top block — DO NOT "
-        "re-narrate these in the summary or guidance)\n"
+        "re-narrate the field list back; refer to specific values from it)\n"
         f"{facts_block or '(no structured fields)'}\n\n"
         f"## Raw log (for context only)\n"
         f"```\n{log_text[:3500]}\n```\n"
         f"{action_hint}{template_hint}{impossible_travel_hint}\n\n"
-        f"{classified_as}Return ONLY the JSON object with 'summary' and "
-        "'guidance' keys."
+        f"{classified_as}Return ONLY the JSON object with a single "
+        "'analysis' string key."
     )
 
     from providers import get_provider
@@ -2626,22 +2817,24 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     except Exception:
         parsed_ai = {}
 
-    summary  = str(parsed_ai.get("summary") or "").strip()
-    guidance = str(parsed_ai.get("guidance") or "").strip()
+    # New single-field schema: one analysis paragraph that covers what
+    # happened, the verdict, and the verification ask. Falls back to the
+    # old summary+guidance pair when older clients / older models still
+    # emit that shape.
+    analysis = str(parsed_ai.get("analysis") or "").strip()
+    if not analysis:
+        s = str(parsed_ai.get("summary") or "").strip()
+        g = str(parsed_ai.get("guidance") or "").strip()
+        analysis = (s + ("\n\n" + g if g else "")).strip()
 
     # Scrub the LLM output for any banned phrases that slipped through.
-    summary  = _strip_filler_phrases(_strip_em_dashes(_strip_list_markers(summary)))
-    guidance = _strip_filler_phrases(_strip_em_dashes(_strip_list_markers(guidance)))
+    analysis = _strip_filler_phrases(_strip_em_dashes(_strip_list_markers(analysis)))
 
-    # Assemble the body: facts block + blank line + summary + blank line + guidance.
-    # The signature template token gets appended below.
     body_parts = []
     if facts_block:
         body_parts.append(facts_block)
-    if summary:
-        body_parts.append(summary)
-    if guidance:
-        body_parts.append(guidance)
+    if analysis:
+        body_parts.append(analysis)
     body = "\n\n".join(body_parts) if body_parts else (
         # Defensive fallback — if both the facts and the LLM produced nothing
         # the email is empty, which is worse than a curt fallback.
