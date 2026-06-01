@@ -332,12 +332,60 @@ function UrlReputationReport({ result }) {
   if (dnsRecords) signalCount++;
   if (bgp) signalCount++;
 
-  const score = Math.max(0, Math.min(100, drivers.reduce((s, d) => s + d.weight, 0) + 50));
-  const verdict = score >= 65 ? { label: 'MALICIOUS',  color: '#EE3838' }
-               : score >= 35 ? { label: 'SUSPICIOUS', color: '#E6700F' }
-               : score >= 15 ? { label: 'WATCH',      color: '#E1B823' }
-               :                { label: 'CLEAN',      color: '#16AD34' };
+  // Evidence-driven verdict — the previous "50 baseline" math meant a
+  // single clean driver (VirusTotal 0/56) scored 45/100 SUSPICIOUS, which
+  // is wrong. Now the verdict follows what the drivers actually say: if
+  // there is no malicious evidence, the URL is CLEAN (or UNKNOWN when no
+  // source returned data). Score is purely informational alongside.
+  const positives = drivers.filter(d => d.weight > 0).reduce((s, d) => s + d.weight, 0);
+  const negatives = drivers.filter(d => d.weight < 0).reduce((s, d) => s + d.weight, 0);
+  const hasMalSignal   = positives > 0;
+  const hasCleanSignal = negatives < 0;
+  const strongMal      = drivers.some(d => d.weight >= 25);
+  const weakMal        = drivers.some(d => d.weight >= 10 && d.weight < 25);
+  const score = hasMalSignal
+    ? Math.max(0, Math.min(100, positives + 20 + negatives))
+    : (hasCleanSignal ? Math.max(0, 10 + negatives) : 0);
+  const verdict = strongMal
+    ? { label: 'MALICIOUS',  color: '#EE3838' }
+    : weakMal
+      ? { label: 'SUSPICIOUS', color: '#E6700F' }
+      : hasMalSignal
+        ? { label: 'WATCH',  color: '#E1B823' }
+        : hasCleanSignal
+          ? { label: 'CLEAN',   color: '#16AD34' }
+          : { label: 'UNKNOWN', color: '#848592' };
   const topDrivers = [...drivers].sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight)).slice(0, 3);
+
+  // Headline-row factoids — the analyst wanted the Wayback "last snapshot"
+  // and the WHOIS registration date visible at the top of the report
+  // without scrolling down to the per-source cards.
+  const factoids = [];
+  if (whois?.created) {
+    const age = whois.age_days;
+    factoids.push({
+      label: 'Domain registered',
+      value: age != null
+        ? `${_formatDate(whois.created)} (${age}d ago)`
+        : _formatDate(whois.created),
+    });
+  }
+  if (whois?.registrar) {
+    factoids.push({ label: 'Registrar', value: whois.registrar });
+  }
+  if (wayback?.last_snapshot) {
+    factoids.push({
+      label: 'Last Wayback snapshot',
+      value: _formatDate(wayback.last_snapshot),
+    });
+  } else if (wayback?.first_snapshot) {
+    factoids.push({
+      label: 'First Wayback snapshot',
+      value: _formatDate(wayback.first_snapshot),
+    });
+  } else if (wayback && wayback.has_snapshots === false) {
+    factoids.push({ label: 'Wayback Machine', value: 'no snapshots on record' });
+  }
 
   // ── helpers for per-source status pills ─────────────────────────────────
   const sourceState = (data, malicious) => {
@@ -402,6 +450,36 @@ function UrlReputationReport({ result }) {
                 </Stack>
               ))}
             </Stack>
+          </Box>
+        )}
+
+        {/* Headline factoids — WHOIS registration date + last Wayback
+            snapshot so the analyst can place the domain in time without
+            scrolling to the per-source cards below. */}
+        {factoids.length > 0 && (
+          <Box sx={{ mt: topDrivers.length ? 1.5 : 1.5,
+            pt: topDrivers.length ? 1.5 : 0,
+            borderTop: topDrivers.length
+              ? `1px solid ${muiAlpha('#ffffff', 0.08)}` : 'none' }}>
+            <Box sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' },
+              gap: '6px 18px',
+            }}>
+              {factoids.map((f, i) => (
+                <Box key={i}>
+                  <Typography sx={{ fontSize: 10, color: 'text.disabled',
+                    fontWeight: 600, textTransform: 'uppercase',
+                    letterSpacing: '0.07em' }}>
+                    {f.label}
+                  </Typography>
+                  <Typography sx={{ fontSize: 12, color: 'text.primary',
+                    ...monoSx, wordBreak: 'break-word' }}>
+                    {f.value}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
           </Box>
         )}
       </MuiPaper>
