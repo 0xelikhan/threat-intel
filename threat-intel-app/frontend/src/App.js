@@ -2073,7 +2073,9 @@ function AttributionChip({ actor }) {
   const huntTtps = actor.ttps_to_look_for || {};
   const huntBefore = Array.isArray(huntTtps.before) ? huntTtps.before : [];
   const huntAfter  = Array.isArray(huntTtps.after)  ? huntTtps.after  : [];
-  const hasHunt    = huntBefore.length + huntAfter.length > 0;
+  const huntProcs  = Array.isArray(huntTtps.process_names) ? huntTtps.process_names : [];
+  const huntSw     = Array.isArray(huntTtps.software)      ? huntTtps.software      : [];
+  const hasHunt    = huntBefore.length + huntAfter.length + huntProcs.length + huntSw.length > 0;
 
   return (
     <Box sx={{
@@ -2243,12 +2245,10 @@ function AttributionChip({ actor }) {
         </Box>
       )}
 
-      {/* Hunt guidance — this actor's other known TTPs bucketed relative to
-          the kill-chain position of the matched evidence. "Before" = look
-          earlier in the alert's surrounding activity (recon, initial
-          access, execution). "After" = look later (persistence, lateral,
-          exfil, impact). Junior analysts get a curated checklist of what
-          to hunt for given the AI's attribution. */}
+      {/* Hunt guidance — concrete artifacts first (process names + software
+          / malware aliases) so the analyst gets actual hunt terms instead
+          of abstract MITRE codes. MITRE technique lists are kept but
+          demoted below the artifacts. */}
       {openHunt && hasHunt && (
         <Box sx={{ mt: 0.75, pt: 0.75,
           borderTop: `1px solid ${muiAlpha('#0fbcff', 0.18)}` }}>
@@ -2259,9 +2259,113 @@ function AttributionChip({ actor }) {
 
           {actor.description && (
             <Typography sx={{ fontSize: 11.5, color: 'text.tertiary',
-              lineHeight: 1.6, mb: 1, fontStyle: 'italic' }}>
+              lineHeight: 1.6, mb: 1.25, fontStyle: 'italic' }}>
               {String(actor.description).slice(0, 320)}
               {String(actor.description).length > 320 ? '…' : ''}
+            </Typography>
+          )}
+
+          {/* Concrete artifact targets — search SIEM / EDR for these */}
+          {huntProcs.length > 0 && (
+            <Box sx={{ mb: 1.25 }}>
+              <Typography sx={{ fontSize: 11, color: 'text.primary',
+                fontWeight: 600, mb: 0.5 }}>
+                Processes / binaries to hunt for
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                {huntProcs.map((p, i) => (
+                  <Box key={i} sx={{
+                    fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
+                    color: '#EE3838',
+                    backgroundColor: muiAlpha('#EE3838', 0.08),
+                    border: `1px solid ${muiAlpha('#EE3838', 0.3)}`,
+                    borderRadius: '3px', px: 0.875, py: '2px',
+                  }}>{p}</Box>
+                ))}
+              </Box>
+              <Typography sx={{ fontSize: 10, color: 'text.disabled',
+                mt: 0.5, fontStyle: 'italic' }}>
+                Pivot your SIEM / EDR on these process names — any execution
+                on related hosts is a high-signal hunt lead.
+              </Typography>
+            </Box>
+          )}
+
+          {huntSw.length > 0 && (
+            <Box sx={{ mb: 1.25 }}>
+              <Typography sx={{ fontSize: 11, color: 'text.primary',
+                fontWeight: 600, mb: 0.5 }}>
+                Tools / malware {display} is known to use
+              </Typography>
+              <Stack spacing={0.6} sx={{ pl: 1,
+                borderLeft: `2px solid ${muiAlpha('#EE3838', 0.25)}` }}>
+                {huntSw.map((s, i) => (
+                  <Box key={i}>
+                    <Stack direction="row" alignItems="center"
+                      spacing={0.75} flexWrap="wrap">
+                      <Box component="a"
+                        href={s.id ? `https://attack.mitre.org/software/${s.id}/` : undefined}
+                        target="_blank" rel="noreferrer"
+                        sx={{ fontFamily: '"IBM Plex Mono", monospace',
+                          fontSize: 11, color: '#EE3838',
+                          textDecoration: 'none', fontWeight: 600,
+                          '&:hover': { textDecoration: 'underline' } }}>
+                        {s.name || s.id}
+                      </Box>
+                      {s.id && (
+                        <Box component="span" sx={{ fontSize: 10,
+                          color: 'text.disabled',
+                          fontFamily: '"IBM Plex Mono", monospace' }}>
+                          {s.id}
+                        </Box>
+                      )}
+                      {s.type && (
+                        <Box component="span" sx={{ fontSize: 10,
+                          color: 'text.tertiary',
+                          textTransform: 'lowercase' }}>
+                          · {s.type}
+                        </Box>
+                      )}
+                    </Stack>
+                    {s.aliases?.length > 0 && (
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4,
+                        mt: 0.4 }}>
+                        {s.aliases.slice(0, 6).map((a, j) => (
+                          <Box key={j} sx={{
+                            fontFamily: '"IBM Plex Mono", monospace',
+                            fontSize: 10.5,
+                            color: 'text.primary',
+                            backgroundColor: muiAlpha('#ffffff', 0.04),
+                            border: `1px solid ${muiAlpha('#ffffff', 0.08)}`,
+                            borderRadius: '3px', px: 0.625, py: '1px',
+                          }}>{a}</Box>
+                        ))}
+                      </Box>
+                    )}
+                    {s.description && (
+                      <Typography sx={{ fontSize: 11, color: 'text.tertiary',
+                        lineHeight: 1.5, mt: 0.4 }}>
+                        {s.description}
+                      </Typography>
+                    )}
+                  </Box>
+                ))}
+              </Stack>
+              <Typography sx={{ fontSize: 10, color: 'text.disabled',
+                mt: 0.5, fontStyle: 'italic' }}>
+                Aliases above are the binary / tool names this software
+                ships under — use them as hash-set seeds and filename
+                hunts in your EDR.
+              </Typography>
+            </Box>
+          )}
+
+          {/* MITRE technique buckets — secondary detail. */}
+          {(huntBefore.length > 0 || huntAfter.length > 0) && (
+            <Typography sx={{ fontSize: 11, color: 'text.tertiary',
+              fontWeight: 600, mb: 0.5, mt: 1,
+              textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              MITRE ATT&CK techniques · before / after
             </Typography>
           )}
 
@@ -2270,9 +2374,6 @@ function AttributionChip({ actor }) {
               <Typography sx={{ fontSize: 11, color: 'text.primary',
                 fontWeight: 600, mb: 0.5 }}>
                 ↤ Look earlier in the kill chain
-                <Box component="span" sx={{ color: 'text.tertiary', fontWeight: 400 }}>
-                  {' '}— precursor activity {display} typically performs before this stage
-                </Box>
               </Typography>
               <Stack spacing={0.4} sx={{ pl: 1,
                 borderLeft: `2px solid ${muiAlpha('#0fbcff', 0.2)}` }}>
@@ -2305,9 +2406,6 @@ function AttributionChip({ actor }) {
               <Typography sx={{ fontSize: 11, color: 'text.primary',
                 fontWeight: 600, mb: 0.5 }}>
                 ↦ Look later in the kill chain
-                <Box component="span" sx={{ color: 'text.tertiary', fontWeight: 400 }}>
-                  {' '}— follow-on activity {display} typically performs after this stage
-                </Box>
               </Typography>
               <Stack spacing={0.4} sx={{ pl: 1,
                 borderLeft: `2px solid ${muiAlpha('#E6700F', 0.25)}` }}>
@@ -2334,13 +2432,6 @@ function AttributionChip({ actor }) {
               </Stack>
             </Box>
           )}
-
-          <Typography sx={{ fontSize: 10, color: 'text.disabled',
-            mt: 1, fontStyle: 'italic' }}>
-            Buckets derived from MITRE ATT&CK Groups data. "Before" / "after"
-            is relative to the latest kill-chain phase represented by the
-            matched evidence.
-          </Typography>
         </Box>
       )}
     </Box>
@@ -2367,99 +2458,40 @@ function AnalystSummary({ result, rs }) {
   // card so the analyst gets the human-readable read before the dial.
   const plainEnglish = (result?.log_translation?.normalized_summary || '').trim();
 
+  // Combined Summary — plain-English read + AI summary + recommended
+  // disposition + the empirical enrichment line are stitched into a single
+  // block so the analyst reads one cohesive narrative instead of four
+  // stacked variants of the same idea.
+  const dispLine = hasDisposition
+    ? (a.disposition === 'CLEAR'
+        ? 'Recommended disposition: CLEAR'
+        : a.disposition === 'ESCALATE'
+          ? 'Recommended disposition: ESCALATE'
+          : `Recommended disposition: ${a.disposition}`)
+    : '';
+  const dispReason = (a?.disposition_reason || '').trim();
+  const enrichLine = (rs?.enrichment_summary?.line || '').trim();
+  const combined = [
+    plainEnglish,
+    summary,
+    dispLine && (dispReason ? `${dispLine} — ${dispReason}` : dispLine),
+    enrichLine,
+  ].filter(Boolean).join('\n\n');
+
   return (
     <Card title="Summary" accent="#0fbcff" badge={a?.disposition?.toLowerCase()} defaultOpen>
-      {plainEnglish && (
-        <Box sx={{ mb: 1.5 }}>
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
-            <Typography sx={{ fontSize: 10, color: 'text.tertiary', fontWeight: 600,
-              textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Plain-English summary
-            </Typography>
-            <Tooltip title="Copy to clipboard">
-              <MuiIconButton
-                size="small"
-                onClick={() => navigator.clipboard.writeText(plainEnglish)}
-                sx={{ p: 0.25, color: 'text.tertiary',
-                  '&:hover': { color: 'primary.main' } }}>
-                <Copy size={11}/>
-              </MuiIconButton>
-            </Tooltip>
-          </Stack>
-          <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.7,
-            whiteSpace: 'pre-wrap' }}>
-            {plainEnglish}
-          </Typography>
-        </Box>
-      )}
-
-      {summary && (
-        <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.7,
-          mb: 1.5, whiteSpace: 'pre-wrap',
-          // Subtle visual gap when the plain-English block sits above it.
-          ...(plainEnglish ? {
-            pt: 1.5,
-            borderTop: `1px solid ${muiAlpha('#ffffff', 0.06)}`,
-          } : {}),
+      {combined && (
+        <Typography sx={{
+          fontSize: 13.5, color: 'text.primary', lineHeight: 1.75,
+          mb: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          ...(hasDisposition ? { borderLeft: `3px solid ${dispColor}`,
+                                  pl: 1.5 } : {}),
         }}>
-          {summary}
+          {combined}
         </Typography>
       )}
 
       {topActor && <AttributionChip actor={topActor}/>}
-
-      {hasDisposition && (
-        <MuiPaper elevation={0} sx={{
-          backgroundColor: 'background.secondary',
-          border: `1px solid ${muiAlpha(dispColor, 0.25)}`,
-          borderLeft: `3px solid ${dispColor}`,
-          borderRadius: '4px', p: '12px 14px', mb: 1.5,
-        }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
-            <Box sx={{ width: 8, height: 8, borderRadius: 99, backgroundColor: dispColor }}/>
-            <Typography sx={{ color: dispColor, fontWeight: 600, fontSize: 13 }}>
-              Recommended disposition: {a.disposition}
-            </Typography>
-          </Box>
-          {a.disposition_reason && (
-            <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.7 }}>
-              {a.disposition_reason}
-            </Typography>
-          )}
-        </MuiPaper>
-      )}
-
-      {/* Enrichment-summary header — empirical baseline computed server-side,
-          shown as the FIRST line so analysts see the source counts before
-          reading any AI interpretation. */}
-      {rs?.enrichment_summary?.line && (
-        <Box sx={{
-          mb: 1.5, p: '8px 12px', borderRadius: '4px',
-          backgroundColor: muiAlpha('#0fbcff', 0.06),
-          border: `1px solid ${muiAlpha('#0fbcff', 0.18)}`,
-          fontFamily: '"IBM Plex Mono", monospace',
-          fontSize: 12, color: 'text.primary', lineHeight: 1.5,
-        }}>
-          {rs.enrichment_summary.line}
-        </Box>
-      )}
-
-      {/* Why this rating — transparent enumeration of the evidence points the
-          AI used to set the threat level. Calibration fix from S8: if this
-          block is empty or only lists benign indicators, the threat level
-          should be INFORMATIONAL/LOW. The analyst can verify the reasoning
-          before acting. The threat_level_reasoning paragraph below the
-          badge is ALWAYS visible (not collapsed) so the analyst sees the
-          justification at a glance. */}
-      {(rs?.assessment_basis?.length > 0 || rs?.threat_level) && (
-        <WhyThisRating
-          threatLevel={rs?.threat_level}
-          reasoning={rs?.threat_level_reasoning || ''}
-          basis={rs?.assessment_basis || []}
-          fpCheck={rs?.false_positive_check}
-          aiUnavailable={rs?.ai_unavailable}
-        />
-      )}
 
       {/* PRINCIPLE 7 — Confirmed facts vs analyst assessment. Rendered as
           two distinct sections so analysts can tell evidence from inference
@@ -2483,101 +2515,16 @@ function AnalystSummary({ result, rs }) {
       )}
 
       {hasGti && <ThreatScore result={result}/>}
-
-      {a?.clear_justification && (
-        <Block title="Why this can / cannot be cleared">
-          <Typography component="li" sx={{ listStyle: 'none', py: 0.5, fontSize: 13,
-            color: 'text.primary', lineHeight: 1.7 }}>
-            {a.clear_justification}
-          </Typography>
-        </Block>
-      )}
-
-      {a?.escalation_steps?.length > 0 && a.disposition !== 'CLEAR' && (
-        <Block title="If escalating · steps for Tier 2">
-          {a.escalation_steps.map((s, i) => (
-            <Box component="li" key={i} sx={{
-              display: 'flex', gap: 1.25, py: 0.75,
-              borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
-              fontSize: 13, color: 'text.primary', lineHeight: 1.6,
-            }}>
-              <Box component="span" sx={{ color: 'error.main', minWidth: 18, fontWeight: 600 }}>
-                {i + 1}
-              </Box>
-              <span>{s}</span>
-            </Box>
-          ))}
-        </Block>
-      )}
     </Card>
   );
 }
 
-/* ─── Threat-level badge — non-collapsible. Shows the rating and the
-       always-visible reasoning paragraph. Reasoning sits inside a larger
-       readable panel rather than a thin inline line so multi-sentence
-       paragraphs (driven-by + enrichment-summary tail) don't feel
-       cramped.                                                          */
-function WhyThisRating({ threatLevel, reasoning, aiUnavailable }) {
-  const lvl = (threatLevel || 'INFORMATIONAL').toUpperCase();
-  const color = lvl === 'CRITICAL' ? '#ff2d2d'
-              : lvl === 'HIGH'     ? '#ff8c00'
-              : lvl === 'MEDIUM'   ? '#ffd700'
-              : lvl === 'LOW'      ? '#00b4d8'
-              :                       '#74c0fc';
-  const reasoningText = (reasoning || '').trim();
-  return (
-    <Box sx={{ mb: 1.5 }}>
-      <Box sx={{
-        display: 'flex', alignItems: 'center', gap: 1,
-        py: 0.85, px: 1.25, borderRadius: '4px',
-        backgroundColor: muiAlpha(color, 0.06),
-        border: `1px solid ${muiAlpha(color, 0.25)}`,
-        borderLeft: `3px solid ${color}`,
-      }}>
-        <Box sx={{ width: 7, height: 7, borderRadius: 99, backgroundColor: color }}/>
-        <Typography sx={{ fontSize: 12, color, fontWeight: 700,
-          letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-          {lvl}
-        </Typography>
-        <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
-          · threat level
-        </Typography>
-      </Box>
-      {(reasoningText || aiUnavailable) && (
-        <Box sx={{
-          mt: 0.75,
-          p: '12px 14px',
-          borderRadius: '4px',
-          backgroundColor: muiAlpha(color, 0.03),
-          border: `1px solid ${muiAlpha(color, 0.18)}`,
-          borderLeft: `2px solid ${muiAlpha(color, 0.45)}`,
-        }}>
-          {reasoningText && (
-            <Typography sx={{
-              fontSize: 13.5,
-              color: 'text.primary',
-              lineHeight: 1.7,
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-            }}>
-              {reasoningText}
-            </Typography>
-          )}
-          {!reasoningText && aiUnavailable && (
-            <Typography sx={{
-              fontSize: 13, color: 'text.tertiary',
-              fontStyle: 'italic', lineHeight: 1.7,
-            }}>
-              AI analysis was unavailable for this run — the level shown is a
-              fallback default. Restore the AI provider key and re-run.
-            </Typography>
-          )}
-        </Box>
-      )}
-    </Box>
-  );
-}
+// WhyThisRating removed — the AI's threat_level field was producing
+// internally contradictory output (badge MEDIUM, prose "This alert is
+// INFORMATIONAL.") and the analyst-facing surface added more confusion
+// than value. The combined Summary block in AnalystSummary already
+// conveys the rating in plain English via the AI's summary + the
+// recommended-disposition tail.
 
 /* ─── Confirmed vs Analysis — PRINCIPLE 7 two-tier split
        Confirmed = statements directly traceable to enrichment data
@@ -2825,21 +2772,22 @@ function ChatWithRecon({ result, bare,
   // to whatever they uploaded.
   const questions = (rs.probing_questions || []).filter(q => q && q.question);
 
-  // ─── Feedback workflow (folded in from the old FeedbackPanel) ───────────
-  // Toggled open by a button below the chat input. When the analyst submits,
-  // we re-run the full /api/analyze pipeline with analystFeedback set.
-  const [feedbackOpen, setFeedbackOpen]   = useState(false);
-  const [feedback, setFeedback]           = useState('');
+  // ─── Feedback mode (folded into the chat input as a selectable toggle) ──
+  // When feedbackMode is on, the same Send button submits the chat input as
+  // analyst feedback — re-running /api/analyze with the original raw log
+  // plus the analyst statement, and replacing the visible analysis result.
+  // Toggle sits to the LEFT of the Send button so the analyst can train the
+  // AI on false positives without leaving the chat surface.
+  const [feedbackMode, setFeedbackMode]     = useState(false);
   const [feedbackSending, setFeedbackSending] = useState(false);
-  const [feedbackError, setFeedbackError] = useState(null);
   const feedbackUpdated = !!rs?.analyst_feedback;
   const originalLog = result?.raw_input || '';
 
-  const submitFeedback = async () => {
-    const trimmed = feedback.trim();
+  const submitFeedback = async (statement) => {
+    const trimmed = (statement || '').trim();
     if (!trimmed || !originalLog) return;
-    setFeedbackError(null);
     setFeedbackSending(true);
+    setError(null);
     onFeedbackStart?.();
     try {
       const resp = await fetch('/api/analyze', {
@@ -2875,18 +2823,23 @@ function ChatWithRecon({ result, bare,
             if (ev.event === 'complete') {
               onFeedbackComplete?.(ev.result);
               setFeedbackSending(false);
-              setFeedback('');
-              setFeedbackOpen(false);
+              setMessages(m => [
+                ...m,
+                { role: 'assistant',
+                  content: 'Got it — re-ran the analysis with your context.',
+                  _from_card: true,
+                  timestamp: new Date().toISOString() },
+              ]);
             }
             if (ev.event === 'error') {
-              setFeedbackError(ev.error || 'analysis failed');
+              setError(ev.error || 'analysis failed');
               setFeedbackSending(false);
             }
           } catch {}
         }
       }
     } catch (e) {
-      setFeedbackError(e.message);
+      setError(e.message);
       setFeedbackSending(false);
     }
   };
@@ -2925,7 +2878,34 @@ function ChatWithRecon({ result, bare,
 
   const send = async (msgOverride) => {
     const rawText = (msgOverride ?? input).trim();
-    if (!rawText || !runId || sending) return;
+    if (!rawText || sending || feedbackSending) return;
+    // Feedback-mode short-circuit — submit the chat input as analyst feedback
+    // instead of a chat message and replace the analysis result.
+    if (feedbackMode && originalLog) {
+      if (!msgOverride) setInput('');
+      setMessages(m => [
+        ...m,
+        { role: 'user', content: rawText, _feedback: true,
+          timestamp: new Date().toISOString() },
+        { role: 'assistant', content: 'Re-analyzing with your context as ground truth…',
+          _streaming: true, _from_card: true,
+          timestamp: new Date().toISOString() },
+      ]);
+      await submitFeedback(rawText);
+      setMessages(m => {
+        const copy = [...m];
+        for (let i = copy.length - 1; i >= 0; i--) {
+          if (copy[i]?._streaming) {
+            copy[i] = { ...copy[i], _streaming: false };
+            break;
+          }
+        }
+        return copy;
+      });
+      setFeedbackMode(false);
+      return;
+    }
+    if (!runId) return;
     setSending(true); setError(null);
     if (!msgOverride) setInput('');
 
@@ -3028,24 +3008,19 @@ function ChatWithRecon({ result, bare,
 
   const body = (
     <>
-      {/* "Updated based on analyst feedback" banner — shown once a feedback
-          re-run has completed so the analyst sees this card reflects their
-          input, not the original AI verdict. */}
+      {/* Small purple chip when this run was re-analysed with analyst
+          feedback. No header text — just the quoted statement so the
+          analyst sees what was applied. */}
       {feedbackUpdated && (
-        <MuiPaper elevation={0} sx={{
-          backgroundColor: muiAlpha('#B286FF', 0.08),
-          border: `1px solid ${muiAlpha('#B286FF', 0.35)}`,
+        <Typography sx={{
+          fontSize: 12, color: '#B286FF', lineHeight: 1.55,
+          mb: 1, fontStyle: 'italic', whiteSpace: 'pre-wrap',
           borderLeft: `3px solid #B286FF`,
-          borderRadius: '4px', p: '10px 14px', mb: 1.5,
+          backgroundColor: muiAlpha('#B286FF', 0.05),
+          p: '8px 12px', borderRadius: '4px',
         }}>
-          <Typography sx={{ fontSize: 12, color: '#B286FF', fontWeight: 600, mb: 0.5 }}>
-            Updated based on analyst feedback
-          </Typography>
-          <Typography sx={{ fontSize: 12, color: 'text.tertiary',
-            lineHeight: 1.55, fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>
-            “{rs.analyst_feedback}”
-          </Typography>
-        </MuiPaper>
+          “{rs.analyst_feedback}”
+        </Typography>
       )}
 
       {/* Investigation-guidance question cards, always visible so the analyst
@@ -3212,24 +3187,82 @@ function ChatWithRecon({ result, bare,
         </Box>
       )}
 
-      {/* Input row */}
+      {/* Mode toggle — feedback or chat. Sits above the input as a small
+          selectable pill so the analyst can train the AI on a false positive
+          mid-conversation without leaving the chat surface. */}
+      {originalLog && (
+        <Stack direction="row" spacing={0.75} alignItems="center"
+          sx={{ mb: 0.75, flexWrap: 'wrap' }}>
+          <Box
+            onClick={() => setFeedbackMode(false)}
+            sx={{
+              cursor: 'pointer', userSelect: 'none',
+              fontSize: 11, fontWeight: 500,
+              px: 1, py: '4px', borderRadius: '4px',
+              color: !feedbackMode ? accent : 'text.tertiary',
+              backgroundColor: !feedbackMode ? muiAlpha(accent, 0.12) : 'transparent',
+              border: `1px solid ${!feedbackMode ? muiAlpha(accent, 0.4) : muiAlpha('#ffffff', 0.12)}`,
+              '&:hover': { backgroundColor: muiAlpha(accent, 0.08) },
+            }}>
+            Ask RECON
+          </Box>
+          <Box
+            onClick={() => setFeedbackMode(true)}
+            sx={{
+              cursor: 'pointer', userSelect: 'none',
+              fontSize: 11, fontWeight: 500,
+              px: 1, py: '4px', borderRadius: '4px',
+              color: feedbackMode ? '#B286FF' : 'text.tertiary',
+              backgroundColor: feedbackMode ? muiAlpha('#B286FF', 0.12) : 'transparent',
+              border: `1px solid ${feedbackMode ? muiAlpha('#B286FF', 0.4) : muiAlpha('#ffffff', 0.12)}`,
+              '&:hover': { backgroundColor: muiAlpha('#B286FF', 0.08) },
+            }}>
+            Train on false positives
+          </Box>
+        </Stack>
+      )}
+
+      {/* Input row — same MuiTextField for both modes. Send routes to chat
+          OR submitFeedback based on the toggle above. */}
       <Stack direction="row" spacing={1}>
         <MuiTextField
           inputRef={textareaRef}
           multiline rows={2} fullWidth variant="outlined"
           value={input} onChange={e => setInput(e.target.value)}
+          disabled={feedbackSending}
           onKeyDown={e => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
           }}
-          placeholder={pendingQuestion
-            ? 'Type what you found when checking this — RECON will interpret your answer…'
-            : 'Ask anything — "Is this likely a vulnerability scanner?", "Look up this hash in sandbox"…'}
-          sx={{ flex:1, '& .MuiOutlinedInput-input': { fontSize:13, lineHeight:1.5 } }}
+          placeholder={feedbackMode
+            ? 'Tell the AI what you found — RECON re-runs the analysis with your verdict as ground truth.'
+            : (pendingQuestion
+              ? 'Type what you found when checking this — RECON will interpret your answer…'
+              : 'Ask anything — "Is this likely a vulnerability scanner?", "Look up this hash in sandbox"…')}
+          sx={{ flex:1,
+            '& .MuiOutlinedInput-input': { fontSize:13, lineHeight:1.5 },
+            ...(feedbackMode ? {
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: muiAlpha('#B286FF', 0.04),
+              },
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: muiAlpha('#B286FF', 0.4),
+              },
+            } : {}),
+          }}
         />
         <MuiButton variant="contained"
-          onClick={() => send()} disabled={sending || !input.trim()}
-          sx={{ alignSelf:'stretch', minWidth:64 }}>
-          {pendingQuestion ? 'Answer' : 'Send'}
+          onClick={() => send()}
+          disabled={(sending || feedbackSending) || !input.trim()}
+          sx={{ alignSelf:'stretch', minWidth:96,
+            ...(feedbackMode ? {
+              backgroundColor: '#B286FF',
+              '&:hover': { backgroundColor: '#9061f0' },
+            } : {}),
+          }}>
+          {feedbackSending ? 'Re-analyzing…'
+            : feedbackMode ? 'Re-analyze'
+            : pendingQuestion ? 'Answer'
+            : 'Send'}
         </MuiButton>
       </Stack>
       <Typography sx={{ fontSize:10, color:'text.tertiary', mt:0.75, textAlign:'right' }}>
@@ -3244,107 +3277,6 @@ function ChatWithRecon({ result, bare,
           color:'error.main', fontSize:12,
         }}>
           {error}
-        </Box>
-      )}
-
-      {/* ── Feedback toggle + form (folded in from the old FeedbackPanel) ──
-          A single button below the chat input lets the analyst flip into
-          feedback mode. Submitting re-runs /api/analyze with the original
-          raw input + the analyst statement labelled as the highest-weight
-          input, then replaces the visible analysis with the new result.   */}
-      {originalLog && (
-        <Box sx={{ mt: 1.5, pt: 1.25,
-          borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
-          {!feedbackOpen && (
-            <MuiButton
-              variant="text" size="small"
-              onClick={() => setFeedbackOpen(true)}
-              sx={{
-                textTransform: 'none', fontSize: 12, color: '#B286FF',
-                fontWeight: 500, p: '4px 8px',
-                '&:hover': { backgroundColor: muiAlpha('#B286FF', 0.08) },
-              }}
-            >
-              Provide feedback to train the AI on false positives
-            </MuiButton>
-          )}
-          {feedbackOpen && (
-            <Box sx={{
-              p: 1.25, borderRadius: '4px',
-              backgroundColor: muiAlpha('#B286FF', 0.05),
-              border: `1px solid ${muiAlpha('#B286FF', 0.3)}`,
-              borderLeft: `3px solid #B286FF`,
-            }}>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
-                <Typography sx={{ fontSize: 11, color: '#B286FF',
-                  fontWeight: 700, textTransform: 'uppercase',
-                  letterSpacing: '0.06em' }}>
-                  Provide feedback to train the AI on false positives
-                </Typography>
-                <Box sx={{ flex: 1 }}/>
-                <MuiButton size="small" variant="text"
-                  onClick={() => {
-                    setFeedbackOpen(false);
-                    setFeedback('');
-                    setFeedbackError(null);
-                  }}
-                  sx={{ textTransform: 'none', fontSize: 11, color: 'text.tertiary',
-                    minWidth: 0, p: '2px 6px' }}>
-                  Cancel
-                </MuiButton>
-              </Stack>
-              <Typography sx={{ fontSize: 11, color: 'text.tertiary',
-                lineHeight: 1.55, mb: 0.75 }}>
-                Tell the AI what you found — your verdict overrides the AI's
-                inference when the two conflict and the analysis re-runs with
-                your statement as the highest-weight input.
-              </Typography>
-              <MuiTextField
-                multiline minRows={3} maxRows={8} fullWidth
-                value={feedback}
-                onChange={e => setFeedback(e.target.value)}
-                placeholder={"e.g. this alert is a false positive because the "
-                  + "hash belongs to Dell SupportAssist, or this IS malicious — "
-                  + "the user account was compromised and this IP is a known "
-                  + "attacker infrastructure."}
-                disabled={feedbackSending}
-                sx={{
-                  mb: 1,
-                  '& .MuiOutlinedInput-root': {
-                    fontSize: 12.5, fontFamily: '"IBM Plex Sans", sans-serif',
-                    backgroundColor: 'background.default',
-                  },
-                }}
-              />
-              {feedbackError && (
-                <Typography sx={{ fontSize: 12, color: 'error.main', mb: 0.75 }}>
-                  {feedbackError}
-                </Typography>
-              )}
-              <Stack direction="row" alignItems="center" spacing={1}>
-                <MuiButton
-                  variant="contained" size="small"
-                  onClick={submitFeedback}
-                  disabled={!feedback.trim() || feedbackSending}
-                  sx={{ textTransform: 'none', fontSize: 12, fontWeight: 500,
-                    backgroundColor: '#B286FF',
-                    '&:hover': { backgroundColor: '#9061f0' } }}
-                >
-                  {feedbackSending ? 'Re-analyzing…' : 'Re-analyze with feedback'}
-                </MuiButton>
-                {feedback.trim() && !feedbackSending && (
-                  <MuiButton
-                    variant="text" size="small"
-                    onClick={() => { setFeedback(''); setFeedbackError(null); }}
-                    sx={{ textTransform: 'none', fontSize: 11,
-                      color: 'text.tertiary' }}
-                  >
-                    Clear
-                  </MuiButton>
-                )}
-              </Stack>
-            </Box>
-          )}
         </Box>
       )}
     </>
@@ -4043,12 +3975,6 @@ function URLScanLive({ result, bare }) {
  */
 function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScanFile, onScanHash, onScanUrl, scanState, onHome, onOpenEmail, emailActive, onOpenAnalyze, analyzeAvailable, analyzeActive, authUser, onLogout }) {
   const [logText, setLogText] = useState('');
-  // Optional analyst-provided context that travels alongside the log on the
-  // first analyze run. The investigation prompt prepends it as the
-  // highest-weight "ANALYST VERDICT AND CONTEXT" block, same as the
-  // post-analysis Feedback flow.
-  const [analystContext, setAnalystContext] = useState('');
-  const [contextOpen, setContextOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
   const handleFile = useCallback(file => {
@@ -4249,11 +4175,19 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
           </Typography>
         </Box>
 
-        {/* Textarea with clear button */}
+        {/* Single textarea — accepts a log on its own OR a log mixed with
+            analyst commentary ("This is from a scheduled scan", "User was on
+            sanctioned RMM tool during this window", etc.). The investigation
+            prompt sees the full block as raw_input and reasons over the
+            commentary in context. No separate context field. */}
         <Box sx={{ position: 'relative', mb: 1.25 }}>
           <Box component="textarea"
             value={logText} onChange={e=>setLogText(e.target.value)}
-            placeholder="Paste to Analyze"
+            placeholder={"Paste the alert log here. You can also add analyst "
+              + "context inline — e.g. 'this is a scheduled vuln scan from "
+              + "10.0.1.45', 'user is on a sanctioned RMM tool', 'we expect "
+              + "Defender 1116 events from PDFSpark right now'. RECON will "
+              + "treat your commentary as ground truth."}
             sx={{
               width: '100%',
               backgroundColor: 'background.secondary',
@@ -4272,7 +4206,7 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
             }}/>
           {logText && (
             <MuiIconButton
-              onClick={()=>{ setLogText(''); setAnalystContext(''); setContextOpen(false); }}
+              onClick={()=>setLogText('')}
               title="Clear input"
               size="small"
               sx={{ position: 'absolute', top: 4, right: 4, color: 'text.tertiary',
@@ -4283,83 +4217,11 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
           )}
         </Box>
 
-        {/* Analyst context (optional) — what the analyst thinks about the
-            alert OR additional context the platform can't see (e.g.
-            "scheduled vuln scan from 10.0.1.45 is running 14:00-15:00 UTC",
-            "this user is on a sanctioned IT remote-access tool"). Travels
-            to the investigation prompt as the same highest-weight
-            "ANALYST VERDICT AND CONTEXT" block the Feedback flow uses. */}
-        <Box sx={{ mb: 1.25 }}>
-          {!contextOpen && !analystContext && (
-            <MuiButton
-              variant="text" size="small"
-              onClick={() => setContextOpen(true)}
-              sx={{
-                textTransform: 'none', fontSize: 11, color: '#B286FF',
-                fontWeight: 500, p: '2px 6px', minWidth: 0,
-                '&:hover': { backgroundColor: muiAlpha('#B286FF', 0.08) },
-              }}
-            >
-              + Add analyst context (optional)
-            </MuiButton>
-          )}
-          {(contextOpen || analystContext) && (
-            <Box sx={{ position: 'relative' }}>
-              <Typography sx={{
-                fontSize: 10, color: '#B286FF', fontWeight: 600,
-                textTransform: 'uppercase', letterSpacing: '0.06em',
-                mb: 0.5,
-              }}>
-                Analyst context (optional)
-              </Typography>
-              <Box component="textarea"
-                value={analystContext}
-                onChange={e => setAnalystContext(e.target.value)}
-                placeholder={"What do you think about this alert? Any context "
-                  + "the platform can't see — e.g. scheduled vuln scan in "
-                  + "this window, sanctioned RMM tool, known false positive…"}
-                sx={{
-                  width: '100%',
-                  backgroundColor: muiAlpha('#B286FF', 0.04),
-                  border: `1px solid ${muiAlpha('#B286FF', 0.3)}`,
-                  color: 'text.primary',
-                  p: '8px 10px',
-                  borderRadius: '4px',
-                  fontFamily: '"IBM Plex Sans", sans-serif',
-                  fontSize: 12,
-                  resize: 'vertical',
-                  outline: 'none',
-                  lineHeight: 1.55,
-                  minHeight: 56,
-                  boxSizing: 'border-box',
-                  '&:focus': { borderColor: '#B286FF' },
-                }}/>
-              {analystContext && (
-                <MuiIconButton
-                  onClick={() => { setAnalystContext(''); setContextOpen(false); }}
-                  title="Clear context"
-                  size="small"
-                  sx={{ position: 'absolute', top: 18, right: 4,
-                    color: 'text.tertiary',
-                    '&:hover': { color: 'text.primary' } }}
-                >
-                  <X size={12}/>
-                </MuiIconButton>
-              )}
-              <Typography sx={{ fontSize: 10, color: 'text.tertiary',
-                mt: 0.5, lineHeight: 1.5 }}>
-                Travels as the highest-weight input to the investigation —
-                the AI treats it as ground truth.
-              </Typography>
-            </Box>
-          )}
-        </Box>
-
         {/* Hash + URL lookups now live inside the Analyze textarea — the
             AgentPipeline button detects a bare URL and routes to
             /api/scan/url, otherwise it runs the log-analysis pipeline. */}
 
-        <AgentPipeline logText={logText} analystFeedback={analystContext} label=""
+        <AgentPipeline logText={logText} label=""
           onComplete={(r) => { onAnalyzing?.(false); onResult(r); }}
           onPartial={(p) => { onAnalyzing?.(false); onPartialResult(p); }}
           onStart={() => { onResult(null); onAnalyzing?.(true); }}
