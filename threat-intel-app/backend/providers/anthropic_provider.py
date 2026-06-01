@@ -24,6 +24,19 @@ from .base import LLMProvider, LLMResponse, LLMChunk, Message, Tool
 _DEFAULT_MODEL = "claude-sonnet-4-20250514"
 
 
+def _clean_sdk_err(e: BaseException) -> str:
+    """Anthropic SDK exceptions usually have a useful `.message`; prefer
+    that. Fall back to a humanised class name so the analyst doesn't see
+    a raw `APIError(...)` repr."""
+    msg = (getattr(e, "message", None) or "").strip()
+    if msg:
+        return msg[:200]
+    cls = type(e).__name__
+    return (cls.replace("Error", " error")
+               .replace("Exception", " exception")
+               .strip().lower()) or "unknown LLM error"
+
+
 def _split_system(messages: List[Message]) -> Tuple[Optional[str], List[Message]]:
     """Pop the leading system message into a single string (Anthropic takes
     system as a separate kwarg). Preserves order of the rest."""
@@ -106,7 +119,7 @@ class AnthropicProvider(LLMProvider):
             if tools:  req["tools"]  = _to_anthropic_tools(tools)
             resp = await client.messages.create(**req)
         except Exception as e:
-            return LLMResponse(model=model, provider=self.name, error=str(e)[:300])
+            return LLMResponse(model=model, provider=self.name, error=_clean_sdk_err(e))
 
         text_parts: List[str] = []
         tool_calls = []
@@ -168,4 +181,4 @@ class AnthropicProvider(LLMProvider):
                     elif etype == "message_stop":
                         yield LLMChunk(finish_reason="stop")
         except Exception as e:
-            yield LLMChunk(error=str(e)[:300], finish_reason="error")
+            yield LLMChunk(error=_clean_sdk_err(e), finish_reason="error")
