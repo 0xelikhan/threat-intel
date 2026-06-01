@@ -755,12 +755,22 @@ async def analyze_clarify(run_id: str, req: ClarifyRequest):
         raise HTTPException(404, f"unknown run_id {run_id}")
     if not req.answers:
         raise HTTPException(400, "answers required")
+    # Same 16KB cap as /api/scan/clarify — prevents an analyst from
+    # pasting the whole log into a clarifying answer and blowing out the
+    # prompt budget on the re-run.
+    _answers_size = sum(len(str(q)) + len(str(a)) for q, a in req.answers.items())
+    if _answers_size > 16_000:
+        raise HTTPException(413,
+            f"answers too large ({_answers_size:,} chars; cap is 16,000)")
 
     state = dict(_results[run_id])
     state["analyst_answers"] = req.answers
 
     from agents.investigation import run_investigation
-    state = await run_investigation(state)
+    try:
+        state = await run_investigation(state)
+    except Exception as e:
+        raise HTTPException(503, _clean_exc(e, prefix="re-investigation"))
 
     # Refresh GTI scores and persist updated state
     state["gti_scores"] = compute_gti_scores(state.get("enrichments", {}))
@@ -2157,6 +2167,13 @@ async def scan_clarify(req: ScanClarifyRequest):
         raise HTTPException(404, "no prior scan for that sha256 — run /api/scan/file first")
     if not req.answers:
         raise HTTPException(400, "answers required")
+    # Cap the answers payload — 16KB is way more than any real clarifying
+    # exchange and stops a paste-the-whole-log mistake from blowing up
+    # the prompt budget.
+    _answers_size = sum(len(str(q)) + len(str(a)) for q, a in req.answers.items())
+    if _answers_size > 16_000:
+        raise HTTPException(413,
+            f"answers too large ({_answers_size:,} chars; cap is 16,000)")
 
     qa_lines = "\n".join(f"  Q: {q}\n  A: {a}" for q, a in req.answers.items() if a)
     extra = (
@@ -2171,11 +2188,15 @@ async def scan_clarify(req: ScanClarifyRequest):
     if inst:
         extra = inst + "\n\n" + extra
 
-    deep = await analyze_deep(scan, config,
-                              comparative_context=gather_comparative_context(scan),
-                              extra_context=extra)
+    try:
+        deep = await analyze_deep(scan, config,
+                                  comparative_context=gather_comparative_context(scan),
+                                  extra_context=extra)
+    except Exception as e:
+        raise HTTPException(503, _clean_exc(e, prefix="AI re-analysis"))
     if not deep or deep.get("error"):
-        raise HTTPException(500, f"AI re-analysis failed: {(deep or {}).get('error') or 'no key'}")
+        raise HTTPException(503,
+            f"AI re-analysis unavailable: {(deep or {}).get('error') or 'no key configured'}")
 
     scan.setdefault("ai_analyst", {})
     scan["ai_analyst"]["deep"] = deep
@@ -2224,6 +2245,18 @@ async def sandbox_lookup(sha256: str):
         raise HTTPException(503, _clean_exc(e, prefix="sandbox lookup"))
 
 
+_URLSCAN_VISIBILITIES = {"public", "unlisted", "private"}
+# URLScan UUIDs are RFC 4122 — accept either the canonical 8-4-4-4-12
+# hex form or a 32-char dashless form. Anything else is bogus and we
+# refuse to ask URLScan about it (avoids spamming upstream with garbage).
+import re as _re_validate
+_UUID_RE = _re_validate.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    r"|^[0-9a-f]{32}$",
+    _re_validate.IGNORECASE,
+)
+
+
 @app.post("/api/urlscan/submit")
 async def urlscan_submit(req: dict):
     """Submit a URL for live scanning via URLScan.io."""
@@ -2233,18 +2266,34 @@ async def urlscan_submit(req: dict):
     url = (req or {}).get("url", "").strip()
     if not url:
         raise HTTPException(400, "url required")
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(400, "url must be http(s)://")
+    if len(url) > 4096:
+        raise HTTPException(400, "url too long (>4096 chars)")
+    visibility = (req.get("visibility") or "unlisted").lower()
+    if visibility not in _URLSCAN_VISIBILITIES:
+        raise HTTPException(400,
+            f"visibility must be one of {sorted(_URLSCAN_VISIBILITIES)}")
     from intel.urlscan import submit_url
-    out = await submit_url(url, api_key, visibility=req.get("visibility", "unlisted"))
+    try:
+        out = await submit_url(url, api_key, visibility=visibility)
+    except Exception as e:
+        raise HTTPException(502, _clean_exc(e, prefix="URLScan submit"))
     if not out.get("ok"):
-        raise HTTPException(502, out.get("error", "submission failed"))
+        raise HTTPException(502, out.get("error") or "URLScan submission failed")
     return out
 
 
 @app.get("/api/urlscan/result/{uuid}")
 async def urlscan_result(uuid: str):
     """Poll a URLScan result. Returns ready=false while processing."""
+    if not _UUID_RE.match(uuid or ""):
+        raise HTTPException(400, "uuid must be an RFC 4122 UUID")
     from intel.urlscan import get_result
-    return await get_result(uuid, config.get("URLSCAN_KEY", ""))
+    try:
+        return await get_result(uuid, config.get("URLSCAN_KEY", ""))
+    except Exception as e:
+        raise HTTPException(502, _clean_exc(e, prefix="URLScan poll"))
 
 
 @app.post("/api/sandbox/submit")
@@ -2280,13 +2329,25 @@ async def sandbox_job_status(job_id: str):
     api_key = config.get("HYBRID_ANALYSIS_KEY")
     if not api_key:
         raise HTTPException(400, "HYBRID_ANALYSIS_KEY not configured")
+    # Hybrid Analysis job IDs are 24-char hex (their internal mongo
+    # ObjectId-style). Reject anything else so we don't poll upstream
+    # with random analyst-typed strings AND don't pollute _sandbox_jobs
+    # with junk keys.
+    if not job_id or not _re_validate.match(r"^[0-9a-f]{8,64}$", job_id):
+        raise HTTPException(400, "job_id must be a hex token (8-64 chars)")
     from intel.sandbox import hybrid_analysis_state, hybrid_analysis_summary
-    state = await hybrid_analysis_state(job_id, api_key)
+    try:
+        state = await hybrid_analysis_state(job_id, api_key)
+    except Exception as e:
+        raise HTTPException(502, _clean_exc(e, prefix="sandbox poll"))
     record = _sandbox_jobs.get(job_id, {})
     record["state"] = state.get("state", "UNKNOWN")
     record["error"] = state.get("error")
     if record["state"] == "SUCCESS":
-        record["summary"] = await hybrid_analysis_summary(job_id, api_key)
+        try:
+            record["summary"] = await hybrid_analysis_summary(job_id, api_key)
+        except Exception as e:
+            record["error"] = _clean_exc(e, prefix="sandbox summary")
     _sandbox_jobs[job_id] = record
     return {"job_id": job_id, **record}
 
@@ -2586,19 +2647,32 @@ async def email_template_save(req: EmailTemplateSave):
     return {"saved": True, "alert_type": req.alert_type}
 
 
+_EMAIL_LOG_MAX = 200_000   # 200 KB log_text cap — well above any real
+                            # alert payload, below the AuditMiddleware
+                            # body cap, prevents OOM on accidental paste.
+
+
 @app.post("/api/email/parse")
 async def email_parse(req: EmailParseRequest):
     """Parse raw log text and return every field the composer will reference."""
     from intel.email_composer import parse_log
     if not req.log_text or not req.log_text.strip():
         raise HTTPException(400, "log_text required")
-    return parse_log(req.log_text)
+    if len(req.log_text) > _EMAIL_LOG_MAX:
+        raise HTTPException(413,
+            f"log_text too large ({len(req.log_text):,} chars; cap is {_EMAIL_LOG_MAX:,})")
+    try:
+        return parse_log(req.log_text)
+    except Exception as e:
+        raise HTTPException(500, _clean_exc(e, prefix="email parse"))
 
 
 @app.post("/api/email/compose")
 async def email_compose(req: EmailComposeRequest):
     """Render the email — returns subject + plain text + HTML."""
     from intel.email_composer import compose
+    if not req.alert_type:
+        raise HTTPException(400, "alert_type required")
     cfg = {
         "EMAIL_FROM_NAME":    config.get("EMAIL_FROM_NAME"),
         "EMAIL_FROM_ADDRESS": config.get("EMAIL_FROM_ADDRESS"),
@@ -2609,8 +2683,11 @@ async def email_compose(req: EmailComposeRequest):
         options["team_name"] = config.get("EMAIL_TEAM_NAME") or "the MDR analyst team"
     if not options.get("from_address"):
         options["from_address"] = config.get("EMAIL_FROM_ADDRESS") or ""
-    return compose(req.alert_type, req.parsed, options, cfg,
-                   ip1=req.ip1, ip2=req.ip2)
+    try:
+        return compose(req.alert_type, req.parsed, options, cfg,
+                       ip1=req.ip1, ip2=req.ip2)
+    except Exception as e:
+        raise HTTPException(500, _clean_exc(e, prefix="email compose"))
 
 
 class EmailComposeAIRequest(BaseModel):
@@ -2625,6 +2702,11 @@ async def email_compose_ai(req: EmailComposeAIRequest):
     models. Returns the same {subject, text, html, template_used} shape as
     /api/email/compose so the frontend can render it identically."""
     from intel.email_composer import compose_ai
+    if not req.log_text or not req.log_text.strip():
+        raise HTTPException(400, "log_text required")
+    if len(req.log_text) > _EMAIL_LOG_MAX:
+        raise HTTPException(413,
+            f"log_text too large ({len(req.log_text):,} chars; cap is {_EMAIL_LOG_MAX:,})")
     cfg = {
         "OPENAI_API_KEY":     config.get("OPENAI_API_KEY"),
         "OPENAI_BASE_URL":    config.get("OPENAI_BASE_URL"),

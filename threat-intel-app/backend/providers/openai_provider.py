@@ -18,6 +18,22 @@ from config import config
 from .base import LLMProvider, LLMResponse, LLMChunk, Message, Tool
 
 
+def _clean_sdk_err(e: BaseException) -> str:
+    """Strip OpenAI SDK exception noise. Most SDK errors have a useful
+    `.message` (the server's human-readable string), so prefer that.
+    Class name fallback maps APIConnectionError → 'connection error',
+    AuthenticationError → 'auth failed', etc."""
+    msg = (getattr(e, "message", None) or "").strip()
+    if msg:
+        # The SDK's .message is usually one sentence — trim hard.
+        return msg[:200]
+    # Fall back to a short class-name phrase rather than the raw repr.
+    cls = type(e).__name__
+    return (cls.replace("Error", " error")
+               .replace("Exception", " exception")
+               .strip().lower()) or "unknown LLM error"
+
+
 class OpenAIProvider(LLMProvider):
     def __init__(self, model: Optional[str] = None):
         self._configured_model = model or config.get("AI_MODEL") or "gpt-4o-mini"
@@ -106,11 +122,12 @@ class OpenAIProvider(LLMProvider):
                                                             "service unavailable", "gateway timeout")):
                     continue
                 # Anything else — give up after this attempt.
-                return LLMResponse(model=model, provider=self.name, error=str(e)[:300])
+                return LLMResponse(model=model, provider=self.name,
+                                   error=_clean_sdk_err(e))
         else:
             # Both attempts exhausted with retryable errors.
             return LLMResponse(model=model, provider=self.name,
-                               error=str(last_err)[:300] if last_err else "unknown error")
+                               error=_clean_sdk_err(last_err) if last_err else "unknown error")
 
         choice = resp.choices[0] if resp.choices else None
         if not choice:
@@ -155,7 +172,7 @@ class OpenAIProvider(LLMProvider):
             if tools:      req["tools"]      = tools
             resp = await client.chat.completions.create(**req)
         except Exception as e:
-            yield LLMChunk(error=str(e)[:300], finish_reason="error")
+            yield LLMChunk(error=_clean_sdk_err(e), finish_reason="error")
             return
         async for chunk in resp:
             if not chunk.choices:
