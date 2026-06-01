@@ -248,6 +248,12 @@ class AnalyzeRequest(BaseModel):
     logText: str
     inputType: str = "log"
     label: Optional[str] = None
+    # Optional analyst-provided verdict and context. When present the
+    # investigation prompt renders an "ANALYST VERDICT AND CONTEXT" block
+    # at the top of the user message and instructs the AI to treat the
+    # analyst's findings as authoritative when they conflict with its own
+    # inference. Used by the post-analysis feedback re-run flow.
+    analystFeedback: Optional[str] = None
 
 class TaxiiPollRequest(BaseModel):
     sinceHours: int = 24
@@ -485,7 +491,8 @@ async def _drain_events(task: "asyncio.Task", q: "asyncio.Queue", run_id: str, l
         return
 
 
-async def _stream(raw_input: str, input_type: str, label: str = ""):
+async def _stream(raw_input: str, input_type: str, label: str = "",
+                   analyst_feedback: str = ""):
     """Walk the pipeline one agent at a time, emitting partial_result events after
     each stage so the UI populates progressively — extracted IOCs land immediately,
     enrichment data lands when ready, AI assessment lands when investigation finishes,
@@ -526,6 +533,10 @@ async def _stream(raw_input: str, input_type: str, label: str = ""):
             "iteration_count":       0,
             "cross_refs":            {},
             "email_analysis":        {},
+            # Analyst-provided verdict / context — when non-empty the
+            # investigation prompt treats it as authoritative, overriding
+            # AI inference when they conflict.
+            "analyst_feedback":      (analyst_feedback or "").strip(),
         }
 
         # ── Stage 1: TRIAGE ──────────────────────────────────────────────────
@@ -658,9 +669,12 @@ async def _stream(raw_input: str, input_type: str, label: str = ""):
 async def analyze_stream(req: AnalyzeRequest):
     if not req.logText.strip():
         raise HTTPException(400, "logText required")
-    return StreamingResponse(_stream(req.logText, req.inputType, req.label or ""),
-                             media_type="text/event-stream",
-                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    return StreamingResponse(
+        _stream(req.logText, req.inputType, req.label or "",
+                analyst_feedback=req.analystFeedback or ""),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 @app.post("/api/analyze/sync")
 async def analyze_sync(req: AnalyzeRequest):

@@ -1296,6 +1296,33 @@ async def run_investigation(state: dict, on_event=None) -> dict:
         multi_log_block = ""
         is_multi_log = False
 
+    # ── Analyst feedback block (re-analysis with operator context) ───────────
+    # When the analyst submits feedback via the post-analysis "Provide
+    # Feedback" textarea, RECON re-runs the pipeline with their findings
+    # injected at the TOP of the user message and labelled as
+    # "ANALYST VERDICT AND CONTEXT". The AI is instructed to treat this
+    # block as authoritative and override its own inference when the two
+    # conflict — the analyst has ground-truth context the AI lacks.
+    analyst_feedback = (state.get("analyst_feedback") or "").strip()
+    feedback_block = ""
+    if analyst_feedback:
+        feedback_block = (
+            "## ANALYST VERDICT AND CONTEXT  (HIGHEST WEIGHT — read first)\n"
+            "\n"
+            "The analyst reviewed an earlier run of this investigation and is\n"
+            "providing direct feedback. Their statement is GROUND TRUTH — they\n"
+            "have environmental knowledge (asset ownership, sanctioned tooling,\n"
+            "user context, ticket history) that you do not. When the analyst's\n"
+            "verdict CONFLICTS with your own inference, the analyst is right and\n"
+            "you must update your conclusions accordingly. Quote the analyst's\n"
+            "statement in your context_impact field and use it to re-anchor\n"
+            "threat_level, threat_level_reasoning, verdict_classification, and\n"
+            "ioc_assessments.\n"
+            "\n"
+            "ANALYST STATEMENT:\n"
+            f"\"\"\"\n{analyst_feedback[:2000]}\n\"\"\"\n"
+        )
+
     result = None
     tool_call_log = []
     openai_key = config.get("OPENAI_API_KEY")
@@ -1335,7 +1362,8 @@ Tool-budget tips:
 - phishing_kit / rmm / lolbas are fast offline checks
 - Don't call lookup_ip/domain/hash for IOCs already in the baseline — only for new ones the AI surfaces
 {type_focus}"""
-                user_msg = f"""## Alert content (first 1500 chars)
+                user_msg = f"""{feedback_block}
+## Alert content (first 1500 chars)
 {(state.get("raw_input") or "")[:1500]}
 
 ## ENRICHMENT SUMMARY (server-side empirical baseline — quote in your summary)
