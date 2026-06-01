@@ -314,8 +314,54 @@ async def run_response(state: dict) -> dict:
     # ── Build a rich evidence pack so the AI can cite specifics ──
     rs_cross = state.get("cross_refs", {})
     rs_email = state.get("email_analysis") or {}
+
+    # Pull any analyst commentary out of the raw input so the disposition
+    # prompt can treat it as ground truth alongside the AI's own summary.
+    # The analyze textarea now accepts logs + analyst notes interleaved; we
+    # heuristically separate the operator's prose from the log payload by
+    # looking for natural-language framing markers at the top of the input.
+    _raw_full = (state.get("raw_input") or "").strip()
+    _operator_note = ""
+    # Markers analysts commonly use to introduce commentary in the textbox.
+    _marker = None
+    for m in (
+        "i think ", "i believe ", "we think ", "we believe ", "analyst note:",
+        "analyst:", "context:", "fyi:", "note:", "this is ", "this looks like ",
+        "we are ", "we're ", "this should be ",
+    ):
+        _idx = _raw_full.lower().find(m)
+        if 0 <= _idx <= 300:   # only count framing in the FIRST 300 chars
+            _marker = _idx
+            break
+    if _marker is not None:
+        # Pull everything up to the first newline-after-log-keyword OR the
+        # next obvious log line as the operator's commentary.
+        _trailing = _raw_full[_marker:]
+        # Stop at "User:" / "Date:" / "EventID" / "Process " / "Path " /
+        # JSON brace / blank line — the first thing that looks like log
+        # content terminates the commentary block.
+        import re as _re
+        _stop = _re.search(
+            r"\n\s*("
+            r"User\s*:|UserName\s*:|Date\s*[:=]|Event\s*ID|Policy\s+ID|"
+            r"Process\s+(Path|Name|ID)|Path\s*:|Action\s+Type\s*:|"
+            r"Full\s+Path\s*:|SHA256\s*:|TimeGenerated\b|\{|\["
+            r")",
+            _trailing,
+            _re.IGNORECASE,
+        )
+        if _stop:
+            _operator_note = _trailing[:_stop.start()].strip()
+        else:
+            # Bound to the first 600 chars to keep the prompt slot small.
+            _operator_note = _trailing[:600].strip()
+
     evidence_pack = {
         "alert_text_first_300": (state.get("raw_input") or "")[:300],
+        # Analyst commentary the operator typed in the analyze textbox
+        # (mixed inline with the log). Authoritative — the AI must respect
+        # this when picking disposition.
+        "operator_analyst_note": _operator_note,
         "key_findings":         investigation.get("key_findings", [])[:6],
         "correlated_signals":   investigation.get("correlated_signals", [])[:5],
         "ioc_assessments":      investigation.get("ioc_assessments", [])[:8],
@@ -341,6 +387,28 @@ async def run_response(state: dict) -> dict:
     # standard the investigation agent applies. Prevents the analyst summary
     # from disagreeing with the calibrated investigation verdict.
     from intel.calibration import CALIBRATION_PRINCIPLES as _CAL
+    _note_block = (
+        f"\nOPERATOR ANALYST NOTE (the analyst typed this in the input):\n"
+        f"  \"{_operator_note}\"\n"
+        f"\n"
+        f"  How to handle this note:\n"
+        f"   * ACKNOWLEDGE it in disposition_reason. Quote or paraphrase\n"
+        f"     the analyst's framing so they can see you read it.\n"
+        f"   * Factor it into your decision — the analyst usually has\n"
+        f"     environmental context the enrichment data lacks (sanctioned\n"
+        f"     tools, scheduled work, approved exceptions).\n"
+        f"   * If you AGREE, lean toward CLEAR / lower disposition and\n"
+        f"     cite the analyst's note as one of the reasons.\n"
+        f"   * If you DISAGREE — i.e. the evidence still points to a real\n"
+        f"     threat despite their framing — state that explicitly and\n"
+        f"     name the SPECIFIC evidence that overrides the analyst's\n"
+        f"     context (named-malware hit, KEV-listed CVE actively exploited,\n"
+        f"     credential access, lateral movement, > 5 VT detections from\n"
+        f"     independent reputable engines, etc.).\n"
+        f"   * Do NOT silently ignore the note. Do NOT pick MONITOR just\n"
+        f"     because 'context is unclear' — the analyst already gave it.\n"
+        if _operator_note else ""
+    )
     analyst_prompt = f"""You are a senior MDR analyst (5+ years, T2/T3 escalation lead) writing the
 final INTERNAL DISPOSITION for a SOC investigation (for the next-tier analyst / shift
 lead). Be CONCISE throughout. Tight sentences, no padding; keep each list to its
@@ -351,7 +419,7 @@ invent. Do not be vague. "Suspicious activity detected" is FORBIDDEN. Say what
 activity, on what indicator, with what corroborating evidence.
 
 {_CAL}
-
+{_note_block}
 ══════════════════════════════════════════════════════════════════════════════════
 INPUT - investigation evidence pack
 ══════════════════════════════════════════════════════════════════════════════════
@@ -372,12 +440,17 @@ DISPOSITION DECISION TREE
                    service, clean hash across every TI source, scheduled
                    vendor maintenance). When the threat_level above is
                    INFORMATIONAL/LOW and the evidence supports benign,
-                   default to CLEAR.
+                   default to CLEAR. When the operator's note frames the
+                   activity as routine / approved / a sanctioned tool AND
+                   nothing in the enrichment contradicts that, lean CLEAR
+                   and quote the analyst's framing in disposition_reason.
   * MONITOR  -> suspicious but not actionable yet; specify the trigger that
                   would escalate.
   * ESCALATE -> real-world threat with concrete corroborating evidence (at
                   least one item from the EVIDENCE STANDARD above); give
-                  concrete next steps.
+                  concrete next steps. When the operator's note disagreed
+                  with this verdict, name the specific evidence that
+                  overrides their framing.
 
 ══════════════════════════════════════════════════════════════════════════════════
 RESPOND with this EXACT JSON (no markdown fences, no commentary):
