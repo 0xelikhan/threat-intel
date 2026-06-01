@@ -58,7 +58,6 @@ const SECTIONS = [
   { id: 'ti',          label: 'Threat Intelligence' },
   { id: 'caps',        label: 'Behavioral Capabilities' },
   { id: 'strings',     label: 'Strings & IOCs' },
-  { id: 'anomalies',   label: 'Anomalies' },
   { id: 'detect',      label: 'Detection Content' },
 ];
 
@@ -1024,13 +1023,33 @@ function ExecutionNarrative({ result }) {
 }
 
 
-// ─── 4. Key Findings ─────────────────────────────────────────────────────────
+// ─── 4. Key Findings (anomalies fused in) ────────────────────────────────────
 function KeyFindings({ result }) {
-  const items = result.ai_analyst?.deep?.key_findings || [];
+  const deep = result.ai_analyst?.deep || {};
+  const findings = (deep.key_findings || []).map(f => ({
+    kind: 'finding',
+    title: f.title || (typeof f === 'string' ? f : 'Finding'),
+    body:  f.explanation || '',
+  }));
+  // Anomalies used to live in their own card; per analyst request they
+  // now render inside Key Findings as anomaly-flagged rows.
+  const anomalies = (deep.anomalies || []).map(a => ({
+    kind: 'anomaly',
+    title: a.observation || (typeof a === 'string' ? a : 'Anomaly'),
+    body: [a.expected && `expected: ${a.expected}`,
+           a.implication && `→ ${a.implication}`]
+          .filter(Boolean).join('  ·  '),
+  }));
+  const items = [...findings, ...anomalies];
   if (!items.length && !result.ai_analyst) return null;
+  const findingsCount = findings.length;
+  const anomalyCount  = anomalies.length;
   return (
     <SectionCard id="findings" label="Key Findings" defaultOpen={false}
-      summary={items.length ? `${items.length} finding${items.length > 1 ? 's' : ''}` : null}>
+      summary={items.length
+        ? `${findingsCount} finding${findingsCount === 1 ? '' : 's'}`
+          + (anomalyCount ? ` · ${anomalyCount} anomaly${anomalyCount === 1 ? '' : 'ies'}` : '')
+        : null}>
       {!items.length && <AILoading text="Identifying analytical insights…"/>}
       {items.map((f, i) => (
         <Box key={i} sx={{
@@ -1038,17 +1057,28 @@ function KeyFindings({ result }) {
           gap: 1.5, py: 1.25,
           borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
         }}>
-          <Typography sx={{ ...monoSx, fontSize: 14, color: 'primary.main',
-            fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-            {String(i + 1).padStart(2, '0')}
-          </Typography>
-          <Box>
-            <Typography sx={{ fontSize: 13, color: 'text.primary', fontWeight: 600, mb: 0.5 }}>
-              {f.title || (typeof f === 'string' ? f : 'Finding')}
+          {f.kind === 'anomaly' ? (
+            <AlertTriangle size={14} color="#E6700F" style={{ marginTop: 2 }}/>
+          ) : (
+            <Typography sx={{ ...monoSx, fontSize: 14, color: 'primary.main',
+              fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+              {String(i + 1).padStart(2, '0')}
             </Typography>
-            {f.explanation && (
+          )}
+          <Box>
+            <Typography sx={{ fontSize: 13, color: 'text.primary', fontWeight: 600,
+              mb: f.body ? 0.5 : 0 }}>
+              {f.title}
+              {f.kind === 'anomaly' && (
+                <Box component="span" sx={{
+                  ml: 1, fontSize: 9, fontWeight: 600, color: '#E6700F',
+                  textTransform: 'uppercase', letterSpacing: '0.07em',
+                }}>anomaly</Box>
+              )}
+            </Typography>
+            {f.body && (
               <Typography sx={{ fontSize: 12, color: 'text.tertiary', lineHeight: 1.6 }}>
-                {f.explanation}
+                {f.body}
               </Typography>
             )}
           </Box>
@@ -2268,8 +2298,9 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
       has.add('verdict');
       if (result.ai_analyst.deep?.technical_summary) has.add('technical');
       if (result.ai_analyst.deep?.execution_narrative) has.add('narrative');
-      if (result.ai_analyst.deep?.key_findings?.length) has.add('findings');
-      if (result.ai_analyst.deep?.anomalies?.length) has.add('anomalies');
+      // Anomalies fold into Key Findings; both share the 'findings' anchor.
+      if (result.ai_analyst.deep?.key_findings?.length
+          || result.ai_analyst.deep?.anomalies?.length) has.add('findings');
     }
     if (result.hashes) has.add('identity');
     if (result.threat_intel && Object.keys(result.threat_intel).length) has.add('ti');
@@ -2388,14 +2419,14 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
                 <VerdictBanner result={result}/>
                 <TechnicalAssessment result={result}/>
                 <ExecutionNarrative result={result}/>
+                {/* Anomalies are fused into Key Findings (anomaly-flagged
+                    rows) — no separate Anomalies card. */}
                 <KeyFindings result={result}/>
                 <FileIdentity result={result}/>
                 <ThreatIntelSection result={result}/>
                 <CapabilitiesSection result={result}/>
                 <StringsSection result={result}/>
-                <Anomalies result={result}/>
-                {/* Detection Content now also hosts the YARA matches —
-                    they're detection content, kept together. */}
+                {/* Detection Content also hosts YARA matches. */}
                 <DetectionContent result={result}/>
               </Stack>
             );

@@ -2060,17 +2060,21 @@ function PerIndicatorList({ sorted, result }) {
 // see in vendor reports (CrowdStrike/FireEye/MITRE/Microsoft). Aliases hide
 // behind a click so the chip stays compact when there are 12 of them.
 function AttributionChip({ actor }) {
-  // Single-tab visibility state — keep it above the early return so the
-  // hook order is stable across renders.
-  const [activeTab, setActiveTab] = useState(null);
-  if (!actor) return null;
-  const display = actor.ms_name || actor.name;
-  const aliases = (actor.aliases || []).filter(a => a && a !== display);
-  const evByTech = Array.isArray(actor.evidence_by_technique)
+  // All hooks must run before any early return. Keep state + effect at
+  // the top so hook order stays consistent across renders.
+  const [activeTab, setActiveTab]   = useState(null);
+  // MalwareBazaar hashes per malware-typed software, fetched lazily when
+  // the Hunt-for tab is opened. Keyed by family name. Each value is
+  // either {loading: true}, {error: '...'}, or {hashes: [...]}.
+  const [mbHashes, setMbHashes]     = useState({});
+
+  const display = actor?.ms_name || actor?.name || '';
+  const aliases = ((actor && actor.aliases) || []).filter(a => a && a !== display);
+  const evByTech = Array.isArray(actor?.evidence_by_technique)
     ? actor.evidence_by_technique : [];
   const evidenceCount = evByTech.reduce((n, t) => n + (t.evidence?.length || 0), 0);
   const hasEvidence = evidenceCount > 0;
-  const huntTtps = actor.ttps_to_look_for || {};
+  const huntTtps = (actor && actor.ttps_to_look_for) || {};
   const huntBefore = Array.isArray(huntTtps.before) ? huntTtps.before : [];
   const huntAfter  = Array.isArray(huntTtps.after)  ? huntTtps.after  : [];
   const huntProcs  = Array.isArray(huntTtps.process_names) ? huntTtps.process_names : [];
@@ -2087,6 +2091,61 @@ function AttributionChip({ actor }) {
   const showEvidence = activeTab === 'evidence';
   const showHunt     = activeTab === 'hunt';
   const showAliases  = activeTab === 'aliases';
+
+  // Strip MITRE-style markdown links + Citation footnotes so the
+  // "how they attack" narrative renders as clean prose.
+  const cleanProse = (s) => (s || '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\(Citation:\s*[^)]+\)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const playbook = cleanProse(actor?.description || '');
+
+  // Malware-typed software entries — these are the rows we want hash
+  // pivots for. Filenames that look like Windows-native binaries get
+  // skipped per analyst request (no Ping.exe / net.exe / tasklist.exe
+  // hash pulls because those aren't worth a MalwareBazaar query).
+  const _NATIVE_WIN_BIN = /^(?:ping|net1?|netstat|nslookup|tasklist|cmd|powershell|pwsh|wmic|cscript|wscript|certutil|bitsadmin|mshta|rundll32|regsvr32|reg|schtasks|whoami|ipconfig|arp|route|hostname|systeminfo|dsquery|find|findstr|attrib)(?:\.exe)?$/i;
+  const _isNativeWin = (name) => _NATIVE_WIN_BIN.test(name || '');
+  const malwareSw = (huntSw || []).filter(s => {
+    const isMal = (s.type || '').toLowerCase().includes('malware')
+      || (s.labels || []).some(l => /malware/i.test(l));
+    return isMal && !_isNativeWin(s.name || '');
+  });
+
+  // Fire the MalwareBazaar lookup the first time the Hunt tab opens.
+  // Each family is fetched once and cached in component state for the
+  // lifetime of this chip render.
+  useEffect(() => {
+    if (!showHunt || malwareSw.length === 0) return;
+    let cancelled = false;
+    malwareSw.forEach(s => {
+      const fam = (s.name || '').trim();
+      if (!fam || mbHashes[fam]) return;
+      setMbHashes(m => ({ ...m, [fam]: { loading: true } }));
+      fetch(`/api/attribution/hashes?family=${encodeURIComponent(fam)}&limit=8`)
+        .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+        .then(data => {
+          if (cancelled) return;
+          if (data?.error) {
+            setMbHashes(m => ({ ...m, [fam]: { error: data.error } }));
+          } else {
+            setMbHashes(m => ({ ...m, [fam]: { hashes: data?.hashes || [] } }));
+          }
+        })
+        .catch(e => {
+          if (cancelled) return;
+          setMbHashes(m => ({ ...m, [fam]: {
+            error: `MalwareBazaar request failed: ${e.message}`
+          } }));
+        });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showHunt, malwareSw.length]);
+
+  // Now safe to bail — all hooks have already run.
+  if (!actor) return null;
 
   return (
     <Box sx={{
@@ -2193,12 +2252,26 @@ function AttributionChip({ actor }) {
         </Stack>
       )}
 
-      {/* Hunt guidance — concrete artifacts only. No actor description,
-          no MITRE technique buckets, no helper italics. Two compact
-          sections: process / binary names as red mono chips, then a
-          tight tool/malware list with optional MalwareBazaar pivot. */}
+      {/* Hunt guidance — three blocks now:
+            1. How they attack (playbook narrative from MITRE/MISP)
+            2. Processes / binaries (red mono chips)
+            3. Malware hashes from MalwareBazaar (lazy-fetched on tab open) */}
       {showHunt && hasHunt && (
         <Stack spacing={1.25}>
+          {playbook && (
+            <Box>
+              <Typography sx={{ fontSize: 10, color: 'text.tertiary',
+                fontWeight: 600, textTransform: 'uppercase',
+                letterSpacing: '0.07em', mb: 0.5 }}>
+                How {display} typically attacks
+              </Typography>
+              <Typography sx={{ fontSize: 12.5, color: 'text.primary',
+                lineHeight: 1.65 }}>
+                {playbook}
+              </Typography>
+            </Box>
+          )}
+
           {huntProcs.length > 0 && (
             <Box>
               <Typography sx={{ fontSize: 10, color: 'text.tertiary',
@@ -2220,49 +2293,94 @@ function AttributionChip({ actor }) {
             </Box>
           )}
 
-          {huntSw.length > 0 && (
+          {malwareSw.length > 0 && (
             <Box>
               <Typography sx={{ fontSize: 10, color: 'text.tertiary',
                 fontWeight: 600, textTransform: 'uppercase',
                 letterSpacing: '0.07em', mb: 0.5 }}>
-                Tools / malware
+                Malware hashes (MalwareBazaar)
               </Typography>
-              <Stack spacing={0.4}>
-                {huntSw.map((s, i) => {
-                  const isMalware = (s.type || '').toLowerCase().includes('malware')
-                    || (s.labels || []).some(l => /malware/i.test(l));
-                  const familyQuery = encodeURIComponent(
-                    (s.name || '').replace(/[^\w\s.-]/g, '').trim()
-                  );
+              <Stack spacing={0.75}>
+                {malwareSw.map((s, i) => {
+                  const fam = (s.name || '').trim();
+                  const state = mbHashes[fam] || { loading: true };
                   return (
-                    <Stack key={i} direction="row" alignItems="baseline"
-                      spacing={0.75} flexWrap="wrap" sx={{ rowGap: 0.25 }}>
-                      <Box component="a"
-                        href={s.id ? `https://attack.mitre.org/software/${s.id}/` : undefined}
-                        target="_blank" rel="noreferrer"
-                        sx={{ fontFamily: '"IBM Plex Mono", monospace',
-                          fontSize: 11.5,
-                          color: isMalware ? '#EE3838' : '#0fbcff',
-                          textDecoration: 'none', fontWeight: 600,
-                          '&:hover': { textDecoration: 'underline' } }}>
-                        {s.name || s.id}
-                      </Box>
-                      <Box component="span" sx={{ fontSize: 10,
-                        color: 'text.disabled',
-                        textTransform: 'lowercase' }}>
-                        {s.type || 'tool'}
-                      </Box>
-                      {isMalware && familyQuery && (
+                    <Box key={i} sx={{
+                      p: '8px 10px', borderRadius: '4px',
+                      backgroundColor: muiAlpha('#EE3838', 0.04),
+                      border: `1px solid ${muiAlpha('#EE3838', 0.2)}`,
+                    }}>
+                      <Stack direction="row" alignItems="baseline"
+                        spacing={0.75} flexWrap="wrap" sx={{ rowGap: 0.25,
+                          mb: 0.5 }}>
                         <Box component="a"
-                          href={`https://bazaar.abuse.ch/browse.php?search=${familyQuery}`}
+                          href={s.id ? `https://attack.mitre.org/software/${s.id}/` : undefined}
                           target="_blank" rel="noreferrer"
-                          sx={{ fontSize: 10, color: '#0fbcff',
-                            textDecoration: 'none',
+                          sx={{ fontFamily: '"IBM Plex Mono", monospace',
+                            fontSize: 11.5, color: '#EE3838',
+                            textDecoration: 'none', fontWeight: 600,
                             '&:hover': { textDecoration: 'underline' } }}>
-                          hashes →
+                          {fam}
                         </Box>
+                        <Box component="span" sx={{ fontSize: 10,
+                          color: 'text.disabled',
+                          textTransform: 'lowercase' }}>
+                          {s.type || 'malware'}
+                        </Box>
+                      </Stack>
+                      {state.loading && (
+                        <Typography sx={{ fontSize: 11, color: 'text.tertiary',
+                          fontStyle: 'italic' }}>
+                          Querying MalwareBazaar for samples…
+                        </Typography>
                       )}
-                    </Stack>
+                      {state.error && (
+                        <Typography sx={{ fontSize: 11, color: 'warning.main',
+                          fontStyle: 'italic' }}>
+                          ⚠ {state.error}
+                        </Typography>
+                      )}
+                      {state.hashes && state.hashes.length === 0 && (
+                        <Typography sx={{ fontSize: 11, color: 'text.disabled',
+                          fontStyle: 'italic' }}>
+                          No samples currently listed on MalwareBazaar for "{fam}".
+                        </Typography>
+                      )}
+                      {state.hashes && state.hashes.length > 0 && (
+                        <Stack spacing={0.5}>
+                          {state.hashes.slice(0, 6).map((h, j) => (
+                            <Box key={j}>
+                              <Box component="a"
+                                href={`https://bazaar.abuse.ch/sample/${h.sha256}/`}
+                                target="_blank" rel="noreferrer"
+                                sx={{ fontFamily: '"IBM Plex Mono", monospace',
+                                  fontSize: 10.5, color: 'text.primary',
+                                  textDecoration: 'none', wordBreak: 'break-all',
+                                  '&:hover': { color: '#EE3838',
+                                               textDecoration: 'underline' } }}>
+                                {h.sha256}
+                              </Box>
+                              {(h.file_name || h.file_type || h.first_seen) && (
+                                <Typography sx={{ fontSize: 10,
+                                  color: 'text.tertiary', mt: 0.1,
+                                  fontFamily: '"IBM Plex Mono", monospace' }}>
+                                  {[h.file_name, h.file_type, h.first_seen]
+                                    .filter(Boolean).join(' · ')}
+                                </Typography>
+                              )}
+                            </Box>
+                          ))}
+                          <Box component="a"
+                            href={`https://bazaar.abuse.ch/browse.php?search=${encodeURIComponent(fam)}`}
+                            target="_blank" rel="noreferrer"
+                            sx={{ fontSize: 10, color: '#0fbcff',
+                              textDecoration: 'none', mt: 0.25,
+                              '&:hover': { textDecoration: 'underline' } }}>
+                            View all MalwareBazaar samples for {fam} →
+                          </Box>
+                        </Stack>
+                      )}
+                    </Box>
                   );
                 })}
               </Stack>
@@ -2288,16 +2406,25 @@ function AnalystSummary({ result, rs }) {
                   : a?.disposition === 'ESCALATE' ? '#F14337'
                   :                                  '#E1B823';
   const summary = (rs?.summary || '').trim();
-  const topActor = (rs?.matched_actors || [])[0];
+  // Attribution gate — only show the chip when TTP overlap is high enough
+  // that the match is more than coincidental. 75% threshold per analyst
+  // request. Analyst context that pushes overlap above the threshold (via
+  // re-analyze with feedback) is honoured automatically because matched_actors
+  // re-runs each time the investigation runs.
+  const topActor = (rs?.matched_actors || []).find(
+    a => typeof a?.score === 'number' && a.score >= 75
+  ) || null;
   // Plain-English summary from log_translator — written like an MDR analyst
   // briefing note (what / context / verdict / recommendation). Top of the
   // card so the analyst gets the human-readable read before the dial.
   const plainEnglish = (result?.log_translation?.normalized_summary || '').trim();
 
   // Combined Summary — plain-English read + AI summary + recommended
-  // disposition + the empirical enrichment line are stitched into a single
-  // block so the analyst reads one cohesive narrative instead of four
-  // stacked variants of the same idea.
+  // action + the empirical enrichment line are stitched into ONE flowing
+  // paragraph (single space joiner, not double-newline) so the analyst
+  // reads a single coherent narrative instead of stacked panels.
+  // De-duplicate: if the plain-English read and the AI summary say the
+  // same thing, keep only the longer one.
   const dispLine = hasDisposition
     ? (a.disposition === 'CLEAR'
         ? 'Recommended action: CLEAR'
@@ -2307,19 +2434,46 @@ function AnalystSummary({ result, rs }) {
     : '';
   const dispReason = (a?.disposition_reason || '').trim();
   const enrichLine = (rs?.enrichment_summary?.line || '').trim();
+  const _ensurePeriod = (s) => {
+    const t = (s || '').trim();
+    if (!t) return '';
+    return /[.!?]$/.test(t) ? t : t + '.';
+  };
+  // Drop the AI summary when it is substantially the same idea as the
+  // plain-English read (>= 60% word overlap) — keeps the paragraph from
+  // saying the same thing twice in slightly different wording.
+  let _summary = summary;
+  if (plainEnglish && summary) {
+    const _toks = (s) => new Set((s.toLowerCase().match(/[a-z0-9@.-]{4,}/g) || []));
+    const a_ = _toks(plainEnglish), b_ = _toks(summary);
+    const inter = [...a_].filter(t => b_.has(t)).length;
+    const ratio = inter / Math.max(1, Math.min(a_.size, b_.size));
+    if (ratio >= 0.6) _summary = '';
+  }
   const combined = [
-    plainEnglish,
-    summary,
-    dispLine && (dispReason ? `${dispLine} — ${dispReason}` : dispLine),
-    enrichLine,
-  ].filter(Boolean).join('\n\n');
+    _ensurePeriod(plainEnglish),
+    _ensurePeriod(_summary),
+    dispLine && _ensurePeriod(dispReason ? `${dispLine} — ${dispReason}` : dispLine),
+    _ensurePeriod(enrichLine),
+  ].filter(Boolean).join(' ');
 
   return (
     <Card title="Summary" accent="#0fbcff" badge={a?.disposition?.toLowerCase()} defaultOpen>
+      {/* Order per analyst request:
+            1. Threat score (top — the empirical headline)
+            2. Possible attribution (only shows when TTP overlap ≥ 75%)
+            3. AI summary paragraph (combined plain-English + verdict +
+               recommended action + enrichment line)
+            4. Confirmed facts / analyst assessment split
+            5. Log correlation (when multi-log input was submitted)        */}
+      {hasGti && <ThreatScore result={result}/>}
+
+      {topActor && <AttributionChip actor={topActor}/>}
+
       {combined && (
         <Typography sx={{
           fontSize: 13.5, color: 'text.primary', lineHeight: 1.75,
-          mb: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          mb: 1.5, wordBreak: 'break-word',
           ...(hasDisposition ? { borderLeft: `3px solid ${dispColor}`,
                                   pl: 1.5 } : {}),
         }}>
@@ -2327,12 +2481,7 @@ function AnalystSummary({ result, rs }) {
         </Typography>
       )}
 
-      {topActor && <AttributionChip actor={topActor}/>}
-
-      {/* PRINCIPLE 7 — Confirmed facts vs analyst assessment. Rendered as
-          two distinct sections so analysts can tell evidence from inference
-          at a glance. Both are valuable; readers should never have to guess
-          which is which. */}
+      {/* PRINCIPLE 7 — Confirmed facts vs analyst assessment. */}
       {(rs?.confirmed_facts?.length > 0 || rs?.analysis_assessment?.length > 0) && (
         <ConfirmedVsAnalysis
           confirmed={rs?.confirmed_facts || []}
@@ -2341,16 +2490,13 @@ function AnalystSummary({ result, rs }) {
       )}
 
       {/* Log Correlation card — only renders when multiple logs were
-          submitted in the same input. Shows chronological timeline +
-          plain-English explanation of how the events connect. */}
+          submitted in the same input. */}
       {(result?.multi_log?.is_multi || (result?.log_count || 0) > 1) && (
         <LogCorrelationCard
           multiLog={result?.multi_log}
           correlation={rs?.log_correlation || result?.log_correlation}
         />
       )}
-
-      {hasGti && <ThreatScore result={result}/>}
     </Card>
   );
 }
@@ -4019,11 +4165,7 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
         <Box sx={{ position: 'relative', mb: 1.25 }}>
           <Box component="textarea"
             value={logText} onChange={e=>setLogText(e.target.value)}
-            placeholder={"Paste the alert log here. You can also add analyst "
-              + "context inline — e.g. 'this is a scheduled vuln scan from "
-              + "10.0.1.45', 'user is on a sanctioned RMM tool', 'we expect "
-              + "Defender 1116 events from PDFSpark right now'. RECON will "
-              + "treat your commentary as ground truth."}
+            placeholder="Paste a log or describe what you saw"
             sx={{
               width: '100%',
               backgroundColor: 'background.secondary',
