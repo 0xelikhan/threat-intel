@@ -2406,13 +2406,16 @@ function AnalystSummary({ result, rs }) {
                   : a?.disposition === 'ESCALATE' ? '#F14337'
                   :                                  '#E1B823';
   const summary = (rs?.summary || '').trim();
-  // Attribution gate — only show the chip when TTP overlap is high enough
-  // that the match is more than coincidental. 75% threshold per analyst
-  // request. Analyst context that pushes overlap above the threshold (via
-  // re-analyze with feedback) is honoured automatically because matched_actors
-  // re-runs each time the investigation runs.
+  // Attribution gate — precision-style score (matched / N_alert_techniques)
+  // is now ≥ 60% AND at least 3 techniques matched. Single-technique
+  // matches that hit "100% precision" against an APT are noise; the
+  // 3-match floor weeds those out. Analyst context that pushes overlap
+  // above the threshold (via re-analyze with feedback) is honoured
+  // automatically because matched_actors re-runs each investigation.
   const topActor = (rs?.matched_actors || []).find(
-    a => typeof a?.score === 'number' && a.score >= 75
+    a => typeof a?.score === 'number'
+      && a.score >= 60
+      && (a.matchedTechniques?.length || 0) >= 3
   ) || null;
   // Plain-English summary from log_translator — written like an MDR analyst
   // briefing note (what / context / verdict / recommendation). Top of the
