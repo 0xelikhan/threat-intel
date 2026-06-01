@@ -66,6 +66,62 @@ const MINIMAL_FIELD_IDS = [
   'alert_summary', 'severity', 'malware_name', 'affected_host', 'recommended_actions',
 ];
 
+// Map each template field-id to the parsed-dict keys that populate it.
+// Used to decide which checkboxes to RENDER once the log has been parsed
+// — fields with no backing data in the current alert get hidden so the
+// analyst only sees toggles for things that actually exist in the log.
+// Kept aligned with backend/intel/email_composer.TEMPLATE_FIELD_TO_KEYS.
+const TEMPLATE_FIELD_TO_KEYS = {
+  alert_summary:       [],   // AI summary sentence; always available
+  severity:            ['severity', 'threat_level'],
+  malware_name:        ['ep_defender_type', 'ep_admin_alert_title', 'ep_message',
+                        'malware_name', 'threat_name'],
+  affected_host:       ['asset_name', 'ep_domain'],
+  username:            ['user_principal_name', 'ep_user', 'user_display_name',
+                        'target_user_principal_name'],
+  source_ip:           ['ip_address', 'first_login_ip', 'second_login_ip',
+                        'source_ip'],
+  destination_ip:      ['destination_ip', 'dest_ip'],
+  file_path:           ['ep_defender_path', 'ep_defender_file', 'ep_full_path',
+                        'infected_path'],
+  process_name:        ['ep_application_name', 'process_name'],
+  process_path:        ['ep_process_path'],
+  action_taken:        ['response_action', 'action_name'],
+  detection_source:    ['detection_source', 'ep_defender_source',
+                        'ep_admin_alert_provider'],
+  timeline:            ['ep_date', 'timestamp'],
+  mitre_techniques:    ['mitre_techniques'],
+  enrichment_summary:  ['enrichment_summary'],
+  recommended_actions: ['recommended_actions'],
+  technical_details:   ['ep_cmd_line', 'ep_process_id', 'ep_sha256',
+                        'additional_info_user_agent',
+                        'risk_event_type', 'risk_level', 'risk_state',
+                        'additional_info_risk_reasons',
+                        'privileged_role_display_name',
+                        'privileged_role_well_known',
+                        'forwarding_address',
+                        'location_city', 'location_state', 'location_country'],
+};
+
+// Decide which template fields to surface as checkboxes given the parsed
+// alert. Fields whose backing keys are empty/missing in parsed are hidden
+// so the analyst only sees toggles for things that actually exist in this
+// specific log. alert_summary always shows (the AI writes it regardless).
+function availableTemplateFields(parsed) {
+  if (!parsed || typeof parsed !== 'object') return TEMPLATE_FIELDS;
+  return TEMPLATE_FIELDS.filter(f => {
+    const keys = TEMPLATE_FIELD_TO_KEYS[f.id];
+    if (!keys || keys.length === 0) return true;
+    return keys.some(k => {
+      const v = parsed[k];
+      if (v == null || v === '' || v === 'N/A' || v === '-') return false;
+      if (Array.isArray(v)) return v.length > 0;
+      if (typeof v === 'object') return Object.keys(v).length > 0;
+      return true;
+    });
+  });
+}
+
 const BUILT_IN_TEMPLATES = [
   {
     id: '__all_details',
@@ -539,13 +595,28 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
           )}
         </Stack>
 
-        {/* Field toggle grid */}
+        {/* Field toggle grid — only renders toggles for fields the parsed
+            log actually contains. Until the log is parsed (parsedFields
+            empty), we hide the grid entirely with a one-line nudge so the
+            analyst doesn't see toggles for fields that can never apply. */}
+        {(() => {
+          const visibleFields = availableTemplateFields(parsedFields);
+          if (Object.keys(parsedFields || {}).length === 0) {
+            return (
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary',
+                fontStyle: 'italic', mt: 0.5 }}>
+                Paste the alert log first — field toggles will appear here
+                based on what the log actually contains.
+              </Typography>
+            );
+          }
+          return (
         <Box sx={{
           display: 'grid',
           gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
           gap: 0.75,
         }}>
-          {TEMPLATE_FIELDS.map(f => {
+          {visibleFields.map(f => {
             const on = enabledFields.includes(f.id);
             return (
               <Box key={f.id}
@@ -586,6 +657,8 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
             );
           })}
         </Box>
+          );
+        })()}
 
         {/* Save-as / Edit modal-ish inline form */}
         {(templateMode === 'create' || templateMode === 'edit') && (

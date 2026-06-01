@@ -6,6 +6,7 @@ Single process: serves React frontend as static files + all API endpoints.
 import asyncio
 import json
 import os
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -719,6 +720,93 @@ async def analyze_clarify(run_id: str, req: ClarifyRequest):
     result = {k: v for k, v in state.items() if k != "stix_bundle"}
     result.update({"runId": run_id, "rephased": True})
     return result
+
+
+# ─── Attribution: MalwareBazaar hash pivot ──────────────────────────────────
+#
+# The AttributionChip's "Hunt for" tab needs concrete sample hashes for
+# malware-typed entries (Mivast, Sakula, Derusbi, etc.). MITRE STIX
+# doesn't carry hashes; abuse.ch's MalwareBazaar does. This endpoint is
+# called on demand from the frontend so we don't slow down /api/analyze
+# with extra outbound HTTPS calls per matched actor.
+_MB_HASH_CACHE: dict = {}   # family_name.lower() -> {ts, payload}
+
+@app.get("/api/attribution/hashes")
+async def attribution_hashes(family: str, limit: int = 10):
+    """Return up to N recent SHA256 / SHA1 / MD5 samples for a malware
+    family from abuse.ch MalwareBazaar. Returns:
+      { "family": "...", "hashes": [{sha256, sha1, md5, file_name,
+                                     file_type, first_seen, signature}],
+        "source": "MalwareBazaar (abuse.ch)" }
+    or { "error": "..." } when the API is unavailable / rate-limited /
+    returns no matches. The frontend renders the error verbatim so the
+    analyst knows the lookup failed rather than seeing an empty list.
+    """
+    fam = (family or "").strip()
+    if not fam or len(fam) > 80:
+        raise HTTPException(400, "family required (<=80 chars)")
+    cache_key = fam.lower()
+    now = time.time()
+    cached = _MB_HASH_CACHE.get(cache_key)
+    if cached and (now - cached["ts"] < 21600):   # 6h cache
+        return cached["payload"]
+
+    import aiohttp
+    limit = max(1, min(int(limit or 10), 50))
+    try:
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=12),
+        ) as session:
+            async with session.post(
+                "https://mb-api.abuse.ch/api/v1/",
+                data={"query": "get_siginfo", "signature": fam,
+                      "limit": str(limit)},
+                headers={"User-Agent": "RECON/1.0 (+attribution-pivot)"},
+            ) as r:
+                if r.status != 200:
+                    payload = {"family": fam, "hashes": [],
+                               "error": f"MalwareBazaar HTTP {r.status}",
+                               "source": "MalwareBazaar (abuse.ch)"}
+                    return payload
+                body = await r.json(content_type=None)
+    except asyncio.TimeoutError:
+        return {"family": fam, "hashes": [],
+                "error": "MalwareBazaar timed out (12s)",
+                "source": "MalwareBazaar (abuse.ch)"}
+    except Exception as e:
+        return {"family": fam, "hashes": [],
+                "error": f"MalwareBazaar call failed: {str(e)[:160]}",
+                "source": "MalwareBazaar (abuse.ch)"}
+
+    status = (body or {}).get("query_status") or ""
+    if status != "ok":
+        # "no_results" / "no_signature" / "limit_exceeded" / "illegal_..."
+        payload = {"family": fam, "hashes": [],
+                   "error": f"MalwareBazaar: {status or 'unknown response'}",
+                   "source": "MalwareBazaar (abuse.ch)"}
+        _MB_HASH_CACHE[cache_key] = {"ts": now, "payload": payload}
+        return payload
+
+    data = body.get("data") or []
+    hashes = []
+    for entry in data[:limit]:
+        if not isinstance(entry, dict):
+            continue
+        hashes.append({
+            "sha256":     entry.get("sha256_hash") or "",
+            "sha1":       entry.get("sha1_hash") or "",
+            "md5":        entry.get("md5_hash") or "",
+            "file_name":  entry.get("file_name") or "",
+            "file_type":  entry.get("file_type") or "",
+            "first_seen": entry.get("first_seen") or "",
+            "signature":  entry.get("signature") or fam,
+            "reporter":   entry.get("reporter") or "",
+        })
+    payload = {"family": fam, "hashes": hashes,
+               "count": len(hashes),
+               "source": "MalwareBazaar (abuse.ch)"}
+    _MB_HASH_CACHE[cache_key] = {"ts": now, "payload": payload}
+    return payload
 
 
 # ─── GTI SCORE ───────────────────────────────────────────────────────────────────
