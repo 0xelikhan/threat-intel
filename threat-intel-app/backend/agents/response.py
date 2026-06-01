@@ -365,6 +365,11 @@ the evidence points to benign activity."""
         # so renderers don't conflate the legitimate triggering process
         # with the malware itself.
         "defender_parse":      state.get("defender_parse"),
+        # Multi-log split + AI correlation — frontend renders a
+        # Log Correlation card when multi_log.is_multi.
+        "multi_log":           state.get("multi_log"),
+        "log_count":           state.get("log_count", 1),
+        "log_correlation":     investigation.get("log_correlation"),
     }
 
     trace.append({

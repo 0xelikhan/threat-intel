@@ -1279,6 +1279,22 @@ async def run_investigation(state: dict, on_event=None) -> dict:
     except Exception:
         defender_block = ""
 
+    # ── Multi-log correlation block ──────────────────────────────────────────
+    # When two+ logs were pasted into the same input field, render the per-
+    # entry view + correlation instructions. AI must populate the
+    # log_correlation field of its JSON response so the frontend can render
+    # a Log Correlation card.
+    multi_log_block = ""
+    is_multi_log = False
+    try:
+        from intel.multi_log import to_prompt_block as _ml_block
+        _ml = state.get("multi_log") or {}
+        is_multi_log = bool(_ml.get("is_multi"))
+        multi_log_block = _ml_block(_ml)
+    except Exception:
+        multi_log_block = ""
+        is_multi_log = False
+
     result = None
     tool_call_log = []
     openai_key = config.get("OPENAI_API_KEY")
@@ -1329,6 +1345,8 @@ Tool-budget tips:
 
 ## Baseline cross-references already collected (do NOT re-query these)
 {cross_ctx[:2500]}
+
+{multi_log_block}
 
 {defender_block}
 
@@ -1529,8 +1547,20 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                     "  analyst_notes (1-2 paragraphs of senior-analyst context for junior tier),\n"
                     "  clarifying_questions (2-4 questions whose answers would MATERIALLY change the\n"
                     "    assessment — host role, user privilege, related alerts, business context,\n"
-                    "    scope; only if not derivable from enrichment; empty list if none).\n\n"
-                    "No markdown fences, no commentary outside the JSON."
+                    "    scope; only if not derivable from enrichment; empty list if none),\n"
+                    + (
+                        "  log_correlation — REQUIRED for this run because the input contained\n"
+                        "    multiple distinct log entries. Object with:\n"
+                        "      { related: bool,\n"
+                        "        shared_elements: array of strings (host/user/process/IOC/time),\n"
+                        "        chronological_timeline: array of {when, event, log_index},\n"
+                        "        combined_picture: string — what the logs together reveal that\n"
+                        "                                   neither alone would,\n"
+                        "        rationale: string — when related=false, brief reason }.\n"
+                        if is_multi_log else
+                        "  log_correlation (optional; omit when only one log was submitted),\n"
+                    ) +
+                    "\nNo markdown fences, no commentary outside the JSON."
                 )
                 # Probing questions get their OWN call so they always have token
                 # headroom — when bundled into the findings half they were the last
@@ -1724,5 +1754,6 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
         "attack_stage":           result.get("attack_stage"),
         "geopolitical":           geopolitical,
         "tool_call_log":          tool_call_log,
+        "log_correlation":        result.get("log_correlation"),
         "agent_trace":            trace,
     }
