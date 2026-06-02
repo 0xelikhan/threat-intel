@@ -240,7 +240,18 @@ def _safe(d, *keys, default=None):
 #     enough to call it (MALICIOUS / SUSPICIOUS / CLEAN / UNKNOWN)
 #
 def _err(source: str, reason) -> dict:
-    return {"error": str(reason), "source": source}
+    # Plain `str(None)` produces the literal 'None' which the frontend
+    # renders as "error: None" — meaningless to an analyst. When the
+    # source returned no data at all (reason is None), report it that
+    # way so the source card can show the right empty state.
+    if reason is None:
+        msg = "no data"
+    elif isinstance(reason, Exception):
+        msg = _humanise_exc(reason)
+    else:
+        s = str(reason).strip()
+        msg = s if s and s.lower() != "none" else "no data"
+    return {"error": msg, "source": source}
 
 def _is_fail(r) -> bool:
     return isinstance(r, Exception) or not isinstance(r, (dict, list)) or (
