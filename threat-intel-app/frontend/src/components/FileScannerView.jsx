@@ -699,7 +699,9 @@ function UrlReputationReport({ result }) {
                 </Box>
               ) : (
                 <Typography sx={{ fontSize: 12, color: 'text.tertiary', fontStyle: 'italic' }}>
-                  {whois?.error ? `error: ${whois.error}` : 'No WHOIS data returned.'}
+                  {whois?.error && !/^no data$/i.test(whois.error)
+                    ? `error: ${whois.error}`
+                    : 'No WHOIS data returned for this domain.'}
                 </Typography>
               )}
             </CollapsibleSource>
@@ -2442,8 +2444,16 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
               const _vtCreated = _toIso(_vtDom?.creation_date)
                               || _toIso(_vtUrl?.creation_date);
               const _regIso = _whois?.created || _vtCreated;
+              // 3+ label hosts (e.g. dx8izrc8b627.cloudfront.net) almost
+              // never have their own WHOIS — the VT date reflects the
+              // PARENT registration (cloudfront.net) and would mislead
+              // the analyst if labelled "first seen" of the actual URL.
+              // Compute the parent so we can show it in the label.
+              const _hostLabels = (_host || '').split('.').filter(Boolean);
+              const _isSubOnCdn = !_whois?.created && _hostLabels.length >= 3;
+              const _parentDomain = _hostLabels.slice(-2).join('.');
               const _regSource = _whois?.created ? 'WHOIS'
-                : _vtCreated ? 'VirusTotal first seen' : null;
+                : _vtCreated ? 'VirusTotal' : null;
               const _regAgeDays = _regIso ? (() => {
                 const d = new Date(_regIso);
                 if (isNaN(d)) return null;
@@ -2453,11 +2463,17 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
                 _regIso && {
                   label: _regSource === 'WHOIS'
                     ? 'Domain registered'
-                    : 'First seen (VirusTotal)',
+                    : _isSubOnCdn
+                      ? `Parent registered (${_parentDomain}, VirusTotal)`
+                      : 'First seen (VirusTotal)',
                   value: _regAgeDays != null
                     ? `${_formatDate(_regIso)}  (${_regAgeDays}d ago)`
                     : _formatDate(_regIso),
-                  accent: _regAgeDays != null && _regAgeDays < 30 ? '#E6700F' : null,
+                  // Newness accent only when this is the *actual* URL's
+                  // age — for parent-domain inferences, the colour would
+                  // be misleading.
+                  accent: !_isSubOnCdn && _regAgeDays != null && _regAgeDays < 30
+                    ? '#E6700F' : null,
                 },
                 _whois?.registrar && {
                   label: 'Registrar',

@@ -35,10 +35,17 @@ async def dns_records(session: aiohttp.ClientSession, domain: str) -> Dict:
                 if " : " not in line:
                     continue
                 left, val = line.split(" : ", 1)
-                for rec in records.keys():
-                    if f" {rec} " in f" {left} " or left.endswith(rec):
-                        records[rec].append(val.strip())
-                        break
+                # HackerTarget's left side looks like:
+                #   "example.com. 60 IN A" / "... 60 IN NS" / "... 60 IN SOA"
+                # The record type is the LAST whitespace-separated token.
+                # Previous logic used left.endswith(rec) which matched
+                # 'SOA' against 'A' (suffix collision), polluting the A
+                # record list with the SOA tuple. Comparing the last token
+                # avoids that.
+                toks = left.split()
+                last_tok = toks[-1] if toks else ""
+                if last_tok in records:
+                    records[last_tok].append(val.strip())
     except Exception as e:
         return {"error": str(e), "source": "hackertarget_dns"}
     # Strip empty record types for compactness
