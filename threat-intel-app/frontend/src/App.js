@@ -2574,6 +2574,29 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
         </Typography>
       )}
 
+      {/* When this run was re-analysed with analyst feedback, surface
+          the analyst's exact statement above the train-on-FP form so
+          the AI analysis (above) and the analyst's input (here) are
+          visually separated rather than running together. */}
+      {rs?.analyst_feedback && (
+        <Box sx={{ mt: 2,
+          backgroundColor: muiAlpha('#B286FF', 0.06),
+          border: `1px solid ${muiAlpha('#B286FF', 0.30)}`,
+          borderLeft: '3px solid #B286FF',
+          borderRadius: '4px',
+          p: '10px 14px' }}>
+          <Typography sx={{ fontSize: 10.5, fontWeight: 700, color: '#B286FF',
+            textTransform: 'uppercase', letterSpacing: '0.08em', mb: 0.5 }}>
+            Analyst feedback applied
+          </Typography>
+          <Typography sx={{ fontSize: 12.5, color: 'text.primary',
+            lineHeight: 1.55, fontStyle: 'italic',
+            whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            “{rs.analyst_feedback}”
+          </Typography>
+        </Box>
+      )}
+
       {/* Train-on-false-positives inline form — pinned directly under
           the AI analysis so the analyst can correct a wrong verdict
           without scrolling further. Renders nothing when there's no
@@ -2844,7 +2867,6 @@ function FeedbackInline({ result, onStart, onPartial, onComplete }) {
   const [sending, setSending]     = useState(false);
   const [error, setError]         = useState(null);
   const originalLog = result?.raw_input || '';
-  const feedbackUpdated = !!result?.response_summary?.analyst_feedback;
   if (!originalLog) return null;
 
   const submit = async () => {
@@ -2908,17 +2930,9 @@ function FeedbackInline({ result, onStart, onPartial, onComplete }) {
         textTransform: 'uppercase', letterSpacing: '0.07em', mb: 1 }}>
         Train on false positives
       </Typography>
-      {feedbackUpdated && (
-        <Box sx={{ mb: 1, p: '6px 10px',
-          backgroundColor: muiAlpha('#B286FF', 0.10),
-          border: `1px solid ${muiAlpha('#B286FF', 0.35)}`,
-          borderLeft: '3px solid #B286FF',
-          borderRadius: '4px' }}>
-          <Typography sx={{ fontSize: 11, color: '#B286FF', fontWeight: 500 }}>
-            Analysis was updated based on your previous feedback.
-          </Typography>
-        </Box>
-      )}
+      {/* The 'Analysis was updated based on your previous feedback' banner
+          used to live here, but the verbatim 'Analyst feedback applied'
+          block in AnalystSummary now carries that signal. */}
       <Stack direction="row" spacing={1} alignItems="stretch">
         <MuiTextField
           multiline rows={2} fullWidth variant="outlined" size="small"
