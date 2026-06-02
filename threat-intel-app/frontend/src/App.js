@@ -2820,14 +2820,148 @@ function LogCorrelationCard({ multiLog, correlation }) {
 }
 
 
+/* ─── Train on false positives · prominent CTA pinned directly under the
+       Summary card so the analyst doesn't have to scroll through chat
+       history to find the feedback surface. Re-uses the same /api/analyze
+       SSE flow as ChatWithRecon's old in-chat toggle: POSTs the original
+       raw input plus the analyst's statement with analystFeedback set, the
+       investigation prompt prepends an "ANALYST VERDICT AND CONTEXT" block
+       as the highest-weight input, and the streamed result replaces the
+       visible analysis via onPartial / onComplete.                       */
+function TrainOnFalsePositive({ result, onStart, onPartial, onComplete }) {
+  const [statement, setStatement] = useState('');
+  const [sending, setSending]     = useState(false);
+  const [error, setError]         = useState(null);
+  const originalLog = result?.raw_input || '';
+  const feedbackUpdated = !!result?.response_summary?.analyst_feedback;
+  if (!originalLog) return null;
+
+  const submit = async () => {
+    const trimmed = statement.trim();
+    if (!trimmed) return;
+    setSending(true); setError(null);
+    onStart?.();
+    try {
+      const resp = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          logText:         originalLog,
+          inputType:       'log',
+          label:           result?.label || '',
+          analystFeedback: trimmed,
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: 'analysis failed' }));
+        throw new Error(err.error || err.detail || `HTTP ${resp.status}`);
+      }
+      const reader = resp.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (raw === '[DONE]') break;
+          try {
+            const ev = JSON.parse(raw);
+            if (ev.event === 'partial_result' && ev.result) onPartial?.(ev.result);
+            if (ev.event === 'complete') {
+              onComplete?.(ev.result);
+              setSending(false);
+              setStatement('');
+            }
+            if (ev.event === 'error') {
+              setError(ev.error || 'analysis failed');
+              setSending(false);
+            }
+          } catch {}
+        }
+      }
+    } catch (e) {
+      setError(e.message || 'analysis failed');
+      setSending(false);
+    }
+  };
+
+  return (
+    <Card title="Train on false positives" accent="#B286FF" defaultOpen={true}>
+      <Typography sx={{ fontSize: 12.5, color: 'text.tertiary',
+        lineHeight: 1.5, mb: 1.5 }}>
+        If RECON's verdict is wrong, explain what you actually found. The
+        analysis re-runs with your context as the highest-weight input.
+      </Typography>
+      {feedbackUpdated && (
+        <Box sx={{ mb: 1.5, p: '8px 12px',
+          backgroundColor: muiAlpha('#B286FF', 0.10),
+          border: `1px solid ${muiAlpha('#B286FF', 0.35)}`,
+          borderLeft: '3px solid #B286FF',
+          borderRadius: '4px' }}>
+          <Typography sx={{ fontSize: 11.5, color: '#B286FF',
+            fontWeight: 500 }}>
+            Analysis was updated based on your previous feedback.
+          </Typography>
+        </Box>
+      )}
+      <Stack direction="row" spacing={1} alignItems="stretch">
+        <MuiTextField
+          multiline rows={2} fullWidth variant="outlined" size="small"
+          value={statement} onChange={e => setStatement(e.target.value)}
+          disabled={sending}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault(); submit();
+            }
+          }}
+          placeholder='e.g. "This is our internal vuln scanner, not malicious traffic."'
+          sx={{ flex: 1,
+            '& .MuiOutlinedInput-input': { fontSize: 13, lineHeight: 1.5 },
+            '& .MuiOutlinedInput-root': {
+              backgroundColor: muiAlpha('#B286FF', 0.04),
+            },
+            '& .MuiOutlinedInput-notchedOutline': {
+              borderColor: muiAlpha('#B286FF', 0.4),
+            },
+          }}
+        />
+        <MuiButton variant="contained"
+          onClick={submit}
+          disabled={sending || !statement.trim()}
+          sx={{ alignSelf: 'stretch', minWidth: 110,
+            backgroundColor: '#B286FF',
+            '&:hover': { backgroundColor: '#9061f0' },
+            '&.Mui-disabled': { backgroundColor: muiAlpha('#B286FF', 0.3) },
+          }}>
+          {sending ? 'Re-analyzing…' : 'Re-analyze'}
+        </MuiButton>
+      </Stack>
+      <Typography sx={{ fontSize: 10, color: 'text.tertiary',
+        mt: 0.75, textAlign: 'right' }}>
+        ⌘↵ to submit
+      </Typography>
+      {error && (
+        <Box sx={{ mt: 1, p: '8px 12px',
+          backgroundColor: muiAlpha('#F14337', 0.1),
+          border: `1px solid ${muiAlpha('#F14337', 0.4)}`,
+          borderRadius: '4px',
+          color: 'error.main', fontSize: 12 }}>
+          {error}
+        </Box>
+      )}
+    </Card>
+  );
+}
+
+
 /* ─── Chat with RECON · conversational follow-up on the investigation.
-       Also hosts the analyst feedback workflow ("Provide feedback to train
-       the AI on false positives") — feedback expands inline, then POSTs the
-       original raw input plus the analyst's statement back through
-       /api/analyze with analystFeedback set so the investigation prompt
-       prepends an "ANALYST VERDICT AND CONTEXT" block as the highest-weight
-       input. The result replaces the current analysis and an "Updated based
-       on analyst feedback" banner appears at the top of this card.       */
+       The feedback-on-false-positives flow lives in <TrainOnFalsePositive>
+       above the Summary now; the chat is chat-only.                      */
 function ChatWithRecon({ result, bare,
                           onFeedbackStart, onFeedbackPartial, onFeedbackComplete }) {
   const [messages, setMessages] = useState([]);
@@ -3262,43 +3396,12 @@ function ChatWithRecon({ result, bare,
         </Box>
       )}
 
-      {/* Mode toggle — feedback or chat. Sits above the input as a small
-          selectable pill so the analyst can train the AI on a false positive
-          mid-conversation without leaving the chat surface. */}
-      {originalLog && (
-        <Stack direction="row" spacing={0.75} alignItems="center"
-          sx={{ mb: 0.75, flexWrap: 'wrap' }}>
-          <Box
-            onClick={() => setFeedbackMode(false)}
-            sx={{
-              cursor: 'pointer', userSelect: 'none',
-              fontSize: 11, fontWeight: 500,
-              px: 1, py: '4px', borderRadius: '4px',
-              color: !feedbackMode ? accent : 'text.tertiary',
-              backgroundColor: !feedbackMode ? muiAlpha(accent, 0.12) : 'transparent',
-              border: `1px solid ${!feedbackMode ? muiAlpha(accent, 0.4) : muiAlpha('#ffffff', 0.12)}`,
-              '&:hover': { backgroundColor: muiAlpha(accent, 0.08) },
-            }}>
-            Ask RECON
-          </Box>
-          <Box
-            onClick={() => setFeedbackMode(true)}
-            sx={{
-              cursor: 'pointer', userSelect: 'none',
-              fontSize: 11, fontWeight: 500,
-              px: 1, py: '4px', borderRadius: '4px',
-              color: feedbackMode ? '#B286FF' : 'text.tertiary',
-              backgroundColor: feedbackMode ? muiAlpha('#B286FF', 0.12) : 'transparent',
-              border: `1px solid ${feedbackMode ? muiAlpha('#B286FF', 0.4) : muiAlpha('#ffffff', 0.12)}`,
-              '&:hover': { backgroundColor: muiAlpha('#B286FF', 0.08) },
-            }}>
-            Train on false positives
-          </Box>
-        </Stack>
-      )}
+      {/* Train-on-false-positives toggle removed — the feedback workflow
+          lives in <TrainOnFalsePositive> directly under the Summary card
+          so it doesn't get buried at the bottom of a long chat. This
+          card stays chat-only. */}
 
-      {/* Input row — same MuiTextField for both modes. Send routes to chat
-          OR submitFeedback based on the toggle above. */}
+      {/* Input row — chat-only after the feedback split. */}
       <Stack direction="row" spacing={1}>
         <MuiTextField
           inputRef={textareaRef}
@@ -4843,13 +4946,22 @@ function AppMain({ authUser, setAuthState }) {
                 follow-up tools (Geolocation, Ask RECON). */}
             <CardDefaultOpenContext.Provider value={false} key={result.runId || 'detail'}>
             {/* Card order (analyst-flow):
-                1. Summary       — verdict + threat score (rolled-up GTI)
-                2. Ask RECON     — interactive probing questions
-                3. Triage        — deep evidence dive
-                4. Geolocation   — map (only when IPs are present)
-                5. Detection     — SIEM-ready rules
+                1. Summary                 — verdict + threat score (rolled-up GTI)
+                2. Train on false positives — re-analyze CTA, pinned near the verdict
+                3. Ask RECON                — interactive probing questions
+                4. Triage                   — deep evidence dive
+                5. Geolocation              — map (only when IPs are present)
+                6. Detection                — SIEM-ready rules
                 EmailAnalysis still slots in when an EML is present. */}
             <ErrorBoundary label="Summary"><AnalystSummary result={result} rs={rs || {}}/></ErrorBoundary>
+            <ErrorBoundary label="Train on false positives">
+              <TrainOnFalsePositive
+                result={result}
+                onStart={() => setAnalyzing(true)}
+                onPartial={mergePartial}
+                onComplete={(r) => { setAnalyzing(false); setResult(r); }}
+              />
+            </ErrorBoundary>
             <ErrorBoundary label="Ask RECON">
               <ChatWithRecon
                 result={result}
