@@ -112,54 +112,73 @@ function SectionCard({
 }) {
   const theme = useTheme();
   const [open, setOpen] = useState(defaultOpen);
+  // Restructured as a single Paper that owns both the header and body —
+  // the header sits inside the bordered card surface (matching the base
+  // <Card> aesthetic in ui.js) so the section reads as one object
+  // instead of a floating chevron + separate body.
   return (
-    <Box id={`section-${id}`} sx={{ scrollMarginTop: 88 }}>
-      <Box
-        onClick={() => setOpen(o => !o)}
-        sx={{
-          display: 'flex', alignItems: 'center', cursor: 'pointer',
-          gap: 1, mb: 1, pl: 0.5, userSelect: 'none',
-          '&:hover .recon-section-label': { color: accent || 'text.primary' },
-        }}
-      >
-        <Box sx={{
-          color: accent || 'text.tertiary',
-          transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
-          transition: 'transform 0.18s ease',
-          display: 'flex', alignItems: 'center',
-        }}>
-          <ChevronRight size={12}/>
-        </Box>
-        <Typography
-          className="recon-section-label"
+    <Box id={`section-${id}`} sx={{ scrollMarginTop: 88, mb: 1.25 }}>
+      <MuiPaper elevation={0} sx={{
+        backgroundColor: theme.palette.background.paper,
+        border: `1px solid ${muiAlpha('#ffffff', 0.08)}`,
+        borderLeft: accent
+          ? `3px solid ${accent}`
+          : `1px solid ${muiAlpha('#ffffff', 0.08)}`,
+        borderRadius: '4px',
+        overflow: 'hidden',
+        transition: 'background-color 0.15s ease',
+        '&:hover': {
+          backgroundColor: muiAlpha('#ffffff', 0.015),
+          '& .recon-section-label': { color: accent || '#F2F2F3' },
+        },
+        ...sx,
+      }}>
+        <Box
+          onClick={() => setOpen(o => !o)}
           sx={{
-            fontSize: 10, color: accent || 'text.tertiary', fontWeight: 600,
-            textTransform: 'uppercase', letterSpacing: '0.1em',
-            transition: 'color 0.18s ease',
+            display: 'flex', alignItems: 'center', cursor: 'pointer',
+            gap: 1.25, p: '11px 16px', userSelect: 'none',
+            borderBottom: open
+              ? `1px solid ${muiAlpha('#ffffff', 0.08)}`
+              : 'none',
           }}
         >
-          {label}
-        </Typography>
-        {summary != null && summary !== '' && (
-          <Typography sx={{
-            fontSize: 10, color: 'text.tertiary', fontWeight: 500,
-            ml: 'auto', pr: 0.5,
-            textTransform: 'none', letterSpacing: '0.02em',
+          <Box sx={{
+            color: accent || 'text.tertiary',
+            opacity: 0.75,
+            transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+            transition: 'transform 0.18s ease',
+            display: 'flex', alignItems: 'center',
           }}>
-            {summary}
+            <ChevronRight size={12}/>
+          </Box>
+          <Typography
+            className="recon-section-label"
+            sx={{
+              fontSize: 11.5, color: accent || 'text.tertiary',
+              fontWeight: 600,
+              textTransform: 'uppercase', letterSpacing: '0.08em',
+              transition: 'color 0.15s ease',
+            }}
+          >
+            {label}
           </Typography>
+          {summary != null && summary !== '' && (
+            <Typography sx={{
+              fontSize: 11, color: 'text.tertiary', fontWeight: 500,
+              ml: 'auto',
+              textTransform: 'none', letterSpacing: '0.02em',
+            }}>
+              {summary}
+            </Typography>
+          )}
+        </Box>
+        {open && (
+          <Box sx={{ p: defaultPad ? '14px 16px 16px 16px' : 0 }}>
+            {children}
+          </Box>
         )}
-      </Box>
-      {open && (
-        <MuiPaper elevation={0} sx={{
-          backgroundColor: theme.palette.background.paper,
-          border: `1px solid ${muiAlpha('#ffffff', 0.08)}`,
-          borderLeft: accent ? `3px solid ${accent}` : `1px solid ${muiAlpha('#ffffff', 0.08)}`,
-          borderRadius: '4px',
-          p: defaultPad ? 2 : 0,
-          ...sx,
-        }}>{children}</MuiPaper>
-      )}
+      </MuiPaper>
     </Box>
   );
 }
@@ -223,19 +242,24 @@ function CollapsibleSource({
   return (
     <MuiPaper elevation={0} sx={{
       backgroundColor: '#0C1524',
-      border: `1px solid ${muiAlpha('#ffffff', 0.10)}`,
+      border: `1px solid ${muiAlpha('#ffffff', 0.08)}`,
       borderLeft: `3px solid ${muiAlpha(statusColor, 0.7)}`,
       borderRadius: '4px',
       overflow: 'hidden',
+      transition: 'background-color 0.15s ease, border-color 0.15s ease',
+      '&:hover': {
+        backgroundColor: '#0D1828',
+        borderColor: muiAlpha('#ffffff', 0.14),
+        borderLeftColor: statusColor,
+      },
     }}>
       <Box onClick={() => setOpen(o => !o)} sx={{
         display: 'flex', alignItems: 'center', gap: 1.25,
-        p: '9px 14px',
+        p: '10px 14px',
         cursor: 'pointer', userSelect: 'none',
-        '&:hover': { backgroundColor: muiAlpha('#ffffff', 0.025) },
       }}>
         <Box sx={{
-          color: 'text.tertiary', opacity: 0.55,
+          color: 'text.tertiary', opacity: 0.6,
           transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
           transition: 'transform 0.18s ease',
           display: 'flex', alignItems: 'center',
@@ -244,24 +268,25 @@ function CollapsibleSource({
         </Box>
         <Typography sx={{
           fontSize: 11.5, color: 'text.primary', fontWeight: 600,
-          textTransform: 'uppercase', letterSpacing: '0.06em', flex: 1,
+          textTransform: 'uppercase', letterSpacing: '0.08em', flex: 1,
         }}>
           {title}
         </Typography>
         {count != null && (
-          <Typography sx={{ fontSize: 10.5, color: 'text.tertiary' }}>
+          <Typography sx={{ fontSize: 10.5, color: 'text.tertiary',
+            fontWeight: 500 }}>
             {count}
           </Typography>
         )}
         {status && (
           <Box sx={{
-            px: 0.875, py: 0.25,
+            px: 0.875, py: 0.3,
             backgroundColor: muiAlpha(statusColor, 0.18),
             color: statusColor,
-            border: `1px solid ${muiAlpha(statusColor, 0.4)}`,
+            border: `1px solid ${muiAlpha(statusColor, 0.45)}`,
             borderRadius: '3px',
             fontSize: 9.5, fontWeight: 700,
-            textTransform: 'uppercase', letterSpacing: '0.06em',
+            textTransform: 'uppercase', letterSpacing: '0.07em',
             whiteSpace: 'nowrap',
           }}>
             {status}
