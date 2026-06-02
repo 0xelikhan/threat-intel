@@ -114,16 +114,32 @@ _DEFENDER_AV_KV_RE = re.compile(
     r"\b(?:AV|AS|NIS|AM)\s*:\s*\d{1,5}(?:\.\d{1,5}){2,3}\b",
 )
 
+# Version-numbered directories inside a file path look like
+#   c:\users\X\appdata\local\app-name\6.35.0.35\service\app.exe
+#   /opt/foo/1.2.3.4/bin/foo
+#   "C:/Program Files/Vendor/2.10.4.7/lib/X"
+# iocextract matches `6.35.0.35` as a dotted-quad even though all octets
+# are < 256, but in this context it's a version directory, not a host
+# address. Strip every 4-part numeric segment that is bracketed on both
+# sides by a path separator. We deliberately don't strip segments at the
+# end of a token (no trailing /) — `connect to 6.35.0.35` is still a
+# legitimate IP candidate and should reach extraction.
+_PATH_VERSION_RE = re.compile(
+    r"(?<=[\\\\/])\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?=[\\\\/])"
+)
+
 
 def strip_defender_version_strings(text: str) -> str:
     """Remove Microsoft Defender Security Intelligence / Engine version
-    strings from the input so they never reach IOC extraction. Replaces
-    each match with a single space so token boundaries upstream of the
-    match still hold."""
+    strings AND in-path version directories (like \\6.35.0.35\\service\\)
+    from the input so they never reach IOC extraction. Replaces each
+    match with a single space so token boundaries upstream of the match
+    still hold."""
     if not text:
         return text
     text = _DEFENDER_VERSION_RE.sub(" ", text)
     text = _DEFENDER_AV_KV_RE.sub(" ", text)
+    text = _PATH_VERSION_RE.sub(" ", text)
     return text
 
 
