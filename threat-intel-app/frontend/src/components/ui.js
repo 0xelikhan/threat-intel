@@ -130,6 +130,10 @@ export const TypeTag = ({ type }) => (
 export const CardDefaultOpenContext = React.createContext(true);
 
 // ─── Card — collapsible MUI Card matching OpenCTI's panel pattern ───────────
+// Visual identity is the always-on accent left border; on hover the card gains
+// a subtle background tint and the title brightens, but layout never shifts
+// (the old hover handler bumped the border from 1px to 3px which caused a
+// 2px content-jitter every time the cursor crossed the card edge).
 export const Card = ({
   title,
   accent,
@@ -141,45 +145,71 @@ export const Card = ({
 }) => {
   const ctxDefaultOpen = React.useContext(CardDefaultOpenContext);
   const [open, setOpen] = useState(defaultOpen ?? ctxDefaultOpen);
+  const titleColor = accent || 'text.tertiary';
   return (
     <MuiCard
       sx={{
-        marginBottom: '10px',
-        // Subtle left-border accent stripe on hover (OpenCTI pattern)
+        marginBottom: '12px',
         position: 'relative',
-        '&:hover': accent
-          ? { borderLeftColor: accent, borderLeftWidth: '3px', paddingLeft: '0' }
-          : undefined,
+        overflow: 'hidden',
+        // Persistent accent stripe — gives each card a visual identity
+        // when scanning the page without needing a hover state.
+        borderLeft: accent
+          ? `3px solid ${accent}`
+          : `1px solid ${alpha('#ffffff', 0.12)}`,
+        transition: 'background-color 0.15s ease, border-color 0.15s ease',
+        '&:hover': {
+          backgroundColor: alpha('#ffffff', 0.015),
+          '& .recon-card-title': {
+            color: accent || '#F2F2F3',
+          },
+        },
       }}
     >
       <CardHeader
         title={title}
         action={badge !== null && (
-          <Typography variant="caption" sx={{ color: 'text.tertiary', fontSize: 12, paddingRight: 1.5 }}>
+          <Typography variant="caption" sx={{
+            color: accent ? alpha(accent, 0.85) : 'text.tertiary',
+            fontSize: 11,
+            fontWeight: 500,
+            paddingRight: 1.5,
+            textTransform: 'lowercase',
+            letterSpacing: '0.04em',
+          }}>
             {badge}
           </Typography>
         )}
         onClick={collapsible ? () => setOpen(o => !o) : undefined}
         avatar={collapsible
-          ? (open ? <ExpandMoreOutlined sx={{ fontSize: 16, color: accent || 'text.tertiary' }}/>
-                  : <ChevronRightOutlined sx={{ fontSize: 16, color: accent || 'text.tertiary' }}/>)
+          ? (open
+              ? <ExpandMoreOutlined sx={{ fontSize: 16, color: titleColor,
+                  opacity: 0.75, transition: 'opacity 0.15s ease' }}/>
+              : <ChevronRightOutlined sx={{ fontSize: 16, color: titleColor,
+                  opacity: 0.75, transition: 'opacity 0.15s ease' }}/>)
           : null}
         sx={{
-          padding: '10px 16px',
+          padding: '11px 16px',
           cursor: collapsible ? 'pointer' : 'default',
-          borderBottom: open ? `1px solid ${alpha('#ffffff', 0.12)}` : 'none',
+          borderBottom: open ? `1px solid ${alpha('#ffffff', 0.08)}` : 'none',
+          userSelect: 'none',
           '& .MuiCardHeader-avatar': { marginRight: 1 },
           '& .MuiCardHeader-title': {
             fontSize: 12,
-            fontWeight: 500,
+            fontWeight: 600,
             textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            color: accent || 'text.tertiary',
+            letterSpacing: '0.08em',
+            color: titleColor,
+            transition: 'color 0.15s ease',
           },
         }}
+        titleTypographyProps={{ className: 'recon-card-title' }}
       />
       <Collapse in={open} unmountOnExit>
-        <CardContent sx={noPad ? { padding: '0 !important' } : { padding: 2 }}>
+        <CardContent sx={noPad
+          ? { padding: '0 !important' }
+          : { padding: '14px 16px 16px 16px',
+              '&:last-child': { paddingBottom: '16px' } }}>
           {children}
         </CardContent>
       </Collapse>
@@ -191,22 +221,24 @@ export const Card = ({
 export const Block = ({ title, children, accent }) => {
   const theme = useTheme();
   return (
-    <Box sx={{ marginBottom: 1.5 }}>
+    <Box sx={{ marginBottom: 1.75 }}>
       {title && (
         <Typography variant="caption" sx={{
-          display: 'block', marginBottom: 1,
-          fontSize: 11, fontWeight: 500,
+          display: 'block', marginBottom: 0.75,
+          fontSize: 10.5, fontWeight: 600,
           color: accent || 'text.tertiary',
-          textTransform: 'uppercase', letterSpacing: '0.06em',
+          textTransform: 'uppercase', letterSpacing: '0.08em',
         }}>
           {title}
         </Typography>
       )}
       <Box sx={{
         backgroundColor: theme.palette.background.secondary,
-        border: `1px solid ${alpha('#ffffff', 0.12)}`,
+        border: `1px solid ${alpha('#ffffff', 0.08)}`,
+        borderLeft: accent ? `2px solid ${alpha(accent, 0.6)}`
+                            : `1px solid ${alpha('#ffffff', 0.08)}`,
         borderRadius: '4px',
-        padding: '8px 12px',
+        padding: '10px 14px',
       }}>
         {children}
       </Box>
@@ -218,11 +250,12 @@ export const Block = ({ title, children, accent }) => {
 export const Row = ({ children, sx = {} }) => {
   return (
     <Box sx={{
-      display: 'flex', gap: 1, padding: '5px 0',
-      borderTop: `1px solid ${alpha('#ffffff', 0.06)}`,
-      fontSize: 13, color: 'text.primary',
+      display: 'flex', gap: 1.25, padding: '6px 0',
+      borderTop: `1px solid ${alpha('#ffffff', 0.05)}`,
+      fontSize: 13, color: 'text.primary', lineHeight: 1.5,
       alignItems: 'flex-start',
-      '&:first-of-type': { borderTop: 'none' },
+      '&:first-of-type': { borderTop: 'none', paddingTop: 0 },
+      '&:last-of-type':  { paddingBottom: 0 },
       ...sx,
     }}>
       {children}
