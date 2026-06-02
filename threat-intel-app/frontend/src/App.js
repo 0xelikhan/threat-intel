@@ -2904,13 +2904,10 @@ function FeedbackInline({ result, onStart, onPartial, onComplete }) {
   return (
     <Box sx={{ mt: 2, pt: 1.5,
       borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
-      <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 1 }}>
-        <Box sx={{ width: 5, height: 5, borderRadius: 99, backgroundColor: '#B286FF' }}/>
-        <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#B286FF',
-          textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-          Train on false positives
-        </Typography>
-      </Stack>
+      <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#B286FF',
+        textTransform: 'uppercase', letterSpacing: '0.07em', mb: 1 }}>
+        Train on false positives
+      </Typography>
       {feedbackUpdated && (
         <Box sx={{ mb: 1, p: '6px 10px',
           backgroundColor: muiAlpha('#B286FF', 0.10),
