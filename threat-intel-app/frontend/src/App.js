@@ -2448,7 +2448,7 @@ function AttributionChip({ actor }) {
   );
 }
 
-function AnalystSummary({ result, rs }) {
+function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeedbackComplete }) {
   const a = rs?.analyst_summary;
   // The Summary card is the new front-page for an investigation, so we show
   // it whenever there's *any* AI output OR per-IOC scoring — not just when
@@ -2573,6 +2573,17 @@ function AnalystSummary({ result, rs }) {
           {enrichLine}
         </Typography>
       )}
+
+      {/* Train-on-false-positives inline form — pinned directly under
+          the AI analysis so the analyst can correct a wrong verdict
+          without scrolling further. Renders nothing when there's no
+          raw_input on the result (e.g. hash-only lookups). */}
+      <FeedbackInline
+        result={result}
+        onStart={onFeedbackStart}
+        onPartial={onFeedbackPartial}
+        onComplete={onFeedbackComplete}
+      />
 
       {/* PRINCIPLE 7 — Confirmed facts vs analyst assessment. */}
       {(rs?.confirmed_facts?.length > 0 || rs?.analysis_assessment?.length > 0) && (
@@ -2820,15 +2831,15 @@ function LogCorrelationCard({ multiLog, correlation }) {
 }
 
 
-/* ─── Train on false positives · prominent CTA pinned directly under the
-       Summary card so the analyst doesn't have to scroll through chat
-       history to find the feedback surface. Re-uses the same /api/analyze
-       SSE flow as ChatWithRecon's old in-chat toggle: POSTs the original
-       raw input plus the analyst's statement with analystFeedback set, the
-       investigation prompt prepends an "ANALYST VERDICT AND CONTEXT" block
-       as the highest-weight input, and the streamed result replaces the
-       visible analysis via onPartial / onComplete.                       */
-function TrainOnFalsePositive({ result, onStart, onPartial, onComplete }) {
+/* ─── Inline feedback form rendered INSIDE the Summary card, directly
+       under the AI prose. Re-uses the /api/analyze SSE flow with
+       analystFeedback set so the investigation prompt prepends an
+       "ANALYST VERDICT AND CONTEXT" block as the highest-weight input;
+       streamed result replaces the visible analysis via onPartial /
+       onComplete. No Card wrapper, no explanatory copy — just a clear
+       header strip + input + button so the feedback surface sits flush
+       in the Summary without taking the analyst out of context.       */
+function FeedbackInline({ result, onStart, onPartial, onComplete }) {
   const [statement, setStatement] = useState('');
   const [sending, setSending]     = useState(false);
   const [error, setError]         = useState(null);
@@ -2891,20 +2902,22 @@ function TrainOnFalsePositive({ result, onStart, onPartial, onComplete }) {
   };
 
   return (
-    <Card title="Train on false positives" accent="#B286FF" defaultOpen={true}>
-      <Typography sx={{ fontSize: 12.5, color: 'text.tertiary',
-        lineHeight: 1.5, mb: 1.5 }}>
-        If RECON's verdict is wrong, explain what you actually found. The
-        analysis re-runs with your context as the highest-weight input.
-      </Typography>
+    <Box sx={{ mt: 2, pt: 1.5,
+      borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
+      <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 1 }}>
+        <Box sx={{ width: 5, height: 5, borderRadius: 99, backgroundColor: '#B286FF' }}/>
+        <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#B286FF',
+          textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+          Train on false positives
+        </Typography>
+      </Stack>
       {feedbackUpdated && (
-        <Box sx={{ mb: 1.5, p: '8px 12px',
+        <Box sx={{ mb: 1, p: '6px 10px',
           backgroundColor: muiAlpha('#B286FF', 0.10),
           border: `1px solid ${muiAlpha('#B286FF', 0.35)}`,
           borderLeft: '3px solid #B286FF',
           borderRadius: '4px' }}>
-          <Typography sx={{ fontSize: 11.5, color: '#B286FF',
-            fontWeight: 500 }}>
+          <Typography sx={{ fontSize: 11, color: '#B286FF', fontWeight: 500 }}>
             Analysis was updated based on your previous feedback.
           </Typography>
         </Box>
@@ -2941,10 +2954,6 @@ function TrainOnFalsePositive({ result, onStart, onPartial, onComplete }) {
           {sending ? 'Re-analyzing…' : 'Re-analyze'}
         </MuiButton>
       </Stack>
-      <Typography sx={{ fontSize: 10, color: 'text.tertiary',
-        mt: 0.75, textAlign: 'right' }}>
-        ⌘↵ to submit
-      </Typography>
       {error && (
         <Box sx={{ mt: 1, p: '8px 12px',
           backgroundColor: muiAlpha('#F14337', 0.1),
@@ -2954,7 +2963,7 @@ function TrainOnFalsePositive({ result, onStart, onPartial, onComplete }) {
           {error}
         </Box>
       )}
-    </Card>
+    </Box>
   );
 }
 
@@ -4946,20 +4955,21 @@ function AppMain({ authUser, setAuthState }) {
                 follow-up tools (Geolocation, Ask RECON). */}
             <CardDefaultOpenContext.Provider value={false} key={result.runId || 'detail'}>
             {/* Card order (analyst-flow):
-                1. Summary                 — verdict + threat score (rolled-up GTI)
-                2. Train on false positives — re-analyze CTA, pinned near the verdict
-                3. Ask RECON                — interactive probing questions
-                4. Triage                   — deep evidence dive
-                5. Geolocation              — map (only when IPs are present)
-                6. Detection                — SIEM-ready rules
+                1. Summary  — verdict + threat score + train-on-false-positives
+                              (the feedback form is inline at the bottom of Summary
+                              so the analyst sees the verdict and the correction
+                              surface together)
+                2. Ask RECON — interactive probing questions
+                3. Triage    — deep evidence dive
+                4. Geolocation — map (only when IPs are present)
+                5. Detection  — SIEM-ready rules
                 EmailAnalysis still slots in when an EML is present. */}
-            <ErrorBoundary label="Summary"><AnalystSummary result={result} rs={rs || {}}/></ErrorBoundary>
-            <ErrorBoundary label="Train on false positives">
-              <TrainOnFalsePositive
-                result={result}
-                onStart={() => setAnalyzing(true)}
-                onPartial={mergePartial}
-                onComplete={(r) => { setAnalyzing(false); setResult(r); }}
+            <ErrorBoundary label="Summary">
+              <AnalystSummary
+                result={result} rs={rs || {}}
+                onFeedbackStart={() => setAnalyzing(true)}
+                onFeedbackPartial={mergePartial}
+                onFeedbackComplete={(r) => { setAnalyzing(false); setResult(r); }}
               />
             </ErrorBoundary>
             <ErrorBoundary label="Ask RECON">
