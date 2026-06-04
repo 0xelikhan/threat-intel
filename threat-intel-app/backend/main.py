@@ -1337,24 +1337,68 @@ async def _chat_stream(run_id: str, user_msg: str):
     history.append({"role": "user", "content": user_msg, "timestamp": now})
     _chats[run_id] = history
 
-    # Cap the history we send to the model — long conversations were
-    # silently exceeding the fast model's context window, producing
-    # empty replies that the frontend rendered as a stuck "thinking"
-    # bubble. Keep the most recent 24 user/assistant turns; everything
-    # older is implicit context the system message already covers.
-    _MAX_TURNS = 24
-    trimmed = [m for m in history if m.get("role") in ("user", "assistant")]
-    if len(trimmed) > _MAX_TURNS:
-        trimmed = trimmed[-_MAX_TURNS:]
+    # Send the full conversation by default — analysts run long
+    # investigations and the chat should never "forget" earlier turns.
+    # The only thing we cap is the TOTAL CONTENT SIZE sent to the
+    # model: once the cumulative body crosses a soft budget, we drop
+    # the oldest user/assistant turns until we're back under it (but
+    # always keep the most recent 10 turns verbatim so the immediate
+    # thread is preserved). The user-visible chat history is never
+    # trimmed; this only affects what the model sees.
+    _CONTENT_BUDGET_BYTES = 96_000   # ~96 KB → roughly 24K tokens on
+                                      # average prose; fits comfortably
+                                      # in any modern fast-tier model's
+                                      # context window with room for
+                                      # the system message + tool
+                                      # outputs + a 1200-token reply.
+    _PROTECTED_RECENT_TURNS = 10
+    _PER_MESSAGE_BYTE_CAP = 6_000     # a pasted log inside chat can be
+                                      # 50KB on its own — clamp so one
+                                      # message doesn't eat the budget.
+
+    candidates = [m for m in history if m.get("role") in ("user", "assistant")]
+
+    def _clamp(body: str) -> str:
+        if len(body) > _PER_MESSAGE_BYTE_CAP:
+            return body[:_PER_MESSAGE_BYTE_CAP] + "\n…[truncated by chat]"
+        return body
+
+    # Pre-clamp every message body, then sum from the END backwards so
+    # the most recent turns are guaranteed to fit even if older ones
+    # have to be dropped.
+    prepared = [(m["role"], _clamp(m.get("content") or "")) for m in candidates]
+    total = 0
+    keep_reversed = []
+    for i, (role, body) in enumerate(reversed(prepared)):
+        # Always keep the most recent N turns regardless of budget.
+        protected = i < _PROTECTED_RECENT_TURNS
+        cost = len(body) + 32   # rough overhead per message envelope
+        if protected or total + cost <= _CONTENT_BUDGET_BYTES:
+            keep_reversed.append((role, body))
+            total += cost
+        else:
+            # Stop walking back — older turns are dropped.
+            break
+    kept = list(reversed(keep_reversed))
 
     messages = [{"role": "system", "content": sys_msg}]
-    for m in trimmed:
-        # Cap any single message body too — a pasted log inside the chat
-        # can otherwise be 50KB and blow the budget on its own.
-        body = (m.get("content") or "")
-        if len(body) > 6000:
-            body = body[:6000] + "\n…[truncated by chat]"
-        messages.append({"role": m["role"], "content": body})
+    # If we trimmed anything, give the model a heads-up so it doesn't
+    # answer "earlier you said X" with confidence when it can no longer
+    # see X. Analyst still sees the full history in the UI.
+    if len(kept) < len(prepared):
+        dropped = len(prepared) - len(kept)
+        messages.append({
+            "role": "system",
+            "content": (
+                f"[note: {dropped} earlier turn{'s' if dropped != 1 else ''} of "
+                f"this conversation were trimmed from your view to keep the "
+                f"context budget healthy. The analyst can still see them. If "
+                f"you need something from earlier that you can't see, ask the "
+                f"analyst to re-state it rather than guessing.]"
+            ),
+        })
+    for role, body in kept:
+        messages.append({"role": role, "content": body})
 
     tool_calls_made = []
     final_content = ""
