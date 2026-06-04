@@ -70,7 +70,7 @@ ENRICHMENT_SOURCES: Tuple[str, ...] = (
     "circl_pdns", "robtex", "hackertarget", "censys", "crowdsec",
     "feodo_tracker", "tor", "bgp_ranking", "google_safebrowsing",
     "deception", "maltiverse", "opencti", "urlscan", "pulsedive",
-    "malwarebazaar", "threatfox", "hybrid_analysis", "anyrun",
+    "malwarebazaar", "threatfox", "hybrid_analysis",
     "deep_instinct", "cybereason", "whois", "dbl", "phishtank",
     "domain_intel", "feed_cache",
 )

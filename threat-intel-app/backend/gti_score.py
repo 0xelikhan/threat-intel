@@ -460,7 +460,7 @@ def score_url(enrichment: dict) -> GTIScore:
 # ─── PUBLIC INTERFACE ─────────────────────────────────────────────────────────────
 def score_email(data: dict, label: str = "email") -> GTIScore:
     """Score an email-address IOC based on breach exposure. The breach
-    sources (HIBP, Dehashed, IntelX) each contribute to the score; an
+    sources (HIBP, Dehashed) each contribute to the score; an
     email appearing in many breaches is a meaningful compromise signal."""
     factors = []
     score = 0
@@ -497,15 +497,6 @@ def score_email(data: dict, label: str = "email") -> GTIScore:
             if verdict == "UNKNOWN":
                 verdict = "SUSPICIOUS"
             factors.append(f"Dehashed: {t} leaked records")
-
-    ix = data.get("intelx") or {}
-    if ix and not ix.get("error"):
-        n = int(ix.get("count") or 0)
-        if n >= 5:
-            score += 10
-            factors.append(f"IntelX: {n} dark-web / paste matches")
-        elif n >= 1:
-            factors.append(f"IntelX: {n} dark-web / paste match(es)")
 
     if not factors:
         factors.append("No breach data available for this email.")

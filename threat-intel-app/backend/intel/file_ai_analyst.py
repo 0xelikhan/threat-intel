@@ -209,7 +209,7 @@ clearly in the executive_summary and set malware_classification.category to
 SOURCE-CITATION RULES (anti-hallucination — analysts have explicitly flagged
 made-up TI sources as the worst possible failure mode):
 1. Only name a threat-intelligence source (VirusTotal, AbuseIPDB, Maltiverse,
-   GreyNoise, OTX, Shodan, URLScan, MalwareBazaar, Hybrid Analysis, ANY.RUN,
+   GreyNoise, OTX, Shodan, URLScan, MalwareBazaar, Hybrid Analysis,
    Pulsedive, ThreatFox, Spamhaus, etc.) when its CORRESPONDING FIELD is
    present in the input JSON with a non-empty, non-error value.
 2. If a source returned no data, did not run, or errored, EITHER omit it

@@ -8,9 +8,8 @@ mappings. Then synthesizes detection opportunities (Sigma rule sketches for
 mutexes / registry persistence / suspicious processes; YARA stub for any
 dropped-file hash).
 
-Hybrid Analysis is preferred (full reports via /api/v2/report/{job_id}/summary)
-because their schema is the most consistent.  ANY.RUN is supported in flatter
-form via the public analysis listing.
+Hybrid Analysis is the sole sandbox source (full reports via
+/api/v2/report/{job_id}/summary); their schema is the most consistent.
 """
 
 from __future__ import annotations
@@ -60,16 +59,12 @@ _PERSISTENCE_REG_KEYS = [
 
 
 # ─── public entry point ────────────────────────────────────────────────────────
-async def fetch_deep_report(sha256: str, hybrid_key: str = "",
-                            anyrun_key: str = "") -> Optional[Dict]:
-    """Pull the richest available report and return a normalized dict."""
+async def fetch_deep_report(sha256: str, hybrid_key: str = "") -> Optional[Dict]:
+    """Pull the richest available sandbox report and return a normalised
+    dict. Hybrid Analysis only — ANY.RUN has been retired."""
     if not sha256:
         return None
-    ha = await _hybrid_deep(sha256, hybrid_key) if hybrid_key else None
-    if ha:
-        return ha
-    ar = await _anyrun_deep(sha256, anyrun_key) if anyrun_key else None
-    return ar
+    return await _hybrid_deep(sha256, hybrid_key) if hybrid_key else None
 
 
 # ─── Hybrid Analysis full-report fetch ─────────────────────────────────────────
@@ -247,41 +242,6 @@ def _normalize_hybrid(sha256: str, d: Dict, job_id: str) -> Dict:
     }
 
 
-# ─── ANY.RUN flatter report ────────────────────────────────────────────────────
-async def _anyrun_deep(sha256: str, key: str) -> Optional[Dict]:
-    url = "https://api.any.run/v1/analysis"
-    headers = {"Authorization": f"API-Key {key}"}
-    try:
-        async with aiohttp.ClientSession(headers=headers, timeout=_TIMEOUT) as s:
-            async with s.get(url, params={"hash": sha256, "skip": 0, "limit": 1}) as r:
-                if r.status != 200:
-                    return None
-                d = await r.json()
-    except Exception:
-        return None
-    tasks = (d or {}).get("data", {}).get("tasks") or []
-    if not tasks:
-        return None
-    t = tasks[0]
-    verdict_raw = t.get("verdict") or t.get("scores", {}).get("verdict", {}).get("threatLevelText", "")
-    return {
-        "source":         "ANY.RUN",
-        "verdict":        "MALICIOUS" if str(verdict_raw).lower() in {"malicious", "suspicious"} else "UNKNOWN",
-        "verdict_raw":    verdict_raw,
-        "threat_score":   t.get("scores", {}).get("verdict", {}).get("score"),
-        "malware_family": t.get("malwareFamily"),
-        "report_url":     f"https://app.any.run/tasks/{t.get('uuid')}",
-        "process_tree":   [],   # ANY.RUN process tree requires a second call we'd rather avoid
-        "network":        {"dns": [], "http": [], "tls": [], "raw": []},
-        "files":          [],
-        "registry":       [],
-        "injections":     [],
-        "dropped":        [],
-        "strings":        {"ips": [], "domains": [], "urls": [], "c2": []},
-        "mutexes":        [],
-        "mitre":          [],
-        "detections":     [],
-    }
 
 
 # ─── detection opportunity synthesis ───────────────────────────────────────────

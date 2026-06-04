@@ -8,7 +8,6 @@ is to query cloud sandboxes that already detonated the sample. RECON does that.
 
 Supported (hash lookup only, no new submission yet):
   - Hybrid Analysis (CrowdStrike Falcon Sandbox) — needs HYBRID_ANALYSIS_KEY
-  - ANY.RUN community                            — needs ANYRUN_KEY (optional)
   - VirusTotal behaviour summary                 — already queried in enrichment
 """
 import aiohttp
@@ -54,47 +53,13 @@ async def hybrid_analysis_lookup(sha256: str, api_key: str) -> dict | None:
     }
 
 
-async def anyrun_lookup(sha256: str, api_key: str) -> dict | None:
-    """Query ANY.RUN for an existing public task for this hash."""
-    if not (sha256 and api_key):
-        return None
-    url = "https://api.any.run/v1/analysis"
-    params = {"hash": sha256, "skip": 0, "limit": 1}
-    headers = {"Authorization": f"API-Key {api_key}"}
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=params, headers=headers,
-                                   timeout=aiohttp.ClientTimeout(total=15)) as r:
-                if r.status != 200:
-                    return None
-                data = await r.json()
-    except Exception:
-        return None
-    tasks = (data or {}).get("data", {}).get("tasks") or []
-    if not tasks:
-        return None
-    t = tasks[0]
-    return {
-        "source":       "ANY.RUN",
-        "verdict":      t.get("verdict") or t.get("scores", {}).get("verdict", {}).get("threatLevelText"),
-        "threat_score": t.get("scores", {}).get("verdict", {}).get("score"),
-        "tags":         t.get("tags") or [],
-        "main_object":  t.get("mainObject", {}).get("name"),
-        "url":          t.get("permanentUrl"),
-        "submitted":    t.get("date"),
-    }
-
-
 async def lookup_all(sha256: str, config) -> dict:
     """Run all configured sandbox lookups in parallel for one hash."""
     import asyncio
     ha_key = config.get("HYBRID_ANALYSIS_KEY")
-    ar_key = config.get("ANYRUN_KEY")
     coros = []
     if ha_key:
         coros.append(("hybrid_analysis", hybrid_analysis_lookup(sha256, ha_key)))
-    if ar_key:
-        coros.append(("any_run", anyrun_lookup(sha256, ar_key)))
     out = {}
     if not coros:
         return out

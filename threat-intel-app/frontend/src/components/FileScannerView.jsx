@@ -1223,8 +1223,6 @@ function ThreatIntelSection({ result }) {
         (d) => d?.found ? d.malware_family || 'match' : null],
       ['Hybrid Analysis', ti.hybrid_analysis,
         (d) => d?.found ? `${d.verdict} · score ${d.threat_score}` : null],
-      ['ANY.RUN',         ti.anyrun,
-        (d) => d?.found ? d.verdict : null],
       ['Feed cache',      ti.feed_cache,
         (d) => d?.hit_count ? `${d.hit_count} hits` : null],
       ['Scan history',    ti.scan_history,
@@ -2438,7 +2436,7 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
             const isUrlScan = !!result.source_url;
             const yaraHits = (result.yara_matches || []).filter(m => m && !m.error).length;
             const ti = result.threat_intel || {};
-            const tiHits = ['virustotal','malwarebazaar','hybrid_analysis','anyrun']
+            const tiHits = ['virustotal','malwarebazaar','hybrid_analysis']
               .some(k => ti[k]?.found);
             const fileHasSignal = yaraHits > 0 || tiHits
               || ['MALICIOUS','SUSPICIOUS'].includes(result.verdict);

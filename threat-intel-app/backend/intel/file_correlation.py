@@ -32,7 +32,6 @@ async def correlate(analysis: Dict, config) -> Dict:
     keys = {
         "VIRUSTOTAL_KEY":      config.get("VIRUSTOTAL_KEY"),
         "HYBRID_ANALYSIS_KEY": config.get("HYBRID_ANALYSIS_KEY"),
-        "ANYRUN_KEY":          config.get("ANYRUN_KEY"),
     }
 
     out: Dict = {}
@@ -45,7 +44,6 @@ async def correlate(analysis: Dict, config) -> Dict:
             "virustotal":      _vt_file(session, sha256, keys["VIRUSTOTAL_KEY"])  if sha256 else _noop(),
             "malwarebazaar":   _malwarebazaar(session, sha256)                    if sha256 else _noop(),
             "hybrid_analysis": _hybrid_analysis(session, sha256, keys["HYBRID_ANALYSIS_KEY"]) if sha256 else _noop(),
-            "anyrun":          _anyrun(session, sha256, keys["ANYRUN_KEY"])       if sha256 else _noop(),
             "feed_cache":      _feed_cache_for_iocs(iocs),
         }
         # Domain extras run only when we have domains
@@ -184,34 +182,6 @@ async def _hybrid_analysis(session, sha256, key) -> Optional[Dict]:
         "mitre":          [f"{t.get('technique') or ''} - {t.get('name') or ''}"
                            for t in (top.get("mitre_attcks") or [])][:8],
         "report_url":     f"https://www.hybrid-analysis.com/sample/{sha256}",
-    }
-
-
-# ─── ANY.RUN public reports ────────────────────────────────────────────────────
-async def _anyrun(session, sha256, key) -> Optional[Dict]:
-    if not key:
-        return None
-    try:
-        async with session.get(
-            "https://api.any.run/v1/analysis",
-            params={"hash": sha256, "skip": 0, "limit": 1},
-            headers={"Authorization": f"API-Key {key}"},
-        ) as r:
-            if r.status != 200:
-                return {"error": f"HTTP {r.status}"}
-            d = await r.json()
-    except Exception as e:
-        return {"error": str(e)}
-    tasks = ((d or {}).get("data") or {}).get("tasks") or []
-    if not tasks:
-        return {"found": False}
-    t = tasks[0]
-    return {
-        "found":        True,
-        "verdict":      t.get("verdict") or (t.get("scores") or {}).get("verdict", {}).get("threatLevelText"),
-        "threat_score": (t.get("scores") or {}).get("verdict", {}).get("score"),
-        "uuid":         t.get("uuid"),
-        "report_url":   f"https://app.any.run/tasks/{t.get('uuid')}",
     }
 
 

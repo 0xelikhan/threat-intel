@@ -63,7 +63,7 @@ def _src_flagged_malicious(src_name: str, payload: Any) -> bool:
     if s == "shodan":
         # Vulns / open exposed ports aren't a malicious VERDICT on their own
         return False
-    if s in ("malwarebazaar", "threatfox", "hybrid_analysis", "anyrun"):
+    if s in ("malwarebazaar", "threatfox", "hybrid_analysis"):
         # Any hit on these is a malicious verdict (they're malware-specific dbs)
         return bool(p.get("found") or p.get("malware_family") or p.get("malwareName"))
     if s == "pulsedive":
@@ -91,11 +91,6 @@ def _src_flagged_malicious(src_name: str, payload: Any) -> bool:
         return int(p.get("breach_count") or 0) >= 3
     if s == "dehashed":
         return int(p.get("total") or 0) >= 3
-    if s == "intelx":
-        # 5+ matches in IntelX (dark web + paste sites) is a real signal.
-        # A single match is often coincidence (the same IP / domain across
-        # many unrelated documents).
-        return int(p.get("count") or 0) >= 5
     if s == "criminal_ip":
         return (p.get("verdict") or "").upper() in ("MALICIOUS", "SUSPICIOUS")
     if s == "urlscan_screenshot":
@@ -308,7 +303,7 @@ MALWARE / EDR-DETECTION FOCUS — weight these signals heaviest
 ═══════════════════════════════════════════════════════════════════════════════════
 Priority signals (check in this order):
   1. File-hash reputation (VirusTotal detection count + named malware family)
-  2. Sandbox verdict (Hybrid Analysis / ANY.RUN if available)
+  2. Sandbox verdict (Hybrid Analysis if available)
   3. LOLBAS / RMM tool references in process name or command line
   4. LOLDrivers BYOVD catalog match (kernel-level compromise)
   5. Suspicious file paths (\\Users\\Public, \\Windows\\SystemTemp, \\AppData\\Roaming\\…)

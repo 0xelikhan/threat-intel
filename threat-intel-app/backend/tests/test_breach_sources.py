@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from intel.breach_sources import (
-    _parse_hibp, _parse_dehashed, _parse_intelx,
+    _parse_hibp, _parse_dehashed,
     _parse_criminal_ip, _parse_urlscan_screenshot,
 )
 from agents.investigation import _src_flagged_malicious, compute_enrichment_summary
@@ -83,25 +83,6 @@ def test_dehashed_ten_hits_malicious():
     assert out["verdict"] == "MALICIOUS"
 
 
-# ─── IntelX ──────────────────────────────────────────────────────────────────
-def test_intelx_no_records_clean():
-    out = _parse_intelx({"records": []}, "domain.example")
-    assert out["count"] == 0
-    assert out["verdict"] == "CLEAN"
-
-
-def test_intelx_buckets_deduped_and_sorted():
-    records = {"records": [
-        {"bucket": "pastes",    "name": "p1"},
-        {"bucket": "darkweb",   "name": "d1"},
-        {"bucket": "pastes",    "name": "p2"},
-        {"bucket": "leaks",     "name": "l1"},
-    ]}
-    out = _parse_intelx(records, "x")
-    assert out["buckets"] == sorted(["pastes", "darkweb", "leaks"])
-    assert out["count"] == 4
-
-
 # ─── Criminal IP ─────────────────────────────────────────────────────────────
 def test_criminal_ip_dangerous_inbound_is_malicious():
     payload = {"score": {"inbound": "dangerous", "outbound": "safe"},
@@ -165,10 +146,9 @@ def test_enrichment_summary_counts_email_breach_sources():
     enr = {"emails": {"u@e.com": {
         "hibp":     {"breach_count": 15, "verdict": "MALICIOUS"},
         "dehashed": {"total": 5, "verdict": "SUSPICIOUS"},
-        "intelx":   {"count": 1, "verdict": "CLEAN"},
     }}}
     s = compute_enrichment_summary(enr)
-    assert s["returned_count"] == 3
+    assert s["returned_count"] == 2
     assert s["flagged_count"] == 2     # HIBP + Dehashed flagged
     assert "u@e.com" in s["flagged_iocs"]
     assert "hibp" in s["flagged_per_ioc"]["u@e.com"]
