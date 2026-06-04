@@ -88,15 +88,48 @@ def parse_log(log_text: str) -> Dict:
 
     lines = log_text.split("\n")
     raw_fields: Dict[str, str] = {}
-    for raw in lines:
-        line = raw.strip()
-        if not line or ":" not in line:
-            continue
-        sep = line.find(":")
-        key = line[:sep].strip()
-        val = line[sep + 1:].strip()
-        if key and key not in raw_fields:
-            raw_fields[key] = val
+
+    # Microsoft 365 / Azure AD audit logs use a "section header + Name/Value"
+    # pattern for repeated property bags:
+    #
+    #   ExtendedProperties :
+    #   Name : UserAgent
+    #   Value : BAV2ROPC
+    #
+    #   ExtendedProperties :
+    #   Name : RequestType
+    #   Value : OAuth2:Token
+    #
+    # The naive "first occurrence wins" loop kept only the first
+    # Name/Value pair and silently dropped everything else, so analyst-
+    # critical signals like the UserAgent or OAuth flow never reached
+    # the email body. Walk the lines with a one-line lookahead and
+    # when we see `Name : X` immediately followed by `Value : Y`,
+    # promote X → Y into raw_fields directly. The literal `Name` /
+    # `Value` rows are then skipped so the dict isn't polluted with
+    # the placeholder keys.
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        if line and ":" in line:
+            sep = line.find(":")
+            key = line[:sep].strip()
+            val = line[sep + 1:].strip()
+            # Section header (key only, value empty) — skip
+            if key and not val:
+                pass
+            # Name → Value pair, look ahead one line
+            elif key.lower() in ("name", "key") and i + 1 < len(lines):
+                nxt = lines[i + 1].strip()
+                if nxt.lower().startswith(("value :", "value:")):
+                    nxt_val = nxt.split(":", 1)[1].strip()
+                    if val and nxt_val and val not in raw_fields:
+                        raw_fields[val] = nxt_val
+                    i += 2
+                    continue
+            elif key and key.lower() not in ("name", "key", "value") and key not in raw_fields:
+                raw_fields[key] = val
+        i += 1
 
     def get(*keys) -> str:
         for wanted in keys:
@@ -3135,7 +3168,21 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "* Confirmed-malicious only with concrete evidence (named malware "
         "hash hit, malicious infrastructure callout, lateral movement, "
         "credential access). Anything weaker: state the facts and the "
-        "single verification step.\n\n"
+        "single verification step.\n"
+        "* SUSPICIOUS authentication patterns to call out by name when "
+        "present in the parsed fields:\n"
+        "  - UserAgent 'BAV2ROPC' (Basic Auth / Resource Owner Password "
+        "    Credentials flow) — strongly associated with password spray "
+        "    and credential-stuffing attacks against M365 / Azure AD.\n"
+        "  - RequestType 'OAuth2:Token' from BAV2ROPC or unknown clients "
+        "    — same ROPC abuse pattern, often paired with legacy auth.\n"
+        "  - LogonError / ErrorNumber 50053, 50057, 50126 on accounts "
+        "    that are disabled / locked / wrong-password — single events "
+        "    are routine, but if multiple users are seeing this pattern "
+        "    from one IP, flag it as potential password spray.\n"
+        "  - User-Agent strings that name an automation framework "
+        "    (curl, python-requests, postman, ROPC, MSAL.NET) on "
+        "    interactive-user accounts — surface for verification.\n\n"
         "BANNED PHRASES (auto-reject): 'indicates that', 'associated with', "
         "'in terms of', 'ensure that', 'consider whether', 'may be "
         "necessary', 'to enhance detection capabilities', 'we will "
