@@ -2791,7 +2791,11 @@ def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
     pd     = data.get("pulsedive") or {}
     shodan = data.get("shodan") or {}
     asn_rep= data.get("asn_reputation") or {}
-    tor    = bool(data.get("tor"))
+    # enrich_ip returns tor as {'isExitNode': bool} — not a bare bool.
+    # The naive bool(data.get('tor')) check treated every non-empty dict
+    # as Truthy and labelled every IP as a Tor exit. Use the inner flag.
+    _tor_blob = data.get("tor") or {}
+    tor    = bool(_tor_blob.get("isExitNode")) if isinstance(_tor_blob, dict) else bool(_tor_blob)
 
     # ── Identity sentence: org + location + ASN + reverse DNS ─────────────
     org_raw  = (ipinfo.get("org") or "").strip()
@@ -3469,10 +3473,27 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "* Known-good vendor patterns (Dell SupportAssist, Microsoft "
         "Defender, SCCM, CrowdStrike, etc.) — say so plainly and state "
         "the verification needed before clearing.\n"
-        "* Confirmed-malicious only with concrete evidence (named malware "
-        "hash hit, malicious infrastructure callout, lateral movement, "
-        "credential access). Anything weaker: state the facts and the "
-        "single verification step.\n"
+        "* Confirmed-malicious — multiple corroborating signals such as\n"
+        "    - a hash matching a known malware family (VirusTotal multi-\n"
+        "      engine flag, MalwareBazaar / Hybrid Analysis verdict)\n"
+        "    - an IP that GreyNoise / Maltiverse / AbuseIPDB classify as\n"
+        "      malicious, especially when it overlaps with Tor exits or\n"
+        "      known C2 infrastructure\n"
+        "    - Office → PowerShell -enc / cmd / wscript spawn chains\n"
+        "    - newly-registered brand-impersonation domains on Spamhaus\n"
+        "      DBL or with VT engine hits\n"
+        "    - lateral movement / credential access primitives\n"
+        "  When two or more of those signals are present, do NOT close\n"
+        "  with a soft 'please confirm whether this was authorized'. State\n"
+        "  the verdict plainly ('this is a confirmed compromise', 'this\n"
+        "  matches a ransomware deployment pattern') and close with a\n"
+        "  CONCRETE containment action the customer should take now —\n"
+        "  isolate the host, kill the process, block the destination IP,\n"
+        "  reset the user's credentials, quarantine the file. The closing\n"
+        "  is action-oriented, not permission-seeking.\n"
+        "* Evidence is weaker (single TI source, no enrichment, ambiguous\n"
+        "  process chain): state the facts and the single verification\n"
+        "  step the customer can answer.\n"
         "* SUSPICIOUS authentication patterns to call out by name when "
         "present in the parsed fields:\n"
         "  - UserAgent 'BAV2ROPC' (Basic Auth / Resource Owner Password "
