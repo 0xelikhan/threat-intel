@@ -2659,14 +2659,11 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
         />
       )}
 
-      {/* Log Correlation card — only renders when multiple logs were
-          submitted in the same input. */}
-      {(result?.multi_log?.is_multi || (result?.log_count || 0) > 1) && (
-        <LogCorrelationCard
-          multiLog={result?.multi_log}
-          correlation={rs?.log_correlation || result?.log_correlation}
-        />
-      )}
+      {/* Log Correlation card retired — the AI now reasons about
+          relationships between events inside an alert directly in the
+          main analysis paragraph above instead of producing a separate
+          correlation object. Kept the LogCorrelationCard definition
+          below in case we revive multi-log later, but never invoked. */}
     </Card>
   );
 }

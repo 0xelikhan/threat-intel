@@ -1280,21 +1280,12 @@ async def run_investigation(state: dict, on_event=None) -> dict:
     except Exception:
         defender_block = ""
 
-    # ── Multi-log correlation block ──────────────────────────────────────────
-    # When two+ logs were pasted into the same input field, render the per-
-    # entry view + correlation instructions. AI must populate the
-    # log_correlation field of its JSON response so the frontend can render
-    # a Log Correlation card.
+    # Multi-log correlation has been retired. The submitted input is
+    # always treated as ONE alert; the AI reasons about relationships
+    # between events inside the alert directly in its analysis prose
+    # instead of emitting a separate log_correlation object.
     multi_log_block = ""
     is_multi_log = False
-    try:
-        from intel.multi_log import to_prompt_block as _ml_block
-        _ml = state.get("multi_log") or {}
-        is_multi_log = bool(_ml.get("is_multi"))
-        multi_log_block = _ml_block(_ml)
-    except Exception:
-        multi_log_block = ""
-        is_multi_log = False
 
     # ── Analyst feedback block (re-analysis with operator context) ───────────
     # When the analyst submits feedback via the post-analysis "Provide
@@ -1634,21 +1625,15 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                     "  clarifying_questions (2-4 questions whose answers would MATERIALLY change the\n"
                     "    assessment — host role, user privilege, related alerts, business context,\n"
                     "    scope; only if not derivable from enrichment; empty list if none),\n"
-                    + (
-                        "  log_correlation — REQUIRED for this run because the input contained\n"
-                        "    multiple distinct log entries. Object with:\n"
-                        "      { related: bool,\n"
-                        "        shared_elements: array of strings (host/user/process/IOC/time),\n"
-                        "        chronological_timeline: array of {when, event, log_index},\n"
-                        "        combined_picture: string — what the logs together reveal that\n"
-                        "                                   neither alone would,\n"
-                        "        rationale: string — when related=false, brief reason }.\n"
-                        if is_multi_log else
-                        "  DO NOT emit a log_correlation field. The input contained ONLY ONE\n"
-                        "    log entry (multi-log detection ran and found a single entry).\n"
-                        "    Treating multiple field values within one log as 'related events'\n"
-                        "    is a bug, not analysis.\n"
-                    ) +
+                    "  DO NOT emit a log_correlation field. The submitted input is\n"
+                    "    a SINGLE alert. Reason about relationships between events\n"
+                    "    inside the alert directly in your analyst_notes / key_findings\n"
+                    "    prose — never as a separate 'log correlation' object and\n"
+                    "    never with phrasing like 'two events were correlated' or\n"
+                    "    'both events occurred' as if the analyst pasted multiple\n"
+                    "    logs. The alert may contain multiple pieces of evidence\n"
+                    "    (multiple processes, IOCs, timestamps); treat them as parts\n"
+                    "    of one event, not as separate logs.\n"
                     "\nNo markdown fences, no commentary outside the JSON."
                 )
                 # Probing questions get their OWN call so they always have token
@@ -1899,11 +1884,9 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
     except Exception as _e:
         geopolitical = {"error": str(_e)}
 
-    # Defensive: even after the prompt change, drop log_correlation when
-    # only one log was submitted. The AI sometimes hallucinates a
-    # correlation across "field values within a single log" — we never
-    # want that surfaced to the analyst.
-    _log_correlation = result.get("log_correlation") if is_multi_log else None
+    # Multi-log feature retired — always strip any log_correlation the AI
+    # may still emit. The submitted input is treated as a single alert.
+    _log_correlation = None
 
     return {
         **state,
