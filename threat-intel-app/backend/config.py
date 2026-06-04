@@ -229,20 +229,15 @@ API_KEY_DEFINITIONS = {
         "placeholder": "SecurityTrails API key",
         "group": "API Keys"
     },
-    "CENSYS_ID": {
-        "label": "Censys API ID",
-        "description": "Internet-wide port and certificate scanning. Free: 250/month.",
+    "CENSYS_API_KEY": {
+        "label": "Censys API Key (Personal Access Token)",
+        "description": "Censys v2 Personal Access Token — single token sent "
+                       "as a Bearer header. Replaces the legacy API ID + "
+                       "Secret pair. Free tier: 250 queries/month. Generate "
+                       "at https://search.censys.io/account/api.",
         "required": False,
-        "url": "https://censys.io",
-        "placeholder": "Censys API ID",
-        "group": "API Keys"
-    },
-    "CENSYS_SECRET": {
-        "label": "Censys API Secret",
-        "description": "Censys API secret — paired with API ID above.",
-        "required": False,
-        "url": "https://censys.io",
-        "placeholder": "Censys API secret",
+        "url": "https://search.censys.io/account/api",
+        "placeholder": "Censys Personal Access Token",
         "group": "API Keys"
     },
     "HYBRID_ANALYSIS_KEY": {

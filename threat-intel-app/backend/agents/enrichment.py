@@ -925,12 +925,21 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
 
     tor_nodes = await _tor(session)
 
-    censys_id     = keys.get("CENSYS_ID", "")
-    censys_secret = keys.get("CENSYS_SECRET", "")
+    # Censys migrated to v2 Personal Access Tokens — single CENSYS_API_KEY
+    # sent as a Bearer token. The old CENSYS_ID + CENSYS_SECRET Basic
+    # Auth pair is still read as a fallback for deployments that haven't
+    # migrated yet; the platform will eventually drop the legacy path.
+    censys_token = keys.get("CENSYS_API_KEY", "")
     censys_auth = None
-    if censys_id and censys_secret:
-        import base64 as _b64
-        censys_auth = "Basic " + _b64.b64encode(f"{censys_id}:{censys_secret}".encode()).decode()
+    if censys_token:
+        censys_auth = f"Bearer {censys_token}"
+    else:
+        censys_id     = keys.get("CENSYS_ID", "")
+        censys_secret = keys.get("CENSYS_SECRET", "")
+        if censys_id and censys_secret:
+            import base64 as _b64
+            censys_auth = "Basic " + _b64.b64encode(
+                f"{censys_id}:{censys_secret}".encode()).decode()
 
     crowdsec_key = keys.get("CROWDSEC_KEY", "")
 
@@ -1556,6 +1565,7 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
         "URLSCAN_KEY":         config.get("URLSCAN_KEY"),
         "OTX_KEY":             config.get("OTX_KEY"),
         "PULSEDIVE_KEY":       config.get("PULSEDIVE_KEY"),
+        "CENSYS_API_KEY":      config.get("CENSYS_API_KEY"),
         "CENSYS_ID":           config.get("CENSYS_ID"),
         "CENSYS_SECRET":       config.get("CENSYS_SECRET"),
         "HYBRID_ANALYSIS_KEY": config.get("HYBRID_ANALYSIS_KEY"),
