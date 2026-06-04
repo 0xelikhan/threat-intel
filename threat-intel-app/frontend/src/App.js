@@ -1970,6 +1970,62 @@ function _ocSources(result, ioc, type) {
     }
   }
 
+  // ─── SOURCE STATUS PASS ────────────────────────────────────────────────
+  // The blocks above only push a row when a source returned USEFUL data
+  // (no error AND non-empty). That meant a source which returned an
+  // error (auth failure, rate limit, circuit-breaker-open, timeout) was
+  // silently hidden — the analyst couldn't tell whether the source ran
+  // and said clean, vs ran and got blocked, vs never ran at all. The
+  // complaint that triggered this: an IP with 100% AbuseIPDB confidence
+  // didn't show because the AbuseIPDB call had errored out and the
+  // frontend hid the failure rather than surfacing it.
+  //
+  // This pass walks every source key on the enrichment dict and appends
+  // a dim status row for any source that errored (so the analyst knows
+  // to retry or check their API key configuration).
+  const _sourceLabels = {
+    virustotal: 'VirusTotal',          abuseipdb: 'AbuseIPDB',
+    otx: 'OTX',                         greynoise: 'GreyNoise',
+    maltiverse: 'Maltiverse',           threatfox: 'ThreatFox',
+    malwarebazaar: 'MalwareBazaar',     urlscan: 'URLScan.io',
+    shodan: 'Shodan',                   pulsedive: 'Pulsedive',
+    spamhaus_dbl: 'Spamhaus DBL',       hibp: 'HaveIBeenPwned',
+    dehashed: 'Dehashed',               intelx: 'IntelX',
+    criminal_ip: 'Criminal IP',         urlhaus_url: 'URLhaus',
+    urlhaus_payload: 'URLhaus payload', circl_hashlookup: 'CIRCL hashlookup',
+    nvd: 'NVD',                          epss: 'EPSS',
+    hybrid_analysis: 'Hybrid Analysis', anyrun: 'ANY.RUN',
+    whois: 'WHOIS',                      ipinfo: 'IPInfo',
+    censys: 'Censys',                    crowdsec: 'CrowdSec',
+    feodo_tracker: 'Feodo Tracker',      pulsedive: 'Pulsedive',
+  };
+  const _surfaced = new Set(out.map(r => r.source));
+  for (const [key, blob] of Object.entries(d || {})) {
+    const label = _sourceLabels[key];
+    if (!label || _surfaced.has(label)) continue;
+    if (!blob || typeof blob !== 'object') continue;
+    const err = blob.error;
+    if (!err) continue;
+    // Translate the most common error_type values to readable phrasing
+    let status;
+    if (blob.error_type === 'circuit_open') {
+      status = `temporarily skipped (recent failures opened the breaker — retry in a few minutes)`;
+    } else if (blob.error_type === 'auth_failed') {
+      status = `couldn't authenticate — verify the ${label} API key in data/config.json`;
+    } else if (blob.error_type === 'rate_limited') {
+      status = `rate-limited (HTTP 429) — daily quota or burst limit reached`;
+    } else if (blob.error_type === 'timed_out') {
+      status = `request timed out — source may be slow or unreachable`;
+    } else if (blob.error_type === 'http_error') {
+      status = `source returned an HTTP error — ${String(err).slice(0, 100)}`;
+    } else if (typeof err === 'string' && err.toLowerCase() === 'no data') {
+      status = `no data returned for this indicator`;
+    } else {
+      status = `unavailable — ${String(err).slice(0, 100)}`;
+    }
+    out.push({ source: label, label: status, color: tert });
+  }
+
   return out;
 }
 
