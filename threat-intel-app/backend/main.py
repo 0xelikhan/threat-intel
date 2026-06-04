@@ -1337,33 +1337,51 @@ async def _chat_stream(run_id: str, user_msg: str):
     history.append({"role": "user", "content": user_msg, "timestamp": now})
     _chats[run_id] = history
 
+    # Cap the history we send to the model — long conversations were
+    # silently exceeding the fast model's context window, producing
+    # empty replies that the frontend rendered as a stuck "thinking"
+    # bubble. Keep the most recent 24 user/assistant turns; everything
+    # older is implicit context the system message already covers.
+    _MAX_TURNS = 24
+    trimmed = [m for m in history if m.get("role") in ("user", "assistant")]
+    if len(trimmed) > _MAX_TURNS:
+        trimmed = trimmed[-_MAX_TURNS:]
+
     messages = [{"role": "system", "content": sys_msg}]
-    for m in history:
-        if m["role"] in ("user", "assistant"):
-            messages.append({"role": m["role"], "content": m["content"]})
+    for m in trimmed:
+        # Cap any single message body too — a pasted log inside the chat
+        # can otherwise be 50KB and blow the budget on its own.
+        body = (m.get("content") or "")
+        if len(body) > 6000:
+            body = body[:6000] + "\n…[truncated by chat]"
+        messages.append({"role": m["role"], "content": body})
 
     tool_calls_made = []
     final_content = ""
+    _MAX_ITERATIONS = 4
 
     try:
         # Tool-calling loop — non-streamed for tool decisions, streamed for the final answer
-        for iteration in range(4):
-            # First, a non-streaming call to decide if tools are needed.
-            # Chat is interactive → fast model tier for snappy replies.
+        iteration = 0
+        for iteration in range(_MAX_ITERATIONS):
+            # Drop tools after the iteration cap so the next call MUST
+            # produce a text answer rather than another tool call. Stops
+            # the rare loop where the model keeps asking for tools and
+            # never composes a reply.
+            allow_tools = iteration < _MAX_ITERATIONS - 1
             resp = await provider.complete(
                 model=config.get_model(fast=True),
                 messages=messages,
-                tools=TOOL_SCHEMAS,
-                tool_choice="auto",
+                tools=TOOL_SCHEMAS if allow_tools else None,
+                tool_choice="auto" if allow_tools else None,
                 temperature=0.2,
-                max_tokens=700,
+                max_tokens=1200,
             )
             if resp.error:
                 yield f"data: {json.dumps({'event': 'error', 'error': resp.error})}\n\n"
                 yield "data: [DONE]\n\n"
                 return
-            if resp.tool_calls:
-                # Tell the client we're calling tools so it shows "RECON checked X"
+            if resp.tool_calls and allow_tools:
                 messages.append({
                     "role":      "assistant", "content": resp.message or "",
                     "tool_calls": [{"id": tc["id"], "type": "function",
@@ -1378,7 +1396,6 @@ async def _chat_stream(run_id: str, user_msg: str):
                     tool_calls_made.append({
                         "tool": tc["name"], "args": args, "summary": tc_summary,
                     })
-                    # Stream the tool call to the UI live
                     yield f"data: {json.dumps({'event': 'tool_call', 'tool': tc['name'], 'args': args, 'summary': tc_summary})}\n\n"
                     messages.append({
                         "role": "tool", "tool_call_id": tc["id"],
@@ -1386,19 +1403,35 @@ async def _chat_stream(run_id: str, user_msg: str):
                     })
                 continue
 
-            # No more tool calls — re-issue this turn with streaming for the visible answer
-            final_content = resp.message or ""
-            if final_content:
-                # We already have the text from the non-stream call — fake-stream it word by word
-                # so the UI fills progressively. (Avoids a 2nd AI roundtrip.)
-                tokens = final_content.split(" ")
-                buf = ""
-                for i, w in enumerate(tokens):
-                    chunk = (" " if i > 0 else "") + w
-                    buf += chunk
-                    yield f"data: {json.dumps({'event': 'token', 'text': chunk})}\n\n"
-                    await asyncio.sleep(0.012)  # ~83 tokens/sec — feels like real streaming
+            # Final answer turn — capture what the model produced.
+            final_content = (resp.message or "").strip()
             break
+
+        # Fallback when the model returned no usable text. Common causes:
+        # context-window saturation, all four iterations spent on tool
+        # calls, or the provider 'happily' returning an empty message.
+        # Surface SOMETHING so the chat bubble isn't stuck empty.
+        if not final_content:
+            if tool_calls_made:
+                tool_names = ", ".join(sorted({t['tool'] for t in tool_calls_made}))
+                final_content = (
+                    f"I ran {tool_names} but didn't produce a written reply. "
+                    f"The tool output is above — try asking me to summarise it, "
+                    f"or rephrase the question."
+                )
+            else:
+                final_content = (
+                    "I didn't manage to compose a reply this turn — likely a "
+                    "model timeout or context-budget hiccup. Try sending the "
+                    "message again."
+                )
+
+        # Stream the final answer word-by-word so the UI fills progressively.
+        tokens = final_content.split(" ")
+        for i, w in enumerate(tokens):
+            chunk = (" " if i > 0 else "") + w
+            yield f"data: {json.dumps({'event': 'token', 'text': chunk})}\n\n"
+            await asyncio.sleep(0.012)
 
         # Persist the assistant turn
         history.append({"role": "assistant", "content": final_content,
