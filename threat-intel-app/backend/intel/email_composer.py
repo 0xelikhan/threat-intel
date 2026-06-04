@@ -2837,6 +2837,12 @@ def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
     pd     = data.get("pulsedive") or {}
     shodan = data.get("shodan") or {}
     asn_rep= data.get("asn_reputation") or {}
+    censys = data.get("censys") or {}
+    crowdsec = data.get("crowdsec") or {}
+    proxycheck = data.get("proxycheck") or {}
+    criminal_ip = data.get("criminal_ip") or {}
+    feodo = data.get("feodo_tracker") or {}
+    bgp = (data.get("osint") or {}).get("bgp_ranking") or {}
     # enrich_ip returns tor as {'isExitNode': bool} — not a bare bool.
     # The naive bool(data.get('tor')) check treated every non-empty dict
     # as Truthy and labelled every IP as a Tor exit. Use the inner flag.
@@ -2956,6 +2962,89 @@ def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
             if threats:
                 piece += f" (associated threats: {', '.join(threats[:3])})"
             reputation_bits.append(piece + ".")
+
+    # CrowdSec CTI — aggregated score from the crowdsourced security
+    # network. Returns a 0-5 score + behaviour list (crawler, brute-force,
+    # web-scan, etc.). High-signal when behaviours include credential or
+    # exploit-attempt tags.
+    if crowdsec and not crowdsec.get("error"):
+        score = crowdsec.get("background_noise_score") or crowdsec.get("score")
+        behaviours = crowdsec.get("behaviors") or []
+        if score and score > 0:
+            piece = f"CrowdSec CTI reports a malicious-activity score of {score}/5"
+            if behaviours:
+                names = [b.get("name") or str(b) for b in behaviours[:3] if b]
+                piece += f" with observed behaviours: {', '.join(names)}"
+            reputation_bits.append(piece + ".")
+
+    # Criminal IP — paid TI service with inbound/outbound threat scores
+    # + VPN/proxy/scanner/Tor classification flags.
+    if criminal_ip and not criminal_ip.get("error"):
+        inb = criminal_ip.get("inbound_score")
+        outb = criminal_ip.get("outbound_score")
+        flags = []
+        if criminal_ip.get("is_tor"):      flags.append("Tor")
+        if criminal_ip.get("is_vpn") or criminal_ip.get("is_anonymous_vpn"): flags.append("VPN")
+        if criminal_ip.get("is_proxy"):    flags.append("proxy")
+        if criminal_ip.get("is_scanner"):  flags.append("scanner")
+        if inb in ("critical", "dangerous", "moderate") or outb in ("critical", "dangerous", "moderate") or flags:
+            piece = "Criminal IP rates the IP"
+            if inb and outb:
+                piece += f" inbound {inb} / outbound {outb}"
+            elif inb:
+                piece += f" inbound threat {inb}"
+            elif outb:
+                piece += f" outbound threat {outb}"
+            if flags:
+                piece += f" with {', '.join(flags)} flags"
+            reputation_bits.append(piece + ".")
+
+    # ProxyCheck — VPN / proxy / Tor classification. When the IP is
+    # flagged as a proxy or VPN, that's high-signal context for any
+    # alert (user logging in from a VPN, C2 traffic via a proxy, etc.).
+    if proxycheck and not proxycheck.get("error"):
+        if proxycheck.get("proxy"):
+            piece = "ProxyCheck flags this IP as a proxy"
+            if proxycheck.get("type"):
+                piece += f" of type {proxycheck['type']}"
+            if proxycheck.get("provider"):
+                piece += f" ({proxycheck['provider']})"
+            risk = proxycheck.get("risk")
+            if risk is not None and isinstance(risk, (int, float)) and risk > 50:
+                piece += f", risk score {risk}/100"
+            reputation_bits.append(piece + ".")
+
+    # Feodo Tracker — abuse.ch botnet C2 tracker. Hits are high-signal.
+    if feodo:
+        family = feodo.get("malware") or feodo.get("family") or "a known botnet"
+        first_seen = feodo.get("first_seen") or ""
+        piece = f"Feodo Tracker lists this IP as active {family} C2 infrastructure"
+        if first_seen:
+            piece += f" (first observed {first_seen[:10]})"
+        reputation_bits.append(piece + ".")
+
+    # BGP Ranking (CIRCL) — ASN-level reputation rank. Lower rank = worse
+    # standing. Only mention when the rank is meaningfully bad.
+    if bgp and not bgp.get("error"):
+        rank = bgp.get("rank")
+        if rank is not None and isinstance(rank, (int, float)) and rank < 5:
+            asn_desc = bgp.get("asn_description") or ""
+            piece = f"BGP Ranking flags the hosting ASN ({asn_desc or 'unknown'}) with a poor reputation rank of {rank}"
+            reputation_bits.append(piece + ".")
+
+    # Censys — observed open services + TLS cert when present.
+    if censys and not censys.get("error"):
+        services = censys.get("services") or []
+        if services:
+            ports = [str(s.get("port")) for s in services[:8] if s.get("port")]
+            if ports:
+                reputation_bits.append(
+                    f"Censys observes services on ports {', '.join(ports)} "
+                    f"({len(services)} total).")
+        cert = censys.get("ssl_cert") or {}
+        subject = cert.get("subject")
+        if subject:
+            reputation_bits.append(f"Censys-observed TLS certificate subject: {subject[:80]}.")
 
     sentences = [s for s in [identity_sentence] + behaviour_bits + reputation_bits if s]
     if not sentences:
@@ -3155,6 +3244,27 @@ def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
                 f"Certificate Transparency logs show {certs} certificates "
                 f"issued across {len(subs)} subdomains, indicating active "
                 "TLS infrastructure.")
+
+    # SecurityTrails — DNS history + subdomain enumeration
+    st = data.get("securitytrails") or {}
+    if st and not st.get("error"):
+        sub_count = st.get("subdomain_count")
+        if sub_count and sub_count > 0:
+            sentences.append(
+                f"SecurityTrails enumerates {sub_count} historical / current "
+                f"subdomain{'s' if sub_count != 1 else ''} under this domain.")
+
+    # FullHunt — attack-surface inventory
+    fh = data.get("fullhunt") or {}
+    if fh and not fh.get("error"):
+        sub_count = fh.get("subdomain_count")
+        ports = fh.get("ports") or []
+        if sub_count or ports:
+            bits = []
+            if sub_count: bits.append(f"{sub_count} subdomains")
+            if ports:     bits.append(f"open ports {', '.join(str(p) for p in ports[:6])}")
+            sentences.append(
+                "FullHunt's attack-surface scan reports " + " and ".join(bits) + ".")
 
     if not sentences:
         return ""

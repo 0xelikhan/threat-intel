@@ -60,7 +60,7 @@ TOOL_SCHEMAS = [
                 "Get full reputation for a file hash (MD5 / SHA-1 / SHA-256): VirusTotal, "
                 "MalwareBazaar malware family + tags, ThreatFox malware/confidence, OTX, "
                 "Team Cymru MHR (free DNS-based first-seen + detection %), Hybrid Analysis "
-                "and ANY.RUN cloud sandbox reports (if SHA-256), LOLDrivers BYOVD catalog "
+                "sandbox report (if SHA-256), LOLDrivers BYOVD catalog "
                 "match. Use when you have a hash and want to know malware family, "
                 "first-seen date, sandbox verdict, or BYOVD status."
             ),

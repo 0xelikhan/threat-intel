@@ -187,14 +187,6 @@ API_KEY_DEFINITIONS = {
         "placeholder": "Dehashed API key",
         "group": "API Keys"
     },
-    "INTELX_KEY": {
-        "label": "IntelligenceX API Key",
-        "description": "Dark-web + paste-site search for domains, IPs, and emails. Returns matches with source, date, and previews.",
-        "required": False,
-        "url": "https://intelx.io/account",
-        "placeholder": "IntelX API key",
-        "group": "API Keys"
-    },
     "CRIMINAL_IP_KEY": {
         "label": "Criminal IP API Key",
         "description": "IP threat scoring (inbound / outbound) + VPN / proxy / Tor / scanner classification.",
@@ -248,14 +240,6 @@ API_KEY_DEFINITIONS = {
         "placeholder": "Hybrid Analysis API key",
         "group": "API Keys"
     },
-    "ANYRUN_KEY": {
-        "label": "Any.run API Key",
-        "description": "Interactive malware sandbox reports.",
-        "required": False,
-        "url": "https://app.any.run",
-        "placeholder": "Any.run API key",
-        "group": "API Keys"
-    },
     "FULLHUNT_KEY": {
         "label": "FullHunt API Key",
         "description": "Attack surface and exposed service discovery. Free: 100/day.",
@@ -270,14 +254,6 @@ API_KEY_DEFINITIONS = {
         "required": False,
         "url": "https://polyswarm.io",
         "placeholder": "Polyswarm API key",
-        "group": "API Keys"
-    },
-    "INTELX_KEY": {
-        "label": "Intelligence X API Key",
-        "description": "Paste sites, dark web, leaked credentials.",
-        "required": False,
-        "url": "https://intelx.io",
-        "placeholder": "Intelligence X API key",
         "group": "API Keys"
     },
     "PROXYCHECK_KEY": {

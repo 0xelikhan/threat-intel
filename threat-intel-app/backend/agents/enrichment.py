@@ -1033,21 +1033,20 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     except Exception:
         _dec_co = _skip()
 
-    # ── New IP enrichment sources (Criminal IP + IntelX) ──
-    # Criminal IP returns inbound/outbound threat scores. IntelX searches
-    # the dark-web + paste-site index for any mentions of this IP.
+    # ── New IP enrichment source (Criminal IP) ──
+    # Criminal IP returns inbound/outbound threat scores + VPN/proxy/Tor
+    # classification flags.
     try:
-        from intel.breach_sources import criminal_ip as _crimip, intelx_search as _ix
+        from intel.breach_sources import criminal_ip as _crimip
         _crimip_co = _crimip(session, ip, keys.get("CRIMINAL_IP_KEY", ""))
-        _ix_co     = _ix(session, ip, keys.get("INTELX_KEY", ""))
     except Exception:
-        _crimip_co, _ix_co = _skip(), _skip()
+        _crimip_co = _skip()
 
-    bgp_r, gsb_r, dec_r, mv_r, oc_r, crimip_r, ix_r = await asyncio.gather(
+    bgp_r, gsb_r, dec_r, mv_r, oc_r, crimip_r = await asyncio.gather(
         _bgp_co, _gsb_co, _dec_co,
         _maltiverse_lookup("ip", ip, _cfg),
         _opencti_lookup(ip, _cfg),
-        _crimip_co, _ix_co,
+        _crimip_co,
         return_exceptions=True,
     )
 
@@ -1075,9 +1074,6 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     crimip = _ok_dict(crimip_r)
     if crimip:
         data["criminal_ip"] = crimip
-    ix = _ok_dict(ix_r)
-    if ix:
-        data["intelx"] = ix
 
     # ASN reputation — offline, uses ISP/org strings we already have, no API call
     try:
@@ -1198,18 +1194,11 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     except Exception:
         _dns_co, _gsb_co = _skip(), _skip()
 
-    # IntelX dark-web + paste-site search for this domain.
-    try:
-        from intel.breach_sources import intelx_search as _ix
-        _ix_co = _ix(session, domain, keys.get("INTELX_KEY", ""))
-    except Exception:
-        _ix_co = _skip()
-
-    dbl_r, mv_r, oc_r, dns_r, gsb_r, ix_r = await asyncio.gather(
+    dbl_r, mv_r, oc_r, dns_r, gsb_r = await asyncio.gather(
         _dbl_co,
         _maltiverse_lookup("hostname", domain, _cfg),
         _opencti_lookup(domain, _cfg),
-        _dns_co, _gsb_co, _ix_co,
+        _dns_co, _gsb_co,
         return_exceptions=True,
     )
 
@@ -1231,9 +1220,6 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         osint["google_safebrowsing"] = gsb
     if osint:
         data["osint"] = osint
-    ix = _ok_dict(ix_r)
-    if ix:
-        data["intelx"] = ix
 
     # SecurityTrails — DNS history, sister domains, current resolution
     # detail. Keyed via SECURITYTRAILS_KEY. Returns historical A records
@@ -1421,27 +1407,17 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         try:
             from intel.sandbox_deep import fetch_deep_report
             _deep_co = fetch_deep_report(hash_val,
-                                         hybrid_key=keys.get("HYBRID_ANALYSIS_KEY", ""),
-                                         anyrun_key=keys.get("ANYRUN_KEY", ""))
+                                         hybrid_key=keys.get("HYBRID_ANALYSIS_KEY", ""))
         except Exception:
             _deep_co = _skip()
     else:
         _deep_co = _skip()
 
-    # IntelX dark-web + paste-site search for this hash. Hashes that
-    # appear in IntelX leak buckets are often referenced by malware
-    # tracker dumps; a hit there is high-signal corroboration.
-    try:
-        from intel.breach_sources import intelx_search as _ix
-        _ix_co = _ix(session, hash_val, keys.get("INTELX_KEY", ""))
-    except Exception:
-        _ix_co = _skip()
-
-    cy_r, mv_r, oc_r, vt_r, mb_r, deep_r, ix_r = await asyncio.gather(
+    cy_r, mv_r, oc_r, vt_r, mb_r, deep_r = await asyncio.gather(
         _cy_co,
         _maltiverse_lookup("hash", hash_val, _cfg),
         _opencti_lookup(hash_val, _cfg),
-        _vt_co, _mb_co, _deep_co, _ix_co,
+        _vt_co, _mb_co, _deep_co,
         return_exceptions=True,
     )
 
@@ -1466,9 +1442,6 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
     deep = _ok_dict(deep_r)
     if deep:
         data["sandbox_deep"] = deep
-    ix = _ok_dict(ix_r)
-    if ix and "error" not in ix:
-        data["intelx"] = ix
     _cache[ck] = data
     return data
 
@@ -1530,16 +1503,6 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
     abusech_key = keys.get("ABUSECH_AUTH_KEY", "") or keys.get("MALWAREBAZAAR_API_KEY", "")
     _ac_headers = {"Auth-Key": abusech_key} if abusech_key else {}
 
-    # IntelX search for the URL itself — pivots through the dark-web /
-    # paste-site index. Hits in leaks.* or darknet.* buckets are a
-    # strong signal the URL has been advertised or referenced in
-    # adversary forums.
-    try:
-        from intel.breach_sources import intelx_search as _ix
-        _ix_co = _ix(session, url, keys.get("INTELX_KEY", ""))
-    except Exception:
-        _ix_co = _skip()
-
     # PhishTank — community phishing database. Free anonymous lookup
     # supported but a key (PHISHTANK_KEY) raises the rate limit.
     phishtank_key = keys.get("PHISHTANK_KEY", "")
@@ -1572,8 +1535,6 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
              headers={"X-OTX-API-KEY": keys.get("OTX_KEY", "")}),
         # PhishTank community phishing DB
         _pt_co,
-        # IntelX dark-web / paste-site search
-        _ix_co,
         return_exceptions=True,
     )
 
@@ -1624,10 +1585,6 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
                                  if results_arr.get("verified")
                                  else "PhishTank has this URL flagged (pending verification)"),
             }
-    # IntelX search
-    ix = _ok_dict(results[6])
-    if ix and not ix.get("error"):
-        data["intelx"] = ix
 
     _cache[ck] = data
     return data
@@ -1635,12 +1592,10 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
 
 # ─── Email enrichment ─────────────────────────────────────────────────────────
 async def enrich_email(session, email: str, keys: dict) -> dict:
-    """Enrich an email-address IOC against breach databases + the dark-web
-    paste-site index. Returns:
+    """Enrich an email-address IOC against breach databases.
       * hibp — breach-history list (count + per-breach details)
       * dehashed — credential-leak database hits (when DEHASHED keys set)
-      * intelx — dark-web + paste-site matches (when INTELX_KEY set)
-    HIBP, Dehashed, and IntelX each handle their own missing-key fallback
+    HIBP and Dehashed each handle their own missing-key fallback
     (returns {"error": "...", "error_type": "auth_failed"} which the
     enrichment-summary tally treats as 'not configured', not 'flagged')."""
     ck = _ck("email", email)
@@ -1649,17 +1604,16 @@ async def enrich_email(session, email: str, keys: dict) -> dict:
 
     try:
         from intel.breach_sources import (
-            hibp_email, dehashed_search, intelx_search,
+            hibp_email, dehashed_search,
         )
     except Exception as e:
         return {"error": f"breach_sources unavailable: {e}"}
 
-    hibp_r, dh_r, ix_r = await asyncio.gather(
+    hibp_r, dh_r = await asyncio.gather(
         hibp_email(session, email, keys.get("HIBP_KEY", "")),
         dehashed_search(session, email, "email",
                         keys.get("DEHASHED_EMAIL", ""),
                         keys.get("DEHASHED_KEY", "")),
-        intelx_search(session, email, keys.get("INTELX_KEY", "")),
         return_exceptions=True,
     )
 
@@ -1670,9 +1624,6 @@ async def enrich_email(session, email: str, keys: dict) -> dict:
     dh = _ok_dict(dh_r)
     if dh:
         data["dehashed"] = dh
-    ix = _ok_dict(ix_r)
-    if ix:
-        data["intelx"] = ix
 
     _cache[ck] = data
     return data
@@ -1727,12 +1678,10 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
         "CROWDSEC_KEY":        config.get("CROWDSEC_KEY"),
         "GOOGLE_API_KEY":      config.get("GOOGLE_API_KEY"),
         "HONEYPOT_KEY":        config.get("HONEYPOT_KEY"),
-        "ANYRUN_KEY":          config.get("ANYRUN_KEY"),
         # Breach / dark-web sources (added by the breach-enrichment feature)
         "HIBP_KEY":            config.get("HIBP_KEY"),
         "DEHASHED_EMAIL":      config.get("DEHASHED_EMAIL"),
         "DEHASHED_KEY":        config.get("DEHASHED_KEY"),
-        "INTELX_KEY":          config.get("INTELX_KEY"),
         "CRIMINAL_IP_KEY":     config.get("CRIMINAL_IP_KEY"),
         # abuse.ch unified key — unlocks the authenticated endpoints for
         # MalwareBazaar, ThreatFox, and URLhaus (anonymous calls have
@@ -1756,9 +1705,9 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
         "domains": iocs.get("domains", [])[:10],
         "hashes":  iocs.get("hashes", [])[:10],
         "urls":    iocs.get("urls", [])[:5],
-        # Email enrichment — HIBP breach history, Dehashed credential
-        # leaks, IntelX dark-web/paste-site matches. Capped at 5 per
-        # investigation since each email triggers 3 API calls.
+        # Email enrichment — HIBP breach history + Dehashed credential
+        # leaks. Capped at 5 per investigation since each email triggers
+        # 2 API calls.
         "emails":  iocs.get("emails", [])[:5],
         # CVE enrichment — NVD detail + EPSS exploitation probability +
         # live CISA KEV check. KEV catalog is downloaded once per run

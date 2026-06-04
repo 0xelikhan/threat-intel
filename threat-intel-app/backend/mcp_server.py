@@ -127,7 +127,7 @@ async def lookup_hash(file_hash: str) -> dict:
 
     Accepts MD5, SHA-1, or SHA-256. Queries: VirusTotal, MalwareBazaar,
     ThreatFox, OTX, Team Cymru MHR (free, DNS-based), Maltiverse, Hybrid
-    Analysis + ANY.RUN cloud sandboxes (if SHA-256), LOLDrivers BYOVD catalog.
+    Analysis cloud sandbox (if SHA-256), LOLDrivers BYOVD catalog.
     """
     from config import config as _cfg
     from agents.enrichment import enrich_hash
@@ -235,8 +235,8 @@ async def scan_url_live(url: str) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════════
 @mcp.tool()
 async def sandbox_hash_lookup(sha256: str) -> dict:
-    """Query Hybrid Analysis + ANY.RUN cloud sandboxes for an existing detonation
-    report on this SHA-256 hash. Returns verdict, threat score, malware family,
+    """Query Hybrid Analysis cloud sandbox for an existing detonation report
+    on this SHA-256 hash. Returns verdict, threat score, malware family,
     MITRE techniques observed in sandbox, and a link to the full report."""
     from config import config as _cfg
     from intel.sandbox import lookup_all

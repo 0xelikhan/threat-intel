@@ -1654,7 +1654,7 @@ async def scan_file(file: UploadFile = File(...)):
     except Exception:
         pass
 
-    # Cloud sandbox lookup — Hybrid Analysis + ANY.RUN by SHA-256
+    # Cloud sandbox lookup — Hybrid Analysis by SHA-256
     sandbox = {}
     try:
         from intel.sandbox import lookup_all
@@ -1719,8 +1719,8 @@ async def scan_file_v2(file: UploadFile = File(...)):
     # via the hash; enrich_hash adds OTX file, ThreatFox, URLhaus payload,
     # CIRCL hashlookup, Hybrid Analysis search, Team Cymru MHR, Maltiverse,
     # OpenCTI, VT graph relationships, MalwareBazaar similar samples,
-    # IntelX, and the deep sandbox aggregator. Run both concurrently so
-    # every hash-capable source the platform supports hits the file.
+    # and the deep sandbox aggregator. Run both concurrently so every
+    # hash-capable source the platform supports hits the file.
     sha256 = (analysis.get("hashes") or {}).get("sha256")
     md5    = (analysis.get("hashes") or {}).get("md5")
     sha1   = (analysis.get("hashes") or {}).get("sha1")
@@ -1733,8 +1733,8 @@ async def scan_file_v2(file: UploadFile = File(...)):
         # shape the URL-scan endpoint already builds).
         _keys = {k: (config.get(k) or "") for k in (
             "VIRUSTOTAL_KEY", "OTX_KEY", "HYBRID_ANALYSIS_KEY",
-            "MALWAREBAZAAR_API_KEY", "ABUSECH_AUTH_KEY", "INTELX_KEY",
-            "MALTIVERSE_KEY", "ANYRUN_KEY", "POLYSWARM_KEY",
+            "MALWAREBAZAAR_API_KEY", "ABUSECH_AUTH_KEY",
+            "MALTIVERSE_KEY", "POLYSWARM_KEY",
         )}
         async with _aiohttp.ClientSession(
             timeout=_aiohttp.ClientTimeout(total=30),
@@ -2080,7 +2080,7 @@ async def scan_url_endpoint(req: dict):
             "GREYNOISE_KEY", "SHODAN_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
             "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
             "HYBRID_ANALYSIS_KEY", "MALWAREBAZAAR_API_KEY",
-            "ABUSECH_AUTH_KEY", "INTELX_KEY", "ANYRUN_KEY",
+            "ABUSECH_AUTH_KEY",
             "POLYSWARM_KEY", "PHISHTANK_KEY", "SECURITYTRAILS_KEY",
             "PROXYCHECK_KEY", "FULLHUNT_KEY", "CENSYS_API_KEY",
             "CENSYS_ID", "CENSYS_SECRET", "CRIMINAL_IP_KEY",

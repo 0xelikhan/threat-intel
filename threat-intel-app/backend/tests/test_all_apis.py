@@ -58,9 +58,9 @@ def _load_keys() -> Dict[str, str]:
     for k in ("VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
               "GREYNOISE_KEY", "SHODAN_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
               "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
-              "HYBRID_ANALYSIS_KEY", "MALWAREBAZAAR_API_KEY", "INTELX_KEY",
+              "HYBRID_ANALYSIS_KEY", "MALWAREBAZAAR_API_KEY",
               "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET", "CROWDSEC_KEY",
-              "FULLHUNT_KEY", "ANYRUN_KEY", "POLYSWARM_KEY", "PROXYCHECK_KEY",
+              "FULLHUNT_KEY", "POLYSWARM_KEY", "PROXYCHECK_KEY",
               "SECURITYTRAILS_KEY", "PHISHTANK_KEY", "OPENAI_API_KEY",
               "OPENAI_BASE_URL", "ANTHROPIC_API_KEY", "HIBP_KEY",
               "DEHASHED_EMAIL", "DEHASHED_KEY", "CRIMINAL_IP_KEY",
@@ -133,37 +133,6 @@ async def _probe(session: aiohttp.ClientSession, name: str, category: str,
     except Exception as e:
         return Result(name, category, "FAIL",
                       f"{type(e).__name__}: {str(e)[:80]}", key_env, key_url)
-
-
-# ─── IntelX-specific probe (3-step search) ─────────────────────────────────
-async def _probe_intelx(session: aiohttp.ClientSession) -> Result:
-    name = "IntelX (dark-web search)"
-    cat = "Email / Generic"
-    key = KEYS.get("INTELX_KEY", "")
-    if not key:
-        return Result(name, cat, "SKIP", "INTELX_KEY not configured",
-                      "INTELX_KEY", "https://intelx.io/account?tab=developer")
-    try:
-        async with session.post(
-            "https://2.intelx.io/intelligent/search",
-            headers={"x-key": key, "Content-Type": "application/json",
-                     "Accept": "application/json"},
-            json={"term": TEST_DOMAIN, "maxresults": 10, "media": 0,
-                  "sort": 4, "timeout": 5, "terminate": []},
-        ) as r:
-            body = await r.text()
-            if r.status != 200:
-                return Result(name, cat, "FAIL",
-                              f"HTTP {r.status} · {body[:200]}",
-                              "INTELX_KEY",
-                              "https://intelx.io/account?tab=developer")
-        # Don't bother polling for results — the POST succeeding tells us
-        # auth works; the polling round-trip is part of the enrichment flow
-        # and adds latency we don't need for a health check.
-        return Result(name, cat, "OK", f"HTTP 200 · search initiated successfully")
-    except Exception as e:
-        return Result(name, cat, "FAIL", f"{type(e).__name__}: {str(e)[:80]}",
-                      "INTELX_KEY", "https://intelx.io/account?tab=developer")
 
 
 # ─── AI / LLM provider probe ───────────────────────────────────────────────
@@ -409,10 +378,6 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
     add(_probe(session, "CIRCL hashlookup", "Hash enrichment",
         f"https://hashlookup.circl.lu/lookup/sha256/{TEST_HASH}",
         ok_statuses=(200, 404)))
-    add(_probe(session, "ANY.RUN public", "Hash enrichment",
-        f"https://api.any.run/v1/analysis?hash={TEST_HASH}",
-        headers={"Authorization": f"API-Key {KEYS.get('ANYRUN_KEY', '')}"},
-        key_env="ANYRUN_KEY", key_url="https://app.any.run/profile/"))
     add(_probe(session, "PolySwarm", "Hash enrichment",
         f"https://api.polyswarm.network/v2/search/hash/sha256",
         params={"hash": TEST_HASH},
@@ -436,7 +401,6 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
                 if KEYS.get("MALWAREBAZAAR_API_KEY") else None))
 
     # ── Email / dark-web ───────────────────────────────────────────────
-    P.append(_probe_intelx(session))   # IntelX (3-step) — handled specially
     add(_probe(session, "HaveIBeenPwned", "Email enrichment",
         "https://haveibeenpwned.com/api/v3/breachedaccount/test%40example.com",
         headers={"hibp-api-key": KEYS.get("HIBP_KEY", ""), "user-agent": "RECON-API-test"},

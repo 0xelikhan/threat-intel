@@ -1811,20 +1811,6 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // IntelX — dark-web + paste-site matches.
-  if (d.intelx && !d.intelx.error) {
-    const n = d.intelx.count ?? 0;
-    if (n > 0) {
-      const buckets = (d.intelx.buckets || []).slice(0, 3).join(', ');
-      const c = n >= 5 ? orange : yellow;
-      out.push({
-        source: 'IntelX',
-        label: `${n} match${n === 1 ? '' : 'es'}${buckets ? ` · ${buckets}` : ''}`,
-        color: c,
-      });
-    }
-  }
-
   // Criminal IP — inbound/outbound threat scoring.
   if (d.criminal_ip && !d.criminal_ip.error) {
     const cip = d.criminal_ip;
@@ -1990,11 +1976,11 @@ function _ocSources(result, ioc, type) {
     malwarebazaar: 'MalwareBazaar',     urlscan: 'URLScan.io',
     shodan: 'Shodan',                   pulsedive: 'Pulsedive',
     spamhaus_dbl: 'Spamhaus DBL',       hibp: 'HaveIBeenPwned',
-    dehashed: 'Dehashed',               intelx: 'IntelX',
+    dehashed: 'Dehashed',
     criminal_ip: 'Criminal IP',         urlhaus_url: 'URLhaus',
     urlhaus_payload: 'URLhaus payload', circl_hashlookup: 'CIRCL hashlookup',
     nvd: 'NVD',                          epss: 'EPSS',
-    hybrid_analysis: 'Hybrid Analysis', anyrun: 'ANY.RUN',
+    hybrid_analysis: 'Hybrid Analysis',
     whois: 'WHOIS',                      ipinfo: 'IPInfo',
     censys: 'Censys',                    crowdsec: 'CrowdSec',
     feodo_tracker: 'Feodo Tracker',      pulsedive: 'Pulsedive',
