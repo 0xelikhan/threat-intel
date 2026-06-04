@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 
 // ─── SCORE DIAL SVG ───────────────────────────────────────────────────────────────
 function ScoreDial({ score, color, size = 120 }) {
@@ -86,6 +86,12 @@ function IOCScoreCard({ ioc, scoreData }) {
   const { score, verdict, severity, label, color, contributing_factors, ioc_type } = scoreData;
   const typeColors = { ip: '#4a9eff', domain: '#51cf66', hash: '#cc5de8', url: '#ffa94d', file: '#cc5de8' };
   const tc = typeColors[ioc_type] || '#718096';
+  // Click-to-expand for long IOCs (URLs / hashes). Defaults closed so the
+  // card stays compact; clicking the IOC text toggles between the
+  // truncated preview and the full value.
+  const [expanded, setExpanded] = useState(false);
+  const longIoc = ioc && ioc.length > 60;
+  const displayIoc = (longIoc && !expanded) ? ioc.substring(0, 57) + '…' : ioc;
 
   return (
     <div style={{ background: '#0a1220', border: '1px solid #1e3a5f', borderRadius: '8px', padding: '14px', marginBottom: '10px' }}>
@@ -102,9 +108,33 @@ function IOCScoreCard({ ioc, scoreData }) {
             <span style={{ background: `${tc}22`, border: `1px solid ${tc}44`, color: tc, padding: '2px 7px', borderRadius: '3px', fontSize: '9px', letterSpacing: '1px', fontFamily: 'Courier New' }}>
               {ioc_type?.toUpperCase()}
             </span>
+            {longIoc && (
+              <span
+                onClick={() => setExpanded(e => !e)}
+                style={{
+                  cursor: 'pointer', userSelect: 'none',
+                  fontSize: '9px', color: '#4a9eff',
+                  letterSpacing: '1px', fontFamily: 'Courier New',
+                  padding: '2px 6px', border: '1px solid #4a9eff44',
+                  borderRadius: '3px',
+                }}>
+                {expanded ? 'COLLAPSE' : 'SHOW FULL'}
+              </span>
+            )}
           </div>
-          <div style={{ fontFamily: 'Courier New', fontSize: '12px', color: '#c8d6e5', wordBreak: 'break-all', marginBottom: '8px' }}>
-            {ioc.length > 60 ? ioc.substring(0, 57) + '...' : ioc}
+          <div
+            onClick={longIoc ? () => setExpanded(e => !e) : undefined}
+            title={longIoc ? (expanded ? 'Click to collapse' : 'Click to show the full value') : undefined}
+            style={{
+              fontFamily: 'Courier New', fontSize: '12px', color: '#c8d6e5',
+              wordBreak: 'break-all', marginBottom: '8px',
+              cursor: longIoc ? 'pointer' : 'default',
+              padding: longIoc ? '4px 6px' : 0,
+              borderRadius: longIoc ? '4px' : 0,
+              backgroundColor: longIoc ? '#0d1828' : 'transparent',
+              border: longIoc ? '1px dashed #1e3a5f' : 'none',
+            }}>
+            {displayIoc}
           </div>
           <VerdictBadge verdict={verdict} severity={severity} />
 
