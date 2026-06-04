@@ -2883,14 +2883,17 @@ def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
     if gn and not gn.get("error"):
         cls = (gn.get("classification") or "").strip().lower()
         name = (gn.get("name") or "").strip()
+        # GreyNoise sometimes reports an actor 'name' of 'unknown' which
+        # adds no information — skip the parenthetical in that case.
+        named = name if name and name.lower() != "unknown" else ""
         if cls in ("malicious", "suspicious"):
             reputation_bits.append(
                 f"GreyNoise classifies it as {cls}"
-                + (f" ({name})" if name else "") + ".")
+                + (f" ({named})" if named else "") + ".")
         elif cls == "benign":
             reputation_bits.append(
                 f"GreyNoise recognises it as benign Internet noise"
-                + (f" ({name})" if name else "") + ".")
+                + (f" ({named})" if named else "") + ".")
 
     if mal_t and not mal_t.get("error"):
         cls = (mal_t.get("classification") or "").strip().lower()
