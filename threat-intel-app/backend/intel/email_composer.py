@@ -3265,6 +3265,340 @@ def _fmt_url_enrichment(url: str, data: Dict) -> str:
     return f"- {short_url}\n  " + " ".join(sentences)
 
 
+# ─── Detection summary block ────────────────────────────────────────────────
+#
+# Compact 4-7 bullet 'Detection summary' that sits between the verbose
+# facts block at the top and the AI prose paragraph below. Lets the
+# customer scan the most decision-relevant fields at a glance without
+# parsing the full facts list.
+#
+# Bullet selection is alert-type aware:
+#   malware-detection logs → Endpoint / User context / Detection / File / Action
+#   sign-in logs           → Account / Source IP+ASN / Outcome / Client / Action
+#   exchange logs          → Mailbox / Operation / Source IP / Action
+#   role-change logs       → User / Role / Operation / Source IP / Action
+#   network / process logs → Endpoint / User / Process / Destination / Action
+#   generic fallback       → use whatever 4+ canonical fields are present
+#
+# Returns an empty string when fewer than 4 meaningful bullets are
+# available so sparse logs don't get a half-empty block.
+
+
+# Well-known Azure / Entra ID role GUIDs — keep in sync with the AI prompt's
+# role list. Used to render 'Role: Global Administrator' instead of a raw GUID.
+_AZURE_ROLE_GUIDS = {
+    "62e90394-69f5-4237-9190-012177145e10": "Global Administrator",
+    "194ae4cb-b126-40b2-bd5b-6091b380977d": "Security Administrator",
+    "e8611ab8-c189-46e8-94e1-60213ab1f814": "Privileged Role Administrator",
+    "7be44c8a-adaf-4e2a-84d6-ab2649e08a13": "Privileged Authentication Administrator",
+    "fe930be7-5e62-47db-91af-98c3a49a38b1": "User Administrator",
+    "158c047a-c907-4556-b7ef-446551a6b5f7": "Cloud Application Administrator",
+    "966707d0-3269-4727-9be2-8c3a10f19b9d": "Password Administrator",
+    "8329153b-31d0-4727-b945-745eb3bc5f31": "Exchange Administrator",
+    "b0f54661-2d74-4c50-afa3-1ec803f12efe": "Billing Administrator",
+    "29232cdf-9323-42fd-ade2-1d097af3e4de": "Exchange Recipient Administrator",
+    "c4e39bd9-1100-46d3-8c65-fb160da0071f": "Authentication Administrator",
+}
+
+
+def _g(parsed: dict, *keys: str) -> str:
+    """First non-empty value across the candidate key list. Match is
+    case-insensitive AND treats underscores / spaces as equivalent so
+    'process_path' matches 'Process Path', 'destination_ip' matches
+    'Destination IP', etc. — saves us listing every alias variant."""
+    if not parsed:
+        return ""
+    def _norm(s: str) -> str:
+        return (s or "").lower().replace(" ", "").replace("_", "").replace("-", "")
+    norm_keys = [_norm(k) for k in keys]
+    for k, nk in zip(keys, norm_keys):
+        v = parsed.get(k)
+        if isinstance(v, str) and v.strip() and v.strip() != "-":
+            return v.strip()
+        # also check normalized variants in parsed
+        for pk, pv in parsed.items():
+            if _norm(pk) == nk and isinstance(pv, str) and pv.strip() and pv.strip() != "-":
+                return pv.strip()
+    raw = (parsed.get("raw_fields") or {}) if isinstance(parsed, dict) else {}
+    for nk in norm_keys:
+        for rk, rv in raw.items():
+            if _norm(rk) == nk and isinstance(rv, str) and rv.strip() and rv.strip() != "-":
+                return rv.strip()
+    return ""
+
+
+def _classify_alert(parsed: dict, log_text: str) -> str:
+    """Pick the bullet template that fits the input. Order matters — most
+    specific patterns first."""
+    raw_lower = (log_text or "").lower()
+    rf = (parsed.get("raw_fields") or {}) if isinstance(parsed, dict) else {}
+    rf_lower = {k.lower(): str(v).lower() for k, v in rf.items() if isinstance(v, str)}
+
+    # Exchange / mailbox operations — BEC indicators
+    if rf_lower.get("workload") == "exchange":
+        return "exchange"
+    if any(op in raw_lower for op in
+           ("set-mailbox", "new-inboxrule", "set-inboxrule",
+            "add-mailboxpermission", "disable-mailbox", "remove-mailbox")):
+        return "exchange"
+
+    # PIM / role changes
+    if "pim" in raw_lower or "privileged role" in raw_lower:
+        return "role_change"
+    if any(s in raw_lower for s in ("add member to role", "addrolemember",
+                                     "rolemanagement", "add owner to")):
+        return "role_change"
+
+    # Impossible-travel sign-in
+    if parsed.get("first_login_ip") or parsed.get("second_login_ip"):
+        return "impossible_travel"
+    if "impossible travel" in raw_lower:
+        return "impossible_travel"
+
+    # Identity Protection / sign-in
+    if rf_lower.get("source") == "identityprotection":
+        return "signin"
+    if any(k in rf_lower for k in ("riskeventtype", "risktype", "risklevel", "riskstate")):
+        return "signin"
+    if rf_lower.get("workload") == "azureactivedirectory":
+        return "signin"
+
+    # AV / malware detection
+    if any(s in raw_lower for s in (
+            "microsoft-windows-windows defender", "windows defender",
+            "sentinelone", "crowdstrike", "carbon black",
+            "microsoftdefenderforendpoint",
+        )) and ("malware" in raw_lower or "detection:" in raw_lower
+                or "trojan" in raw_lower or "ransomware" in raw_lower
+                or "monitoringtool" in raw_lower):
+        return "malware"
+
+    # Process execution / behavioral
+    if _g(parsed, "command_line") or _g(parsed, "process_path", "processPath"):
+        return "process_exec"
+
+    # Network connection
+    if _g(parsed, "dest_ip", "destination_ip", "remoteIp",
+          "Destination", "Dest", "remote_ip"):
+        return "network"
+
+    return "generic"
+
+
+def _abbreviate_value(v: str, max_len: int = 110) -> str:
+    """Truncate long values so a single bullet doesn't wrap awkwardly."""
+    s = (v or "").strip()
+    if len(s) <= max_len:
+        return s
+    return s[:max_len - 1] + "…"
+
+
+def _render_detection_summary(parsed: dict, log_text: str,
+                              enrichment_raw: Optional[Dict] = None) -> str:
+    """Build the bullet block. Returns empty string when fewer than 4
+    bullets can be filled — half-empty summaries look worse than none."""
+    parsed = parsed or {}
+    rf = (parsed.get("raw_fields") or {}) if isinstance(parsed, dict) else {}
+    bullets: List[tuple] = []
+    alert_type = _classify_alert(parsed, log_text)
+
+    # ── Common fields used across many templates ─────────────────────────
+    endpoint = _g(parsed, "asset_name", "assetName", "hostName", "DeviceName",
+                  "Computer", "Asset", "deviceDnsName", "host", "MachineName")
+    user_id  = _g(parsed, "user_principal_name", "userPrincipalName",
+                  "user_id", "userId", "UserName", "UserId", "User")
+    user_disp= _g(parsed, "user_display_name", "userDisplayName", "displayName")
+    src_ip   = _g(parsed, "ip_address", "ClientIP", "ClientIp", "ipAddress",
+                  "Source IP", "sourceIp", "source_ip", "ActorIpAddress")
+    workload = _g(parsed, "workload", "Workload")
+    response_action = _g(parsed, "response_action") or rf.get("Response action", "")
+
+    def _ip_with_loc(ip: str) -> str:
+        """ASN + location suffix on an IP using already-fetched enrichment data."""
+        if not ip or not enrichment_raw:
+            return ip
+        ipd = (enrichment_raw.get("ips") or {}).get(ip) or {}
+        org = (ipd.get("ipinfo") or {}).get("org") or ""
+        country = (ipd.get("ipinfo") or {}).get("country") or ""
+        city = (ipd.get("ipinfo") or {}).get("city") or ""
+        org_clean, _asn = _strip_asn_prefix(org)
+        loc_bits = [b for b in (city, country) if b]
+        suffix_bits = [b for b in (org_clean, ", ".join(loc_bits)) if b]
+        if suffix_bits:
+            return f"{ip} ({' · '.join(suffix_bits)})"
+        return ip
+
+    # ── Per-template bullet builders ─────────────────────────────────────
+    if alert_type == "malware":
+        detection = _g(parsed, "detection", "Detection") or _g(parsed, "ThreatName", "Name")
+        file_path = (_g(parsed, "file_path", "filePath", "Full Path", "File path",
+                        "Path", "path",
+                        "process_path", "Process Path")
+                     or _g(parsed, "fileName"))
+        eventlog_desc = _g(parsed, "EventLog Description", "eventlog_description")
+        engine = "Microsoft Defender" if "defender" in (eventlog_desc + " " + (log_text or "")).lower() \
+                 else ("SentinelOne" if "sentinelone" in (log_text or "").lower()
+                       else ("CrowdStrike" if "crowdstrike" in (log_text or "").lower()
+                             else "EDR"))
+        if endpoint:  bullets.append(("Endpoint", endpoint))
+        if user_id:   bullets.append(("User context", user_id))
+        if detection:
+            label = f"{detection} ({engine})" if engine and engine.lower() not in detection.lower() \
+                    else detection
+            bullets.append(("Detection", label))
+        if file_path: bullets.append(("File", _abbreviate_value(file_path)))
+        if response_action:
+            bullets.append(("Action", response_action))
+
+    elif alert_type == "signin":
+        account = user_id or user_disp
+        risk_event = _g(parsed, "risk_event_type", "riskEventType",
+                        "risk_type", "RiskType", "EventDescription")
+        risk_state = _g(parsed, "risk_state", "riskState", "Resultstatus")
+        risk_level = _g(parsed, "risk_level", "riskLevel")
+        risk_detail = _g(parsed, "risk_detail", "riskDetail", "LogonError")
+        ua = _g(parsed, "UserAgent", "user_agent") or rf.get("User agent", "")
+        req_type = _g(parsed, "RequestType")
+        loc_city = _g(parsed, "location_city", "city", "first_login_city")
+        loc_country = _g(parsed, "location_country", "countryOrRegion", "first_login_country")
+        if account: bullets.append(("Account", account))
+        if src_ip:  bullets.append(("Source IP", _ip_with_loc(src_ip)))
+        if loc_city or loc_country:
+            loc_str = ", ".join([x for x in (loc_city, loc_country) if x])
+            if loc_str and src_ip and loc_str not in bullets[-1][1]:
+                bullets.append(("Reported location", loc_str))
+        outcome_bits = [b for b in (risk_state, risk_event, risk_detail) if b]
+        if outcome_bits:
+            bullets.append(("Outcome", _abbreviate_value(" / ".join(outcome_bits[:2]))))
+        elif risk_level:
+            bullets.append(("Outcome", f"risk level {risk_level}"))
+        client_bits = []
+        if req_type: client_bits.append(req_type)
+        if ua:
+            # Trim the user-agent — full UA strings are massive
+            client_bits.append(_abbreviate_value(ua, 80))
+        if client_bits:
+            bullets.append(("Client", " / ".join(client_bits)))
+        if response_action:
+            bullets.append(("Action", response_action))
+
+    elif alert_type == "impossible_travel":
+        account = user_id or user_disp
+        first_ip = _g(parsed, "first_login_ip")
+        second_ip = _g(parsed, "second_login_ip")
+        first_loc = ", ".join([x for x in (
+            _g(parsed, "first_login_city"),
+            _g(parsed, "first_login_country"),
+        ) if x])
+        second_loc = ", ".join([x for x in (
+            _g(parsed, "second_login_city"),
+            _g(parsed, "second_login_country"),
+        ) if x])
+        if account: bullets.append(("Account", account))
+        if first_ip:
+            label = f"{_ip_with_loc(first_ip)}" + (f" — {first_loc}" if first_loc and first_loc not in _ip_with_loc(first_ip) else "")
+            bullets.append(("First login", label))
+        if second_ip:
+            label = f"{_ip_with_loc(second_ip)}" + (f" — {second_loc}" if second_loc and second_loc not in _ip_with_loc(second_ip) else "")
+            bullets.append(("Second login", label))
+        bullets.append(("Pattern", "Impossible travel between two geographies in a short window"))
+        if response_action:
+            bullets.append(("Action", response_action))
+
+    elif alert_type == "exchange":
+        operation = _g(parsed, "Operation", "activity", "operationType", "activityDisplayName")
+        mailbox = _g(parsed, "Identity", "Mailbox", "ObjectId") or user_id
+        fwd = _g(parsed, "ForwardingAddress", "ForwardingSmtpAddress", "forwarding_address")
+        if mailbox:  bullets.append(("Mailbox", mailbox))
+        if operation:bullets.append(("Operation", operation))
+        if fwd:      bullets.append(("Forward target", fwd))
+        if src_ip:   bullets.append(("Source IP", _ip_with_loc(src_ip)))
+        if response_action:
+            bullets.append(("Action", response_action))
+
+    elif alert_type == "role_change":
+        # Resolve role GUID to a friendly name when we have it
+        role_id = _g(parsed, "privileged_role_object_id",
+                     "privileged_role_template_id", "newValue", "wids",
+                     "Privileged role", "Privileged Role", "PrivilegedRole")
+        role_name = _g(parsed, "privileged_role_display_name", "RoleDisplayName")
+        # Strip any wrapping quotes the log may have
+        role_id_clean = role_id.strip('"').split(",")[0].strip()
+        if not role_name and role_id_clean in _AZURE_ROLE_GUIDS:
+            role_name = _AZURE_ROLE_GUIDS[role_id_clean]
+        operation = _g(parsed, "activity", "Operation", "activityDisplayName", "ActionType")
+        if user_id:  bullets.append(("User", user_id))
+        if role_name:bullets.append(("Role", role_name))
+        elif role_id_clean: bullets.append(("Role", f"GUID {role_id_clean}"))
+        if operation: bullets.append(("Operation", operation))
+        if src_ip:    bullets.append(("Source IP", _ip_with_loc(src_ip)))
+        if response_action:
+            bullets.append(("Action", response_action))
+
+    elif alert_type == "network":
+        dest_ip = _g(parsed, "dest_ip", "destination_ip", "remoteIp") \
+                  or _g(parsed, "Destination", "Dest")
+        dest_port = _g(parsed, "Destination Port", "destinationPort", "remotePort")
+        process = _g(parsed, "Process", "Process Path", "process_path", "fileName")
+        if endpoint:bullets.append(("Endpoint", endpoint))
+        if user_id: bullets.append(("User", user_id))
+        if process: bullets.append(("Process", _abbreviate_value(process)))
+        if dest_ip:
+            dest_label = _ip_with_loc(dest_ip)
+            if dest_port:
+                dest_label += f":{dest_port}"
+            bullets.append(("Destination", dest_label))
+        if response_action:
+            bullets.append(("Action", response_action))
+
+    elif alert_type == "process_exec":
+        cmd = _g(parsed, "command_line", "Command line", "Cmd Line Parameters",
+                 "processCommandLine")
+        proc = _g(parsed, "process_path", "Process Path", "Process",
+                  "fileName")
+        # Process-execution alerts often carry a network destination
+        # too (the process being executed is making outbound network
+        # I/O). Surface both bullets when present.
+        dest_ip = _g(parsed, "dest_ip", "destination_ip", "remoteIp",
+                     "Destination", "Dest")
+        dest_port = _g(parsed, "destination_port", "remotePort")
+        if endpoint: bullets.append(("Endpoint", endpoint))
+        if user_id:  bullets.append(("User", user_id))
+        if proc:     bullets.append(("Process", _abbreviate_value(proc)))
+        if cmd:      bullets.append(("Command", _abbreviate_value(cmd, 130)))
+        if dest_ip:
+            dest_label = _ip_with_loc(dest_ip)
+            if dest_port:
+                dest_label += f":{dest_port}"
+            bullets.append(("Destination", dest_label))
+        if response_action:
+            bullets.append(("Action", response_action))
+
+    else:  # generic
+        if endpoint: bullets.append(("Endpoint", endpoint))
+        if user_id:  bullets.append(("User", user_id))
+        if src_ip:   bullets.append(("Source IP", _ip_with_loc(src_ip)))
+        if workload: bullets.append(("Workload", workload))
+        if response_action:
+            bullets.append(("Action", response_action))
+
+    # De-dupe by label (in case two field aliases resolved to the same key)
+    seen = set()
+    dedup = []
+    for k, v in bullets:
+        if k not in seen and v:
+            seen.add(k)
+            dedup.append((k, v))
+
+    if len(dedup) < 4:
+        return ""
+
+    lines = ["Detection summary"]
+    for k, v in dedup[:7]:   # cap at 7 — past that it's facts-block territory
+        lines.append(f"- {k}: {v}")
+    return "\n".join(lines)
+
+
 async def _gather_email_enrichment(log_text: str, parsed: Dict,
                                     config) -> Dict[str, Any]:
     """Run enrichment for IOCs found in the email log. Returns a dict
@@ -3461,10 +3795,19 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     # "no enrichment available" so the email always renders.
     enr_bundle = await _gather_email_enrichment(log_text, parsed, config)
     enr_lines = (enr_bundle or {}).get("lines", "")
+    enr_raw   = (enr_bundle or {}).get("raw", {})
     if enr_lines:
         facts_block = (facts_block + "\n\nThreat intelligence:\n"
                        + enr_lines) if facts_block else \
                       ("Threat intelligence:\n" + enr_lines)
+
+    # Detection summary — 4-7 bullet block tailored per alert type, sits
+    # between the verbose facts block and the AI prose. Built AFTER
+    # enrichment so source-IP bullets can carry ASN + location inline.
+    # Returns "" when fewer than 4 meaningful bullets are available, in
+    # which case the summary block is skipped entirely (sparse logs
+    # would otherwise produce a half-empty section).
+    summary_block = _render_detection_summary(parsed, log_text, enr_raw)
 
     # ── Tiny LLM scope: ONLY a summary sentence + a guidance paragraph ──
     # The prompt asks for strict JSON {summary, guidance} — both fields are
@@ -3783,7 +4126,12 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         f"## Alert facts (already rendered as the email's top block — DO NOT "
         "re-narrate the field list back; refer to specific values from it)\n"
         f"{facts_block or '(no structured fields)'}\n\n"
-        f"## Raw log (for context only)\n"
+        + (f"## Detection summary (already rendered above the analysis as a "
+           "scannable bullet list — DO NOT repeat these bullets verbatim. "
+           "Your paragraph should EXPLAIN what these bullets mean for the "
+           "customer and CLOSE with the recommended next step.)\n"
+           f"{summary_block}\n\n" if summary_block else "")
+        + f"## Raw log (for context only)\n"
         f"```\n{log_text[:3500]}\n```\n"
         f"{action_hint}{template_hint}{impossible_travel_hint}\n\n"
         f"{classified_as}Return ONLY the JSON object with a single "
@@ -3827,6 +4175,11 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     body_parts = []
     if facts_block:
         body_parts.append(facts_block)
+    if summary_block:
+        # 'Detection summary' block sits between the facts and the AI
+        # prose. When empty (sparse log → fewer than 4 useful bullets)
+        # it gets skipped so the email goes facts → prose with no gap.
+        body_parts.append(summary_block)
     if analysis:
         body_parts.append(analysis)
     body = "\n\n".join(body_parts) if body_parts else (
