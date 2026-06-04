@@ -3223,52 +3223,71 @@ function ChatWithRecon({ result, bare,
         buf += dec.decode(value, { stream:true });
         const lines = buf.split('\n');
         buf = lines.pop();
+        let streamError = null;
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           const payload = line.slice(6).trim();
           if (payload === '[DONE]') break;
-          try {
-            const ev = JSON.parse(payload);
-            if (ev.event === 'token') {
-              setMessages(m => {
-                const copy = [...m];
-                const last = copy[copy.length - 1];
-                if (last && last.role === 'assistant') {
-                  copy[copy.length - 1] = { ...last, content: (last.content || '') + ev.text };
-                }
-                return copy;
-              });
-            } else if (ev.event === 'tool_call') {
-              setMessages(m => {
-                const copy = [...m];
-                const last = copy[copy.length - 1];
-                if (last && last.role === 'assistant') {
-                  copy[copy.length - 1] = {
-                    ...last,
-                    tool_calls: [...(last.tool_calls || []), {
-                      tool: ev.tool, args: ev.args, summary: ev.summary,
-                    }],
-                  };
-                }
-                return copy;
-              });
-            } else if (ev.event === 'done') {
-              setMessages(m => {
-                const copy = [...m];
-                const last = copy[copy.length - 1];
-                if (last && last.role === 'assistant') {
-                  copy[copy.length - 1] = { ...last, _streaming:false };
-                }
-                return copy;
-              });
-            } else if (ev.event === 'error') {
-              throw new Error(ev.error);
-            }
-          } catch (e) { /* skip malformed lines */ }
+          // Parse the event first. The inner try used to wrap the whole
+          // event handling block — including `throw new Error(ev.error)`
+          // — which meant backend error events got silently swallowed
+          // and the chat looked frozen with the analyst's message stuck
+          // mid-stream.
+          let ev = null;
+          try { ev = JSON.parse(payload); } catch { continue; }
+          if (ev.event === 'token') {
+            setMessages(m => {
+              const copy = [...m];
+              const last = copy[copy.length - 1];
+              if (last && last.role === 'assistant') {
+                copy[copy.length - 1] = { ...last, content: (last.content || '') + ev.text };
+              }
+              return copy;
+            });
+          } else if (ev.event === 'tool_call') {
+            setMessages(m => {
+              const copy = [...m];
+              const last = copy[copy.length - 1];
+              if (last && last.role === 'assistant') {
+                copy[copy.length - 1] = {
+                  ...last,
+                  tool_calls: [...(last.tool_calls || []), {
+                    tool: ev.tool, args: ev.args, summary: ev.summary,
+                  }],
+                };
+              }
+              return copy;
+            });
+          } else if (ev.event === 'done') {
+            setMessages(m => {
+              const copy = [...m];
+              const last = copy[copy.length - 1];
+              if (last && last.role === 'assistant') {
+                // If the stream finished with no text AND no tool calls,
+                // surface a fallback so the bubble doesn't sit empty.
+                const hasContent = (last.content || '').trim().length > 0;
+                const hasTools   = (last.tool_calls || []).length > 0;
+                copy[copy.length - 1] = {
+                  ...last,
+                  content: hasContent
+                    ? last.content
+                    : (hasTools
+                        ? 'I ran the checks above but didn\'t produce a written reply — try asking again or rephrasing.'
+                        : 'No reply came back. Try sending the message again.'),
+                  _streaming: false,
+                };
+              }
+              return copy;
+            });
+          } else if (ev.event === 'error') {
+            streamError = ev.error || 'chat stream failed';
+            break;
+          }
         }
+        if (streamError) throw new Error(streamError);
       }
     } catch (e) {
-      setError(e.message);
+      setError(e.message || 'chat stream failed');
       // Roll back the placeholder assistant message on error
       setMessages(m => m[m.length-1]?._streaming ? m.slice(0, -1) : m);
     } finally { setSending(false); }
