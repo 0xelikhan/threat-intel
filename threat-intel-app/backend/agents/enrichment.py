@@ -356,6 +356,13 @@ def _p_gn(r):
 
 def _p_shodan(r):
     if _is_fail(r):
+        # Shodan free "oss" plan returns 403 for /shodan/host/ because host
+        # lookups require query credits. That isn't a bad key — it's a plan
+        # limitation. Reclassify so the UI shows it the same way as other
+        # unconfigured sources rather than "auth failed".
+        if isinstance(r, dict) and r.get("error_type") == "auth_failed":
+            return {"error": "Shodan host lookup requires a paid plan",
+                    "error_type": "not_configured", "source": "shodan"}
         return _err("shodan", r)
     vulns = r.get("vulns") or {}
     data_ports = r.get("data") or []
@@ -575,6 +582,12 @@ def _p_whois(r):
 
 
 def _p_pd(r):
+    # Pulsedive returns 200 OK with {"error": "Indicator not found."} when
+    # the IOC isn't in their DB. That's a clean miss, not a source failure.
+    if isinstance(r, dict) and isinstance(r.get("error"), str) \
+            and "not found" in r["error"].lower() and "source" not in r:
+        return {"risk": None, "verdict": "CLEAN",
+                "note": "Not in Pulsedive database"}
     if _is_fail(r):
         return _err("pulsedive", r)
     risk = (r.get("risk") or "").lower()
