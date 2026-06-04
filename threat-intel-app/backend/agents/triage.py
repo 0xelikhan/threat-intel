@@ -128,6 +128,35 @@ _PATH_VERSION_RE = re.compile(
     r"(?<=[\\\\/])\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?=[\\\\/])"
 )
 
+# X.509 Object Identifiers (OIDs) — dot-separated numbers, 5+ components,
+# often prefixed with "oid." in Windows EDR certificate fields:
+#   oid.1.3.6.1.4.1.311.60.2.1.1=road town
+#   oid.2.5.4.15=private organization
+#   1.3.6.1.4.1.311.21.10
+# iocextract's IP matcher is greedy on the leading 4 components ("1.3.6.1"
+# from "1.3.6.1.4.1.311.60.2.1.1"), so OID strings get extracted as IPv4
+# and shipped to VirusTotal / OTX. Strip the entire OID run before the
+# IP regex ever sees it. The 5-component minimum keeps legitimate v4
+# addresses (always exactly 4 parts) untouched.
+_OID_RE = re.compile(
+    r"\b(?:oid\.)?\d{1,5}(?:\.\d{1,5}){4,}\b",
+    re.IGNORECASE,
+)
+# Short OIDs that LOOK like IPs (4 components) but live in certificate
+# context — the "oid." prefix gives them away. Catches "oid.2.5.4.15"
+# and similar.
+_OID_PREFIXED_SHORT_RE = re.compile(
+    r"\boid\.\d{1,5}(?:\.\d{1,5}){2,}\b",
+    re.IGNORECASE,
+)
+# X.509 directory attribute OIDs (the 2.5.4.X branch — CN, OU, O, L, S, C,
+# serialNumber, businessCategory, etc.). These appear as bare "2.5.4.15"
+# in the trailing part of certificate subject strings even when the
+# parser stripped the "oid." prefix. They are never real IPs in EDR
+# logs, and the 2.5.4.0/24 IP range is unrouted ARIN-reserved space
+# regardless, so stripping is safe.
+_X509_DIR_ATTR_OID_RE = re.compile(r"\b2\.5\.4\.\d{1,3}\b")
+
 
 def strip_defender_version_strings(text: str) -> str:
     """Remove Microsoft Defender Security Intelligence / Engine version
@@ -140,6 +169,9 @@ def strip_defender_version_strings(text: str) -> str:
     text = _DEFENDER_VERSION_RE.sub(" ", text)
     text = _DEFENDER_AV_KV_RE.sub(" ", text)
     text = _PATH_VERSION_RE.sub(" ", text)
+    text = _OID_PREFIXED_SHORT_RE.sub(" ", text)
+    text = _OID_RE.sub(" ", text)
+    text = _X509_DIR_ATTR_OID_RE.sub(" ", text)
     return text
 
 
