@@ -764,10 +764,18 @@ def _p_feodo(ip: str) -> dict:
 
 # ─── Authenticated sources (Censys / Hybrid Analysis / CrowdSec) ───────────────
 def _p_censys(r):
-    """Censys v2 hosts view — services, TLS cert, ASN, location."""
+    """Censys host view — handles BOTH the legacy search.censys.io/v2
+    response shape and the new api.platform.censys.io/v3 shape.
+    The v2 response puts host fields at `result.<field>`; the v3
+    Platform response wraps them one deeper at `result.resource.<field>`.
+    Field names are the same once you reach the resource level."""
     if _is_fail(r):
         return _err("censys", r)
     res = (r.get("result") or {})
+    # Platform v3 wraps the host data under 'resource'; legacy v2 puts
+    # the fields directly on result. Detect and unwrap.
+    if isinstance(res.get("resource"), dict):
+        res = res["resource"]
     services = []
     for s in (res.get("services") or [])[:15]:
         services.append({
@@ -795,9 +803,9 @@ def _p_censys(r):
         "asn":         asys.get("asn"),
         "asn_name":    asys.get("name"),
         "bgp_prefix":  asys.get("bgp_prefix"),
-        "country":     loc.get("country"),
+        "country":     loc.get("country") or loc.get("country_code"),
         "city":        loc.get("city"),
-        "last_updated": res.get("last_updated_at"),
+        "last_updated": res.get("last_updated_at") or res.get("last_observed_at"),
         "os":          _safe(res, "operating_system", "product"),
     }
     return out
@@ -925,19 +933,26 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
 
     tor_nodes = await _tor(session)
 
-    # Censys migrated to v2 Personal Access Tokens — single CENSYS_API_KEY
-    # sent as a Bearer token. The old CENSYS_ID + CENSYS_SECRET Basic
-    # Auth pair is still read as a fallback for deployments that haven't
-    # migrated yet; the platform will eventually drop the legacy path.
+    # Censys auth — two paths:
+    #   • New Platform API (PAT): CENSYS_API_KEY starts with 'censys_',
+    #     used as a Bearer token against api.platform.censys.io. This is
+    #     the actively-supported v3 surface.
+    #   • Legacy search.censys.io/v2 API ID + Secret pair, kept as a
+    #     fallback for older deployments that haven't rotated yet.
+    # The two endpoints return different response shapes; _p_censys
+    # handles both.
     censys_token = keys.get("CENSYS_API_KEY", "")
+    censys_url = None
     censys_auth = None
     if censys_token:
+        censys_url  = f"https://api.platform.censys.io/v3/global/asset/host/{ip}"
         censys_auth = f"Bearer {censys_token}"
     else:
         censys_id     = keys.get("CENSYS_ID", "")
         censys_secret = keys.get("CENSYS_SECRET", "")
         if censys_id and censys_secret:
             import base64 as _b64
+            censys_url  = f"https://search.censys.io/api/v2/hosts/{ip}"
             censys_auth = "Basic " + _b64.b64encode(
                 f"{censys_id}:{censys_secret}".encode()).decode()
 
@@ -963,7 +978,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         _get(session, f"https://freeapi.robtex.com/ipquery/{ip}"),
         _get(session, f"https://api.hackertarget.com/reverseiplookup/?q={ip}"),
         # ── conditional authenticated sources ──────────────────────────────────
-        _get(session, f"https://search.censys.io/api/v2/hosts/{ip}",
+        _get(session, censys_url,
              headers={"Authorization": censys_auth}) if censys_auth else _noop(),
         _get(session, f"https://cti.api.crowdsec.net/v2/smoke/{ip}",
              headers={"x-api-key": crowdsec_key}) if crowdsec_key else _noop(),
@@ -1332,11 +1347,20 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
     else:
         _deep_co = _skip()
 
-    cy_r, mv_r, oc_r, vt_r, mb_r, deep_r = await asyncio.gather(
+    # IntelX dark-web + paste-site search for this hash. Hashes that
+    # appear in IntelX leak buckets are often referenced by malware
+    # tracker dumps; a hit there is high-signal corroboration.
+    try:
+        from intel.breach_sources import intelx_search as _ix
+        _ix_co = _ix(session, hash_val, keys.get("INTELX_KEY", ""))
+    except Exception:
+        _ix_co = _skip()
+
+    cy_r, mv_r, oc_r, vt_r, mb_r, deep_r, ix_r = await asyncio.gather(
         _cy_co,
         _maltiverse_lookup("hash", hash_val, _cfg),
         _opencti_lookup(hash_val, _cfg),
-        _vt_co, _mb_co, _deep_co,
+        _vt_co, _mb_co, _deep_co, _ix_co,
         return_exceptions=True,
     )
 
@@ -1361,6 +1385,9 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
     deep = _ok_dict(deep_r)
     if deep:
         data["sandbox_deep"] = deep
+    ix = _ok_dict(ix_r)
+    if ix and "error" not in ix:
+        data["intelx"] = ix
     _cache[ck] = data
     return data
 

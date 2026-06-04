@@ -190,25 +190,34 @@ def _parse_dehashed(r: Any, identifier: str) -> Dict[str, Any]:
 
 # ─── IntelX (dark web + paste sites) ─────────────────────────────────────────
 async def intelx_search(session, term: str, intelx_key: Optional[str]) -> Dict[str, Any]:
-    """Search IntelligenceX for a term across the dark web + paste site
-    index. IntelX uses a 2-step protocol: POST to /intelligent/search to
-    get a search-id, then GET /intelligent/search/result?id=... for the
-    results. We do one POST and one GET (the GET sometimes returns
-    immediately, otherwise we surface what we have)."""
+    """Search IntelligenceX for a term across the dark web + paste-site
+    index. IntelX's protocol is a 3-step search:
+
+      1. POST  /intelligent/search   → returns a search id
+      2. wait ~500ms for the server-side search to populate
+      3. GET   /intelligent/search/result?id=<id>&limit=10
+      4. GET   /intelligent/search/terminate?id=<id>  (cleanup)
+
+    Returns count, bucket list, recent record dates, and a preview of
+    the first record. Buckets containing 'leaks' or 'darknet' are
+    high-signal indicators of credential exposure or dark-web mention.
+    """
     from agents.enrichment import _post, _get
     if not intelx_key:
         return {"error": "INTELX_KEY not configured", "error_type": "auth_failed",
                 "source": "intelx"}
 
+    # Step 1 — initiate the search
     init = await _post(
         session, "https://2.intelx.io/intelligent/search",
         headers={"x-key": intelx_key, "Accept": "application/json",
                  "Content-Type": "application/json"},
         json={
             "term":       term,
-            "maxresults": 25,
+            "maxresults": 10,
             "media":      0,        # 0 = any media type
             "sort":       4,        # 4 = newest first
+            "timeout":    5,        # server-side search timeout in seconds
             "terminate":  [],
         },
     )
@@ -221,11 +230,28 @@ async def intelx_search(session, term: str, intelx_key: Optional[str]) -> Dict[s
     if not search_id:
         return {"source": "intelx", "error": "no search id returned"}
 
+    # Step 2 — wait briefly for IntelX to populate the search server-side
+    import asyncio as _asyncio
+    await _asyncio.sleep(0.5)
+
+    # Step 3 — fetch the results (limit=10 per the spec)
     results = await _get(
         session,
-        f"https://2.intelx.io/intelligent/search/result?id={search_id}",
+        f"https://2.intelx.io/intelligent/search/result?id={search_id}&limit=10",
         headers={"x-key": intelx_key, "Accept": "application/json"},
     )
+
+    # Step 4 — terminate the search to free server resources. Fire and
+    # forget; failure here doesn't affect the analyst-visible result.
+    try:
+        await _get(
+            session,
+            f"https://2.intelx.io/intelligent/search/terminate?id={search_id}",
+            headers={"x-key": intelx_key, "Accept": "application/json"},
+        )
+    except Exception:
+        pass
+
     return _parse_intelx(results, term)
 
 
@@ -237,46 +263,80 @@ def _parse_intelx(r: Any, term: str) -> Dict[str, Any]:
         return {"source": "intelx", "error": "unexpected response shape"}
 
     records = r.get("records") or []
-    selectors = {}
     sources = set()
+    recent_dates = []
     matches = []
-    for rec in records[:20]:
+    first_preview = ""
+    for rec in records[:10]:
         if not isinstance(rec, dict):
             continue
         src = rec.get("bucket")
         if src:
             sources.add(src)
+        added = rec.get("added") or rec.get("date")
+        if added:
+            recent_dates.append(str(added)[:19])
+        # Build a compact preview from the first record's name + bucket +
+        # media — analyst sees enough to decide whether to pivot to IntelX.
+        if not first_preview:
+            bits = []
+            if rec.get("name"):  bits.append(str(rec["name"]))
+            if rec.get("typeh"): bits.append(f"type: {rec['typeh']}")
+            if rec.get("mediah"):bits.append(f"media: {rec['mediah']}")
+            first_preview = " · ".join(bits)[:200]
         matches.append({
             "added":     rec.get("added"),
             "date":      rec.get("date"),
             "name":      rec.get("name"),
             "bucket":    src,
-            "media":     rec.get("mediah"),         # human-readable media type
+            "media":     rec.get("mediah"),
             "type":      rec.get("typeh"),
             "size":      rec.get("size"),
             "system_id": rec.get("systemid"),
-            "preview":   (rec.get("xscore") and rec.get("name") or "")[:160],
         })
 
     n = len(records)
-    if n >= 5:
-        verdict = "SUSPICIOUS"
+    buckets_sorted = sorted(sources)
+
+    # High-signal bucket detection: 'leaks.*' (credential dumps) and
+    # 'darknet.*' (Tor + I2P mentions) are the buckets where a hit is
+    # actionable. Other buckets (whois, dumpster, etc.) are noise more
+    # often than signal.
+    high_signal_buckets = [b for b in buckets_sorted
+                            if "leaks" in b.lower() or "darknet" in b.lower()]
+    if high_signal_buckets:
+        verdict = "MALICIOUS" if "leaks.private" in " ".join(buckets_sorted).lower() \
+                  else "SUSPICIOUS"
     elif n >= 1:
         verdict = "SUSPICIOUS"
     else:
         verdict = "CLEAN"
 
+    summary_bits = []
+    if n:
+        summary_bits.append(f"{n} match{'es' if n != 1 else ''} in IntelX")
+        if buckets_sorted:
+            summary_bits.append(f"buckets: {', '.join(buckets_sorted[:5])}")
+        if high_signal_buckets:
+            summary_bits.append(
+                f"high-signal bucket{'s' if len(high_signal_buckets) != 1 else ''}: "
+                f"{', '.join(high_signal_buckets[:3])}")
+        if recent_dates:
+            summary_bits.append(f"most recent: {sorted(recent_dates, reverse=True)[0][:10]}")
+    else:
+        summary_bits.append("No IntelX matches.")
+
     return {
-        "source":   "intelx",
-        "term":     term,
-        "count":    n,
-        "matches":  matches,
-        "buckets":  sorted(sources)[:12],
-        "verdict":  verdict,
-        "summary":  (f"{n} match{'es' if n != 1 else ''} in IntelX "
-                     f"(dark web + paste sites); buckets: "
-                     f"{', '.join(sorted(sources)[:5])}"
-                     if n else "No IntelX matches."),
+        "source":              "intelx",
+        "term":                term,
+        "count":               n,
+        "matches":             matches,
+        "buckets":             buckets_sorted[:12],
+        "high_signal_buckets": high_signal_buckets,
+        "recent_dates":        sorted(recent_dates, reverse=True)[:5],
+        "preview":             first_preview,
+        "verdict":             verdict,
+        "summary":             " · ".join(summary_bits),
     }
 
 
