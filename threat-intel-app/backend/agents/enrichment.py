@@ -1091,6 +1091,36 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
             data["asn_reputation"] = asn
     except Exception:
         pass
+
+    # ProxyCheck — VPN / proxy / Tor / residential-proxy classification.
+    # Configured via PROXYCHECK_KEY; free tier supports 1000 daily checks
+    # without a key but rate-limits aggressively. Returns proxy/VPN/Tor
+    # flags + ISP + country + ASN.
+    proxycheck_key = keys.get("PROXYCHECK_KEY", "")
+    if proxycheck_key:
+        try:
+            pc = await _get(
+                session, f"https://proxycheck.io/v2/{ip}",
+                params={"key": proxycheck_key, "vpn": "1", "asn": "1", "risk": "1"},
+            )
+            if isinstance(pc, dict) and not pc.get("error"):
+                row = pc.get(ip) or {}
+                if row:
+                    data["proxycheck"] = {
+                        "proxy":     (row.get("proxy") or "").lower() == "yes",
+                        "type":      row.get("type"),       # VPN / TOR / public / etc.
+                        "provider":  row.get("provider"),
+                        "country":   row.get("country"),
+                        "isp":       row.get("isocode"),
+                        "asn":       row.get("asn"),
+                        "risk":      row.get("risk"),       # 0-100
+                    }
+                else:
+                    data["proxycheck"] = {"error": "no data", "error_type": "no_data"}
+            elif isinstance(pc, dict):
+                data["proxycheck"] = pc
+        except Exception as e:
+            data["proxycheck"] = {"error": _humanise_exc(e), "error_type": "unreachable"}
     _cache[ck] = data
     return data
 
@@ -1204,6 +1234,57 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     ix = _ok_dict(ix_r)
     if ix:
         data["intelx"] = ix
+
+    # SecurityTrails — DNS history, sister domains, current resolution
+    # detail. Keyed via SECURITYTRAILS_KEY. Returns historical A records
+    # and subdomain enumeration that complements crt.sh cert transparency.
+    st_key = keys.get("SECURITYTRAILS_KEY", "")
+    if st_key:
+        try:
+            st = await _get(
+                session, f"https://api.securitytrails.com/v1/domain/{domain}",
+                headers={"APIKEY": st_key, "Accept": "application/json"},
+            )
+            if isinstance(st, dict) and not st.get("error"):
+                data["securitytrails"] = {
+                    "apex_domain": st.get("apex_domain"),
+                    "hostname":    st.get("hostname"),
+                    "alexa_rank":  st.get("alexa_rank"),
+                    "subdomain_count": (st.get("subdomain_count")
+                                        or len(st.get("subdomains") or [])),
+                    "current_dns": {
+                        rt: (v or {}).get("values", [])[:3]
+                        for rt, v in (st.get("current_dns") or {}).items()
+                    },
+                }
+            elif isinstance(st, dict):
+                data["securitytrails"] = st
+        except Exception as e:
+            data["securitytrails"] = {"error": _humanise_exc(e),
+                                       "error_type": "unreachable"}
+
+    # FullHunt — subdomain + service inventory. Keyed via FULLHUNT_KEY.
+    fullhunt_key = keys.get("FULLHUNT_KEY", "")
+    if fullhunt_key:
+        try:
+            fh = await _get(
+                session, f"https://fullhunt.io/api/v1/host/{domain}",
+                headers={"X-API-KEY": fullhunt_key},
+            )
+            if isinstance(fh, dict) and not fh.get("error"):
+                data["fullhunt"] = {
+                    "host":             fh.get("host"),
+                    "ip_addresses":     (fh.get("ip_addresses") or [])[:6],
+                    "ports":            (fh.get("ports") or [])[:10],
+                    "subdomain_count":  fh.get("subdomain_count")
+                                        or len(fh.get("subdomains") or []),
+                    "tags":             (fh.get("tags") or [])[:6],
+                }
+            elif isinstance(fh, dict):
+                data["fullhunt"] = fh
+        except Exception as e:
+            data["fullhunt"] = {"error": _humanise_exc(e),
+                                 "error_type": "unreachable"}
 
     _cache[ck] = data
     return data
@@ -1446,45 +1527,68 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
     except Exception:
         _us_co = _skip()
 
-    abusech_key = keys.get("ABUSECH_AUTH_KEY", "")
+    abusech_key = keys.get("ABUSECH_AUTH_KEY", "") or keys.get("MALWAREBAZAAR_API_KEY", "")
     _ac_headers = {"Auth-Key": abusech_key} if abusech_key else {}
+
+    # IntelX search for the URL itself — pivots through the dark-web /
+    # paste-site index. Hits in leaks.* or darknet.* buckets are a
+    # strong signal the URL has been advertised or referenced in
+    # adversary forums.
+    try:
+        from intel.breach_sources import intelx_search as _ix
+        _ix_co = _ix(session, url, keys.get("INTELX_KEY", ""))
+    except Exception:
+        _ix_co = _skip()
+
+    # PhishTank — community phishing database. Free anonymous lookup
+    # supported but a key (PHISHTANK_KEY) raises the rate limit.
+    phishtank_key = keys.get("PHISHTANK_KEY", "")
+    _pt_params = {"url": url, "format": "json"}
+    if phishtank_key:
+        _pt_params["app_key"] = phishtank_key
+    _pt_co = _post(
+        session,
+        "https://checkurl.phishtank.com/checkurl/",
+        data=_pt_params,
+        headers={"User-Agent": "RECON/phishtank-check"},
+    )
 
     results = await asyncio.gather(
         _get(session, f"https://www.virustotal.com/api/v3/urls/{url_b64}",
              headers={"x-apikey": keys.get("VIRUSTOTAL_KEY", "")}),
         _us_co,
-        # URLhaus URL endpoint — direct lookup against the abuse.ch
-        # malware-distribution URL database. Returns hosting status,
-        # threat, malware family, tags, payload hashes.
+        # URLhaus URL endpoint
         _post(session, "https://urlhaus-api.abuse.ch/v1/url/",
               data=f"url={url}",
               headers={"Content-Type": "application/x-www-form-urlencoded",
                        **_ac_headers}),
-        # ThreatFox URL search — confirms whether the URL is on the
-        # ThreatFox IOC database.
+        # ThreatFox URL search
         _post(session, "https://threatfox-api.abuse.ch/api/v1/",
               json={"query": "search_ioc", "search_term": url},
               headers=_ac_headers),
+        # OTX URL indicator — pulse count + tags for the URL itself
+        _get(session,
+             f"https://otx.alienvault.com/api/v1/indicators/url/{url}/general",
+             headers={"X-OTX-API-KEY": keys.get("OTX_KEY", "")}),
+        # PhishTank community phishing DB
+        _pt_co,
+        # IntelX dark-web / paste-site search
+        _ix_co,
         return_exceptions=True,
     )
 
     data = {
         "virustotal": _p_vt_url(results[0]),
     }
-    # URLScan screenshot — surface only when a previous scan was found
-    # (the "not found" payload still carries source + summary so the
-    # frontend can render a per-source row with status if desired).
     us = _ok_dict(results[1])
     if us:
         data["urlscan_screenshot"] = us
-    # URLhaus URL hit — only attach when the URL is actually in the
-    # database (query_status == "ok").
     uh = results[2]
     if isinstance(uh, dict) and not uh.get("error") and \
             (uh.get("query_status") or "").lower() == "ok":
         data["urlhaus_url"] = {
-            "url_status":   uh.get("url_status"),       # online | offline | unknown
-            "threat":       uh.get("threat"),            # malware_download / etc.
+            "url_status":   uh.get("url_status"),
+            "threat":       uh.get("threat"),
             "tags":         (uh.get("tags") or [])[:8],
             "first_seen":   uh.get("date_added"),
             "last_seen":    uh.get("last_online"),
@@ -1494,12 +1598,36 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
             "summary":      (f"URLhaus hit: {uh.get('threat') or 'malware-distribution'}"
                              + (f" ({uh.get('url_status')})" if uh.get("url_status") else "")),
         }
-    # ThreatFox URL search — same parser as the hash variant.
     tf_url = results[3]
     if isinstance(tf_url, dict) and not tf_url.get("error"):
         tf_parsed = _p_tf(tf_url)
         if not tf_parsed.get("error"):
             data["threatfox"] = tf_parsed
+    # OTX URL pulses
+    otx_url = _ok_dict(results[4])
+    if otx_url and not otx_url.get("error"):
+        data["otx"] = _p_otx(otx_url)
+    # PhishTank — only surface positive results (in_database=True means
+    # the URL is on the phishing list). Negative responses are not noise
+    # worth showing.
+    pt = results[5]
+    if isinstance(pt, dict) and not pt.get("error"):
+        results_arr = (pt.get("results") or {})
+        in_db = results_arr.get("in_database") if isinstance(results_arr, dict) else False
+        if in_db:
+            data["phishtank"] = {
+                "verified":     results_arr.get("verified"),
+                "phish_id":     results_arr.get("phish_id"),
+                "submitted_at": results_arr.get("submission_time"),
+                "verdict":      "MALICIOUS",
+                "summary":      ("PhishTank lists this URL as a verified phishing page"
+                                 if results_arr.get("verified")
+                                 else "PhishTank has this URL flagged (pending verification)"),
+            }
+    # IntelX search
+    ix = _ok_dict(results[6])
+    if ix and not ix.get("error"):
+        data["intelx"] = ix
 
     _cache[ck] = data
     return data

@@ -1715,10 +1715,45 @@ async def scan_file_v2(file: UploadFile = File(...)):
     except Exception:
         pass
 
-    # TI correlation (async)
+    # TI correlation (async) — file_correlation handles VT/MB/HA/AnyRUN
+    # via the hash; enrich_hash adds OTX file, ThreatFox, URLhaus payload,
+    # CIRCL hashlookup, Hybrid Analysis search, Team Cymru MHR, Maltiverse,
+    # OpenCTI, VT graph relationships, MalwareBazaar similar samples,
+    # IntelX, and the deep sandbox aggregator. Run both concurrently so
+    # every hash-capable source the platform supports hits the file.
+    sha256 = (analysis.get("hashes") or {}).get("sha256")
+    md5    = (analysis.get("hashes") or {}).get("md5")
+    sha1   = (analysis.get("hashes") or {}).get("sha1")
+    primary_hash = sha256 or sha1 or md5
     try:
-        from intel.file_correlation import correlate
-        analysis["threat_intel"] = await correlate(analysis, config)
+        from intel.file_correlation import correlate as _correlate
+        from agents.enrichment import enrich_hash as _enrich_hash
+        import aiohttp as _aiohttp
+        # Snapshot the keys enrich_hash looks at into a plain dict (same
+        # shape the URL-scan endpoint already builds).
+        _keys = {k: (config.get(k) or "") for k in (
+            "VIRUSTOTAL_KEY", "OTX_KEY", "HYBRID_ANALYSIS_KEY",
+            "MALWAREBAZAAR_API_KEY", "ABUSECH_AUTH_KEY", "INTELX_KEY",
+            "MALTIVERSE_KEY", "ANYRUN_KEY", "POLYSWARM_KEY",
+        )}
+        async with _aiohttp.ClientSession(
+            timeout=_aiohttp.ClientTimeout(total=30),
+        ) as _sess:
+            _ti_res, _eh_res = await asyncio.gather(
+                _correlate(analysis, config),
+                _enrich_hash(_sess, primary_hash, _keys) if primary_hash else asyncio.sleep(0, result={}),
+                return_exceptions=True,
+            )
+        # file_correlation result lands as threat_intel for backwards
+        # compatibility with the file-scanner UI; enrich_hash result
+        # lands as enrichments.hashes[sha256] mirroring how analyze
+        # stores per-IOC enrichment.
+        if isinstance(_ti_res, Exception):
+            analysis["threat_intel"] = {"error": _clean_exc(_ti_res, prefix="threat-intel")}
+        else:
+            analysis["threat_intel"] = _ti_res
+        if primary_hash and isinstance(_eh_res, dict):
+            analysis.setdefault("enrichments", {}).setdefault("hashes", {})[primary_hash] = _eh_res
     except Exception as e:
         analysis["threat_intel"] = {"error": _clean_exc(e, prefix="threat-intel")}
 
@@ -1736,7 +1771,6 @@ async def scan_file_v2(file: UploadFile = File(...)):
         pass
 
     # Kick off AI workflows in the background — caller doesn't wait for them
-    sha256 = (analysis.get("hashes") or {}).get("sha256")
     if sha256:
         asyncio.create_task(_finish_ai_in_background(sha256, data))
 
@@ -2031,32 +2065,52 @@ async def scan_url_endpoint(req: dict):
     #      actual data behind it because file_correlation only sees the
     #      downloaded bytes, never the URL or hostname.
     try:
-        from intel.file_correlation import correlate
-        analysis["threat_intel"] = await correlate(analysis, config)
-    except Exception as e:
-        analysis["threat_intel"] = {"error": _clean_exc(e, prefix="threat-intel")}
-    try:
         import aiohttp
         from urllib.parse import urlparse
-        from agents.enrichment import enrich_url as _enrich_url, enrich_domain as _enrich_domain
+        from intel.file_correlation import correlate
+        from agents.enrichment import (
+            enrich_url as _enrich_url,
+            enrich_domain as _enrich_domain,
+            enrich_hash as _enrich_hash,
+        )
         host = (urlparse(url).hostname or "").strip().lower()
+        sha256 = (analysis.get("hashes") or {}).get("sha256")
         keys = {k: config.get(k, "") for k in (
             "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
             "GREYNOISE_KEY", "SHODAN_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
             "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
+            "HYBRID_ANALYSIS_KEY", "MALWAREBAZAAR_API_KEY",
+            "ABUSECH_AUTH_KEY", "INTELX_KEY", "ANYRUN_KEY",
+            "POLYSWARM_KEY", "PHISHTANK_KEY", "SECURITYTRAILS_KEY",
+            "PROXYCHECK_KEY", "FULLHUNT_KEY", "CENSYS_API_KEY",
+            "CENSYS_ID", "CENSYS_SECRET", "CRIMINAL_IP_KEY",
+            "CROWDSEC_KEY",
         )}
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as sess:
-            url_enr, dom_enr = await asyncio.gather(
+        # Run hash correlation (file_correlation) + per-IOC enrichment in
+        # parallel — every source the platform supports gets a fair shot.
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=30),
+        ) as sess:
+            ti_res, url_enr, dom_enr, hash_enr = await asyncio.gather(
+                correlate(analysis, config),
                 _enrich_url(sess, url, keys),
                 _enrich_domain(sess, host, keys) if host else asyncio.sleep(0, result={}),
+                _enrich_hash(sess, sha256, keys) if sha256 else asyncio.sleep(0, result={}),
                 return_exceptions=True,
             )
+        if isinstance(ti_res, Exception):
+            analysis["threat_intel"] = {"error": _clean_exc(ti_res, prefix="threat-intel")}
+        else:
+            analysis["threat_intel"] = ti_res
         analysis["enrichments"] = {
             "urls":    {url: url_enr if isinstance(url_enr, dict) else {}},
             "domains": {host: dom_enr if (host and isinstance(dom_enr, dict)) else {}},
+            "hashes":  ({sha256: hash_enr} if (sha256 and isinstance(hash_enr, dict)) else {}),
         }
     except Exception as e:
         analysis["enrichments"] = {"error": _clean_exc(e, prefix="enrichment")}
+        if "threat_intel" not in analysis:
+            analysis["threat_intel"] = {"error": _clean_exc(e, prefix="threat-intel")}
     # Only schedule the AI pipeline when we actually have bytes to analyse.
     # Soft-fail downloads produce a stub analysis; the URL-reputation +
     # WHOIS + Wayback + URLScan submission paths still work without AI.
