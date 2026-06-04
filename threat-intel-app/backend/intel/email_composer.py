@@ -2741,6 +2741,18 @@ def _extract_iocs_from_log(log_text: str, parsed: Dict) -> Dict[str, List[str]]:
         " ", cleaned, flags=re.IGNORECASE | re.MULTILINE,
     )
 
+    # Microsoft / Entra ID alert identifiers are 64-char hex strings
+    # shaped exactly like a SHA-256 (e.g. 'id : 29644c05947ac6...').
+    # They were being extracted as file hashes, pushed to VirusTotal,
+    # and the empty-result was then narrated by the AI as 'the file
+    # hash has no malicious reputation' — misleading because it's not
+    # a file hash, just an alert ID. Strip any line where the key
+    # ends with 'Id' / 'ID' / 'id' and the value is a long hex blob.
+    cleaned = re.sub(
+        r"^[ \t]*[\w\s]*[Ii][Dd]\s*:\s*[a-fA-F0-9]{32,64}[ \t]*$",
+        " ", cleaned, flags=re.MULTILINE,
+    )
+
     # Documentation / KB links inside an alert message (go.microsoft.com,
     # learn.microsoft.com, docs.microsoft.com, ...) are not customer
     # IOCs — they're just where Microsoft hosts the help page for the
