@@ -2730,6 +2730,27 @@ def _extract_iocs_from_log(log_text: str, parsed: Dict) -> Dict[str, List[str]]:
         " ", cleaned,
     )
 
+    # Microsoft Defender TLHash / Parent Process TLHash fields are
+    # 32-char hex strings shaped exactly like MD5s but they are NOT
+    # file hashes (Microsoft internal TrieList hash). They were being
+    # extracted as MD5 hashes and pushed to VirusTotal, where they
+    # sometimes coincidentally collided with real malware hashes and
+    # came back as 'malicious'. Strip them before hash extraction.
+    cleaned = re.sub(
+        r"^[ \t]*(?:Parent\s+Process\s+)?TLHash\s*:[^\r\n]*",
+        " ", cleaned, flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    # Documentation / KB links inside an alert message (go.microsoft.com,
+    # learn.microsoft.com, docs.microsoft.com, ...) are not customer
+    # IOCs — they're just where Microsoft hosts the help page for the
+    # detection. They were getting enriched as if they were attacker
+    # infrastructure. Strip any documentation-shaped URL pattern.
+    cleaned = re.sub(
+        r"https?://(?:go|learn|docs|support|aka|technet)\.microsoft\.com[^\s\"'<>]*",
+        " ", cleaned, flags=re.IGNORECASE,
+    )
+
     # IPs — log body
     for m in _IOC_IP_RE.finditer(cleaned):
         _add("ips", m.group(0))
@@ -3537,6 +3558,55 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "  - User-Agent strings that name an automation framework "
         "    (curl, python-requests, postman, ROPC, MSAL.NET) on "
         "    interactive-user accounts — surface for verification.\n\n"
+        "* DUAL-USE administrative tools — do NOT lead with 'malicious' "
+        "  even when VirusTotal flags the file. The following are widely-"
+        "  used IT admin / penetration-testing tools that legitimate "
+        "  administrators run daily; AV engines flag them because they "
+        "  are equally useful to attackers:\n"
+        "    - SoftPerfect Network Scanner (netscan.exe)\n"
+        "    - Advanced IP Scanner (advanced_ip_scanner.exe)\n"
+        "    - Nmap, Zenmap, masscan\n"
+        "    - Angry IP Scanner\n"
+        "    - PsExec, PsLoggedOn, the wider Sysinternals suite\n"
+        "    - PowerShell Empire / Cobalt Strike artefacts (these ARE\n"
+        "      offensive frameworks — treat as malicious unless the\n"
+        "      customer's red team has scheduled an engagement)\n"
+        "    - ProcDump, ProcessHacker (legit + LSASS dump abuse)\n"
+        "    - RemCom, paexec, BloodHound, SharpHound\n"
+        "    - WinRAR / 7zip command-line in odd locations (legit\n"
+        "      compressors, also used to stage data for exfil)\n"
+        "  When the parsed log shows one of these tools, the analysis\n"
+        "  should EXPLAIN the dual-use status to the customer:\n"
+        "    'SoftPerfect Network Scanner (netscan.exe) is a widely-used\n"
+        "     network discovery tool that IT teams use for inventory and\n"
+        "     pen-testers / attackers use for reconnaissance. The high\n"
+        "     VirusTotal detection ratio reflects this dual-use status,\n"
+        "     not a definitive malicious verdict.'\n"
+        "  Calibrate based on context:\n"
+        "    - Executed from C:\\Tools\\, C:\\Program Files\\..., or by\n"
+        "      a known admin account during business hours: probably\n"
+        "      legitimate — confirm with IT.\n"
+        "    - Executed from Desktop, Downloads, AppData\\Local\\Temp,\n"
+        "      by an unprivileged user, after-hours, or following a\n"
+        "      suspicious sign-in: treat as serious — that's the\n"
+        "      reconnaissance phase of a real intrusion.\n"
+        "  Never write 'this file is malicious' for these tools without\n"
+        "  the secondary context above.\n\n"
+        "* WELL-KNOWN Azure / Entra ID role GUIDs — when a role-change\n"
+        "  operation references one of these GUIDs, resolve the name\n"
+        "  inline so the customer doesn't have to look it up:\n"
+        "    62e90394-69f5-4237-9190-012177145e10 → Global Administrator\n"
+        "    194ae4cb-b126-40b2-bd5b-6091b380977d → Security Administrator\n"
+        "    e8611ab8-c189-46e8-94e1-60213ab1f814 → Privileged Role Administrator\n"
+        "    7be44c8a-adaf-4e2a-84d6-ab2649e08a13 → Privileged Authentication Administrator\n"
+        "    fe930be7-5e62-47db-91af-98c3a49a38b1 → User Administrator\n"
+        "    158c047a-c907-4556-b7ef-446551a6b5f7 → Cloud Application Administrator\n"
+        "    966707d0-3269-4727-9be2-8c3a10f19b9d → Password Administrator\n"
+        "    8329153b-31d0-4727-b945-745eb3bc5f31 → Exchange Administrator\n"
+        "  Assignments to Global / Privileged Role / Privileged Auth / \n"
+        "  Security Administrator are TIER-0 changes — flag explicitly\n"
+        "  ('This grants tenant-wide control') and require change-ticket\n"
+        "  confirmation regardless of stated reason.\n\n"
         "* SUSPICIOUS mailbox / Exchange operations — these are TOP "
         "  Business Email Compromise (BEC) indicators. When the parsed "
         "  log includes one of these Workload=Exchange operations, name "
