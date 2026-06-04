@@ -1644,7 +1644,10 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                         "                                   neither alone would,\n"
                         "        rationale: string — when related=false, brief reason }.\n"
                         if is_multi_log else
-                        "  log_correlation (optional; omit when only one log was submitted),\n"
+                        "  DO NOT emit a log_correlation field. The input contained ONLY ONE\n"
+                        "    log entry (multi-log detection ran and found a single entry).\n"
+                        "    Treating multiple field values within one log as 'related events'\n"
+                        "    is a bug, not analysis.\n"
                     ) +
                     "\nNo markdown fences, no commentary outside the JSON."
                 )
@@ -1896,6 +1899,12 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
     except Exception as _e:
         geopolitical = {"error": str(_e)}
 
+    # Defensive: even after the prompt change, drop log_correlation when
+    # only one log was submitted. The AI sometimes hallucinates a
+    # correlation across "field values within a single log" — we never
+    # want that surfaced to the analyst.
+    _log_correlation = result.get("log_correlation") if is_multi_log else None
+
     return {
         **state,
         "investigation_result":   result,
@@ -1911,6 +1920,6 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
         "attack_stage":           result.get("attack_stage"),
         "geopolitical":           geopolitical,
         "tool_call_log":          tool_call_log,
-        "log_correlation":        result.get("log_correlation"),
+        "log_correlation":        _log_correlation,
         "agent_trace":            trace,
     }

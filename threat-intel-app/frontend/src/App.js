@@ -1355,20 +1355,62 @@ function SignalBanners({ result }) {
   const banners = [];
   const enr = result?.enrichments || {};
 
-  // Same-day domain registrations — top phishing signal
+  // Helper — build a one-line "context tail" with WHOIS + hosting info
+  // we have for a domain so the banner text quotes the same data the
+  // analyst would otherwise have to dig for in the per-domain card.
+  const _domainContext = (d) => {
+    const bits = [];
+    const w = d?.whois;
+    if (w && !w.error) {
+      if (w.registrar) bits.push(`registrar ${w.registrar}`);
+      if (w.registrant_country) bits.push(w.registrant_country);
+    }
+    // ASN of the A-record IP — flag Cloudflare / known abused hosters
+    // explicitly. Falls back to the generic ASN description when not
+    // recognised. Looks at the first A record returned by dns_records.
+    const aRecords = d?.osint?.dns_records?.records?.A || [];
+    const firstIp = aRecords[0] || '';
+    if (firstIp) {
+      const ipInfo = (result?.enrichments?.ips || {})[firstIp];
+      const asnDesc = (ipInfo?.bgp_ranking?.asn_description
+                   || ipInfo?.ipinfo?.org || '').toString();
+      const knownAbused = /cloudflare|namecheap|porkbun|hostinger|fastly|akamai|hetzner|digitalocean|vultr|linode/i;
+      if (knownAbused.test(asnDesc)) {
+        const provider = asnDesc.match(knownAbused)[0].toLowerCase();
+        bits.push(`hosted on ${provider} (${firstIp})`);
+      } else if (asnDesc) {
+        bits.push(`hosted on ${asnDesc.slice(0, 40)} (${firstIp})`);
+      } else {
+        bits.push(`resolves to ${firstIp}`);
+      }
+    }
+    return bits.length ? ` · ${bits.join(' · ')}` : '';
+  };
+
+  // Recently-registered domains, three tiers by age
   for (const [domain, d] of Object.entries(enr.domains || {})) {
     const nrd = d?.heuristics?.nrd;
+    const ctx = _domainContext(d);
     if (nrd?.is_same_day) {
       banners.push({
         kind: 'critical',
         title: 'Domain registered TODAY',
-        text:  `${domain} was registered ${nrd.age_hours}h ago (${nrd.created}). This is a high-confidence phishing signal — legitimate businesses don't operate from same-day domains.`,
+        text:  `${domain} was registered ${nrd.age_hours}h ago (${nrd.created})${ctx}. This is a high-confidence phishing signal — legitimate businesses don't operate from same-day domains.`,
       });
     } else if (nrd?.is_this_week) {
       banners.push({
         kind: 'high',
         title: 'Domain registered this week',
-        text:  `${domain} is ${nrd.age_days} days old (${nrd.created}). New domains under one week are common in active phishing campaigns.`,
+        text:  `${domain} is ${nrd.age_days} days old (${nrd.created})${ctx}. New domains under one week are common in active phishing campaigns.`,
+      });
+    } else if (nrd?.is_nrd && nrd?.age_days != null && nrd.age_days < 30) {
+      // 7–29 days — still flag, slightly lower urgency. CDN-fronted
+      // newly-registered domains are a textbook clickfix / phishing
+      // pattern (mentioned by analyst feedback).
+      banners.push({
+        kind: 'medium',
+        title: 'Newly-registered domain',
+        text:  `${domain} is ${nrd.age_days} days old (${nrd.created})${ctx}. NRDs under 30 days are commonly used for short-lived phishing pages, especially when fronted by a CDN.`,
       });
     }
     // Spamhaus DBL listing — independent confirmation
@@ -1428,8 +1470,9 @@ function SignalBanners({ result }) {
   return (
     <Stack spacing={1} sx={{ mb: 1.75 }}>
       {banners.map((b, i) => {
-        const isCritical = b.kind === 'critical';
-        const color = isCritical ? '#F14337' : '#E6700F';
+        const color = b.kind === 'critical' ? '#F14337'
+                    : b.kind === 'medium'   ? '#E1B823'
+                    :                          '#E6700F';
         return (
           <MuiPaper key={i} elevation={0} sx={{
             backgroundColor: muiAlpha(color, 0.1),
