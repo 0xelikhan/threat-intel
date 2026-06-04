@@ -181,6 +181,20 @@ def extract_iocs(text: str) -> dict:
             iocs["ips"].add(ip)
 
         for url in iocextract.extract_urls(text, refang=True):
+            # Skip documentation / KB URLs inside alert message bodies —
+            # Defender, Sentinel, EDR vendors embed links like
+            # https://go.microsoft.com/fwlink/?linkid=37020 inside their
+            # message field as the "more info" target. These are not
+            # IOCs and shouldn't reach enrichment / GTI scoring.
+            u_lower = url.lower()
+            if any(s in u_lower for s in (
+                "go.microsoft.com/", "learn.microsoft.com/",
+                "docs.microsoft.com/", "support.microsoft.com/",
+                "aka.ms/", "technet.microsoft.com/",
+                "google.com/search?", "support.google.com/",
+                "developer.mozilla.org/",
+            )):
+                continue
             iocs["urls"].add(url.rstrip(".,;)\"'"))
 
         for h in iocextract.extract_hashes(text):
@@ -195,6 +209,14 @@ def extract_iocs(text: str) -> dict:
             .replace("[.]", ".").replace("(dot)", ".")
             .replace("[://]", "://").replace("hxxp", "http"))
         for url in re.findall(r"https?://[^\s\"'<>\]\),]+", norm):
+            u_lower = url.lower()
+            if any(s in u_lower for s in (
+                "go.microsoft.com/", "learn.microsoft.com/",
+                "docs.microsoft.com/", "support.microsoft.com/",
+                "aka.ms/", "technet.microsoft.com/",
+                "google.com/search?", "support.google.com/",
+            )):
+                continue
             iocs["urls"].add(url.rstrip(".,;)"))
         for ip in re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", norm):
             if ip in BENIGN_IPS or _is_private_ip(ip) or not _valid_ip(ip):
