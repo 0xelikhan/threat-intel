@@ -2784,7 +2784,16 @@ async def email_compose_ai(req: EmailComposeAIRequest):
     if len(req.log_text) > _EMAIL_LOG_MAX:
         raise HTTPException(413,
             f"log_text too large ({len(req.log_text):,} chars; cap is {_EMAIL_LOG_MAX:,})")
+    # cfg is a flat dict that compose_ai treats as the API-key bag. It
+    # needs AI provider config AND every enrichment-API key compose_ai's
+    # _gather_email_enrichment fans out to (VirusTotal, AbuseIPDB,
+    # MalwareBazaar, Hybrid Analysis, etc.). Previously the dict only
+    # carried the 7 AI / sender-identity keys and the enrichment helper
+    # silently got None for everything else — that's why VT / Spamhaus
+    # / WHOIS / Hybrid Analysis lines never appeared in the prose even
+    # though the keys were configured in data/config.json.
     cfg = {
+        # AI provider + email-sender identity
         "OPENAI_API_KEY":     config.get("OPENAI_API_KEY"),
         "OPENAI_BASE_URL":    config.get("OPENAI_BASE_URL"),
         "AI_MODEL":           config.get("AI_MODEL"),
@@ -2792,6 +2801,20 @@ async def email_compose_ai(req: EmailComposeAIRequest):
         "EMAIL_FROM_NAME":    config.get("EMAIL_FROM_NAME"),
         "EMAIL_FROM_ADDRESS": config.get("EMAIL_FROM_ADDRESS"),
         "EMAIL_SIGNATURE":    config.get("EMAIL_SIGNATURE"),
+        # Enrichment APIs — every key compose_ai's fan-out looks at
+        "VIRUSTOTAL_KEY":     config.get("VIRUSTOTAL_KEY"),
+        "ABUSEIPDB_KEY":      config.get("ABUSEIPDB_KEY"),
+        "OTX_KEY":            config.get("OTX_KEY"),
+        "URLSCAN_KEY":        config.get("URLSCAN_KEY"),
+        "GREYNOISE_KEY":      config.get("GREYNOISE_KEY"),
+        "SHODAN_KEY":         config.get("SHODAN_KEY"),
+        "PULSEDIVE_KEY":      config.get("PULSEDIVE_KEY"),
+        "MALTIVERSE_KEY":     config.get("MALTIVERSE_KEY"),
+        "IPINFO_TOKEN":       config.get("IPINFO_TOKEN"),
+        "WHOISXML_KEY":       config.get("WHOISXML_KEY"),
+        "GOOGLE_API_KEY":     config.get("GOOGLE_API_KEY"),
+        "HYBRID_ANALYSIS_KEY": config.get("HYBRID_ANALYSIS_KEY"),
+        "MALWAREBAZAAR_API_KEY": config.get("MALWAREBAZAAR_API_KEY"),
     }
     options = dict(req.options or {})
     if not options.get("team_name"):
