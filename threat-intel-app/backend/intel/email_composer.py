@@ -2683,7 +2683,10 @@ def _is_private_or_local_ip(ip: str) -> bool:
 
 def _extract_iocs_from_log(log_text: str, parsed: Dict) -> Dict[str, List[str]]:
     """Pull IPs / domains / hashes / URLs out of the raw log + parsed
-    fields. Caps each type and skips well-known benign infrastructure."""
+    fields. Caps each type and skips well-known benign infrastructure.
+    Defender version strings (AV: 1.451.195.0) and in-path version
+    directories (\\app\\6.35.0.35\\service\\) get stripped before IP
+    extraction so they don't surface as fake IOCs."""
     iocs: Dict[str, List[str]] = {"ips": [], "domains": [], "hashes": [], "urls": []}
     seen = {"ips": set(), "domains": set(), "hashes": set(), "urls": set()}
 
@@ -2693,13 +2696,29 @@ def _extract_iocs_from_log(log_text: str, parsed: Dict) -> Dict[str, List[str]]:
             return
         if kind == "ips" and _is_private_or_local_ip(v):
             return
+        if kind == "ips" and not _valid_v4_octets(v):
+            return
         if kind == "domains" and v.lower() in _ENR_SKIP_DOMAINS:
             return
         seen[kind].add(v)
         iocs[kind].append(v)
 
+    # Strip software version strings BEFORE IP extraction so the regex
+    # doesn't see them. Re-uses the triage scrubbers when the package is
+    # importable; falls back to local regexes otherwise so the email
+    # composer never depends on the triage agent.
+    cleaned = (log_text or "")
+    try:
+        from agents.triage import strip_defender_version_strings as _strip_ver
+        cleaned = _strip_ver(cleaned)
+    except Exception:
+        # Fallback — strip `\X.Y.Z.W\` / `/X.Y.Z.W/` path versions and
+        # `AV: 1.451.195.0` Defender version K-V lines.
+        cleaned = re.sub(r"(?<=[\\/])\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?=[\\/])", " ", cleaned)
+        cleaned = re.sub(r"\b(?:AV|AS|NIS|AM)\s*:\s*\d{1,5}(?:\.\d{1,5}){2,3}\b", " ", cleaned)
+
     # IPs — log body
-    for m in _IOC_IP_RE.finditer(log_text or ""):
+    for m in _IOC_IP_RE.finditer(cleaned):
         _add("ips", m.group(0))
         if len(iocs["ips"]) >= _EMAIL_ENR_MAX_IPS:
             break
@@ -2711,20 +2730,20 @@ def _extract_iocs_from_log(log_text: str, parsed: Dict) -> Dict[str, List[str]]:
                 break
 
     # Domains
-    for m in _IOC_DOMAIN_RE.finditer(log_text or ""):
+    for m in _IOC_DOMAIN_RE.finditer(cleaned):
         _add("domains", m.group(1).lower())
         if len(iocs["domains"]) >= _EMAIL_ENR_MAX_DOMAINS:
             break
 
     # URLs
-    for m in _IOC_URL_RE.finditer(log_text or ""):
+    for m in _IOC_URL_RE.finditer(cleaned):
         _add("urls", m.group(0).rstrip(".,;)\"'"))
         if len(iocs["urls"]) >= _EMAIL_ENR_MAX_URLS:
             break
 
     # Hashes — md5, sha1, sha256 from log + parsed
     _HASH_RE = re.compile(r"\b[a-fA-F0-9]{32,64}\b")
-    for m in _HASH_RE.finditer(log_text or ""):
+    for m in _HASH_RE.finditer(cleaned):
         h = m.group(0).lower()
         if len(h) in (32, 40, 64):
             _add("hashes", h)
@@ -2733,42 +2752,63 @@ def _extract_iocs_from_log(log_text: str, parsed: Dict) -> Dict[str, List[str]]:
     return iocs
 
 
+def _valid_v4_octets(s: str) -> bool:
+    """Every octet in a dotted-quad must be 0-255. Defender version
+    strings + in-path versions usually have an octet > 255 (e.g.
+    1.451.195.0) but some legitimately look like IPs (6.35.0.35); the
+    Defender/path scrubbers handle those upstream."""
+    try:
+        return all(0 <= int(x) <= 255 for x in s.split("."))
+    except Exception:
+        return False
+
+
 def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
-    """One-line summary for an IP — combines AbuseIPDB + IPInfo +
-    VirusTotal + Maltiverse + GreyNoise. De-conflicts: when AbuseIPDB
-    score is high but VT shows clean, both are mentioned."""
+    """One-line summary for an IP.
+    Strategy: lead with risk signals when any source reports activity,
+    fall back to identity (ASN + location) when everything's clean.
+    Suppresses 'AbuseIPDB 0% / VT clean / fixed line isp' noise that
+    pads the line without adding decision-grade context."""
     if not data or not isinstance(data, dict):
         return ""
-    bits = []
+    risk_bits = []
+    identity_bits = []
+    clean_sources = []
 
-    # AbuseIPDB → score + report count
+    # AbuseIPDB → only show when there's a real signal (score > 0 OR
+    # any reports). Otherwise the source counts toward 'clean sources'.
     abuse = data.get("abuseipdb") or {}
     if abuse and not abuse.get("error"):
-        score = abuse.get("abuseScore")
-        reports = abuse.get("totalReports")
-        if score is not None:
+        score = abuse.get("abuseScore") or 0
+        reports = abuse.get("totalReports") or 0
+        if score > 0 or reports > 0:
             piece = f"AbuseIPDB {score}%"
             if reports:
                 piece += f" ({reports} reports)"
-            bits.append(piece)
+            risk_bits.append(piece)
+        else:
+            clean_sources.append("AbuseIPDB")
 
-    # IPInfo → ASN / org + country/city
+    # IPInfo → ASN / org + country/city. Always-on identity context.
     ipinfo = data.get("ipinfo") or {}
     org    = (ipinfo.get("org") or "").strip()
     country = (ipinfo.get("country") or abuse.get("country") or "").strip()
     city    = (ipinfo.get("city") or "").strip()
     if org:
-        bits.append(org)
+        identity_bits.append(org)
     if city and country:
-        bits.append(f"{city}, {country}")
+        identity_bits.append(f"{city}, {country}")
     elif country:
-        bits.append(country)
-
-    # AbuseIPDB ISP (when IPInfo missed the org)
+        identity_bits.append(country)
     if not org and abuse.get("isp"):
-        bits.append(abuse["isp"])
-    if abuse.get("usageType"):
-        bits.append(abuse["usageType"].lower())
+        identity_bits.append(abuse["isp"])
+
+    # usageType only matters when it's a meaningful security signal —
+    # 'Data Center / Web Hosting / Transit' on an end-user account is
+    # suspicious; 'Fixed Line ISP' is mostly noise.
+    usage = (abuse.get("usageType") or "").lower()
+    if usage and any(t in usage for t in ("data center", "hosting", "transit", "reserved")):
+        risk_bits.append(usage)
 
     # VirusTotal IP
     vt = data.get("virustotal") or {}
@@ -2777,39 +2817,66 @@ def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
         susp = vt.get("suspicious", 0) or 0
         total = (vt.get("harmless", 0) or 0) + (vt.get("undetected", 0) or 0) + mal + susp
         if total and (mal or susp):
-            bits.append(f"VT {mal + susp}/{total} flagged")
+            risk_bits.append(f"VT {mal + susp}/{total} flagged")
         elif total:
-            bits.append(f"VT clean (0/{total})")
+            clean_sources.append("VT")
 
-    # GreyNoise — quick noise classification
+    # GreyNoise — high-signal when classification is set
     gn = data.get("greynoise") or {}
     if gn and not gn.get("error"):
-        cls = (gn.get("classification") or "").strip()
+        cls = (gn.get("classification") or "").strip().lower()
         name = (gn.get("name") or "").strip()
-        if cls:
-            bits.append(f"GreyNoise: {cls}" + (f" ({name})" if name else ""))
+        if cls in ("malicious", "suspicious"):
+            risk_bits.append(f"GreyNoise: {cls}" + (f" ({name})" if name else ""))
+        elif cls == "benign" and name:
+            # Named-benign (Cloudflare scanner, etc.) is useful FP context
+            identity_bits.append(f"GreyNoise benign ({name})")
+        elif cls:
+            clean_sources.append("GreyNoise")
 
     # Maltiverse classification (only when malicious/suspicious)
     mal_t = data.get("maltiverse") or {}
     if mal_t and not mal_t.get("error"):
         cls = (mal_t.get("classification") or "").strip().lower()
         if cls in ("malicious", "suspicious"):
-            bits.append(f"Maltiverse: {cls}")
+            risk_bits.append(f"Maltiverse: {cls}")
+        elif cls:
+            clean_sources.append("Maltiverse")
 
-    return f"IP {ip}: " + " · ".join(bits) if bits else ""
+    # Compose: risk first (forces analyst attention), then identity,
+    # then a single 'clean across X / Y' summary if there's still value
+    # in confirming no other sources flagged the IP.
+    parts = []
+    parts.extend(risk_bits)
+    parts.extend(identity_bits)
+    if not risk_bits and clean_sources:
+        parts.append("clean across " + " / ".join(clean_sources))
+
+    return f"IP {ip}: " + " · ".join(parts) if parts else ""
 
 
 def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
+    """One-line domain summary. Same risk-first / identity-second
+    layout as the IP formatter; suppresses clean-everywhere lines that
+    add nothing."""
     if not data or not isinstance(data, dict):
         return ""
-    bits = []
+    risk_bits = []
+    identity_bits = []
+    clean_sources = []
 
+    # WHOIS — age is a top-tier phishing signal; registrar is context.
     whois = data.get("whois") or {}
     if whois and not whois.get("error"):
-        if whois.get("age_days") is not None:
-            bits.append(f"registered {whois['age_days']}d ago")
+        age = whois.get("age_days")
+        if age is not None:
+            # < 30 days is a real risk signal; older is informational.
+            if age < 30:
+                risk_bits.append(f"registered {age}d ago")
+            else:
+                identity_bits.append(f"registered {age}d ago")
         if whois.get("registrar"):
-            bits.append(f"registrar {whois['registrar']}")
+            identity_bits.append(f"registrar {whois['registrar']}")
 
     vt = data.get("virustotal") or {}
     if vt and not vt.get("error"):
@@ -2817,27 +2884,33 @@ def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
         susp = vt.get("suspicious", 0) or 0
         total = (vt.get("harmless", 0) or 0) + (vt.get("undetected", 0) or 0) + mal + susp
         if total and (mal or susp):
-            bits.append(f"VT {mal + susp}/{total} flagged")
+            risk_bits.append(f"VT {mal + susp}/{total} flagged")
         elif total:
-            bits.append(f"VT clean (0/{total})")
+            clean_sources.append("VT")
 
     spam = data.get("spamhaus_dbl") or {}
     if spam.get("hit"):
-        bits.append(f"Spamhaus DBL: {spam.get('verdict') or 'listed'}")
+        risk_bits.append(f"Spamhaus DBL: {spam.get('verdict') or 'listed'}")
 
     otx = data.get("otx") or {}
     if otx and not otx.get("error"):
         c = otx.get("pulseCount") or otx.get("pulse_count") or 0
         if c:
-            bits.append(f"OTX {c} pulses")
+            risk_bits.append(f"OTX {c} pulses")
 
     mal_t = data.get("maltiverse") or {}
     if mal_t and not mal_t.get("error"):
         cls = (mal_t.get("classification") or "").strip().lower()
         if cls in ("malicious", "suspicious"):
-            bits.append(f"Maltiverse: {cls}")
+            risk_bits.append(f"Maltiverse: {cls}")
+        elif cls:
+            clean_sources.append("Maltiverse")
 
-    return f"Domain {domain}: " + " · ".join(bits) if bits else ""
+    parts = risk_bits + identity_bits
+    if not risk_bits and clean_sources:
+        parts.append("clean across " + " / ".join(clean_sources))
+
+    return f"Domain {domain}: " + " · ".join(parts) if parts else ""
 
 
 def _fmt_hash_enrichment(h: str, data: Dict) -> str:
