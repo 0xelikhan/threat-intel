@@ -2717,6 +2717,19 @@ def _extract_iocs_from_log(log_text: str, parsed: Dict) -> Dict[str, List[str]]:
         cleaned = re.sub(r"(?<=[\\/])\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?=[\\/])", " ", cleaned)
         cleaned = re.sub(r"\b(?:AV|AS|NIS|AM)\s*:\s*\d{1,5}(?:\.\d{1,5}){2,3}\b", " ", cleaned)
 
+    # Browser version numbers inside User-Agent strings look exactly like
+    # IPv4 addresses (Chrome/148.0.0.0, Edg/149.0.0.0, Firefox/120.0.0.0).
+    # iocextract / our IP regex were extracting them and enriching the
+    # Chrome version number as if it were the user's source IP — emails
+    # then carried bogus 'Vodafone Turkey' / 'Compañía Dominicana de
+    # Teléfonos' lines for a user-agent string. Strip the
+    # 'Token/X.Y.Z.W' pattern (any product token followed by 4-octet
+    # version) before IP extraction.
+    cleaned = re.sub(
+        r"\b[A-Za-z][A-Za-z0-9_\-]+/\d{1,4}\.\d{1,4}\.\d{1,4}\.\d{1,4}\b",
+        " ", cleaned,
+    )
+
     # IPs — log body
     for m in _IOC_IP_RE.finditer(cleaned):
         _add("ips", m.group(0))
@@ -3007,7 +3020,20 @@ def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
         sentences.append(
             f"Domain age is {nrd.get('age_days')} days, "
             "a strong newly-registered-domain (NRD) phishing indicator.")
-    if (heur or {}).get("dga", {}).get("flagged"):
+    # DGA heuristic — suppress for known-legitimate auto-generated tenant
+    # subdomains. Microsoft 365 tenants are auto-named 'netorgft#######'
+    # or '<random>.onmicrosoft.com'; the DGA scorer correctly flags the
+    # random label, but in this context it's a legitimate tenant name,
+    # not malware infrastructure.
+    _is_known_generated = (
+        domain.endswith(".onmicrosoft.com")
+        or domain.endswith(".sharepoint.com")
+        or domain.endswith(".azurewebsites.net")
+        or domain.endswith(".cloudapp.azure.com")
+        or domain.endswith(".cloudfront.net")
+        or domain.endswith(".amazonaws.com")
+    )
+    if (heur or {}).get("dga", {}).get("flagged") and not _is_known_generated:
         sentences.append(
             "The domain label scores high on DGA heuristics, suggesting an "
             "algorithmically-generated name.")
@@ -3078,7 +3104,7 @@ def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
 
     # Wayback Machine
     if wayback:
-        if wayback.get("has_snapshots") is False:
+        if wayback.get("has_snapshots") is False and not _is_known_generated:
             sentences.append(
                 "The Wayback Machine has no archived snapshots — unusual for "
                 "an established business domain.")
@@ -3511,6 +3537,33 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "  - User-Agent strings that name an automation framework "
         "    (curl, python-requests, postman, ROPC, MSAL.NET) on "
         "    interactive-user accounts — surface for verification.\n\n"
+        "* SUSPICIOUS mailbox / Exchange operations — these are TOP "
+        "  Business Email Compromise (BEC) indicators. When the parsed "
+        "  log includes one of these Workload=Exchange operations, name "
+        "  the pattern in the analysis and treat the action as suspect "
+        "  until the customer confirms:\n"
+        "  - Set-Mailbox + ForwardingAddress / ForwardingSmtpAddress / "
+        "    DeliverToMailboxAndForward — external auto-forward rule is "
+        "    the #1 BEC indicator. Adversaries set this to exfiltrate "
+        "    invoices / contract emails after credential theft. Always "
+        "    flag and ask whether the forward target is intended.\n"
+        "  - New-InboxRule / Set-InboxRule with deleteMessage / "
+        "    moveToFolder=Deleted Items / forwardTo external — same "
+        "    BEC stealth pattern; the rule auto-deletes incoming "
+        "    threads so the victim doesn't see the adversary's "
+        "    interception.\n"
+        "  - Add-MailboxPermission / Add-MailboxFolderPermission with "
+        "    FullAccess / SendAs to an external account — mailbox "
+        "    delegation grant; flag as account-takeover indicator.\n"
+        "  - Disable-Mailbox / Remove-Mailbox immediately after a "
+        "    suspicious sign-in — destruction-of-evidence pattern.\n"
+        "  When any of these patterns appears, do NOT close with a soft "
+        "  'confirm whether this was authorized'. Lead with the BEC "
+        "  callout ('Auto-forward rules to an external address are the "
+        "  #1 BEC indicator') and close with a directive action "
+        "  ('remove the forwarding rule, force a password reset and MFA "
+        "  re-enrolment for this account, audit recent Sent / Deleted "
+        "  Items for adversary correspondence').\n\n"
         "BANNED PHRASES (auto-reject): 'indicates that', 'associated with', "
         "'in terms of', 'ensure that', 'consider whether', 'may be "
         "necessary', 'to enhance detection capabilities', 'we will "
