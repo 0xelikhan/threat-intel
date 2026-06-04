@@ -1992,7 +1992,11 @@ function _ocSources(result, ioc, type) {
     if (!blob || typeof blob !== 'object') continue;
     const err = blob.error;
     if (!err) continue;
-    // Translate the most common error_type values to readable phrasing
+    // Sources that simply aren't configured shouldn't pretend they
+    // failed — skip them entirely so the per-IOC panel only shows
+    // sources that ACTUALLY attempted to run.
+    if (blob.error_type === 'not_configured') continue;
+    // Translate the remaining error_type values to readable phrasing
     let status;
     if (blob.error_type === 'circuit_open') {
       status = `temporarily skipped (recent failures opened the breaker — retry in a few minutes)`;

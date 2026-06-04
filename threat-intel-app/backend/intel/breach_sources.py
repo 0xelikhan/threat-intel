@@ -33,7 +33,7 @@ async def hibp_email(session, email: str, hibp_key: Optional[str]) -> Dict[str, 
     analyst to add a key in Settings)."""
     from agents.enrichment import _get
     if not hibp_key:
-        return {"error": "HIBP_KEY not configured", "error_type": "auth_failed",
+        return {"error": "HIBP_KEY not configured", "error_type": "not_configured",
                 "source": "hibp"}
     url = (f"https://haveibeenpwned.com/api/v3/breachedaccount/"
            f"{email}?truncateResponse=false&includeUnverified=false")
@@ -126,7 +126,7 @@ async def dehashed_search(session, identifier: str, kind: str,
     from agents.enrichment import _get
     if not (dehashed_email and dehashed_key):
         return {"error": "DEHASHED_EMAIL + DEHASHED_KEY not configured",
-                "error_type": "auth_failed", "source": "dehashed"}
+                "error_type": "not_configured", "source": "dehashed"}
     query_field = {"email": "email", "username": "username"}.get(kind, "email")
     auth_token = base64.b64encode(
         f"{dehashed_email}:{dehashed_key}".encode()
@@ -194,7 +194,7 @@ async def criminal_ip(session, ip: str, criminal_ip_key: Optional[str]) -> Dict[
     from agents.enrichment import _get
     if not criminal_ip_key:
         return {"error": "CRIMINAL_IP_KEY not configured",
-                "error_type": "auth_failed", "source": "criminal_ip"}
+                "error_type": "not_configured", "source": "criminal_ip"}
     r = await _get(
         session,
         f"https://api.criminalip.io/v1/asset/ip/report?ip={ip}",
