@@ -2763,209 +2763,440 @@ def _valid_v4_octets(s: str) -> bool:
         return False
 
 
+def _strip_asn_prefix(org: str) -> Tuple[str, str]:
+    """Split an IPInfo-style 'AS7018 AT&T Enterprises, LLC' string into
+    ('AT&T Enterprises, LLC', 'AS7018'). When the prefix isn't present,
+    returns (org, '')."""
+    s = (org or "").strip()
+    m = re.match(r"^(AS\d+)\s+(.+)$", s)
+    if m:
+        return m.group(2).strip(), m.group(1).strip()
+    return s, ""
+
+
 def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
-    """One-line summary for an IP.
-    Strategy: lead with risk signals when any source reports activity,
-    fall back to identity (ASN + location) when everything's clean.
-    Suppresses 'AbuseIPDB 0% / VT clean / fixed line isp' noise that
-    pads the line without adding decision-grade context."""
+    """Client-readable summary paragraph for an IP. Pulls from every
+    API source we have — AbuseIPDB, VirusTotal, IPInfo, GreyNoise,
+    Maltiverse, Pulsedive, Shodan, ASN reputation, Tor — and renders
+    as natural-language sentences so the customer can read it without
+    decoding CLI-style fragments."""
     if not data or not isinstance(data, dict):
         return ""
-    risk_bits = []
-    identity_bits = []
-    clean_sources = []
 
-    # AbuseIPDB → only show when there's a real signal (score > 0 OR
-    # any reports). Otherwise the source counts toward 'clean sources'.
     abuse = data.get("abuseipdb") or {}
-    if abuse and not abuse.get("error"):
-        score = abuse.get("abuseScore") or 0
-        reports = abuse.get("totalReports") or 0
-        if score > 0 or reports > 0:
-            piece = f"AbuseIPDB {score}%"
-            if reports:
-                piece += f" ({reports} reports)"
-            risk_bits.append(piece)
-        else:
-            clean_sources.append("AbuseIPDB")
-
-    # IPInfo → ASN / org + country/city. Always-on identity context.
     ipinfo = data.get("ipinfo") or {}
-    org    = (ipinfo.get("org") or "").strip()
-    country = (ipinfo.get("country") or abuse.get("country") or "").strip()
-    city    = (ipinfo.get("city") or "").strip()
-    if org:
-        identity_bits.append(org)
-    if city and country:
-        identity_bits.append(f"{city}, {country}")
-    elif country:
-        identity_bits.append(country)
+    vt     = data.get("virustotal") or {}
+    gn     = data.get("greynoise") or {}
+    mal_t  = data.get("maltiverse") or {}
+    pd     = data.get("pulsedive") or {}
+    shodan = data.get("shodan") or {}
+    asn_rep= data.get("asn_reputation") or {}
+    tor    = bool(data.get("tor"))
+
+    # ── Identity sentence: org + location + ASN + reverse DNS ─────────────
+    org_raw  = (ipinfo.get("org") or "").strip()
+    org, asn = _strip_asn_prefix(org_raw)
+    country  = (ipinfo.get("country") or abuse.get("country") or "").strip()
+    city     = (ipinfo.get("city") or "").strip()
+    region   = (ipinfo.get("region") or "").strip()
+    hostname = (ipinfo.get("hostname") or "").strip()
     if not org and abuse.get("isp"):
-        identity_bits.append(abuse["isp"])
+        org = abuse["isp"].strip()
 
-    # usageType only matters when it's a meaningful security signal —
-    # 'Data Center / Web Hosting / Transit' on an end-user account is
-    # suspicious; 'Fixed Line ISP' is mostly noise.
-    usage = (abuse.get("usageType") or "").lower()
-    if usage and any(t in usage for t in ("data center", "hosting", "transit", "reserved")):
-        risk_bits.append(usage)
+    loc_bits = [b for b in (city, region, country) if b]
+    if loc_bits:
+        # dedupe ("Houston, Texas, US" -> "Houston, US" if region matches)
+        seen = []
+        for b in loc_bits:
+            if b not in seen:
+                seen.append(b)
+        loc = ", ".join(seen[:3])
+    else:
+        loc = ""
 
-    # VirusTotal IP
-    vt = data.get("virustotal") or {}
+    if org and loc:
+        identity_sentence = f"It is registered to {org} in {loc}"
+    elif org:
+        identity_sentence = f"It is registered to {org}"
+    elif loc:
+        identity_sentence = f"It is located in {loc}"
+    else:
+        identity_sentence = ""
+    if asn:
+        identity_sentence += f" (autonomous system {asn})" if identity_sentence \
+                              else f"It is on autonomous system {asn}"
+    if hostname:
+        identity_sentence += f", reverse DNS {hostname}"
+    if identity_sentence:
+        identity_sentence += "."
+
+    # ── Usage / behavioural context ───────────────────────────────────────
+    usage = (abuse.get("usageType") or "").strip()
+    behaviour_bits = []
+    if usage:
+        behaviour_bits.append(f"Usage classification: {usage}.")
+    if tor:
+        behaviour_bits.append("It is a known Tor exit node.")
+    if asn_rep.get("severity") in ("high", "medium") and asn_rep.get("hits"):
+        descs = [h.get("description") for h in asn_rep["hits"][:1] if h.get("description")]
+        if descs:
+            behaviour_bits.append(
+                f"The hosting ASN has been flagged as abuse-friendly: {descs[0]}.")
+    if shodan and not shodan.get("error"):
+        ports = shodan.get("ports") or []
+        if ports:
+            port_str = ", ".join(str(p) for p in ports[:6])
+            behaviour_bits.append(f"Shodan sees open ports {port_str}.")
+
+    # ── Reputation findings ───────────────────────────────────────────────
+    reputation_bits = []
+    score = abuse.get("abuseScore") if abuse else None
+    reports = abuse.get("totalReports") if abuse else None
+    last_reported = (abuse.get("lastReportedAt") or "")[:10] if abuse else ""
+    if score is not None:
+        if score > 0 or (reports or 0) > 0:
+            piece = f"AbuseIPDB rates the IP at {score}% confidence"
+            if reports:
+                piece += f" backed by {reports} community report{'s' if reports != 1 else ''}"
+            if last_reported:
+                piece += f" (most recent {last_reported})"
+            reputation_bits.append(piece + ".")
+        else:
+            reputation_bits.append("AbuseIPDB has no abuse reports on file.")
+
     if vt and not vt.get("error"):
         mal = vt.get("malicious", 0) or 0
         susp = vt.get("suspicious", 0) or 0
         total = (vt.get("harmless", 0) or 0) + (vt.get("undetected", 0) or 0) + mal + susp
-        if total and (mal or susp):
-            risk_bits.append(f"VT {mal + susp}/{total} flagged")
-        elif total:
-            clean_sources.append("VT")
+        if total:
+            if mal or susp:
+                reputation_bits.append(
+                    f"VirusTotal shows {mal + susp} of {total} engines flagging the IP.")
+            else:
+                reputation_bits.append(
+                    f"VirusTotal shows the IP clean across {total} engines.")
 
-    # GreyNoise — high-signal when classification is set
-    gn = data.get("greynoise") or {}
     if gn and not gn.get("error"):
         cls = (gn.get("classification") or "").strip().lower()
         name = (gn.get("name") or "").strip()
         if cls in ("malicious", "suspicious"):
-            risk_bits.append(f"GreyNoise: {cls}" + (f" ({name})" if name else ""))
-        elif cls == "benign" and name:
-            # Named-benign (Cloudflare scanner, etc.) is useful FP context
-            identity_bits.append(f"GreyNoise benign ({name})")
-        elif cls:
-            clean_sources.append("GreyNoise")
+            reputation_bits.append(
+                f"GreyNoise classifies it as {cls}"
+                + (f" ({name})" if name else "") + ".")
+        elif cls == "benign":
+            reputation_bits.append(
+                f"GreyNoise recognises it as benign Internet noise"
+                + (f" ({name})" if name else "") + ".")
 
-    # Maltiverse classification (only when malicious/suspicious)
-    mal_t = data.get("maltiverse") or {}
     if mal_t and not mal_t.get("error"):
         cls = (mal_t.get("classification") or "").strip().lower()
         if cls in ("malicious", "suspicious"):
-            risk_bits.append(f"Maltiverse: {cls}")
-        elif cls:
-            clean_sources.append("Maltiverse")
+            tags = mal_t.get("tag") or []
+            tag_str = f" ({', '.join(tags[:3])})" if tags else ""
+            reputation_bits.append(f"Maltiverse classifies it as {cls}{tag_str}.")
 
-    # Compose: risk first (forces analyst attention), then identity,
-    # then a single 'clean across X / Y' summary if there's still value
-    # in confirming no other sources flagged the IP.
-    parts = []
-    parts.extend(risk_bits)
-    parts.extend(identity_bits)
-    if not risk_bits and clean_sources:
-        parts.append("clean across " + " / ".join(clean_sources))
+    if pd and not pd.get("error"):
+        risk = (pd.get("risk") or pd.get("risk_factor") or "").strip().lower()
+        threats = pd.get("threats") or []
+        if risk in ("critical", "high", "medium"):
+            piece = f"Pulsedive risk score: {risk}"
+            if threats:
+                piece += f" (associated threats: {', '.join(threats[:3])})"
+            reputation_bits.append(piece + ".")
 
-    return f"IP {ip}: " + " · ".join(parts) if parts else ""
+    sentences = [s for s in [identity_sentence] + behaviour_bits + reputation_bits if s]
+    if not sentences:
+        return ""
+    return f"- {ip}\n  " + " ".join(sentences)
+
+
+def _join_clauses(clauses: List[str]) -> str:
+    """Join a list of clauses into a single readable phrase. One clause
+    → as-is; two → 'X and Y'; three+ → 'X, Y, and Z'."""
+    cleaned = [c.strip() for c in clauses if c and c.strip()]
+    if not cleaned:
+        return ""
+    if len(cleaned) == 1:
+        return cleaned[0]
+    if len(cleaned) == 2:
+        return f"{cleaned[0]} and {cleaned[1]}"
+    return ", ".join(cleaned[:-1]) + f", and {cleaned[-1]}"
+
+
+def _clean_summary_phrase(sources: List[str]) -> str:
+    """Render 'no reputation hits on X' phrasing. Avoid the 'clean
+    across X / Y' jargon."""
+    s = [src for src in sources if src]
+    if not s:
+        return ""
+    if len(s) == 1:
+        return f"no reputation hits on {s[0]}"
+    if len(s) == 2:
+        return f"no reputation hits on {s[0]} or {s[1]}"
+    return "no reputation hits on " + ", ".join(s[:-1]) + f", or {s[-1]}"
 
 
 def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
-    """One-line domain summary. Same risk-first / identity-second
-    layout as the IP formatter; suppresses clean-everywhere lines that
-    add nothing."""
+    """Client-readable summary paragraph for a domain. Surfaces every
+    relevant signal we collect: WHOIS registration date and registrar,
+    VirusTotal reputation, Spamhaus DBL listing, OTX threat pulses,
+    Maltiverse classification, URLScan history, Wayback archive
+    presence, Cert Transparency subdomain count, Pulsedive risk."""
     if not data or not isinstance(data, dict):
         return ""
-    risk_bits = []
-    identity_bits = []
-    clean_sources = []
 
-    # WHOIS — age is a top-tier phishing signal; registrar is context.
     whois = data.get("whois") or {}
+    vt = data.get("virustotal") or {}
+    spam = data.get("spamhaus_dbl") or {}
+    otx = data.get("otx") or {}
+    mal_t = data.get("maltiverse") or {}
+    urlscan = data.get("urlscan") or {}
+    wayback = data.get("wayback") or {}
+    crt = data.get("certTransparency") or {}
+    pd = data.get("pulsedive") or {}
+    heur = data.get("heuristics") or {}
+
+    sentences: List[str] = []
+
+    # WHOIS — age + registrar + registrant
     if whois and not whois.get("error"):
         age = whois.get("age_days")
+        registrar = (whois.get("registrar") or "").strip()
+        created = (whois.get("created") or "")[:10]
+        registrant = (whois.get("registrant_org") or "").strip()
+        country = (whois.get("registrant_country") or "").strip()
+        bits = []
         if age is not None:
-            # < 30 days is a real risk signal; older is informational.
             if age < 30:
-                risk_bits.append(f"registered {age}d ago")
+                bits.append(f"registered {age} day{'s' if age != 1 else ''} ago")
+            elif age < 365:
+                bits.append(f"registered {age} days ago")
             else:
-                identity_bits.append(f"registered {age}d ago")
-        if whois.get("registrar"):
-            identity_bits.append(f"registrar {whois['registrar']}")
+                yr = age // 365
+                bits.append(f"registered about {yr} year{'s' if yr != 1 else ''} ago")
+        if created:
+            bits.append(f"on {created}")
+        if registrar:
+            bits.append(f"through {registrar}")
+        if registrant:
+            tail = f"under registrant {registrant}"
+            if country:
+                tail += f" ({country})"
+            bits.append(tail)
+        if bits:
+            sentence = "The domain was " + " ".join(bits)
+            # Avoid 'Namecheap, Inc..' double periods when the registrar
+            # field already ends with a period.
+            sentences.append(sentence.rstrip(".") + ".")
+        if whois.get("privacy_protected"):
+            sentences.append("WHOIS registrant details are privacy-redacted.")
 
-    vt = data.get("virustotal") or {}
+    # Heuristic flags (NRD / DGA / IDN)
+    nrd = (heur or {}).get("nrd") or {}
+    if nrd.get("is_same_day"):
+        sentences.append(
+            "Domain age is under 24 hours, a top-tier phishing indicator.")
+    elif nrd.get("is_this_week"):
+        sentences.append(
+            f"Domain age is {nrd.get('age_days')} days, "
+            "a strong newly-registered-domain (NRD) phishing indicator.")
+    if (heur or {}).get("dga", {}).get("flagged"):
+        sentences.append(
+            "The domain label scores high on DGA heuristics, suggesting an "
+            "algorithmically-generated name.")
+    if (heur or {}).get("idn"):
+        sentences.append(
+            "Internationalised-domain analysis flagged punycode or homoglyph "
+            "characters that could spoof a legitimate brand.")
+
+    # VirusTotal
     if vt and not vt.get("error"):
         mal = vt.get("malicious", 0) or 0
         susp = vt.get("suspicious", 0) or 0
         total = (vt.get("harmless", 0) or 0) + (vt.get("undetected", 0) or 0) + mal + susp
-        if total and (mal or susp):
-            risk_bits.append(f"VT {mal + susp}/{total} flagged")
-        elif total:
-            clean_sources.append("VT")
+        if total:
+            if mal or susp:
+                sentences.append(
+                    f"VirusTotal shows {mal + susp} of {total} engines flagging "
+                    "the domain.")
+            else:
+                sentences.append(
+                    f"VirusTotal shows the domain clean across {total} engines.")
 
-    spam = data.get("spamhaus_dbl") or {}
+    # Spamhaus DBL — independent authoritative listing
     if spam.get("hit"):
-        risk_bits.append(f"Spamhaus DBL: {spam.get('verdict') or 'listed'}")
+        v = spam.get("verdict") or "listed"
+        sentences.append(
+            f"Spamhaus DBL lists the domain ({v}), an independent confirmation "
+            "from an authoritative blocklist.")
 
-    otx = data.get("otx") or {}
+    # OTX pulses
     if otx and not otx.get("error"):
         c = otx.get("pulseCount") or otx.get("pulse_count") or 0
         if c:
-            risk_bits.append(f"OTX {c} pulses")
+            sentences.append(
+                f"AlienVault OTX has {c} threat pulse{'s' if c != 1 else ''} "
+                "associating the domain with reported campaigns.")
 
-    mal_t = data.get("maltiverse") or {}
+    # Maltiverse
     if mal_t and not mal_t.get("error"):
         cls = (mal_t.get("classification") or "").strip().lower()
         if cls in ("malicious", "suspicious"):
-            risk_bits.append(f"Maltiverse: {cls}")
-        elif cls:
-            clean_sources.append("Maltiverse")
+            tags = mal_t.get("tag") or []
+            tail = f" (tagged {', '.join(tags[:3])})" if tags else ""
+            sentences.append(f"Maltiverse classifies it as {cls}{tail}.")
 
-    parts = risk_bits + identity_bits
-    if not risk_bits and clean_sources:
-        parts.append("clean across " + " / ".join(clean_sources))
+    # Pulsedive risk
+    if pd and not pd.get("error"):
+        risk = (pd.get("risk") or "").strip().lower()
+        threats = pd.get("threats") or []
+        if risk in ("critical", "high", "medium"):
+            piece = f"Pulsedive risk score is {risk}"
+            if threats:
+                piece += f" (threat associations: {', '.join(threats[:3])})"
+            sentences.append(piece + ".")
 
-    return f"Domain {domain}: " + " · ".join(parts) if parts else ""
+    # URLScan history
+    if urlscan and not urlscan.get("error"):
+        total = urlscan.get("total")
+        if total:
+            mal_s = urlscan.get("malicious") or 0
+            last = (urlscan.get("last_scan_date") or "")[:10]
+            piece = f"URLScan has {total} prior submission{'s' if total != 1 else ''}"
+            if last:
+                piece += f" (most recent {last})"
+            if mal_s:
+                piece += f", {mal_s} flagged malicious"
+            sentences.append(piece + ".")
+
+    # Wayback Machine
+    if wayback:
+        if wayback.get("has_snapshots") is False:
+            sentences.append(
+                "The Wayback Machine has no archived snapshots — unusual for "
+                "an established business domain.")
+        elif wayback.get("first_snapshot"):
+            sentences.append(
+                f"The Wayback Machine first archived the domain on "
+                f"{str(wayback.get('first_snapshot'))[:10]}.")
+
+    # Cert Transparency — useful when many subdomains hint at infra reuse
+    if crt and not crt.get("error"):
+        subs = crt.get("subdomains") or []
+        certs = crt.get("totalCerts")
+        if certs and certs >= 100:
+            sentences.append(
+                f"Certificate Transparency logs show {certs} certificates "
+                f"issued across {len(subs)} subdomains, indicating active "
+                "TLS infrastructure.")
+
+    if not sentences:
+        return ""
+    return f"- {domain}\n  " + " ".join(sentences)
 
 
 def _fmt_hash_enrichment(h: str, data: Dict) -> str:
+    """Client-readable summary for a file hash. Pulls VirusTotal,
+    MalwareBazaar, Hybrid Analysis, and any signing / family / size
+    context we have."""
     if not data or not isinstance(data, dict):
         return ""
-    bits = []
 
     vt = data.get("virustotal") or {}
+    mb = data.get("malwarebazaar") or {}
+    ha = data.get("hybrid_analysis") or {}
+
+    sentences: List[str] = []
+
+    # VirusTotal — engine ratio + family + signer + dates
     if vt and not vt.get("error"):
         mal = vt.get("malicious", 0) or 0
         susp = vt.get("suspicious", 0) or 0
         total = (vt.get("harmless", 0) or 0) + (vt.get("undetected", 0) or 0) + mal + susp
         if total and (mal or susp):
-            bits.append(f"VT {mal + susp}/{total} flagged")
-        if vt.get("family") or vt.get("popular_name"):
-            bits.append(f"family {vt.get('family') or vt.get('popular_name')}")
-        if vt.get("first_seen"):
-            bits.append(f"first seen {vt['first_seen'][:10]}")
+            verdict = "malicious" if mal else "suspicious"
+            sentences.append(
+                f"VirusTotal flags the file as {verdict}, "
+                f"with {mal + susp} of {total} engines detecting it.")
+            fam = (vt.get("family") or vt.get("popular_name") or "").strip()
+            if fam:
+                sentences.append(f"VirusTotal labels the family as {fam}.")
+        elif total:
+            sentences.append(
+                f"VirusTotal shows the file clean across {total} engines.")
+        first = (vt.get("first_seen") or vt.get("first_submission_date") or "")
+        if first:
+            sentences.append(
+                f"It was first submitted to VirusTotal on {str(first)[:10]}.")
+        signer = (vt.get("signer") or vt.get("signature_info", {}).get("signer") or "")
+        if signer:
+            sentences.append(f"The file is digitally signed by {signer}.")
 
-    mb = data.get("malwarebazaar") or {}
+    # MalwareBazaar — confirmation + tags
     if mb.get("found"):
-        sig = mb.get("signature") or mb.get("malware_family")
-        if sig:
-            bits.append(f"MalwareBazaar: {sig}")
+        family = mb.get("malware_family") or mb.get("signature")
+        tags = mb.get("tags") or []
+        piece = f"MalwareBazaar has the file catalogued"
+        if family:
+            piece += f" as {family}"
+        if tags:
+            piece += f" (tagged {', '.join(tags[:3])})"
+        sentences.append(piece + ".")
 
-    ha = data.get("hybrid_analysis") or {}
+    # Hybrid Analysis
     if ha and not ha.get("error"):
-        v = (ha.get("verdict") or "").lower()
+        v = (ha.get("verdict") or "").strip().lower()
+        score = ha.get("threat_score")
         if v in ("malicious", "suspicious", "ambiguous"):
-            bits.append(f"Hybrid Analysis: {v}")
+            piece = f"Hybrid Analysis sandboxing rates the verdict as {v}"
+            if score is not None:
+                piece += f" (threat score {score})"
+            sentences.append(piece + ".")
 
-    return f"Hash {h[:16]}…: " + " · ".join(bits) if bits else ""
+    if not sentences:
+        return ""
+    return f"- {h[:16]}…\n  " + " ".join(sentences)
 
 
 def _fmt_url_enrichment(url: str, data: Dict) -> str:
+    """Client-readable summary for a URL."""
     if not data or not isinstance(data, dict):
         return ""
-    bits = []
 
     vt = data.get("virustotal") or {}
+    us = data.get("urlscan") or {}
+
+    sentences: List[str] = []
+
     if vt and not vt.get("error"):
         mal = vt.get("malicious", 0) or 0
         susp = vt.get("suspicious", 0) or 0
         total = (vt.get("harmless", 0) or 0) + (vt.get("undetected", 0) or 0) + mal + susp
         if total and (mal or susp):
-            bits.append(f"VT {mal + susp}/{total} flagged")
+            sentences.append(
+                f"VirusTotal shows {mal + susp} of {total} engines flagging "
+                "the URL.")
+        elif total:
+            sentences.append(
+                f"VirusTotal shows the URL clean across {total} engines.")
 
-    us = data.get("urlscan") or {}
     if us and not us.get("error"):
-        v = (us.get("verdict") or "").lower()
+        v = (us.get("verdict") or "").strip().lower()
         if v in ("malicious", "suspicious"):
-            bits.append(f"URLScan: {v}")
+            page_title = (us.get("page_title") or "").strip()
+            piece = f"URLScan rates the URL as {v}"
+            if page_title:
+                piece += f" (page title \"{page_title[:60]}\")"
+            sentences.append(piece + ".")
+        elif us.get("country") and us.get("page_server"):
+            sentences.append(
+                f"URLScan recorded the destination as hosted in "
+                f"{us['country']} on {us['page_server']}.")
 
-    short = url if len(url) <= 80 else url[:77] + "…"
-    return f"URL {short}: " + " · ".join(bits) if bits else ""
+    short_url = url if len(url) <= 80 else url[:77] + "…"
+    if not sentences:
+        return ""
+    return f"- {short_url}\n  " + " ".join(sentences)
 
 
 async def _gather_email_enrichment(log_text: str, parsed: Dict,
