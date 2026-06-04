@@ -398,17 +398,16 @@ async def run_triage(state: dict) -> dict:
     except Exception:
         defender_parse = None
 
-    # Multi-log detection — split the input into individual entries when
-    # the analyst pasted multiple distinct logs into the same field. The
-    # investigation prompt uses this to ask the AI for an explicit log
-    # correlation analysis; the frontend renders a Log Correlation card
-    # only when log_count > 1.
-    multi_log = None
-    try:
-        from intel.multi_log import analyze_multi_log
-        multi_log = analyze_multi_log(raw)
-    except Exception:
-        multi_log = None
+    # Multi-log detection has been retired — the AI was producing
+    # "log correlation" output for single alerts containing multiple
+    # pieces of evidence (Robocopy + Code Integrity modification in one
+    # Defender alert, etc.) which read as if the user had pasted two
+    # logs. The AI's main analysis paragraph already reasons about
+    # relationships between events inside the alert; the dedicated
+    # log_correlation field added more noise than signal. Always set
+    # log_count=1 so downstream stages treat the input as one alert.
+    multi_log = {"log_count": 1, "is_multi": False,
+                  "segments": [raw], "anchors": []}
 
     # AI log translation (spec §4) — runs before IOC extraction and behavioral
     # analysis so they operate on structured fields rather than just raw text.
