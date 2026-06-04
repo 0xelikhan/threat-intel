@@ -34,6 +34,18 @@ _TS_PATTERNS = [
     re.compile(r"\b\d{1,2}/\d{1,2}/\d{2,4}\s+\d{1,2}:\d{2}(?::\d{2})?\b"),
 ]
 
+# Line-start variants — require the timestamp to sit at the START of a line
+# (with optional whitespace). A real multi-log paste has one log per entry
+# where the timestamp begins the line; timestamps inside JSON values like
+# `"submission_time": "2025-..."` or in "Last modified: 2025-..." key/value
+# fields are NOT log-entry boundaries. We use these stricter patterns for
+# COUNTING entries and let the loose patterns above handle anchor extraction.
+_LINE_START_TS_PATTERNS = [
+    re.compile(r"(?m)^\s*\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[Z+\-]\d{0,4})?\b"),
+    re.compile(r"(?m)^\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\b"),
+    re.compile(r"(?m)^\s*\d{1,2}/\d{1,2}/\d{2,4}\s+\d{1,2}:\d{2}(?::\d{2})?\b"),
+]
+
 _HEADER_PATTERNS = [
     re.compile(r"\bEvent[\s_]?ID\s*[:=]?\s*\d+\b", re.IGNORECASE),
     re.compile(r"\bAlert\s*[:#]\s*", re.IGNORECASE),
@@ -58,34 +70,36 @@ def detect_log_count(text: str) -> int:
     if not text or len(text.strip()) < 60:
         return 1
 
-    ts_hits     = _count_matches(text, _TS_PATTERNS)
-    header_hits = _count_matches(text, _HEADER_PATTERNS)
+    # Line-start timestamps are the only reliable "new log entry" signal.
+    # A timestamp inside a JSON value or as a `Last modified:` field is
+    # not a log-entry boundary, so loose `_TS_PATTERNS` over-counts.
+    line_start_ts = _count_matches(text, _LINE_START_TS_PATTERNS)
+    header_hits   = _count_matches(text, _HEADER_PATTERNS)
 
     # Count blank-line-delimited blocks that each contain at least one
-    # header or timestamp.
+    # header or line-start timestamp.
     blocks = [b for b in re.split(r"\n\s*\n+", text) if b.strip()]
     structured_blocks = 0
     for b in blocks:
-        if _count_matches(b, _HEADER_PATTERNS) > 0 or _count_matches(b, _TS_PATTERNS) > 0:
+        if (_count_matches(b, _HEADER_PATTERNS) > 0
+                or _count_matches(b, _LINE_START_TS_PATTERNS) > 0):
             structured_blocks += 1
 
     # Multiple JSON objects on separate lines (each starting with `{`).
-    json_lines = sum(1 for ln in text.splitlines() if ln.lstrip().startswith("{")
-                                                       and ln.rstrip().endswith("}"))
+    json_lines = sum(1 for ln in text.splitlines()
+                       if ln.lstrip().startswith("{") and ln.rstrip().endswith("}"))
 
-    # Take the strongest signal. structured_blocks tends to give the
-    # cleanest count when blocks are blank-line-separated. Otherwise fall
-    # back to the timestamp count.
+    # Strongest signal first. structured_blocks is the cleanest when each
+    # log entry is its own blank-line-separated block. Otherwise we need
+    # BOTH multiple line-start timestamps AND multiple headers — neither
+    # signal alone is reliable: timestamps repeat inside field values,
+    # headers like `EventLog Source ID` partially match.
     if structured_blocks >= 2:
         return structured_blocks
     if json_lines >= 2:
         return json_lines
-    if ts_hits >= 2 and header_hits >= 2:
-        # Heuristic — when both signals double up, assume the count equals
-        # the smaller of the two.
-        return min(ts_hits, header_hits)
-    if ts_hits >= 2:
-        return ts_hits
+    if line_start_ts >= 2 and header_hits >= 2:
+        return min(line_start_ts, header_hits)
     return 1
 
 
@@ -126,26 +140,31 @@ def split_logs(text: str) -> List[str]:
     if len(json_blocks) >= 2:
         return json_blocks
 
-    # Strategy 3 — split before each subsequent timestamp.
-    splits: List[str] = []
-    ts_locations: List[int] = []
-    for pat in _TS_PATTERNS:
-        for m in pat.finditer(text):
-            ts_locations.append(m.start())
-    ts_locations = sorted(set(ts_locations))
-    if len(ts_locations) >= 2:
-        # Use the timestamp positions as segment starts.
-        prev = 0
-        for pos in ts_locations[1:]:
-            seg = text[prev:pos].strip()
-            if seg:
-                splits.append(seg)
-            prev = pos
-        tail = text[prev:].strip()
-        if tail:
-            splits.append(tail)
-        if len(splits) >= 2:
-            return splits
+    # Strategy 3 — split before each subsequent timestamp. Only use the
+    # LINE-START timestamp patterns here: splitting before a timestamp
+    # that's mid-line (e.g. inside a JSON value or `Last modified:` field)
+    # produces nonsense segments. Additionally require at least one
+    # header pattern in the text so we don't carve up a single log just
+    # because it has multiple timestamp fields.
+    if _count_matches(text, _HEADER_PATTERNS) >= 1:
+        splits: List[str] = []
+        ts_locations: List[int] = []
+        for pat in _LINE_START_TS_PATTERNS:
+            for m in pat.finditer(text):
+                ts_locations.append(m.start())
+        ts_locations = sorted(set(ts_locations))
+        if len(ts_locations) >= 2:
+            prev = 0
+            for pos in ts_locations[1:]:
+                seg = text[prev:pos].strip()
+                if seg:
+                    splits.append(seg)
+                prev = pos
+            tail = text[prev:].strip()
+            if tail:
+                splits.append(tail)
+            if len(splits) >= 2:
+                return splits
 
     return [text]
 
