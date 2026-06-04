@@ -2597,6 +2597,372 @@ def _render_facts_block(parsed: dict, options: dict) -> str:
     return "\n".join(lines)
 
 
+# ─── OSINT enrichment fan-out for emails ─────────────────────────────────────
+#
+# Analyst feedback: customer emails should include the OSINT context we
+# already have (AbuseIPDB risk score, ISP/ASN, country, VirusTotal
+# detections, WHOIS age, etc.) instead of just echoing what the alert log
+# itself contained. The compose_ai flow now extracts IOCs from the raw
+# log, runs the same enrichment fan-out the analyze pipeline uses, and
+# renders a compact 'Threat intelligence' subsection in the facts block
+# AND feeds the same data to the AI so the analysis paragraph can
+# reference specific findings.
+#
+# Caps the fan-out to keep latency bounded — emails are interactive,
+# analysts don't want a 30-second compose. Max 4 IPs / 3 domains / 2
+# hashes / 2 URLs gets us 90% of useful context for <8s overhead.
+
+_EMAIL_ENR_MAX_IPS     = 4
+_EMAIL_ENR_MAX_DOMAINS = 3
+_EMAIL_ENR_MAX_HASHES  = 2
+_EMAIL_ENR_MAX_URLS    = 2
+
+# IOCs commonly embedded in MDR alerts that are NOT analyst-actionable.
+# Local network ranges + Microsoft / Cloudflare / Google infra hostnames
+# get filtered before fan-out to avoid spammy lookups.
+_ENR_SKIP_DOMAINS = {
+    "microsoft.com", "windows.com", "office.com", "outlook.com",
+    "live.com", "azure.com", "office365.com", "msftncsi.com",
+    "windowsupdate.com", "msauth.net", "msftauth.net",
+    "google.com", "googleapis.com", "gstatic.com", "gmail.com",
+    "cloudflare.com", "cloudflare-dns.com",
+    "apple.com", "icloud.com",
+}
+
+
+def _is_private_or_local_ip(ip: str) -> bool:
+    """Skip RFC1918 / loopback / link-local before enrichment."""
+    try:
+        octets = [int(x) for x in ip.split(".")]
+        if len(octets) != 4:
+            return True
+        a, b = octets[0], octets[1]
+        if a == 10:                       return True
+        if a == 172 and 16 <= b <= 31:    return True
+        if a == 192 and b == 168:         return True
+        if a == 127:                      return True
+        if a == 169 and b == 254:         return True
+        if a == 0 or a >= 224:            return True
+    except Exception:
+        return True
+    return False
+
+
+def _extract_iocs_from_log(log_text: str, parsed: Dict) -> Dict[str, List[str]]:
+    """Pull IPs / domains / hashes / URLs out of the raw log + parsed
+    fields. Caps each type and skips well-known benign infrastructure."""
+    iocs: Dict[str, List[str]] = {"ips": [], "domains": [], "hashes": [], "urls": []}
+    seen = {"ips": set(), "domains": set(), "hashes": set(), "urls": set()}
+
+    def _add(kind, value):
+        v = (value or "").strip()
+        if not v or v in seen[kind]:
+            return
+        if kind == "ips" and _is_private_or_local_ip(v):
+            return
+        if kind == "domains" and v.lower() in _ENR_SKIP_DOMAINS:
+            return
+        seen[kind].add(v)
+        iocs[kind].append(v)
+
+    # IPs — log body
+    for m in _IOC_IP_RE.finditer(log_text or ""):
+        _add("ips", m.group(0))
+        if len(iocs["ips"]) >= _EMAIL_ENR_MAX_IPS:
+            break
+    # IPs — parsed (covers source_ip, dest_ip, first_login_ip, etc.)
+    for k, v in (parsed or {}).items():
+        if isinstance(v, str) and _IOC_IP_RE.fullmatch(v.strip() or ""):
+            _add("ips", v.strip())
+            if len(iocs["ips"]) >= _EMAIL_ENR_MAX_IPS:
+                break
+
+    # Domains
+    for m in _IOC_DOMAIN_RE.finditer(log_text or ""):
+        _add("domains", m.group(1).lower())
+        if len(iocs["domains"]) >= _EMAIL_ENR_MAX_DOMAINS:
+            break
+
+    # URLs
+    for m in _IOC_URL_RE.finditer(log_text or ""):
+        _add("urls", m.group(0).rstrip(".,;)\"'"))
+        if len(iocs["urls"]) >= _EMAIL_ENR_MAX_URLS:
+            break
+
+    # Hashes — md5, sha1, sha256 from log + parsed
+    _HASH_RE = re.compile(r"\b[a-fA-F0-9]{32,64}\b")
+    for m in _HASH_RE.finditer(log_text or ""):
+        h = m.group(0).lower()
+        if len(h) in (32, 40, 64):
+            _add("hashes", h)
+            if len(iocs["hashes"]) >= _EMAIL_ENR_MAX_HASHES:
+                break
+    return iocs
+
+
+def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
+    """One-line summary for an IP — combines AbuseIPDB + IPInfo +
+    VirusTotal + Maltiverse + GreyNoise. De-conflicts: when AbuseIPDB
+    score is high but VT shows clean, both are mentioned."""
+    if not data or not isinstance(data, dict):
+        return ""
+    bits = []
+
+    # AbuseIPDB → score + report count
+    abuse = data.get("abuseipdb") or {}
+    if abuse and not abuse.get("error"):
+        score = abuse.get("abuseScore")
+        reports = abuse.get("totalReports")
+        if score is not None:
+            piece = f"AbuseIPDB {score}%"
+            if reports:
+                piece += f" ({reports} reports)"
+            bits.append(piece)
+
+    # IPInfo → ASN / org + country/city
+    ipinfo = data.get("ipinfo") or {}
+    org    = (ipinfo.get("org") or "").strip()
+    country = (ipinfo.get("country") or abuse.get("country") or "").strip()
+    city    = (ipinfo.get("city") or "").strip()
+    if org:
+        bits.append(org)
+    if city and country:
+        bits.append(f"{city}, {country}")
+    elif country:
+        bits.append(country)
+
+    # AbuseIPDB ISP (when IPInfo missed the org)
+    if not org and abuse.get("isp"):
+        bits.append(abuse["isp"])
+    if abuse.get("usageType"):
+        bits.append(abuse["usageType"].lower())
+
+    # VirusTotal IP
+    vt = data.get("virustotal") or {}
+    if vt and not vt.get("error"):
+        mal = vt.get("malicious", 0) or 0
+        susp = vt.get("suspicious", 0) or 0
+        total = (vt.get("harmless", 0) or 0) + (vt.get("undetected", 0) or 0) + mal + susp
+        if total and (mal or susp):
+            bits.append(f"VT {mal + susp}/{total} flagged")
+        elif total:
+            bits.append(f"VT clean (0/{total})")
+
+    # GreyNoise — quick noise classification
+    gn = data.get("greynoise") or {}
+    if gn and not gn.get("error"):
+        cls = (gn.get("classification") or "").strip()
+        name = (gn.get("name") or "").strip()
+        if cls:
+            bits.append(f"GreyNoise: {cls}" + (f" ({name})" if name else ""))
+
+    # Maltiverse classification (only when malicious/suspicious)
+    mal_t = data.get("maltiverse") or {}
+    if mal_t and not mal_t.get("error"):
+        cls = (mal_t.get("classification") or "").strip().lower()
+        if cls in ("malicious", "suspicious"):
+            bits.append(f"Maltiverse: {cls}")
+
+    return f"IP {ip}: " + " · ".join(bits) if bits else ""
+
+
+def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
+    if not data or not isinstance(data, dict):
+        return ""
+    bits = []
+
+    whois = data.get("whois") or {}
+    if whois and not whois.get("error"):
+        if whois.get("age_days") is not None:
+            bits.append(f"registered {whois['age_days']}d ago")
+        if whois.get("registrar"):
+            bits.append(f"registrar {whois['registrar']}")
+
+    vt = data.get("virustotal") or {}
+    if vt and not vt.get("error"):
+        mal = vt.get("malicious", 0) or 0
+        susp = vt.get("suspicious", 0) or 0
+        total = (vt.get("harmless", 0) or 0) + (vt.get("undetected", 0) or 0) + mal + susp
+        if total and (mal or susp):
+            bits.append(f"VT {mal + susp}/{total} flagged")
+        elif total:
+            bits.append(f"VT clean (0/{total})")
+
+    spam = data.get("spamhaus_dbl") or {}
+    if spam.get("hit"):
+        bits.append(f"Spamhaus DBL: {spam.get('verdict') or 'listed'}")
+
+    otx = data.get("otx") or {}
+    if otx and not otx.get("error"):
+        c = otx.get("pulseCount") or otx.get("pulse_count") or 0
+        if c:
+            bits.append(f"OTX {c} pulses")
+
+    mal_t = data.get("maltiverse") or {}
+    if mal_t and not mal_t.get("error"):
+        cls = (mal_t.get("classification") or "").strip().lower()
+        if cls in ("malicious", "suspicious"):
+            bits.append(f"Maltiverse: {cls}")
+
+    return f"Domain {domain}: " + " · ".join(bits) if bits else ""
+
+
+def _fmt_hash_enrichment(h: str, data: Dict) -> str:
+    if not data or not isinstance(data, dict):
+        return ""
+    bits = []
+
+    vt = data.get("virustotal") or {}
+    if vt and not vt.get("error"):
+        mal = vt.get("malicious", 0) or 0
+        susp = vt.get("suspicious", 0) or 0
+        total = (vt.get("harmless", 0) or 0) + (vt.get("undetected", 0) or 0) + mal + susp
+        if total and (mal or susp):
+            bits.append(f"VT {mal + susp}/{total} flagged")
+        if vt.get("family") or vt.get("popular_name"):
+            bits.append(f"family {vt.get('family') or vt.get('popular_name')}")
+        if vt.get("first_seen"):
+            bits.append(f"first seen {vt['first_seen'][:10]}")
+
+    mb = data.get("malwarebazaar") or {}
+    if mb.get("found"):
+        sig = mb.get("signature") or mb.get("malware_family")
+        if sig:
+            bits.append(f"MalwareBazaar: {sig}")
+
+    ha = data.get("hybrid_analysis") or {}
+    if ha and not ha.get("error"):
+        v = (ha.get("verdict") or "").lower()
+        if v in ("malicious", "suspicious", "ambiguous"):
+            bits.append(f"Hybrid Analysis: {v}")
+
+    return f"Hash {h[:16]}…: " + " · ".join(bits) if bits else ""
+
+
+def _fmt_url_enrichment(url: str, data: Dict) -> str:
+    if not data or not isinstance(data, dict):
+        return ""
+    bits = []
+
+    vt = data.get("virustotal") or {}
+    if vt and not vt.get("error"):
+        mal = vt.get("malicious", 0) or 0
+        susp = vt.get("suspicious", 0) or 0
+        total = (vt.get("harmless", 0) or 0) + (vt.get("undetected", 0) or 0) + mal + susp
+        if total and (mal or susp):
+            bits.append(f"VT {mal + susp}/{total} flagged")
+
+    us = data.get("urlscan") or {}
+    if us and not us.get("error"):
+        v = (us.get("verdict") or "").lower()
+        if v in ("malicious", "suspicious"):
+            bits.append(f"URLScan: {v}")
+
+    short = url if len(url) <= 80 else url[:77] + "…"
+    return f"URL {short}: " + " · ".join(bits) if bits else ""
+
+
+async def _gather_email_enrichment(log_text: str, parsed: Dict,
+                                    config) -> Dict[str, Any]:
+    """Run enrichment for IOCs found in the email log. Returns a dict
+    with 'lines' (rendered facts-block subsection) and 'raw' (the raw
+    per-IOC enrichment dicts, for the AI prompt). Returns empty dict on
+    any error — the email compose flow must never break because of
+    enrichment failures."""
+    try:
+        iocs = _extract_iocs_from_log(log_text, parsed)
+        if not any(iocs.values()):
+            return {"lines": "", "raw": {}}
+
+        # Snapshot the keys we need into a plain dict so enrichment can
+        # read them without going through ConfigManager. The keys
+        # mirror the URL-scan endpoint's set so we get the same
+        # coverage.
+        keys = {k: (config.get(k) or "") for k in (
+            "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
+            "GREYNOISE_KEY", "SHODAN_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
+            "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
+            "HYBRID_ANALYSIS_KEY",
+        )}
+
+        import aiohttp as _aiohttp
+        from agents.enrichment import (
+            enrich_ip as _enr_ip,
+            enrich_domain as _enr_dom,
+            enrich_hash as _enr_hash,
+            enrich_url as _enr_url,
+        )
+
+        # 20s outer cap on the whole fan-out — emails are interactive
+        # so we'd rather ship a partial enrichment than block the
+        # analyst for 60+ seconds.
+        outer_timeout = 20
+
+        async def _do():
+            async with _aiohttp.ClientSession(
+                timeout=_aiohttp.ClientTimeout(total=outer_timeout),
+            ) as session:
+                tasks = []
+                ip_idx, dom_idx, hash_idx, url_idx = [], [], [], []
+                for ip in iocs["ips"]:
+                    ip_idx.append(("ip", ip, len(tasks)))
+                    tasks.append(_enr_ip(session, ip, keys))
+                for d in iocs["domains"]:
+                    dom_idx.append(("domain", d, len(tasks)))
+                    tasks.append(_enr_dom(session, d, keys))
+                for h in iocs["hashes"]:
+                    hash_idx.append(("hash", h, len(tasks)))
+                    tasks.append(_enr_hash(session, h, keys))
+                for u in iocs["urls"]:
+                    url_idx.append(("url", u, len(tasks)))
+                    tasks.append(_enr_url(session, u, keys))
+                if not tasks:
+                    return {}
+                import asyncio as _asyncio
+                results = await _asyncio.gather(*tasks, return_exceptions=True)
+                out: Dict[str, Any] = {"ips": {}, "domains": {},
+                                        "hashes": {}, "urls": {}}
+                for kind, value, idx in (ip_idx + dom_idx + hash_idx + url_idx):
+                    r = results[idx]
+                    if isinstance(r, Exception) or not isinstance(r, dict):
+                        continue
+                    bucket = {"ip": "ips", "domain": "domains",
+                              "hash": "hashes", "url": "urls"}[kind]
+                    out[bucket][value] = r
+                return out
+
+        import asyncio as _asyncio
+        try:
+            raw = await _asyncio.wait_for(_do(), timeout=outer_timeout + 2)
+        except _asyncio.TimeoutError:
+            raw = {}
+
+        # Render compact lines
+        lines = []
+        for ip, d in (raw.get("ips") or {}).items():
+            line = _fmt_ip_enrichment(ip, d)
+            if line:
+                lines.append(line)
+        for dom, d in (raw.get("domains") or {}).items():
+            line = _fmt_domain_enrichment(dom, d)
+            if line:
+                lines.append(line)
+        for h, d in (raw.get("hashes") or {}).items():
+            line = _fmt_hash_enrichment(h, d)
+            if line:
+                lines.append(line)
+        for u, d in (raw.get("urls") or {}).items():
+            line = _fmt_url_enrichment(u, d)
+            if line:
+                lines.append(line)
+
+        return {"lines": "\n".join(lines), "raw": raw}
+    except Exception:
+        # Never break compose because of an enrichment hiccup. The AI
+        # still has the parsed fields + raw log to work from.
+        return {"lines": "", "raw": {}}
+
+
 async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
                      config) -> Dict:
     """Generate a customer-facing email body.
@@ -2682,6 +3048,21 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     # ── Server-side facts block (deterministic, no LLM involvement) ──────
     facts_block = _render_facts_block(parsed, options)
 
+    # ── OSINT enrichment fan-out ─────────────────────────────────────────
+    # Pull AbuseIPDB / VirusTotal / IPInfo / Maltiverse / GreyNoise / WHOIS
+    # context for IOCs found in the log. Append the rendered lines to the
+    # facts block as a 'Threat intelligence' subsection AND pass the
+    # compact rendering into the AI prompt so the analysis paragraph can
+    # weave specific findings in (ISP, ASN, country, risk score, etc.).
+    # Bounded by an outer 20s timeout — failures degrade gracefully to
+    # "no enrichment available" so the email always renders.
+    enr_bundle = await _gather_email_enrichment(log_text, parsed, config)
+    enr_lines = (enr_bundle or {}).get("lines", "")
+    if enr_lines:
+        facts_block = (facts_block + "\n\nThreat intelligence:\n"
+                       + enr_lines) if facts_block else \
+                      ("Threat intelligence:\n" + enr_lines)
+
     # ── Tiny LLM scope: ONLY a summary sentence + a guidance paragraph ──
     # The prompt asks for strict JSON {summary, guidance} — both fields are
     # small, so prompt-following stays reliable. The model never has the
@@ -2728,11 +3109,25 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "* No bullet points. No numbered lists. No section headings inside "
         "the analysis. Just a single coherent paragraph.\n\n"
         "GROUNDING:\n"
-        "* Every claim MUST trace back to a parsed field or the raw log. "
-        "Do not invent IPs, hashes, users, processes, malware names, or "
-        "campaigns that aren't in the input.\n"
-        "* Do not name a TI source unless that source actually appears in "
-        "the parsed enrichment payload.\n\n"
+        "* Every claim MUST trace back to a parsed field, the raw log, OR "
+        "the enrichment block (AbuseIPDB / VirusTotal / IPInfo / WHOIS / "
+        "Maltiverse / GreyNoise / Spamhaus / etc.). Do not invent IPs, "
+        "hashes, users, processes, malware names, or campaigns that "
+        "aren't in the input.\n"
+        "* When the enrichment block contains relevant context (an IP's "
+        "ASN/ISP/country, an AbuseIPDB score with report count, a VT "
+        "detection ratio, a WHOIS registration age, etc.), reference "
+        "those specific values in the analysis paragraph so the customer "
+        "sees the OSINT picture, not just the raw alert. State the "
+        "source explicitly ('AbuseIPDB rates the source IP at 87% with "
+        "42 abuse reports', 'VirusTotal shows 8/86 engines flagging the "
+        "domain', 'WHOIS records show the domain was registered 4 days "
+        "ago via Namecheap').\n"
+        "* De-conflict when sources disagree — if AbuseIPDB scores the IP "
+        "high but VT shows it clean, mention BOTH so the recipient sees "
+        "the full picture.\n"
+        "* Never reference a TI source that isn't in the enrichment "
+        "block. If no enrichment is present, do not pretend there is.\n\n"
         "CALIBRATION:\n"
         "* Known-good vendor patterns (Dell SupportAssist, Microsoft "
         "Defender, SCCM, CrowdStrike, etc.) — say so plainly and state "
