@@ -1295,7 +1295,7 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         return {**_cache[ck], "cached": True}
 
     hybrid_key = keys.get("HYBRID_ANALYSIS_KEY", "")
-    abusech_key = keys.get("ABUSECH_AUTH_KEY", "")
+    abusech_key = keys.get("ABUSECH_AUTH_KEY", "") or keys.get("MALWAREBAZAAR_API_KEY", "")
     is_sha256 = len(hash_val) == 64
 
     # ── CIRCL hashlookup SHORT-CIRCUIT ────────────────────────────────────────
