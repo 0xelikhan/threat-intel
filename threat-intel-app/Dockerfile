@@ -52,6 +52,21 @@ RUN mkdir -p backend/intel/mitre \
             && rm -f backend/intel/mitre/enterprise-attack.json)) \
     && chown -R recon:recon backend/intel/mitre
 
+# Fetch MISP galaxy clusters (~10 MB total) at build time. Same pattern as
+# MITRE STIX above — bundled into the image, loaded lazily on first use.
+# Augments AI-emitted threat_actor and malware_family fields with country,
+# aliases, target sectors, and external refs. Non-fatal: missing clusters
+# just mean lookup_actor / lookup_malware return None for that name.
+RUN mkdir -p backend/intel/misp_galaxy \
+    && for cluster in threat-actor malpedia ransomware rat tool; do \
+         curl -fSL --retry 3 --retry-delay 2 \
+           -o "backend/intel/misp_galaxy/${cluster}.json" \
+           "https://raw.githubusercontent.com/MISP/misp-galaxy/main/clusters/${cluster}.json" \
+         || (echo "WARNING: MISP galaxy ${cluster}.json download failed" \
+             && rm -f "backend/intel/misp_galaxy/${cluster}.json"); \
+       done \
+    && chown -R recon:recon backend/intel/misp_galaxy
+
 COPY --from=frontend-build --chown=recon:recon /frontend/build ./frontend/build
 
 RUN mkdir -p /app/data && chown recon:recon /app/data

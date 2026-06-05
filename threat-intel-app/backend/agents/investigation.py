@@ -82,6 +82,10 @@ def _src_flagged_malicious(src_name: str, payload: Any) -> bool:
         return (p.get("verdict") or "").lower() in ("malicious", "phishing")
     if s == "local_feeds":
         return bool(p.get("hit"))
+    if s == "misp_feeds":
+        # Any feed match is a MALICIOUS verdict — the hash appears in a
+        # MISP community feed event, which is curated TI.
+        return bool(p.get("matched_feeds"))
     if s == "tor":
         # TOR exit is contextual, not a malicious verdict per se
         return False
@@ -1890,6 +1894,26 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
     # Multi-log feature retired — always strip any log_correlation the AI
     # may still emit. The submitted input is treated as a single alert.
     _log_correlation = None
+
+    # MISP galaxy augmentation — when the AI named a threat_actor or
+    # malware_family, look it up in the bundled galaxy clusters and
+    # attach the canonical record (aliases, country, sectors, refs) so
+    # the analyst has cross-referenced context, not just the AI's loose
+    # naming. Fully optional: missing galaxies just mean None matches.
+    try:
+        from intel.misp_galaxies import lookup_actor, lookup_malware
+        ta = result.get("threat_actor")
+        if isinstance(ta, dict) and ta.get("name"):
+            gx = lookup_actor(ta["name"])
+            if gx:
+                ta["misp_galaxy"] = gx
+        mf = result.get("malware_family")
+        if isinstance(mf, str) and mf:
+            gx = lookup_malware(mf)
+            if gx:
+                result["malware_family_galaxy"] = gx
+    except Exception as _e:
+        _log.debug("misp_galaxy augmentation failed: %s", _e)
 
     # Belt-and-braces: even with the OUTPUT STYLE rule in every prompt,
     # the LLM occasionally still emits em-dashes in key_findings /

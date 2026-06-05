@@ -50,6 +50,8 @@ threat-intel-app/
 │   │   ├── identity_hash.py # Tenant-scoped HMAC
 │   │   ├── warninglist_filter.py
 │   │   ├── mitre_data.py    # MITRE ATT&CK loader
+│   │   ├── misp_feeds.py    # CIRCL/DigitalSide/Botvrij flat hash dumps
+│   │   ├── misp_galaxies.py # Threat-actor / malpedia / ransomware lookup
 │   │   └── (40+ other modules — file analysis, sandbox, feeds, ...)
 │   └── tests/               # pytest, namespace-based grouping
 └── frontend/

@@ -27,6 +27,9 @@ vendor/
 # MITRE ATT&CK STIX dataset (47MB, downloaded by setup script)
 **/backend/intel/mitre/
 
+# MISP galaxy clusters (~10MB, downloaded by Dockerfile build step)
+**/backend/intel/misp_galaxy/
+
 # Bundled intel datasets (regenerated; too large for git)
 **/backend/intel/feeds/
 **/backend/intel/sigma/
