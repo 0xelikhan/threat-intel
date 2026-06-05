@@ -56,14 +56,13 @@ def _load_keys() -> Dict[str, str]:
                 pass
     # Env-var fallback / overlay
     for k in ("VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
-              "GREYNOISE_KEY", "SHODAN_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
+              "GREYNOISE_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
               "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
               "HYBRID_ANALYSIS_KEY", "MALWAREBAZAAR_API_KEY",
               "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET", "CROWDSEC_KEY",
               "FULLHUNT_KEY", "POLYSWARM_KEY", "PROXYCHECK_KEY",
-              "SECURITYTRAILS_KEY", "PHISHTANK_KEY", "OPENAI_API_KEY",
-              "OPENAI_BASE_URL", "ANTHROPIC_API_KEY", "HIBP_KEY",
-              "DEHASHED_EMAIL", "DEHASHED_KEY", "CRIMINAL_IP_KEY",
+              "PHISHTANK_KEY", "OPENAI_API_KEY",
+              "OPENAI_BASE_URL", "ANTHROPIC_API_KEY", "CRIMINAL_IP_KEY",
               "THEHIVE_URL", "THEHIVE_TOKEN", "SLACK_WEBHOOK_URL",
               "TEAMS_WEBHOOK_URL"):
         v = os.environ.get(k)
@@ -236,13 +235,6 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
         headers={"key": KEYS.get("GREYNOISE_KEY", "")},
         ok_statuses=(200, 404),  # 404 = IP not in RIOT (benign), still healthy
         key_env="GREYNOISE_KEY", key_url="https://greynoise.io"))
-    add(_probe(session, "Shodan (host)", "IP enrichment",
-        f"https://api.shodan.io/shodan/host/{TEST_IP}",
-        params={"key": KEYS.get("SHODAN_KEY", "")},
-        key_env="SHODAN_KEY", key_url="https://shodan.io"))
-    add(_probe(session, "Shodan InternetDB", "IP enrichment",
-        f"https://internetdb.shodan.io/{TEST_IP}",
-        ok_statuses=(200, 404)))  # free, no key
     add(_probe(session, "OTX (IPv4)", "IP enrichment",
         f"https://otx.alienvault.com/api/v1/indicators/IPv4/{TEST_IP}/general",
         headers={"X-OTX-API-KEY": KEYS.get("OTX_KEY", "")},
@@ -330,11 +322,6 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
         f"https://fullhunt.io/api/v1/host/{TEST_DOMAIN}",
         headers={"X-API-KEY": KEYS.get("FULLHUNT_KEY", "")},
         key_env="FULLHUNT_KEY", key_url="https://fullhunt.io"))
-    add(_probe(session, "SecurityTrails", "Domain enrichment",
-        f"https://api.securitytrails.com/v1/domain/{TEST_DOMAIN}",
-        headers={"APIKEY": KEYS.get("SECURITYTRAILS_KEY", "")},
-        key_env="SECURITYTRAILS_KEY", key_url="https://securitytrails.com/app/account"))
-
     # ── Hash enrichment ─────────────────────────────────────────────────
     add(_probe(session, "VirusTotal (file)", "Hash enrichment",
         f"https://www.virustotal.com/api/v3/files/{TEST_HASH}",
@@ -399,25 +386,6 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
         json_body={"query": "search_ioc", "search_term": TEST_URL},
         headers={"Auth-Key": KEYS.get("MALWAREBAZAAR_API_KEY", "")}
                 if KEYS.get("MALWAREBAZAAR_API_KEY") else None))
-
-    # ── Email / dark-web ───────────────────────────────────────────────
-    add(_probe(session, "HaveIBeenPwned", "Email enrichment",
-        "https://haveibeenpwned.com/api/v3/breachedaccount/test%40example.com",
-        headers={"hibp-api-key": KEYS.get("HIBP_KEY", ""), "user-agent": "RECON-API-test"},
-        ok_statuses=(200, 404),
-        key_env="HIBP_KEY", key_url="https://haveibeenpwned.com/API/Key"))
-    if KEYS.get("DEHASHED_EMAIL") and KEYS.get("DEHASHED_KEY"):
-        auth = "Basic " + base64.b64encode(
-            f"{KEYS['DEHASHED_EMAIL']}:{KEYS['DEHASHED_KEY']}".encode()).decode()
-        add(_probe(session, "Dehashed", "Email enrichment",
-            "https://api.dehashed.com/search?query=email:test@example.com",
-            headers={"Authorization": auth, "Accept": "application/json"},
-            ok_statuses=(200, 404)))
-    else:
-        P.append(asyncio.sleep(0, result=Result(
-            "Dehashed", "Email enrichment", "SKIP",
-            "DEHASHED_EMAIL + DEHASHED_KEY not configured",
-            "DEHASHED_EMAIL / DEHASHED_KEY", "https://dehashed.com")))
 
     # ── CVE enrichment ─────────────────────────────────────────────────
     add(_probe(session, "NVD CVE", "CVE enrichment",

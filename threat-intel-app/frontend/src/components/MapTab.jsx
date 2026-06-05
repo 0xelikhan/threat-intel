@@ -57,7 +57,6 @@ function getIPDetails(ip, enrichments) {
     isTor: data.tor?.isExitNode,
     isNoise: data.greynoise?.noise,
     greynoiseClass: data.greynoise?.classification,
-    ports: data.shodan?.ports?.slice(0, 6),
     otxPulses: data.otx?.pulseCount
   };
 }
@@ -147,7 +146,6 @@ export default function MapTab({ result }) {
           ${details.abuseScore > 0 ? `<div style="margin-top:6px;color:#ffa94d">Abuse score: ${details.abuseScore}%</div>` : ''}
           ${details.vtMalicious > 0 ? `<div style="color:#ff6b6b">VT: ${details.vtMalicious} malicious engines</div>` : ''}
           ${details.isTor ? `<div style="color:#cc5de8;margin-top:4px">⚠ Tor exit node</div>` : ''}
-          ${details.ports?.length > 0 ? `<div style="color:#74c0fc;margin-top:4px">Ports: ${details.ports.join(', ')}</div>` : ''}
           ${details.otxPulses > 0 ? `<div style="color:#ffa94d;margin-top:4px">OTX: ${details.otxPulses} pulses</div>` : ''}
         </div>`;
 

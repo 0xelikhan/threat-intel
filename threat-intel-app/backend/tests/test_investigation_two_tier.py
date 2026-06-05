@@ -65,7 +65,7 @@ def test_summary_handles_errors_and_skipped():
     enr = {"ips": {"8.8.8.8": {
         "abuseipdb": {"abuseScore": 0, "country": "US"},      # returned, not flagged
         "virustotal": {"error": "auth_failed", "error_type": "auth_failed"},  # not returned
-        "shodan":    {"skipped": True, "error": "no key"},     # not returned
+        "otx":       {"skipped": True, "error": "no key"},     # not returned
         "greynoise": {"classification": "benign"},             # returned, not flagged
     }}}
     s = compute_enrichment_summary(enr)

@@ -6,7 +6,7 @@ import React, { useState } from 'react';
  * Build a flat CSV from analysis result.
  * Columns: type, value, verdict, reason, abuse_score, vt_malicious,
  *          country, org, is_tor, otx_pulses, malware_name, registrar,
- *          shodan_ports, shodan_vulns, whois_created, cert_count,
+ *          whois_created, cert_count,
  *          threat_level, mitre_techniques, analyst_timestamp
  */
 export function buildIOCCSV(result) {
@@ -26,7 +26,6 @@ export function buildIOCCSV(result) {
     'otx_pulses', 'bgp_rank',
     'malware_name', 'malware_family',
     'registrar', 'whois_created', 'cert_count', 'pulsedive_risk',
-    'shodan_ports', 'shodan_vulns',
     'overall_threat_level', 'mitre_techniques', 'analysis_timestamp'
   ].join(','));
 
@@ -59,8 +58,6 @@ export function buildIOCCSV(result) {
       q(d.bgpranking?.rank ?? ''),
       q(''), q(''),
       q(''), q(''), q(''), q(''),
-      q((d.shodan?.ports || []).join(' | ')),
-      q((d.shodan?.vulns || []).join(' | ')),
       q(threat_level || ''), q(mitre), q(ts)
     ].join(','));
   });
@@ -79,7 +76,6 @@ export function buildIOCCSV(result) {
       q(d.whois?.created || ''),
       q(d.certTransparency?.totalCerts ?? ''),
       q(d.pulsedive?.risk || ''),
-      q(''), q(''),
       q(threat_level || ''), q(mitre), q(ts)
     ].join(','));
   });
@@ -97,7 +93,6 @@ export function buildIOCCSV(result) {
       q(d.otx?.pulseCount ?? ''), q(''),
       q(malwareName), q(malwareFamily),
       q(''), q(''), q(''), q(''),
-      q(''), q(''),
       q(threat_level || ''), q(mitre), q(ts)
     ].join(','));
   });
@@ -113,7 +108,6 @@ export function buildIOCCSV(result) {
       q(''), q(''),
       q(''), q(d.urlhaus?.threat || ''),
       q(''), q(''), q(''), q(''),
-      q(''), q(''),
       q(threat_level || ''), q(mitre), q(ts)
     ].join(','));
   });
@@ -128,7 +122,6 @@ export function buildIOCCSV(result) {
       q(''), q(''),
       q(''), q(''),
       q(''), q(''), q(''), q(''),
-      q(''), q(''),
       q(threat_level || ''), q(mitre), q(ts)
     ].join(','));
   });

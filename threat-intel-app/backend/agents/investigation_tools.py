@@ -319,7 +319,7 @@ async def _t_lookup_ip(args, config):
         return {"error": "ip required"}
     keys = {k: config.get(k) for k in (
         "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "IPINFO_TOKEN",
-        "GREYNOISE_KEY", "SHODAN_KEY", "OTX_KEY",
+        "GREYNOISE_KEY", "OTX_KEY",
     )}
     async with aiohttp.ClientSession() as session:
         return await enrich_ip(session, ip, keys)

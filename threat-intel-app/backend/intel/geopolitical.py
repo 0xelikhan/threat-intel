@@ -68,8 +68,7 @@ def compute_geopolitical_context(enrichments: Dict, threat_actor: Optional[Dict]
     for ip, payload in (enrichments.get("ips") or {}).items():
         ipinfo = payload.get("ipinfo") or {}
         country = _country_name(ipinfo.get("country") or
-                                (payload.get("abuseipdb") or {}).get("country") or
-                                (payload.get("shodan") or {}).get("country"))
+                                (payload.get("abuseipdb") or {}).get("country"))
         if not country:
             continue
         bucket = by_country[country]

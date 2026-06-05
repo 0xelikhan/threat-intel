@@ -180,10 +180,6 @@ async def check_api_key_reachability(config_module) -> List[Dict[str, Any]]:
             "https://urlscan.io/user/quotas/",
             lambda k: {"API-Key": k}, {200, 401, 403, 404},
         ),
-        "shodan": (
-            "https://api.shodan.io/api-info",   # ?key= appended below
-            lambda k: {}, {200, 401, 403},
-        ),
     }
 
     results: List[Dict[str, Any]] = []
@@ -197,8 +193,7 @@ async def check_api_key_reachability(config_module) -> List[Dict[str, Any]]:
                                       f"{name}: no API key configured.",
                                       fix_hint=f"Open Settings and add {cfg_key} to enable this source."))
                 continue
-            url_full = url + (f"?key={key}" if name == "shodan" else "")
-            probes.append((name, _probe_url(session, url_full, headers=hdr_builder(key))))
+            probes.append((name, _probe_url(session, url, headers=hdr_builder(key))))
 
         outcomes = await asyncio.gather(*[p[1] for p in probes], return_exceptions=True)
         for (name, _), outcome in zip(probes, outcomes):

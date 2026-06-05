@@ -586,9 +586,9 @@ function SandboxBehavioral({ result, bare }) {
 }
 
 /* ─── honeypot / deception intelligence (spec §5) ────────────────────────────
- * Per-IP rollup of: GreyNoise RIOT (known-good infra), Shodan InternetDB,
- * DShield SANS ISC, StopForumSpam, Emerging Threats blocklist, Project
- * Honeypot HTTP:BL. Each source returns flagged + summary.
+ * Per-IP rollup of: GreyNoise RIOT (known-good infra), DShield SANS ISC,
+ * StopForumSpam, Emerging Threats blocklist, Project Honeypot HTTP:BL.
+ * Each source returns flagged + summary.
  */
 function HoneypotActivity({ result, bare }) {
   const ips = result?.enrichments?.ips || {};
@@ -616,27 +616,6 @@ function HoneypotActivity({ result, bare }) {
             payload.trust_level && ['Trust level', String(payload.trust_level)],
             payload.description && ['Description', payload.description],
             payload.last_updated && ['Last updated', payload.last_updated.slice(0, 10)],
-          ].filter(Boolean),
-        };
-      }
-      case 'shodan_internetdb': {
-        const cves = payload.vulns || [];
-        const ports = payload.ports || [];
-        const tags = payload.tags || [];
-        const hosts = payload.hostnames || [];
-        if (!cves.length && !ports.length && !tags.length && !hosts.length) return null;
-        return {
-          name: 'Shodan InternetDB', good: false,
-          headline: [
-            ports.length && `${ports.length} open port${ports.length === 1 ? '' : 's'}`,
-            cves.length && `${cves.length} CVE${cves.length === 1 ? '' : 's'}`,
-            tags.length && `${tags.length} tag${tags.length === 1 ? '' : 's'}`,
-          ].filter(Boolean).join(' · '),
-          rows: [
-            ports.length && ['Open ports', ports.slice(0, 20).join(', ')],
-            cves.length && ['CVEs', cves.slice(0, 8).join(', ')],
-            tags.length && ['Tags', tags.join(', ')],
-            hosts.length && ['Hostnames', hosts.slice(0, 5).join(', ')],
           ].filter(Boolean),
         };
       }
@@ -696,8 +675,8 @@ function HoneypotActivity({ result, bare }) {
   const body = (
     <>
       <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
-        Cross-checked against GreyNoise RIOT, Shodan InternetDB, DShield SANS ISC,
-        StopForumSpam, Emerging Threats compromised IPs, and Project Honeypot HTTP:BL.
+        Cross-checked against GreyNoise RIOT, DShield SANS ISC, StopForumSpam,
+        Emerging Threats compromised IPs, and Project Honeypot HTTP:BL.
       </Typography>
       {rows.map(({ ip, dec, full }) => {
         // ── Per-IP context (ASN / country / ISP / AbuseIPDB) — already
@@ -727,7 +706,6 @@ function HoneypotActivity({ result, bare }) {
 
         const renderedSources = [
           renderSource('greynoise_riot',    dec.greynoise_riot),
-          renderSource('shodan_internetdb', dec.shodan_internetdb),
           renderSource('dshield',           dec.dshield),
           renderSource('stopforumspam',     dec.stopforumspam),
           renderSource('emerging_threats',  dec.emerging_threats),
@@ -791,12 +769,6 @@ function HoneypotActivity({ result, bare }) {
                 sx={{ fontSize: 10.5, color: '#0fbcff', textDecoration: 'none',
                   '&:hover': { textDecoration: 'underline' } }}>
                 VirusTotal ↗
-              </Box>
-              <Box component="a" target="_blank" rel="noreferrer"
-                href={`https://internetdb.shodan.io/${ip}`}
-                sx={{ fontSize: 10.5, color: '#0fbcff', textDecoration: 'none',
-                  '&:hover': { textDecoration: 'underline' } }}>
-                Shodan ↗
               </Box>
               <Box component="a" target="_blank" rel="noreferrer"
                 href={`https://isc.sans.edu/ipinfo.html?ip=${ip}`}
@@ -1756,13 +1728,6 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // Shodan — open ports / services for IPs.
-  if (d.shodan && !d.shodan.error) {
-    const s = d.shodan;
-    const ports = (s.ports || []).slice(0, 6).join(', ');
-    if (ports) out.push({ source: 'Shodan', label: `open ${ports}`, color: cyan });
-  }
-
   // Pulsedive — risk level.
   if (d.pulsedive && !d.pulsedive.error) {
     const p = d.pulsedive;
@@ -1778,37 +1743,6 @@ function _ocSources(result, ioc, type) {
   // Spamhaus DBL — domain blocklist.
   if (d.spamhaus_dbl?.hit) {
     out.push({ source: 'Spamhaus DBL', label: `${d.spamhaus_dbl.verdict || 'listed'}${d.spamhaus_dbl.code ? ` · ${d.spamhaus_dbl.code}` : ''}`, color: red });
-  }
-
-  // HIBP — breach history for email IOCs.
-  if (d.hibp && !d.hibp.error) {
-    const h = d.hibp;
-    const n = h.breach_count ?? 0;
-    if (n > 0) {
-      const c = n >= 10 ? red : n >= 3 ? orange : yellow;
-      const first = (h.breaches || [])[0]?.title || '';
-      const extra = first ? ` · ${first}` : '';
-      out.push({
-        source: 'HaveIBeenPwned',
-        label: `${n} breach${n === 1 ? '' : 'es'}${extra}`,
-        color: c,
-      });
-    } else if (h.breach_count === 0) {
-      out.push({ source: 'HaveIBeenPwned', label: 'no breaches', color: green });
-    }
-  }
-
-  // Dehashed — credential-leak database hits.
-  if (d.dehashed && !d.dehashed.error) {
-    const t = d.dehashed.total ?? 0;
-    if (t > 0) {
-      const c = t >= 10 ? red : t >= 3 ? orange : yellow;
-      out.push({
-        source: 'Dehashed',
-        label: `${t} leaked record${t === 1 ? '' : 's'}`,
-        color: c,
-      });
-    }
   }
 
   // Criminal IP — inbound/outbound threat scoring.
@@ -1974,16 +1908,14 @@ function _ocSources(result, ioc, type) {
     otx: 'OTX',                         greynoise: 'GreyNoise',
     maltiverse: 'Maltiverse',           threatfox: 'ThreatFox',
     malwarebazaar: 'MalwareBazaar',     urlscan: 'URLScan.io',
-    shodan: 'Shodan',                   pulsedive: 'Pulsedive',
-    spamhaus_dbl: 'Spamhaus DBL',       hibp: 'HaveIBeenPwned',
-    dehashed: 'Dehashed',
+    pulsedive: 'Pulsedive',             spamhaus_dbl: 'Spamhaus DBL',
     criminal_ip: 'Criminal IP',         urlhaus_url: 'URLhaus',
     urlhaus_payload: 'URLhaus payload', circl_hashlookup: 'CIRCL hashlookup',
     nvd: 'NVD',                          epss: 'EPSS',
     hybrid_analysis: 'Hybrid Analysis',
     whois: 'WHOIS',                      ipinfo: 'IPInfo',
     censys: 'Censys',                    crowdsec: 'CrowdSec',
-    feodo_tracker: 'Feodo Tracker',      pulsedive: 'Pulsedive',
+    feodo_tracker: 'Feodo Tracker',
   };
   const _surfaced = new Set(out.map(r => r.source));
   for (const [key, blob] of Object.entries(d || {})) {
@@ -2037,8 +1969,6 @@ function PerIndicatorList({ sorted, result }) {
       : iocType === 'email'  ? result?.enrichments?.emails
       :                         null;
     const enrData = enrBucket?.[ioc] || {};
-    const breachCount = enrData?.hibp?.breach_count ?? null;
-    const dehashedCount = enrData?.dehashed?.total ?? null;
     const urlScreenshot = enrData?.urlscan_screenshot;
     const expandable = sources.length > 0
                        || (d.contributing_factors || []).length > 1
@@ -2077,33 +2007,6 @@ function PerIndicatorList({ sorted, result }) {
               </Typography>
             )}
           </Box>
-          {/* Breach badge — credential exposure is a high-signal compromise
-              indicator. Sits next to the verdict so analysts notice it
-              without expanding the row. */}
-          {(breachCount != null && breachCount > 0) && (
-            <Box sx={{
-              px: 0.875, py: 0.25, borderRadius: '3px',
-              border: `1px solid ${breachCount >= 10 ? '#EE3838' : breachCount >= 3 ? '#E6700F' : '#E1B823'}`,
-              backgroundColor: muiAlpha(breachCount >= 10 ? '#EE3838' : breachCount >= 3 ? '#E6700F' : '#E1B823', 0.12),
-              color: breachCount >= 10 ? '#ff6b6b' : breachCount >= 3 ? '#ffa94d' : '#ffd700',
-              fontSize: 10, fontWeight: 700, fontFamily: '"IBM Plex Mono", monospace',
-              letterSpacing: '0.04em', whiteSpace: 'nowrap',
-            }}>
-              ⚠ {breachCount} BREACH{breachCount === 1 ? '' : 'ES'}
-            </Box>
-          )}
-          {(dehashedCount != null && dehashedCount > 0 && breachCount == null) && (
-            <Box sx={{
-              px: 0.875, py: 0.25, borderRadius: '3px',
-              border: `1px solid ${dehashedCount >= 10 ? '#EE3838' : '#E6700F'}`,
-              backgroundColor: muiAlpha(dehashedCount >= 10 ? '#EE3838' : '#E6700F', 0.12),
-              color: dehashedCount >= 10 ? '#ff6b6b' : '#ffa94d',
-              fontSize: 10, fontWeight: 700, fontFamily: '"IBM Plex Mono", monospace',
-              whiteSpace: 'nowrap',
-            }}>
-              ⚠ {dehashedCount} LEAKED
-            </Box>
-          )}
           <Verdict verdict={d.verdict} size="small"/>
         </Box>
 

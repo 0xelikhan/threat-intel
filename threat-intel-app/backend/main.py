@@ -2077,11 +2077,11 @@ async def scan_url_endpoint(req: dict):
         sha256 = (analysis.get("hashes") or {}).get("sha256")
         keys = {k: config.get(k, "") for k in (
             "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
-            "GREYNOISE_KEY", "SHODAN_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
+            "GREYNOISE_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
             "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
             "HYBRID_ANALYSIS_KEY", "MALWAREBAZAAR_API_KEY",
             "ABUSECH_AUTH_KEY",
-            "POLYSWARM_KEY", "PHISHTANK_KEY", "SECURITYTRAILS_KEY",
+            "POLYSWARM_KEY", "PHISHTANK_KEY",
             "PROXYCHECK_KEY", "FULLHUNT_KEY", "CENSYS_API_KEY",
             "CENSYS_ID", "CENSYS_SECRET", "CRIMINAL_IP_KEY",
             "CROWDSEC_KEY",
@@ -2516,9 +2516,6 @@ async def status_check():
         checks.append(("abuseipdb", "https://api.abuseipdb.com/api/v2/check",
                        {"Key": config.get("ABUSEIPDB_KEY"), "Accept": "application/json"},
                        {"ipAddress": "8.8.8.8"}))
-    if config.get("SHODAN_KEY"):
-        checks.append(("shodan", "https://api.shodan.io/api-info",
-                       None, {"key": config.get("SHODAN_KEY")}))
     if config.get("GREYNOISE_KEY"):
         checks.append(("greynoise", "https://api.greynoise.io/ping",
                        {"key": config.get("GREYNOISE_KEY")}, None))
@@ -2567,7 +2564,7 @@ async def startup_check():
             pkg_status[name] = "missing"
 
     required = ("OPENAI_API_KEY",)
-    optional = ("VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "SHODAN_KEY", "GREYNOISE_KEY",
+    optional = ("VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "GREYNOISE_KEY",
                 "OTX_KEY", "URLSCAN_KEY", "PULSEDIVE_KEY", "CENSYS_ID",
                 "CENSYS_SECRET", "HYBRID_ANALYSIS_KEY", "CROWDSEC_KEY",
                 "MALTIVERSE_KEY", "OPENCTI_TOKEN", "FRESHRSS_API_KEY")
@@ -2861,7 +2858,6 @@ async def email_compose_ai(req: EmailComposeAIRequest):
         "OTX_KEY":            config.get("OTX_KEY"),
         "URLSCAN_KEY":        config.get("URLSCAN_KEY"),
         "GREYNOISE_KEY":      config.get("GREYNOISE_KEY"),
-        "SHODAN_KEY":         config.get("SHODAN_KEY"),
         "PULSEDIVE_KEY":      config.get("PULSEDIVE_KEY"),
         "MALTIVERSE_KEY":     config.get("MALTIVERSE_KEY"),
         "IPINFO_TOKEN":       config.get("IPINFO_TOKEN"),
