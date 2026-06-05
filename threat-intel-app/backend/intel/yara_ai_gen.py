@@ -14,10 +14,18 @@ from typing import Dict, Tuple, List
 
 
 _BASE_PROMPT = """Generate a single YARA rule for the malware sample whose
-static analysis is below. Output ONLY the YARA rule — no markdown fences,
-no commentary.
+static analysis is below. Output ONLY the YARA rule. No markdown fences.
+No commentary.
 
-REQUIREMENTS — these are not negotiable:
+REQUIREMENTS - these are not negotiable:
+  - Start with `rule <CamelCaseName> {{` on the first line. Do NOT omit
+    the `rule` keyword or the name.
+  - Use ONLY the literal strings provided under "Unique strings to consider"
+    and "Mutex candidates" below. Copy them verbatim into the strings
+    block. Do NOT invent placeholder strings like "unique_string_1",
+    "another_unique_string", "third_unique_string", "example_string",
+    or "{{placeholder}}". A rule that does not match the actual file is
+    worthless and will be rejected.
   - Prefer mutex names and unique multi-byte strings over common API names
     that appear in every legitimate binary.
   - Prefer combinations of 3 or more indicators over single indicators.
@@ -42,6 +50,28 @@ Unique strings to consider:
 Mutex candidates:
 {mutexes}
 """
+
+# Strings that indicate the AI ignored the provided indicators and emitted
+# a template/placeholder rule. Any rule containing one of these is rejected
+# before the slow yara.compile + match step.
+_PLACEHOLDER_TELLS = (
+    "unique_string_1", "unique_string_2", "unique_string_3",
+    "another_unique_string", "third_unique_string",
+    "example_string", "example_mutex",
+    "placeholder", "PLACEHOLDER",
+    "<insert ", "your_string_here", "string_here",
+    "specific_string_from_sample",
+)
+
+
+def _looks_like_placeholder_rule(text: str) -> bool:
+    """Cheap pre-check before the yara compile + match. The AI sometimes
+    emits literal template strings instead of using the unique_strings we
+    passed it; those rules compile but never match the sample, so the
+    expensive validation path eventually rejects them. Failing fast here
+    saves a yara.compile + retry roundtrip."""
+    low = text.lower()
+    return any(tell.lower() in low for tell in _PLACEHOLDER_TELLS)
 
 
 def _pick_unique_strings(result: Dict, limit: int = 12) -> List[str]:
@@ -89,6 +119,23 @@ async def generate_yara_for_file(result: Dict, ai_call) -> Dict:
     uniq   = _pick_unique_strings(result)
     mut    = _pick_mutexes(result)
 
+    # Skip the AI call entirely when we have no real indicators to anchor
+    # the rule on. With "(none extracted)" in the prompt the model
+    # invariably hallucinates template strings ("unique_string_1") that
+    # can't possibly match the sample, then the validator rejects them.
+    # Better to honestly report "insufficient indicators" than to ship a
+    # broken rule labeled "invalid".
+    if not uniq and not mut:
+        return {
+            "rule":     "",
+            "valid":    False,
+            "errors":   ["No unique strings or mutex candidates were "
+                         "extracted from this file; YARA generation "
+                         "would not produce a useful signature."],
+            "attempts": 0,
+            "skipped":  True,
+        }
+
     base = _BASE_PROMPT.format(
         date=datetime.now().strftime("%Y-%m-%d"),
         sha256=sha256,
@@ -112,6 +159,24 @@ async def generate_yara_for_file(result: Dict, ai_call) -> Dict:
     for attempt in range(1, 3):
         text = await ai_call(prompt)
         text = _strip_fences(text)
+        # Cheap pre-check: reject placeholder/template rules BEFORE the
+        # slow yara compile + match. Saves a roundtrip on the common
+        # failure mode where the AI emits "unique_string_1" rather than
+        # the actual strings we provided in the prompt.
+        if _looks_like_placeholder_rule(text):
+            last_text = text
+            last_errors = ["rule used placeholder strings instead of the "
+                           "unique indicators provided in the prompt"]
+            prompt = (
+                f"Your previous YARA rule was rejected: it contained "
+                f"placeholder strings (like 'unique_string_1') instead of "
+                f"the actual indicators provided in the prompt. Re-read "
+                f"the 'Unique strings to consider' and 'Mutex candidates' "
+                f"sections and use those EXACT strings verbatim. Output "
+                f"ONLY the corrected YARA rule. No markdown fences. "
+                f"No commentary."
+            )
+            continue
         ok, errs = _validate_and_test(text, result.get("_file_bytes"))
         if ok:
             return {"rule": text, "valid": True, "errors": [], "attempts": attempt}
