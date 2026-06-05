@@ -3908,6 +3908,10 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     # small, so prompt-following stays reliable. The model never has the
     # chance to robotic-narrate the facts (because we render them itself).
     sys_msg = (
+        "OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes (—), "
+        "en-dashes (–), or curly quotes. Use hyphens (-), commas, or restructure. "
+        "Customers immediately spot AI text by the em-dash and lose trust in the "
+        "analysis.\n\n"
         "You are a senior SOC analyst writing the body of a customer alert "
         "email. Output STRICT JSON with exactly one string field: "
         "'analysis'. No other keys. No markdown fences.\n\n"

@@ -398,7 +398,9 @@ def _is_high_confidence(heuristic_score: float, cross_refs: dict, iocs: dict) ->
     return False
 
 
-TRIAGE_PROMPT = """You are a SOC triage analyst. Quickly assess this security alert.
+TRIAGE_PROMPT = """OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes (—), en-dashes (–), or curly quotes. Use hyphens (-), commas, or restructure the sentence. This applies to every string you emit, including JSON values.
+
+You are a SOC triage analyst. Quickly assess this security alert.
 
 CHARACTER: Senior SOC analyst, 10+ years experience.
 CONTEXT: First agent in an automated pipeline. Your decision controls whether resources are spent.

@@ -89,7 +89,9 @@ def _compress_for_prompt(analysis: Dict) -> Dict:
     }
 
 
-SYSTEM_PROMPT = """You are a senior malware analyst writing for a colleague.
+SYSTEM_PROMPT = """OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes (—), en-dashes (–), or curly quotes. Use hyphens (-), commas, or restructure the sentence.
+
+You are a senior malware analyst writing for a colleague.
 Given a file analysis result, write a SHORT plain-English summary (2-3 sentences,
 ~50-80 words) describing what this file actually IS and what it appears to do.
 
