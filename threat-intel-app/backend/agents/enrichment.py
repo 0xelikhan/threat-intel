@@ -319,13 +319,32 @@ def _p_abuse(r):
                                           "is_active_this_week": True}
         except Exception:
             pass
-    # Source-level verdict per spec §3
+    # Source-level verdict — aligned with AbuseIPDB's own published
+    # guidance so the verdict we show matches the colour / severity the
+    # AbuseIPDB site uses for the same score:
+    #
+    #   >= 75  -> MALICIOUS    (AbuseIPDB: "high confidence" — red on
+    #                           their site, "this IP is reported as
+    #                           highly abusive")
+    #   25-74  -> SUSPICIOUS   (AbuseIPDB: "potentially malicious" /
+    #                           "investigate" — yellow/orange on their
+    #                           site; their API docs explicitly call
+    #                           this the floor for actionable signal)
+    #   1-24   -> UNKNOWN      (low-confidence reports; AbuseIPDB
+    #                           doesn't recommend action at this level)
+    #   0 + reports = 0 -> CLEAN (no reports, nothing observed)
+    #   0 + any reports -> UNKNOWN  (reports filed but they don't
+    #                           confidence-score them — informational
+    #                           only)
+    reports = d.get("totalReports") or 0
     if score >= 75:
         out["verdict"] = "MALICIOUS"
-    elif score > 50:
+    elif score >= 25:
         out["verdict"] = "SUSPICIOUS"
-    elif score >= 0:
-        out["verdict"] = "CLEAN" if score == 0 and d.get("totalReports") == 0 else "UNKNOWN"
+    elif score == 0 and reports == 0:
+        out["verdict"] = "CLEAN"
+    else:
+        out["verdict"] = "UNKNOWN"
     return out
 
 
@@ -832,12 +851,29 @@ def _p_censys(r):
 
 
 def _p_hybrid(r):
-    """Hybrid Analysis sandbox report (search by hash) → behavioral summary."""
+    """Hybrid Analysis sandbox report (search by hash) → behavioral summary.
+
+    Verdict mapping respects HA's own taxonomy — they distinguish
+    'malicious' from 'suspicious' deliberately, and collapsing the two
+    into MALICIOUS amplifies severity beyond what the source said
+    (same bug pattern as the GreyNoise RIOT-as-CLEAN bug). HA verdicts
+    in the wild: 'no_specific_threat' / 'no specific threat' (clean
+    enough), 'suspicious', 'malicious', 'unknown', or empty.
+    """
     if _is_fail(r):
         return _err("hybrid_analysis", r)
     if not isinstance(r, list) or not r:
         return _err("hybrid_analysis", "no reports")
     top = r[0]  # most recent
+    raw = (top.get("verdict") or "").lower().strip()
+    if raw == "malicious":
+        verdict = "MALICIOUS"
+    elif raw == "suspicious":
+        verdict = "SUSPICIOUS"
+    elif raw in ("no specific threat", "no_specific_threat", "whitelisted"):
+        verdict = "CLEAN"
+    else:
+        verdict = "UNKNOWN"
     return {
         "verdict_raw":     top.get("verdict"),
         "threat_score":    top.get("threat_score"),
@@ -852,7 +888,7 @@ def _p_hybrid(r):
         "network_hosts":   [(h.get("address") or h.get("name")) for h in (top.get("hosts") or [])][:8],
         "dropped_count":   len(top.get("extracted_files") or []),
         "report_url":      f"https://www.hybrid-analysis.com/sample/{top.get('sha256')}" if top.get("sha256") else None,
-        "verdict":         "MALICIOUS" if (top.get("verdict") or "").lower() in {"malicious", "suspicious"} else "UNKNOWN",
+        "verdict":         verdict,
     }
 
 
