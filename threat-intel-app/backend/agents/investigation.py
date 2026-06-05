@@ -1439,8 +1439,18 @@ Anchor your threat_level on it unless concrete malicious evidence contradicts it
 
 ## Behavioral / TTP indicators extracted from raw input (spec §1 — pre-enrichment)
 {json.dumps(state.get('behavioral_indicators', {}).get('categories', {}), indent=2)[:2500] or "(none detected)"}
-Decoded base64 payloads from PowerShell/etc:
+Decoded payloads (base64 / hex / unicode / fromCharCode / etc. - already deobfuscated by triage):
 {json.dumps(state.get('behavioral_indicators', {}).get('decoded_payloads', []), indent=2)[:1500] or "(none)"}
+
+CRITICAL: if the decoded-payloads block above is "(none)", DO NOT claim
+the alert contains base64 / hex / encoded data, and DO NOT invent
+decode results. The triage stage already ran every safe deobfuscator
+against the raw input; if it found nothing, there is nothing to decode.
+Phrases like "the alert contains a base64 payload that decodes to..."
+or "we detected encoded data" are FORBIDDEN unless the decoded-payloads
+list above actually has content. When it's empty, say nothing about
+encoding. If you must reference the raw input shape, quote it
+literally — never describe its "encoded contents".
 
 ## Deterministic confidence scores per IOC (spec §2 — independent of your assessment)
 {json.dumps({k: {"score": v.get("score"), "verdict": v.get("verdict"),

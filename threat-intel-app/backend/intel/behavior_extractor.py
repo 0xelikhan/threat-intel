@@ -186,7 +186,13 @@ _PATTERNS = [
 
 
 # ─── Decoded-payload secondary scan ─────────────────────────────────────────────
-_BASE64_RE = re.compile(r"\b(?:[A-Za-z0-9+/]{40,}={0,2})\b")
+# Lowered minimum from 40 to 16 chars so short base64 strings embedded
+# in log lines (e.g. base64 of "this is a test" -> 20 chars) actually
+# get decoded. The >0.90 printable-ASCII gate in _decode_b64_candidates
+# still filters out random alphanumeric runs that decode to binary.
+# Non-base64-alphabet borders prevent grabbing a slice of a longer
+# alphanumeric token (filename, hash, GUID).
+_BASE64_RE = re.compile(r"(?<![A-Za-z0-9+/])[A-Za-z0-9+/]{16,}={0,2}(?![A-Za-z0-9+/])")
 
 
 def _printable_ascii_ratio(s: str) -> float:
