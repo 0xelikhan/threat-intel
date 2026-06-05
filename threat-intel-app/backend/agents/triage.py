@@ -157,6 +157,23 @@ _OID_PREFIXED_SHORT_RE = re.compile(
 # regardless, so stripping is safe.
 _X509_DIR_ATTR_OID_RE = re.compile(r"\b2\.5\.4\.\d{1,3}\b")
 
+# User-Agent / browser / software version strings:
+#   Chrome/148.0.0.0
+#   Mozilla/5.0
+#   AppleWebKit/537.36
+#   Firefox/121.0.2
+#   Edg/119.0.2151.97
+#   Safari/605.1.15
+#   curl/7.88.1, python-requests/2.31.0, Go-http-client/1.1, etc.
+# iocextract happily extracts "148.0.0.0" from "Chrome/148.0.0.0" because
+# all octets are 0-255 and the regex doesn't care that the number is
+# attached to a software-name slash. Strip the whole "Word/Version"
+# token before IP extraction sees it. The Word part allows alnum and
+# common separators (-, _, .) that show up in product names.
+_SOFTWARE_VERSION_RE = re.compile(
+    r"\b[A-Za-z][A-Za-z0-9_\-]*\/\d{1,5}(?:\.\d{1,5}){1,}\b"
+)
+
 
 def strip_defender_version_strings(text: str) -> str:
     """Remove Microsoft Defender Security Intelligence / Engine version
@@ -172,6 +189,7 @@ def strip_defender_version_strings(text: str) -> str:
     text = _OID_PREFIXED_SHORT_RE.sub(" ", text)
     text = _OID_RE.sub(" ", text)
     text = _X509_DIR_ATTR_OID_RE.sub(" ", text)
+    text = _SOFTWARE_VERSION_RE.sub(" ", text)
     return text
 
 
