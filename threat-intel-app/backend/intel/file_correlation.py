@@ -66,10 +66,33 @@ async def correlate(analysis: Dict, config) -> Dict:
     if family_hint:
         out["malware_family_consensus"] = family_hint
 
-    # Sandbox auto-submit if HA key available + no existing report
+    # Sandbox auto-submit if HA key available + no existing report.
+    # When the analysis dict carries the raw file bytes (the file
+    # analyzer keeps them on _file_bytes until just before persistence),
+    # kick off a fire-and-forget detonation job. The submission +
+    # polling runs in the background and writes the final summary to
+    # backend/data/sandbox_results/{sha256}.json, which the UI fetches
+    # via GET /api/sandbox/result/{sha256}.
     if (sha256 and keys["HYBRID_ANALYSIS_KEY"]
         and not (out.get("hybrid_analysis") and not out["hybrid_analysis"].get("error"))):
         out["sandbox_submission_eligible"] = True
+        file_bytes = analysis.get("_file_bytes")
+        if file_bytes:
+            try:
+                from intel.sandbox import auto_submit_and_poll
+                filename = (analysis.get("filename")
+                            or (analysis.get("file_name"))
+                            or f"{sha256[:12]}.bin")
+                # Don't await — the polling loop is up to 10 min and the
+                # analyst is waiting on the synchronous response.
+                asyncio.create_task(
+                    auto_submit_and_poll(file_bytes, filename, sha256,
+                                          keys["HYBRID_ANALYSIS_KEY"])
+                )
+                out["sandbox_auto_submitted"] = True
+                out["sandbox_status_path"] = f"/api/sandbox/result/{sha256}"
+            except Exception as e:
+                out["sandbox_auto_submit_error"] = str(e)
     return out
 
 

@@ -2639,7 +2639,129 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
           main analysis paragraph above instead of producing a separate
           correlation object. Kept the LogCorrelationCard definition
           below in case we revive multi-log later, but never invoked. */}
+
+      {/* Calibration: every analyst override is a training signal. */}
+      <VerdictOverride result={result} rs={rs} />
     </Card>
+  );
+}
+
+/* ─── analyst override — POSTs to /api/calibration/override ────────────
+   Drives the calibration log used to spot prompt regressions.
+   Surfaced as a quiet link under the summary so analysts who agree
+   with the AI never see a visible "DISAGREE?" button shouting at them. */
+function VerdictOverride({ result, rs }) {
+  const [open, setOpen]       = React.useState(false);
+  const [level, setLevel]     = React.useState('');
+  const [reason, setReason]   = React.useState('');
+  const [submitting, setSub]  = React.useState(false);
+  const [saved, setSaved]     = React.useState(null);  // null | record | {error}
+
+  const aiLevel = rs?.threat_level || '';
+  if (!aiLevel) return null;
+
+  const submit = async () => {
+    if (!level || level === aiLevel) return;
+    setSub(true); setSaved(null);
+    try {
+      const r = await fetch('/api/calibration/override', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          raw_input:            result?.raw_input || '',
+          ai_threat_level:      aiLevel,
+          ai_confidence:        rs?.confidence ?? null,
+          ai_summary:           rs?.summary || '',
+          analyst_threat_level: level,
+          analyst_reason:       reason,
+          alert_type:           rs?.alert_type || null,
+        }),
+      }).then(x => x.json());
+      setSaved(r?.saved ? r.record : { error: r?.detail || 'save failed' });
+      if (r?.saved) { setOpen(false); setLevel(''); setReason(''); }
+    } catch (e) {
+      setSaved({ error: String(e) });
+    }
+    setSub(false);
+  };
+
+  const LEVELS = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFORMATIONAL'];
+
+  if (!open) {
+    return (
+      <Box sx={{ mt: 1.25, fontSize: 11, color: 'text.tertiary' }}>
+        {saved && !saved.error && (
+          <Box component="span" sx={{ color: '#5be584', mr: 1 }}>
+            ✓ Override saved for calibration
+          </Box>
+        )}
+        {saved?.error && (
+          <Box component="span" sx={{ color: '#ff8a8a', mr: 1 }}>
+            ⚠ {String(saved.error).slice(0, 80)}
+          </Box>
+        )}
+        <Box component="span"
+          onClick={() => setOpen(true)}
+          sx={{ cursor: 'pointer', textDecoration: 'underline',
+                '&:hover': { color: 'primary.main' } }}>
+          Disagree with this verdict?
+        </Box>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ mt: 1.5, p: '10px 12px', borderRadius: '4px',
+      border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+      backgroundColor: muiAlpha('#ffffff', 0.02) }}>
+      <Box sx={{ fontSize: 11, color: 'text.tertiary', mb: 0.75 }}>
+        AI rated this <b>{aiLevel}</b>. Your verdict:
+      </Box>
+      <Stack direction="row" spacing={0.5} sx={{ mb: 1, flexWrap: 'wrap' }}>
+        {LEVELS.map(L => (
+          <Box key={L}
+            onClick={() => setLevel(L)}
+            sx={{ px: 1, py: 0.375, fontSize: 10, cursor: 'pointer',
+              borderRadius: '3px', fontFamily: '"IBM Plex Mono", monospace',
+              border: `1px solid ${level === L ? '#0fbcff' : muiAlpha('#ffffff', 0.12)}`,
+              backgroundColor: level === L ? muiAlpha('#0fbcff', 0.12) : 'transparent',
+              color: level === L ? '#0fbcff' : 'text.secondary' }}>
+            {L}
+          </Box>
+        ))}
+      </Stack>
+      <Box component="textarea"
+        value={reason}
+        onChange={e => setReason(e.target.value)}
+        placeholder="Why? (optional — e.g. 'Known internal RMM, not C2')"
+        rows={2}
+        sx={{ width: '100%', boxSizing: 'border-box',
+          fontSize: 11, p: 1, fontFamily: '"IBM Plex Mono", monospace',
+          backgroundColor: '#0b0d12', color: 'text.primary',
+          border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+          borderRadius: '3px', resize: 'vertical', mb: 1 }} />
+      <Stack direction="row" spacing={1}>
+        <Box component="button"
+          onClick={submit}
+          disabled={submitting || !level || level === aiLevel}
+          sx={{ px: 1.5, py: 0.5, fontSize: 10, cursor: 'pointer',
+            border: '1px solid #0fbcff', backgroundColor: muiAlpha('#0fbcff', 0.12),
+            color: '#0fbcff', borderRadius: '3px',
+            fontFamily: '"IBM Plex Mono", monospace',
+            '&:disabled': { opacity: 0.4, cursor: 'not-allowed' } }}>
+          {submitting ? 'SAVING...' : 'SAVE OVERRIDE'}
+        </Box>
+        <Box component="button"
+          onClick={() => { setOpen(false); setLevel(''); setReason(''); }}
+          sx={{ px: 1.5, py: 0.5, fontSize: 10, cursor: 'pointer',
+            border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+            backgroundColor: 'transparent', color: 'text.secondary',
+            borderRadius: '3px',
+            fontFamily: '"IBM Plex Mono", monospace' }}>
+          CANCEL
+        </Box>
+      </Stack>
+    </Box>
   );
 }
 

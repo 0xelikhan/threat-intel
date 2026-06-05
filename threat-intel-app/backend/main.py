@@ -321,6 +321,16 @@ class GTIScoreRequest(BaseModel):
     enrichments: dict
 
 
+class CalibrationOverrideRequest(BaseModel):
+    raw_input:            str
+    ai_threat_level:      str
+    ai_confidence:        Optional[float] = None
+    ai_summary:           Optional[str]   = ""
+    analyst_threat_level: str
+    analyst_reason:       Optional[str]   = ""
+    alert_type:           Optional[str]   = None
+
+
 # ─── SETTINGS ─────────────────────────────────────────────────────────────────────
 @app.get("/api/settings")
 async def get_settings():
@@ -2467,6 +2477,54 @@ class ScanFeedbackRequest(BaseModel):
     analyst: Optional[str] = ""
 
 
+@app.post("/api/calibration/override")
+async def calibration_override(req: CalibrationOverrideRequest):
+    """Record an analyst override of the AI verdict. Returns the stored
+    record (with computed input_hash + prompt_version) so the UI can
+    confirm. Eval data for spotting prompt regressions — see
+    intel/calibration_log.py for the storage format."""
+    from intel.calibration_log import record_override
+    rec = record_override(
+        raw_input            = req.raw_input,
+        ai_threat_level      = req.ai_threat_level,
+        ai_confidence        = req.ai_confidence,
+        ai_summary           = req.ai_summary or "",
+        analyst_threat_level = req.analyst_threat_level,
+        analyst_reason       = req.analyst_reason or "",
+        alert_type           = req.alert_type,
+    )
+    return {"saved": True, "record": rec}
+
+
+@app.get("/api/calibration/stats")
+async def calibration_stats():
+    """Aggregate override stats — agreement rate, per-prompt-version
+    breakdown, level-pair counts (AI->Analyst), recent 20 overrides.
+    Used to spot regressions: a sudden spike in the override rate after
+    a prompt edit is a leading indicator."""
+    from intel.calibration_log import stats
+    return stats()
+
+
+@app.get("/api/sandbox/result/{sha256}")
+async def sandbox_result(sha256: str):
+    """Poll for the auto-submitted Hybrid Analysis detonation result.
+    The file analyzer fires this submission in the background when HA
+    has no prior report for the file — the analyst doesn't wait, this
+    endpoint surfaces the eventual outcome (IN_PROGRESS / SUCCESS /
+    ERROR / TIMEOUT) once it lands."""
+    if not _SHA256_RE.match(sha256 or ""):
+        raise HTTPException(400, "sha256 must be 64 hex characters")
+    from intel.sandbox import load_sandbox_result
+    result = load_sandbox_result(sha256.lower())
+    if result is None:
+        return {"sha256": sha256, "state": "NO_SUBMISSION",
+                "note": "No auto-submission for this hash. The file analyzer "
+                        "only auto-submits when HYBRID_ANALYSIS_KEY is set "
+                        "and no prior report exists for the hash."}
+    return result
+
+
 @app.post("/api/scan/feedback")
 async def scan_feedback(req: ScanFeedbackRequest):
     """Record analyst feedback on an AI scan result. Used as institutional
@@ -2506,6 +2564,7 @@ _UUID_RE = _re_validate.compile(
     r"|^[0-9a-f]{32}$",
     _re_validate.IGNORECASE,
 )
+_SHA256_RE = _re_validate.compile(r"^[0-9a-fA-F]{64}$")
 
 
 @app.post("/api/urlscan/submit")

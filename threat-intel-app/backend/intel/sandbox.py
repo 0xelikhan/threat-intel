@@ -123,6 +123,93 @@ async def hybrid_analysis_state(job_id: str, api_key: str) -> dict:
         return {"state": "ERROR", "error": str(e)}
 
 
+async def auto_submit_and_poll(file_bytes: bytes, filename: str, sha256: str,
+                                api_key: str, poll_interval_s: int = 30,
+                                max_wait_s: int = 600) -> dict:
+    """Submit a sample to Hybrid Analysis and poll until SUCCESS / ERROR /
+    timeout. Persists the final summary to backend/data/sandbox_results/
+    {sha256}.json so the UI can fetch it later. Returns the final summary
+    dict or an error dict.
+
+    Designed to be called as a background task (asyncio.create_task) from
+    the file analyzer when sandbox_submission_eligible fires — the user
+    doesn't wait, the result lands on disk when ready and the UI polls
+    for it via GET /api/sandbox/result/{sha256}."""
+    import asyncio
+    import json
+    import logging
+    import time
+    from pathlib import Path
+
+    _log = logging.getLogger("recon.sandbox.auto")
+    out_dir = Path(__file__).resolve().parents[1] / "data" / "sandbox_results"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    status_path  = out_dir / f"{sha256}.json"
+
+    def _persist(state: dict) -> None:
+        try:
+            status_path.write_text(json.dumps(state, default=str, indent=2))
+        except Exception as e:
+            _log.warning("Failed to persist sandbox status for %s: %s", sha256, e)
+
+    submit_result = await submit_hybrid_analysis(file_bytes, filename, api_key)
+    if not submit_result.get("ok"):
+        state = {"sha256": sha256, "state": "SUBMIT_FAILED",
+                 "error": submit_result.get("error"),
+                 "submitted_at": time.time()}
+        _persist(state)
+        return state
+
+    job_id = submit_result.get("job_id")
+    _persist({"sha256": sha256, "state": "IN_QUEUE", "job_id": job_id,
+              "submitted_at": time.time()})
+
+    deadline = time.time() + max_wait_s
+    while time.time() < deadline:
+        await asyncio.sleep(poll_interval_s)
+        s = await hybrid_analysis_state(job_id, api_key)
+        st = (s.get("state") or "").upper()
+        if st == "SUCCESS":
+            summary = await hybrid_analysis_summary(job_id, api_key)
+            final = {
+                "sha256":       sha256,
+                "state":        "SUCCESS",
+                "job_id":       job_id,
+                "summary":      summary or {},
+                "completed_at": time.time(),
+            }
+            _persist(final)
+            return final
+        if st in ("ERROR", "FAILED"):
+            final = {"sha256": sha256, "state": st, "job_id": job_id,
+                     "error": s.get("error"), "completed_at": time.time()}
+            _persist(final)
+            return final
+        # Still in IN_QUEUE / IN_PROGRESS — update timestamp and keep polling.
+        _persist({"sha256": sha256, "state": st or "IN_PROGRESS",
+                  "job_id": job_id, "last_check": time.time()})
+
+    timeout_state = {"sha256": sha256, "state": "TIMEOUT", "job_id": job_id,
+                     "max_wait_s": max_wait_s, "completed_at": time.time()}
+    _persist(timeout_state)
+    return timeout_state
+
+
+def load_sandbox_result(sha256: str) -> dict | None:
+    """Read the persisted sandbox status (or None if no submission ever
+    happened for this hash). Used by the UI polling endpoint."""
+    import json
+    from pathlib import Path
+    path = (Path(__file__).resolve().parents[1] / "data" /
+            "sandbox_results" / f"{sha256}.json")
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return None
+
+
 async def hybrid_analysis_summary(job_id: str, api_key: str) -> dict | None:
     """Fetch the full summary once state == SUCCESS."""
     if not (job_id and api_key):
