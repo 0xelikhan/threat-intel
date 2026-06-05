@@ -911,6 +911,21 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     if ck in _cache:
         return {**_cache[ck], "cached": True}
 
+    # Built-in known-good baseline short-circuit. When the IOC maps to
+    # a stable benign service (public DNS, Microsoft endpoint, etc.) we
+    # skip the entire enrichment fan-out and return a synthetic CLEAN
+    # verdict. Saves ~10 API calls and a couple seconds per analysis on
+    # the common false-positive sources that slip past warninglists.
+    try:
+        from intel.known_good_baseline import lookup_ip as _kg_ip
+        kg = _kg_ip(ip)
+        if kg:
+            data = {"known_good_baseline": kg, "_short_circuited": True}
+            _cache[ck] = data
+            return data
+    except Exception:
+        pass
+
     tor_nodes = await _tor(session)
 
     # Censys auth — two paths:
@@ -1102,6 +1117,17 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     ck = _ck("domain", domain)
     if ck in _cache:
         return {**_cache[ck], "cached": True}
+
+    # Known-good baseline short-circuit (see enrich_ip for the rationale).
+    try:
+        from intel.known_good_baseline import lookup_domain as _kg_dom
+        kg = _kg_dom(domain)
+        if kg:
+            data = {"known_good_baseline": kg, "_short_circuited": True}
+            _cache[ck] = data
+            return data
+    except Exception:
+        pass
 
     # WhoisXML API runs in parallel with the rest when the paid key is set.
     # When it's not, we fall back to the free who-dat.as93.net endpoint at the
