@@ -2289,8 +2289,12 @@ _FACT_FIELDS = (
                                                                                   or p.get("ep_user"))
                                                                         else None, "Identity"),
     ("Target user",          ["target_user_principal_name"], None, "Identity"),
-    ("Asset",                ["asset_name", "ep_domain"], None, "Identity"),
-    ("Host",                 ["ep_domain"], lambda v, p: v if not p.get("asset_name") else None, "Identity"),
+    # `ep_domain` is the Windows AD domain prefix from `User: DOMAIN\name`,
+    # NOT a hostname. Falling back to it for Asset/Host populated the
+    # asset card with the AD domain (which often shares a name with the
+    # company / tenant), making it look like the platform misidentified
+    # the host. Only show a real asset_name; otherwise leave blank.
+    ("Asset",                ["asset_name"], None, "Identity"),
     ("Process",              ["ep_application_name"], None, "Process"),
     ("Process path",         ["ep_process_path", "ep_full_path"], None, "Process"),
     ("Process ID",           ["ep_process_id"], None, "Process"),
@@ -2439,7 +2443,11 @@ def _is_real_value(v) -> bool:
 # email body and from the AI prompt, not just visually hidden.
 TEMPLATE_FIELD_TO_KEYS = {
     "alert_summary":       [],   # rendered by the AI summary sentence, not a parsed key
-    "affected_host":       ["asset_name", "ep_domain"],
+    # Do NOT fall back to ep_domain — it's the Windows AD domain prefix
+    # from "DOMAIN\username", not a hostname. Using it as a host source
+    # made the email body claim "affected host: SEC" when SEC was really
+    # just the AD domain shared across every user record.
+    "affected_host":       ["asset_name"],
     "severity":            ["severity", "threat_level"],
     "malware_name":        ["ep_defender_type", "ep_admin_alert_title", "ep_message",
                             "malware_name", "threat_name"],
