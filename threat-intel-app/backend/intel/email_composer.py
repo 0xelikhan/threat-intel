@@ -1,12 +1,10 @@
 """
-Email composer — RECON port of TL.MDR.email (C# WPF).
+Email composer — generates customer-facing alert emails from analysis output.
 
-ThreatLocker branding has been stripped throughout: template text replaces
-`ThreatLocker MDR Team` / `ThreatLocker MDR` / `Threatlocker` references with
-the configurable placeholders `{{TeamName}}` / `{{FromAddress}}` and removes
-vendor-specific URLs and product-policy IDs (e.g. `TL.CD.090`). The signature
-block is fully configurable from RECON settings (`EMAIL_FROM_NAME`,
-`EMAIL_FROM_ADDRESS`, `EMAIL_SIGNATURE`).
+All MDR-team identity is parameterized via configurable placeholders
+(`{{TeamName}}` / `{{FromAddress}}`); the signature block is fully
+configurable from RECON settings (`EMAIL_FROM_NAME`, `EMAIL_FROM_ADDRESS`,
+`EMAIL_SIGNATURE`).
 
 Public API:
   parse_log(text)                              -> dict (ParsedAlertLog)
@@ -17,7 +15,6 @@ Public API:
   send_smtp(subject, body_html, body_text,
             to, cc, config)                    -> {"sent": True} or {error}
 
-Each public function has zero loss of functionality from the original WPF tool.
 """
 
 from __future__ import annotations
@@ -32,11 +29,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 
-# ─── alert type catalog (ported from Models/AlertType.cs, branding-scrubbed) ───
+# ─── alert type catalog ───────────────────────────────────────────────────────
 # (id_value, display_label, category) — id used as URL/JSON key, label as UI text.
-# Two ThreatLocker-specific enum values renamed:
-#   NetStopThreatLocker          → disable_security_agent
-#   TlUninstallScriptExecution   → uninstall_script_execution
 ALERT_TYPES: List[Tuple[str, str, str]] = [
     ("user_at_risk",                "User at Risk",                          "cloud"),
     ("impossible_travel",           "Impossible Travel",                     "cloud"),
@@ -4392,16 +4386,9 @@ def list_response_actions():
     return [{"id": a[0], "label": a[1]} for a in RESPONSE_ACTIONS]
 
 
-# ─── Default templates (ThreatLocker branding stripped) ───────────────────────
-# Source: TL.MDR.email/Templates/*.txt, scrubbed per email-tool-audit.md.
-# Patterns applied globally:
-#   "ThreatLocker MDR Team"               → "{{TeamName}}"
-#   "ThreatLocker MDR has identified"     → "Our MDR team has identified"
-#   "Threatlocker" / "ThreatLocker"       → dropped or replaced contextually
-#   "TL.CD.090 - ThreatLocker"            → ""
-#   "ThreatLocker Response Center"        → "the MDR console"
-#   "ThreatLocker Support / LiveChat"     → "the on-call analyst"
-#   "the ThreatLocker service"            → "the endpoint security agent"
+# ─── Default templates ────────────────────────────────────────────────────────
+# Generic MDR alert email templates. Vendor identity is parameterized via the
+# {{TeamName}} / {{FromAddress}} placeholders configured in RECON settings.
 _DEFAULT_TEMPLATES: Dict[str, str] = {
     "_generic": (
         "Greetings,\n\n"
