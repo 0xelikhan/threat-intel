@@ -485,6 +485,26 @@ PRINCIPLE 1 — Context matters more than patterns
   internet service. Treat cloud-provider attribution as INFORMATIONAL
   context unless an enrichment source explicitly flagged the specific IP.
 
+  CRITICAL COROLLARY: cloud-provider attribution is ALSO NOT exonerating
+  evidence. A GreyNoise verdict of CLEAN_INFRA (RIOT match for Azure /
+  AWS / Google) identifies the IP's OWNER, not the legitimacy of the
+  specific traffic. Attackers spin up VMs in these clouds and inherit
+  the RIOT-benign classification. Do NOT clear alerts of the following
+  shapes solely on cloud-provider attribution:
+    - Inbound RDP / SSH / SMB authentication from an internet IP
+    - Lateral movement (SMB, WMI, WinRM, PsExec, scheduled-task push)
+    - C2 callbacks / beaconing patterns
+    - Data exfiltration to external storage
+    - Privilege-escalation / credential-dumping chains
+  For these alert shapes, "the source IP is in Azure" is FORBIDDEN as a
+  disposition justification. The fact that the OWNER of the IP is a
+  reputable cloud provider tells you NOTHING about whether the specific
+  inbound connection is legitimate — that depends on the customer's
+  expected RDP source ranges, the user account used, the time of day,
+  and corroborating signals. When this shape appears and the only
+  "clean" signal is RIOT/cloud-provider attribution, the verdict floor
+  is MEDIUM and the disposition is MONITOR or ESCALATE.
+
 ──────────────────────────────────────────────────────────────────────────────────
 PRINCIPLE 2 — Known-good software behaviour
 ──────────────────────────────────────────────────────────────────────────────────
