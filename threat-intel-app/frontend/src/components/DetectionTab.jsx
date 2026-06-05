@@ -262,7 +262,7 @@ function KQLBuilder({ analysisResult }) {
   );
 }
 
-// ─── QUERY BUILDER (TQL syntax) ──────────────────────────────────────────────────
+// ─── QUERY BUILDER ───────────────────────────────────────────────────────────────
 function QueryBuilder({ analysisResult }) {
   const [loading, setLoading] = useState(false);
   const [query, setQuery]     = useState('');
@@ -284,7 +284,7 @@ function QueryBuilder({ analysisResult }) {
   return (
     <div style={S.panel}>
       <div style={{ fontWeight: 'bold', color: '#e2e8f0', marginBottom: '8px', fontSize: '13px' }}>QUERY BUILDER</div>
-      <div style={{ fontSize: '12px', color: '#718096', marginBottom: '16px' }}>Generates a Query (TQL syntax) matching the activity. Pure (Attribute Operator Value) statements joined with AND / OR / parens. CamelCase attributes, double-quoted strings, regex via LIKE.</div>
+      <div style={{ fontSize: '12px', color: '#718096', marginBottom: '16px' }}>Generates a Query matching the activity. Pure (Attribute Operator Value) statements joined with AND / OR / parens. CamelCase attributes, double-quoted strings, regex via LIKE.</div>
       {!analysisResult && <div style={{ color: '#ffa94d', fontSize: '12px', marginBottom: '12px' }}>⚠ Run an analysis first.</div>}
       <button style={S.btn(true)} onClick={generate} disabled={!analysisResult || loading}>
         {loading ? '⟳ GENERATING...' : '⚡ GENERATE QUERY'}
@@ -295,11 +295,11 @@ function QueryBuilder({ analysisResult }) {
             <div style={S.label}>Generated Query</div>
             <div style={{ display: 'flex', gap: '6px' }}>
               <button style={S.btn(false)} onClick={copy}>{copied ? '✓ COPIED' : 'COPY QUERY'}</button>
-              <button style={S.btn(false)} onClick={() => { const b = new Blob([query], {type:'text/plain'}); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href=u; a.download='detection.query.tql'; a.click(); }}>⬇ DOWNLOAD</button>
+              <button style={S.btn(false)} onClick={() => { const b = new Blob([query], {type:'text/plain'}); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href=u; a.download='detection.query.txt'; a.click(); }}>⬇ DOWNLOAD</button>
             </div>
           </div>
           <div style={S.code}>{query}</div>
-          <div style={{ marginTop: '6px', fontSize: '11px', color: '#4a5568' }}>Paste into the search bar of any TQL-compatible portal or alert builder.</div>
+          <div style={{ marginTop: '6px', fontSize: '11px', color: '#4a5568' }}>Paste into the search bar of any compatible portal or alert builder.</div>
         </div>
       )}
     </div>

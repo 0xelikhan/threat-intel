@@ -1071,18 +1071,18 @@ async def detection(req: DetectionRequest):
         return {"result": await _ai_gen(prompt)}
 
     if req.action == "query":
-        # TQL — a ThreatLocker-style query DSL. Pure pattern language: no
-        # tables, no schema joins, just (Attribute Operator Value) statements
-        # composed with AND / OR / parens. The model needs the full grammar
-        # in the prompt because it isn't standard SQL/KQL/Lucene.
+        # Query DSL — pure pattern language: no tables, no schema joins,
+        # just (Attribute Operator Value) statements composed with AND /
+        # OR / parens. The model needs the full grammar in the prompt
+        # because it isn't standard SQL / KQL / Lucene.
         a = req.analysis or {}
         ioc_json = json.dumps({k: v[:5] for k, v in (req.iocs or {}).items() if v})
         prompt = (
-            "Generate ONE TQL (ThreatLocker Query Language) query that would\n"
-            "match the activity described below. Output ONLY the query - no\n"
-            "markdown fences, no commentary, no explanation.\n\n"
+            "Generate ONE Query that would match the activity described\n"
+            "below, using the grammar specified here. Output ONLY the query\n"
+            "- no markdown fences, no commentary, no explanation.\n\n"
 
-            "## TQL grammar (hard rules)\n"
+            "## Query grammar (hard rules)\n"
             "- Attribute names are CamelCase and case-sensitive: SourceIPAddress,\n"
             "  DestinationDomain, ProcessName, FullPath, SHA256, etc.\n"
             "- Operators are case-insensitive but write them in UPPERCASE for\n"
@@ -1111,13 +1111,12 @@ async def detection(req: DetectionRequest):
             "                    ParentProcessName, ParentProcessId,\n"
             "                    CreatedByProcess, FileSize, ProcessFileSize,\n"
             "                    DeviceType\n"
-            "  Hashes:           TLHash, SHA256, SHA1, MD5Hash,\n"
-            "                    ParentProcessSHA256, ParentProcessTLHash\n"
+            "  Hashes:           SHA256, SHA1, MD5Hash, ParentProcessSHA256\n"
             "  Identity:         username, computerId, OrganizationId\n"
             "  Policy / action:  PolicyName, PolicyIds, ApplicationName,\n"
             "                    ApplicationId, ActionType, ActionId,\n"
-            "                    EffectiveAction, MonitorOnly, Ringfenced,\n"
-            "                    KillRunningProcess, ElevationStatus\n"
+            "                    EffectiveAction, MonitorOnly,\n"
+            "                    ElevationStatus\n"
             "  Event log:        EventLogDescription, EventLogSourceId,\n"
             "                    EventLogLevel, EventLogOpCode, EventLogTaskName,\n"
             "                    EventLogTaskMessage, EventTime, LogName\n"
@@ -1132,7 +1131,7 @@ async def detection(req: DetectionRequest):
             "  DestinationIPAddress IN (\"45.61.169.99\" \"185.220.101.45\")\n"
             "  FullPath LIKE \"^.*\\\\\\\\appdata\\\\\\\\local\\\\\\\\temp\\\\\\\\.*\\\\.exe$\"\n"
             "  (PolicyName = \"Block Office Macros\" OR PolicyName = \"Block LOLBINs\")\n"
-            "      AND EffectiveAction = 3\n"
+            "      AND EffectiveAction = \"deny\"\n"
             "  SHA256 = \"d9661e2378b88fbf51ce409333ba97ee2c798485cfd7ad8e50c360bce05836ba\"\n\n"
 
             "## What this specific alert is\n"
@@ -1141,7 +1140,7 @@ async def detection(req: DetectionRequest):
             f"  MITRE:        {', '.join(a.get('mitreTechniques',[]))}\n"
             f"  IOCs:         {ioc_json}\n\n"
 
-            "Write the tightest single TQL statement that flags this activity.\n"
+            "Write the tightest single Query statement that flags this activity.\n"
             "Prefer specific hash / IP / domain matches over loose path patterns\n"
             "when concrete IOCs are present. Use NOT IN sparingly to exclude\n"
             "known-good values. Output the query only."
@@ -2801,7 +2800,7 @@ async def get_history_item(run_id: str):
     return {k: v for k, v in _results[run_id].items() if k != "stix_bundle"}
 
 
-# ─── EMAIL COMPOSER (RECON port of TL.MDR.email — ThreatLocker branding stripped) ─
+# ─── EMAIL COMPOSER ─────────────────────────────────────────────────────────────
 class EmailParseRequest(BaseModel):
     log_text: str
 
