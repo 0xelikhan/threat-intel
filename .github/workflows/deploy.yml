@@ -11,6 +11,13 @@ on:
       - 'threat-intel-app/**'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:        # manual trigger from the Actions tab
+  # Weekly rebuild — Mondays 06:00 UTC. The image fetches MITRE ATT&CK
+  # STIX and MISP galaxy clusters fresh on every build (see Dockerfile),
+  # so a scheduled rebuild keeps those datasets at most ~7 days stale.
+  # Runtime data (TAXII feeds, MISP feed hashes.csv, TTL caches) refresh
+  # themselves at runtime and don't need a redeploy.
+  schedule:
+    - cron: '0 6 * * 1'
 
 env:
   RESOURCE_GROUP: threat-intel-rg
