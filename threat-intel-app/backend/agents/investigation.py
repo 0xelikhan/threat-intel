@@ -977,7 +977,7 @@ RESPOND WITH EXACTLY THIS JSON (no markdown fences, no commentary outside the JS
   "confidence_basis": "<one sentence: WHY this confidence level given the evidence>",
   "needs_more_enrichment": <true|false>,
   "missing_data": "<if confidence<0.6, what specific data would raise it>",
-  "summary": "<2-3 sentence executive summary that synthesizes the correlated picture, NOT a list>",
+  "summary": "<MAX 2 sentences. NEVER restate the raw alert content. The analyst already sees the parsed log fields above. This field is INTERPRETATION ONLY: what does the activity mean, what pattern does it match, what is the verdict. Do not narrate timestamps, process names, users, reason codes back at the analyst. If you have nothing to add beyond the enrichment_summary, return ONLY that line.>",
   "attack_chain_hypothesis": "<one-paragraph narrative: how this attack likely unfolds, mapping signals to phases>",
   "chain_of_thought": [
     "<step 1 of your reasoning, citing specific evidence>",
@@ -1554,10 +1554,17 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                     "  • SEPARATE confirmed_facts from analysis_assessment per PRINCIPLE 7 —\n"
                     "    both are valuable, never blur them.\n\n"
                     "Output ONLY these keys (nothing else):\n"
-                    "  summary (2-3 sentences — START with the enrichment_summary line VERBATIM,\n"
-                    "    then a one-sentence plain-language read of what the alert IS. When the\n"
-                    "    activity matches a known-good vendor pattern, say so plainly e.g.\n"
-                    "    'This is consistent with Dell SupportAssist scheduled maintenance.'),\n"
+                    "  summary (MAX 2 sentences. NEVER restate the raw alert content.\n"
+                    "    The analyst already sees the parsed log fields above. This field\n"
+                    "    is for INTERPRETATION ONLY: what does this activity MEAN, what\n"
+                    "    pattern does it match, what is the verdict. Do NOT narrate the\n"
+                    "    timestamp, process, user, reason code, or event ID back at the\n"
+                    "    analyst. Sentence 1: the enrichment_summary line VERBATIM if it\n"
+                    "    has content, otherwise skip. Sentence 2: the value-add read\n"
+                    "    (e.g. 'Consistent with Dell SupportAssist scheduled maintenance.'\n"
+                    "    or 'Routine admin reboot, no action required.'). If you have\n"
+                    "    nothing to add beyond the enrichment_summary, return ONLY that\n"
+                    "    line. Restating the log is the most common analyst complaint.),\n"
                     "  threat_level (CRITICAL|HIGH|MEDIUM|LOW|INFORMATIONAL),\n"
                     "  confirmed_facts (3-6 SHORT sentences — statements directly traceable to\n"
                     "    the enrichment data or raw log. Anyone reading the same data could\n"
