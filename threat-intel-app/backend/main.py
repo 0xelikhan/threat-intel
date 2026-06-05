@@ -1145,7 +1145,48 @@ async def detection(req: DetectionRequest):
             "when concrete IOCs are present. Use NOT IN sparingly to exclude\n"
             "known-good values. Output the query only."
         )
-        return {"result": await _ai_gen(prompt)}
+        # Validation loop: same shape as Sigma + YARA. Generate → compile
+        # through intel.query_parser → on SyntaxError, retry with the
+        # error fed back into the prompt. Caps at 3 attempts so a
+        # pathologically broken model still ships (valid: false) instead
+        # of looping forever.
+        from intel.query_parser import validate as _validate_query
+        attempt = 0
+        prompt_now = prompt
+        last_text  = ""
+        last_error = None
+        last_pos   = -1
+        for attempt in range(1, 4):
+            text = (await _ai_gen(prompt_now)).strip()
+            # Strip any stray markdown fences the model produces despite
+            # the rule (same defensive pattern as the KQL handler).
+            if text.startswith("```"):
+                text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+                if text.rstrip().endswith("```"):
+                    text = text.rstrip()[:-3]
+            text = text.strip()
+            check = _validate_query(text)
+            if check["ok"]:
+                return {"result": text, "valid": True, "errors": [],
+                        "attempts": attempt}
+            last_text  = text
+            last_error = check["error"]
+            last_pos   = check["position"]
+            prompt_now = (
+                f"Your previous Query failed to parse:\n"
+                f"  {last_error}\n\n"
+                f"Here is the query you produced:\n{text}\n\n"
+                "Fix the syntax and output ONLY the corrected Query. No "
+                "markdown fences. No commentary. Common mistakes: NOT only "
+                "combines with IN/LIKE/CONTAINS (never bare NOT =); string "
+                "values must be quoted; numeric values are bare; list items "
+                "go inside parens; double-escape regex backslashes inside "
+                "LIKE strings."
+            )
+        return {"result": last_text, "valid": False,
+                "errors": [last_error] if last_error else ["unknown parse error"],
+                "error_position": last_pos,
+                "attempts": attempt}
 
     if req.action == "yara":
         # Spec §6: AI generates → yara-python compiles → retry up to 3× on syntax error.

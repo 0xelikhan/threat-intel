@@ -18,9 +18,13 @@ const S = {
   card: { background: '#0a1220', border: '1px solid #1e3a5f', borderRadius: '6px', padding: '12px', marginBottom: '8px', cursor: 'pointer' },
 };
 
-const call = (action, body) =>
+const call = (action, body, opts = {}) =>
   fetch('/api/detection', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...body }) })
-    .then(r => r.json()).then(d => d.result);
+    .then(r => r.json())
+    // Default unwraps .result for backwards compat with existing
+    // callers (Sigma / KQL / MITRE). Pass {raw: true} when the caller
+    // needs the full {result, valid, errors, attempts} envelope.
+    .then(d => opts.raw ? d : d.result);
 
 // ─── MITRE BROWSER ────────────────────────────────────────────────────────────────
 function MitreBrowser({ analysisResult }) {
@@ -266,16 +270,34 @@ function KQLBuilder({ analysisResult }) {
 function QueryBuilder({ analysisResult }) {
   const [loading, setLoading] = useState(false);
   const [query, setQuery]     = useState('');
+  const [valid, setValid]     = useState(null);   // null | true | false
+  const [errors, setErrors]   = useState([]);
+  const [attempts, setAttempts] = useState(0);
   const [copied, setCopied]   = useState(false);
 
   const generate = async () => {
     if (!analysisResult) return;
     setLoading(true);
-    const r = await call('query', {
-      iocs: analysisResult.iocs,
-      analysis: analysisResult.response_summary || analysisResult.investigation,
-    }).catch(() => '// Error generating Query');
-    setQuery(r || '// No query generated');
+    setErrors([]); setValid(null); setAttempts(0);
+    // Backend now returns {result, valid, errors, attempts} (same shape
+    // as the Sigma/YARA validators). Older call() helpers may unwrap
+    // the .result field — defensively handle both shapes.
+    try {
+      const r = await call('query', {
+        iocs: analysisResult.iocs,
+        analysis: analysisResult.response_summary || analysisResult.investigation,
+      }, { raw: true });
+      if (r && typeof r === 'object' && 'result' in r) {
+        setQuery(r.result || '');
+        setValid(r.valid !== false);
+        setErrors(r.errors || []);
+        setAttempts(r.attempts || 0);
+      } else {
+        setQuery(typeof r === 'string' ? r : '// No query generated');
+      }
+    } catch {
+      setQuery('// Error generating Query');
+    }
     setLoading(false);
   };
 
@@ -292,13 +314,39 @@ function QueryBuilder({ analysisResult }) {
       {query && (
         <div style={{ marginTop: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <div style={S.label}>Generated Query</div>
+            <div style={S.label}>Generated Query
+              {valid === true && (
+                <span style={{ marginLeft: 8, fontSize: 10, color: '#5be584',
+                  padding: '2px 6px', borderRadius: 3,
+                  border: '1px solid #5be58444',
+                  backgroundColor: 'rgba(91,229,132,0.08)' }}>
+                  ✓ VALID{attempts > 1 ? ` (${attempts} attempts)` : ''}
+                </span>
+              )}
+              {valid === false && (
+                <span style={{ marginLeft: 8, fontSize: 10, color: '#ff6b6b',
+                  padding: '2px 6px', borderRadius: 3,
+                  border: '1px solid #ff6b6b44',
+                  backgroundColor: 'rgba(255,107,107,0.08)' }}>
+                  ✗ INVALID
+                </span>
+              )}
+            </div>
             <div style={{ display: 'flex', gap: '6px' }}>
               <button style={S.btn(false)} onClick={copy}>{copied ? '✓ COPIED' : 'COPY QUERY'}</button>
               <button style={S.btn(false)} onClick={() => { const b = new Blob([query], {type:'text/plain'}); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href=u; a.download='detection.query.txt'; a.click(); }}>⬇ DOWNLOAD</button>
             </div>
           </div>
           <div style={S.code}>{query}</div>
+          {valid === false && errors.length > 0 && (
+            <div style={{ marginTop: '8px', padding: '8px 10px',
+              border: '1px solid #ff6b6b33',
+              backgroundColor: 'rgba(255,107,107,0.05)',
+              color: '#ff8a8a', fontSize: 11, fontFamily: '"IBM Plex Mono", monospace' }}>
+              Parser rejected this output after {attempts} attempts:<br/>
+              {errors.map((e, i) => <div key={i}>• {e}</div>)}
+            </div>
+          )}
           <div style={{ marginTop: '6px', fontSize: '11px', color: '#4a5568' }}>Paste into the search bar of any compatible portal or alert builder.</div>
         </div>
       )}
