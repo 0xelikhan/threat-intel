@@ -227,10 +227,28 @@ def _decode_b64_candidates(text: str, max_decodes: int = 5) -> List[str]:
 def extract_behavioral_indicators(raw: str) -> Dict:
     """Spec §1 entry point. Returns categorized behavioral indicators with MITRE."""
     if not raw:
-        return {"categories": {}, "total": 0, "decoded_payloads": [], "techniques": []}
+        return {"categories": {}, "total": 0, "decoded_payloads": [],
+                "techniques": [], "obfuscation": {"detected": [], "decoded": []}}
 
     text_full = raw
     decoded = _decode_b64_candidates(raw)
+
+    # Multi-format deobfuscation. Catches hex/unicode/octal escapes, HTML
+    # entities, URL-encoding, fromCharCode, concat chains, reversed strings,
+    # plus detect-only signals for JSFuck / AAEncode / JJEncode (those need
+    # a JS engine for full decode). Decoded payloads feed the pattern-match
+    # haystack list so MITRE rules fire against the deobfuscated body too.
+    try:
+        from intel.deobfuscator import deobfuscate as _deob
+        deob = _deob(raw)
+    except Exception:
+        deob = {"detected": [], "decoded": []}
+    deob_decoded = [d["decoded"] for d in deob.get("decoded", []) if d.get("decoded")]
+    if deob_decoded:
+        decoded = decoded + deob_decoded
+        # Cap so a hostile input can't blow up the next stage.
+        decoded = decoded[:10]
+
     # Run patterns against decoded payloads too so EncodedCommand bodies get tagged
     haystacks = [("raw", text_full)] + [("decoded", d) for d in decoded]
 
@@ -264,4 +282,9 @@ def extract_behavioral_indicators(raw: str) -> Dict:
         "techniques_with_names": [
             {"id": t, "name": _mitre_name(t)} for t in techniques
         ],
+        # Multi-format deobfuscation results. `detected` includes
+        # detect-only signals (JSFuck etc. that need a JS engine to fully
+        # decode); `decoded` holds the safely-deobfuscated payloads that
+        # were also folded into the haystack list above.
+        "obfuscation":      deob,
     }
