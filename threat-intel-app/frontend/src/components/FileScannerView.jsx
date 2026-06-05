@@ -1212,6 +1212,36 @@ function ThreatIntelSection({ result }) {
   const ti = useMemo(() => result.threat_intel || {}, [result.threat_intel]);
   const [openSource, setOpenSource] = useState(null);
 
+  // Sandbox auto-submit polling — the backend fires submit_url() in the
+  // background when HA has no prior report and we have file bytes; the
+  // SHA-256-keyed JSON file at /api/sandbox/result/{sha256} is the only
+  // way to learn the outcome from the UI. Poll every 30s while the
+  // status is IN_QUEUE / IN_PROGRESS / undefined, stop on terminal states.
+  const sha256 = result?.hashes?.sha256;
+  const autoSubmitted = !!ti.sandbox_auto_submitted;
+  const [sbState, setSbState] = useState(null);
+  useEffect(() => {
+    if (!autoSubmitted || !sha256) return undefined;
+    let alive = true;
+    const TERMINAL = new Set(['SUCCESS', 'ERROR', 'FAILED', 'TIMEOUT',
+                               'SUBMIT_FAILED']);
+    async function poll() {
+      try {
+        const r = await fetch(`/api/sandbox/result/${sha256}`);
+        if (!alive) return;
+        const j = await r.json();
+        setSbState(j);
+        if (!TERMINAL.has((j.state || '').toUpperCase())) {
+          setTimeout(poll, 30_000);
+        }
+      } catch {
+        if (alive) setTimeout(poll, 60_000);
+      }
+    }
+    poll();
+    return () => { alive = false; };
+  }, [autoSubmitted, sha256]);
+
   const sources = useMemo(() => {
     // Each row returns either a hit summary string or an empty-state
     // reason string so the analyst sees WHY a source had nothing to
@@ -1241,6 +1271,21 @@ function ThreatIntelSection({ result }) {
           if (d.found) return { hit: `${d.verdict} · score ${d.threat_score}` };
           return { empty: 'no prior sandbox detonation' };
         }],
+      ['Sandbox auto-detonation', sbState || (autoSubmitted ? {state: 'IN_QUEUE'} : null),
+        (d) => {
+          if (!d) return { empty: 'not auto-submitted' };
+          const st = (d.state || '').toUpperCase();
+          if (st === 'SUCCESS') {
+            const s = d.summary || {};
+            return { hit: `${s.verdict || 'analyzed'}${s.threat_score != null ? ' · score '+s.threat_score : ''}${s.malware_family ? ' · '+s.malware_family : ''}` };
+          }
+          if (st === 'IN_QUEUE')       return { empty: 'queued — polling every 30s…' };
+          if (st === 'IN_PROGRESS')    return { empty: 'detonating in HA sandbox… (3-5 min)' };
+          if (st === 'TIMEOUT')        return { empty: 'detonation timed out after 10 min' };
+          if (st === 'SUBMIT_FAILED')  return { empty: `submission failed: ${d.error || 'unknown'}` };
+          if (st === 'ERROR' || st === 'FAILED') return { empty: `failed: ${d.error || 'unknown'}` };
+          return { empty: `state: ${st || 'unknown'}` };
+        }],
       ['Feed cache',      ti.feed_cache,
         (d) => {
           if (!d) return { empty: 'feed cache not initialized' };
@@ -1255,7 +1300,7 @@ function ThreatIntelSection({ result }) {
         }],
     ];
     return order;
-  }, [ti]);
+  }, [ti, sbState, autoSubmitted]);
 
   // Top-level summary indicator — how many TI sources returned an actual hit.
   const hitCount = sources.reduce((n, [, d, fn]) => n + (fn(d).hit ? 1 : 0), 0);

@@ -1002,16 +1002,16 @@ RESPOND WITH EXACTLY THIS JSON (no markdown fences, no commentary outside the JS
   "needs_more_enrichment": <true|false>,
   "missing_data": "<if confidence<0.6, what specific data would raise it>",
   "summary": "<MAX 2 sentences. NEVER restate the raw alert content. The analyst already sees the parsed log fields above. This field is INTERPRETATION ONLY: what does the activity mean, what pattern does it match, what is the verdict. Do not narrate timestamps, process names, users, reason codes back at the analyst. If you have nothing to add beyond the enrichment_summary, return ONLY that line.>",
-  "attack_chain_hypothesis": "<one-paragraph narrative: how this attack likely unfolds, mapping signals to phases>",
+  "attack_chain_hypothesis": "<one short paragraph mapping the alert's signals to kill-chain phases. SKIP entirely (empty string) when the alert is informational or benign - hypothesising an attack chain on routine activity is the second-most-common analyst complaint. Never restate the summary verdict here.>",
   "chain_of_thought": [
-    "<step 1 of your reasoning, citing specific evidence>",
-    "<step 2 building on step 1>",
-    "<step 3 reaching a conclusion>"
+    "<step 1 of your reasoning - cite a SPECIFIC signal, not the summary>",
+    "<step 2 building on step 1 with a different signal>",
+    "<step 3 reaching a conclusion that adds something NOT already in summary>"
   ],
   "key_findings": [
-    "<finding 1 — must cite specific evidence (e.g. 'AbuseIPDB 92% + ipsum blocklist + same-day domain')>",
-    "<finding 2>",
-    "<finding 3>"
+    "<finding 1 - one distinct signal with the source cited inline. Format: 'OBSERVATION (source: NAME)'. NEVER a confirmed_fact verbatim, NEVER a paraphrase of another finding.>",
+    "<finding 2 - a DIFFERENT signal, different source>",
+    "<finding 3 - a DIFFERENT signal again>"
   ],
   "correlated_signals": [
     {{"observation": "<correlation>", "supporting_signals": ["<signal 1>", "<signal 2>"]}}
@@ -1674,15 +1674,55 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                     "Now output PART 2 of your final assessment as strict JSON — the structured "
                     "findings. Cite specific evidence; do not be vague. Keep every field TIGHT: "
                     "short phrases, not paragraphs; one brief entry per CTI-framework field.\n\n"
+                    "ANTI-DUPLICATION RULE (hard, same as PART 1):\n"
+                    "Each finding / signal / note must contribute DISTINCT information.\n"
+                    "Do NOT paraphrase the same fact across key_findings,\n"
+                    "correlated_signals, and analyst_notes. Cross-field overlap > 30%%\n"
+                    "is a quality failure. The fields hold different SLICES:\n"
+                    "    key_findings       = atomic signal-cite pairs ('X seen,\n"
+                    "                          source: Y'); one finding per signal\n"
+                    "    correlated_signals = multi-signal patterns ('X + Y together\n"
+                    "                          mean Z'); requires >= 2 signals each\n"
+                    "    recommended_actions= what to DO next (verbs)\n"
+                    "    analyst_notes      = senior-analyst CONTEXT for the junior\n"
+                    "                          tier (history, customer-specific\n"
+                    "                          patterns, decision-tree shortcuts).\n"
+                    "                          NEVER a verdict restatement.\n\n"
+
                     "Output ONLY these keys (nothing else):\n"
-                    "  key_findings (3-7 findings; each cites the supporting enrichment source),\n"
-                    "  correlated_signals (array of {observation, supporting_signals}),\n"
+                    "  key_findings (3-7 findings, each ONE distinct signal -> source\n"
+                    "    pair. Format: 'OBSERVATION (source: SOURCE_NAME)'. NEVER\n"
+                    "    repeat a confirmed_fact verbatim and NEVER paraphrase another\n"
+                    "    finding. Examples of GOOD findings:\n"
+                    "      'AbuseIPDB rates 185.220.101.45 at 92%% confidence with\n"
+                    "       127 reports (source: AbuseIPDB)'\n"
+                    "      'Hash 7c2f... is signed by Microsoft and matches the\n"
+                    "       SCCM client (source: known_good_baseline + Authenticode)'\n"
+                    "    Examples of FORBIDDEN findings (these duplicate other\n"
+                    "    fields or each other):\n"
+                    "      'User X deleted file Y' (that's a confirmed_fact)\n"
+                    "      'The action appears suspicious' (no signal cited)\n"
+                    "      'AbuseIPDB flagged the IP' THEN 'The IP was reported on\n"
+                    "       AbuseIPDB' (same finding twice)),\n"
+                    "  correlated_signals (array of {observation, supporting_signals}.\n"
+                    "    REQUIRES >= 2 supporting_signals - this field is for\n"
+                    "    MULTI-signal patterns, not single observations. Skip\n"
+                    "    entirely (empty array) when nothing multi-signal exists.),\n"
                     "  ioc_assessments (array of {ioc, type, verdict, reason, evidence_source}),\n"
                     "  mitre_techniques (array of 'Txxxx[.yyy] - Name'),\n"
                     "  mitre_evidence (array of {technique, evidence, confidence}),\n"
                     "  recommended_actions (array of {action, priority, timeframe} where\n"
                     "    priority is IMMEDIATE|SHORTTERM|LONGTERM),\n"
-                    "  analyst_notes (1-2 paragraphs of senior-analyst context for junior tier),\n"
+                    "  analyst_notes (1-2 SHORT paragraphs of senior-analyst CONTEXT\n"
+                    "    for the junior tier. Allowed content: customer-specific\n"
+                    "    history ('this account uses RMM from Azure regularly'),\n"
+                    "    decision-tree shortcuts ('if the AppLocker policy is on,\n"
+                    "    this would have blocked'), or cross-case patterns ('we saw\n"
+                    "    this same dropper SHA on the Acme case last week').\n"
+                    "    FORBIDDEN content: restating the verdict, paraphrasing\n"
+                    "    confirmed_facts, repeating key_findings. If you have no\n"
+                    "    distinct context to add, emit an empty string - that is\n"
+                    "    preferable to padding with restated content.),\n"
                     "  clarifying_questions (2-4 questions whose answers would MATERIALLY change the\n"
                     "    assessment — host role, user privilege, related alerts, business context,\n"
                     "    scope; only if not derivable from enrichment; empty list if none),\n"
