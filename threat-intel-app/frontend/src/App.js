@@ -2626,13 +2626,28 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
         onComplete={onFeedbackComplete}
       />
 
-      {/* PRINCIPLE 7 — Confirmed facts vs analyst assessment. */}
-      {(rs?.confirmed_facts?.length > 0 || rs?.analysis_assessment?.length > 0) && (
-        <ConfirmedVsAnalysis
-          confirmed={rs?.confirmed_facts || []}
-          analysis={rs?.analysis_assessment || []}
-        />
-      )}
+      {/* PRINCIPLE 7 — Confirmed facts vs analyst assessment.
+          Cross-field de-dup: when the AI ignored its prompt and put the
+          same paraphrased verdict in BOTH `summary` (rendered in the
+          combined paragraph above) AND `analysis_assessment` (rendered
+          below), drop the duplicates from analysis_assessment. Catches
+          the wording-shift dupes a strict string-equal check misses
+          (e.g. "the deletion of X by user Y is not suspicious" vs
+          "user Y deleted X, not malicious"). */}
+      {(() => {
+        const confirmed = rs?.confirmed_facts || [];
+        const analysis_ = (rs?.analysis_assessment || []).filter(s => {
+          if (!s) return false;
+          // Drop assessment sentences whose tokens overlap any of the
+          // already-rendered prose (combined paragraph + dispReason +
+          // confirmed facts) by >= 50%.
+          const compareAgainst = [combined, _dispReason, dispReason,
+                                  ...confirmed].filter(Boolean).join(' ');
+          return _overlap(s, compareAgainst) < 0.5;
+        });
+        if (!confirmed.length && !analysis_.length) return null;
+        return <ConfirmedVsAnalysis confirmed={confirmed} analysis={analysis_} />;
+      })()}
 
       {/* Log Correlation card retired — the AI now reasons about
           relationships between events inside an alert directly in the
