@@ -1667,6 +1667,15 @@ function _ocSources(result, ioc, type) {
     }
   }
 
+  // MISP feeds — community-curated hash matches (CIRCL OSINT / DigitalSide /
+  // Botvrij). A hit here means the hash is in a published MISP event, which
+  // is high-signal corroborating evidence.
+  if (d.misp_feeds && d.misp_feeds.matched_feeds?.length > 0) {
+    const feeds = d.misp_feeds.matched_feeds.slice(0, 3).join(', ');
+    out.push({ source: 'MISP Feeds',
+               label: `matched in ${feeds}`, color: red });
+  }
+
   // OTX — pulse count + a top pulse name when present.
   if (d.otx && !d.otx.error) {
     const pulses = d.otx.pulseCount ?? d.otx.pulse_count ?? 0;
@@ -1932,6 +1941,7 @@ function _ocSources(result, ioc, type) {
     whois: 'WHOIS',                      ipinfo: 'IPInfo',
     censys: 'Censys',                    crowdsec: 'CrowdSec',
     feodo_tracker: 'Feodo Tracker',
+    misp_feeds: 'MISP Feeds',
   };
   const _surfaced = new Set(out.map(r => r.source));
   for (const [key, blob] of Object.entries(d || {})) {

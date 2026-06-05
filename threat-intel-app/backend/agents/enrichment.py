@@ -1335,6 +1335,25 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         ha = _p_hybrid(results[5])
         if "error" not in ha:
             data["hybrid_analysis"] = ha
+
+    # MISP feeds — flat hashes.csv dump from CIRCL OSINT / DigitalSide /
+    # Botvrij. Free, no key, refreshed every 6h. Hits here are strong
+    # corroborating evidence (community-curated event with a UUID + a
+    # filename context).
+    try:
+        from intel.misp_feeds import lookup_hash as _misp_lookup
+        _misp_hits = await _misp_lookup(hash_val)
+        if _misp_hits:
+            data["misp_feeds"] = {
+                "matched_feeds": [h["feed"] for h in _misp_hits],
+                "hits":          _misp_hits[:5],
+                "verdict":       "MALICIOUS",
+                "summary":       (f"Hash matched in {len(_misp_hits)} MISP feed"
+                                  f"{'s' if len(_misp_hits) != 1 else ''}: "
+                                  + ", ".join(h["feed"] for h in _misp_hits)),
+            }
+    except Exception as _e:
+        _log.debug("misp_feeds hash lookup failed: %s", _e)
     # ── Secondary lookups — independent, run concurrently (Team Cymru MHR,
     #    Maltiverse, OpenCTI, VT graph, MalwareBazaar pivot, deep sandbox). The
     #    family pivot + deep sandbox depend only on data already collected above. ─
