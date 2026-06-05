@@ -262,10 +262,60 @@ function KQLBuilder({ analysisResult }) {
   );
 }
 
+// ─── QUERY BUILDER (TQL syntax) ──────────────────────────────────────────────────
+function QueryBuilder({ analysisResult }) {
+  const [loading, setLoading] = useState(false);
+  const [query, setQuery]     = useState('');
+  const [copied, setCopied]   = useState(false);
+
+  const generate = async () => {
+    if (!analysisResult) return;
+    setLoading(true);
+    const r = await call('query', {
+      iocs: analysisResult.iocs,
+      analysis: analysisResult.response_summary || analysisResult.investigation,
+    }).catch(() => '// Error generating Query');
+    setQuery(r || '// No query generated');
+    setLoading(false);
+  };
+
+  const copy = () => { navigator.clipboard.writeText(query); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+
+  return (
+    <div style={S.panel}>
+      <div style={{ fontWeight: 'bold', color: '#e2e8f0', marginBottom: '8px', fontSize: '13px' }}>QUERY BUILDER</div>
+      <div style={{ fontSize: '12px', color: '#718096', marginBottom: '16px' }}>Generates a Query (TQL syntax) matching the activity. Pure (Attribute Operator Value) statements joined with AND / OR / parens. CamelCase attributes, double-quoted strings, regex via LIKE.</div>
+      {!analysisResult && <div style={{ color: '#ffa94d', fontSize: '12px', marginBottom: '12px' }}>⚠ Run an analysis first.</div>}
+      <button style={S.btn(true)} onClick={generate} disabled={!analysisResult || loading}>
+        {loading ? '⟳ GENERATING...' : '⚡ GENERATE QUERY'}
+      </button>
+      {query && (
+        <div style={{ marginTop: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <div style={S.label}>Generated Query</div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button style={S.btn(false)} onClick={copy}>{copied ? '✓ COPIED' : 'COPY QUERY'}</button>
+              <button style={S.btn(false)} onClick={() => { const b = new Blob([query], {type:'text/plain'}); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href=u; a.download='detection.query.tql'; a.click(); }}>⬇ DOWNLOAD</button>
+            </div>
+          </div>
+          <div style={S.code}>{query}</div>
+          <div style={{ marginTop: '6px', fontSize: '11px', color: '#4a5568' }}>Paste into the search bar of any TQL-compatible portal or alert builder.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── MAIN TAB ────────────────────────────────────────────────────────────────────
 function DetectionTab({ analysisResult }) {
   const [tab, setTab] = useState('mitre');
-  const tabs = [{ id: 'mitre', label: 'MITRE ATT&CK' }, { id: 'actors', label: 'THREAT ACTORS' }, { id: 'sigma', label: 'SIGMA RULE' }, { id: 'kql', label: 'KQL BUILDER' }];
+  const tabs = [
+    { id: 'mitre',  label: 'MITRE ATT&CK' },
+    { id: 'actors', label: 'THREAT ACTORS' },
+    { id: 'sigma',  label: 'SIGMA RULE' },
+    { id: 'kql',    label: 'KQL BUILDER' },
+    { id: 'query',  label: 'QUERY' },
+  ];
   return (
     <div>
       <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap' }}>
@@ -277,6 +327,7 @@ function DetectionTab({ analysisResult }) {
       {tab === 'actors' && <ThreatActors analysisResult={analysisResult} />}
       {tab === 'sigma'  && <SigmaGenerator analysisResult={analysisResult} />}
       {tab === 'kql'    && <KQLBuilder analysisResult={analysisResult} />}
+      {tab === 'query'  && <QueryBuilder analysisResult={analysisResult} />}
     </div>
   );
 }

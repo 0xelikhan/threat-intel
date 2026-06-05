@@ -1065,9 +1065,87 @@ async def detection(req: DetectionRequest):
                   f"Threat Level: {a.get('threatLevel','MEDIUM')}\n"
                   f"Summary: {a.get('summary','')}\n"
                   f"MITRE: {', '.join(a.get('mitreTechniques',[]))}\n"
-                  f"IOCs: {ioc_json}\n"
                   f"Requirements: let statements, relevant Sentinel tables, entity mapping fields, "
-                  f"// comments explaining each section, rule metadata as // comments at top.")
+                  f"// comments explaining each section, rule metadata as // comments at top.\n"
+                  f"IOCs: {ioc_json}\n")
+        return {"result": await _ai_gen(prompt)}
+
+    if req.action == "query":
+        # TQL — a ThreatLocker-style query DSL. Pure pattern language: no
+        # tables, no schema joins, just (Attribute Operator Value) statements
+        # composed with AND / OR / parens. The model needs the full grammar
+        # in the prompt because it isn't standard SQL/KQL/Lucene.
+        a = req.analysis or {}
+        ioc_json = json.dumps({k: v[:5] for k, v in (req.iocs or {}).items() if v})
+        prompt = (
+            "Generate ONE TQL (ThreatLocker Query Language) query that would\n"
+            "match the activity described below. Output ONLY the query - no\n"
+            "markdown fences, no commentary, no explanation.\n\n"
+
+            "## TQL grammar (hard rules)\n"
+            "- Attribute names are CamelCase and case-sensitive: SourceIPAddress,\n"
+            "  DestinationDomain, ProcessName, FullPath, SHA256, etc.\n"
+            "- Operators are case-insensitive but write them in UPPERCASE for\n"
+            "  readability: AND, OR, NOT, IN, LIKE, CONTAINS.\n"
+            "- String values use double quotes; escape inner quotes as \\\".\n"
+            "- Integer / float values are bare (no quotes).\n"
+            "- Lists use parens with no commas required:\n"
+            "    Attribute IN (\"a\" \"b\" \"c\")\n"
+            "- Group sub-expressions with parens to control precedence.\n"
+            "- NOT only combines with IN / LIKE / CONTAINS:\n"
+            "    Attribute NOT IN (...) / NOT LIKE \"...\" / NOT CONTAINS \"...\".\n"
+            "- LIKE takes a regex string (anchored ^...$ for full match).\n"
+            "- Comparison operators (>, >=, <, <=) work on numeric attributes.\n\n"
+
+            "## Operators (use exactly these tokens)\n"
+            "  =   !=   AND   OR   CONTAINS   IN   LIKE   NOT\n"
+            "  >   >=   <   <=   (   )\n\n"
+
+            "## Attribute catalog (pick the ones that fit; do NOT invent new names)\n"
+            "  IPs / network:    SourceIPAddress, DestinationIPAddress,\n"
+            "                    SourcePort, DestinationPort, DestinationDomain,\n"
+            "                    TransportLayer, NetworkDirection, Hostname,\n"
+            "                    MacAddress\n"
+            "  Process / file:   ProcessName, ProcessPath, ProcessId, FullPath,\n"
+            "                    FullPathWithCmdLine, CmdLineParameters,\n"
+            "                    ParentProcessName, ParentProcessId,\n"
+            "                    CreatedByProcess, FileSize, ProcessFileSize,\n"
+            "                    DeviceType\n"
+            "  Hashes:           TLHash, SHA256, SHA1, MD5Hash,\n"
+            "                    ParentProcessSHA256, ParentProcessTLHash\n"
+            "  Identity:         username, computerId, OrganizationId\n"
+            "  Policy / action:  PolicyName, PolicyIds, ApplicationName,\n"
+            "                    ApplicationId, ActionType, ActionId,\n"
+            "                    EffectiveAction, MonitorOnly, Ringfenced,\n"
+            "                    KillRunningProcess, ElevationStatus\n"
+            "  Event log:        EventLogDescription, EventLogSourceId,\n"
+            "                    EventLogLevel, EventLogOpCode, EventLogTaskName,\n"
+            "                    EventLogTaskMessage, EventTime, LogName\n"
+            "  Threat / risk:    ThreatType, ThreatLevel := CurrentThreatLevel,\n"
+            "                    RiskScore, RiskState, Severity, Priority,\n"
+            "                    ResultStatus, Source, Service\n"
+            "  Misc:             Notes, Data, RemotePresence, IsProtectedProcess,\n"
+            "                    MemoryBytes, Location\n\n"
+
+            "## Examples\n"
+            "  ProcessName = \"powershell.exe\" AND CmdLineParameters CONTAINS \"-enc\"\n"
+            "  DestinationIPAddress IN (\"45.61.169.99\" \"185.220.101.45\")\n"
+            "  FullPath LIKE \"^.*\\\\\\\\appdata\\\\\\\\local\\\\\\\\temp\\\\\\\\.*\\\\.exe$\"\n"
+            "  (PolicyName = \"Block Office Macros\" OR PolicyName = \"Block LOLBINs\")\n"
+            "      AND EffectiveAction = 3\n"
+            "  SHA256 = \"d9661e2378b88fbf51ce409333ba97ee2c798485cfd7ad8e50c360bce05836ba\"\n\n"
+
+            "## What this specific alert is\n"
+            f"  Threat level: {a.get('threatLevel','MEDIUM')}\n"
+            f"  Summary:      {a.get('summary','')}\n"
+            f"  MITRE:        {', '.join(a.get('mitreTechniques',[]))}\n"
+            f"  IOCs:         {ioc_json}\n\n"
+
+            "Write the tightest single TQL statement that flags this activity.\n"
+            "Prefer specific hash / IP / domain matches over loose path patterns\n"
+            "when concrete IOCs are present. Use NOT IN sparingly to exclude\n"
+            "known-good values. Output the query only."
+        )
         return {"result": await _ai_gen(prompt)}
 
     if req.action == "yara":
