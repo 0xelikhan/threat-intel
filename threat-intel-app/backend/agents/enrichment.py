@@ -338,13 +338,36 @@ def _p_ipinfo(r):
 
 
 def _p_gn(r):
-    """GreyNoise community + enterprise format. Extracts tags/CVEs/actor."""
+    """GreyNoise community + enterprise format. Extracts tags/CVEs/actor.
+
+    Verdict semantics — important nuance the AI prompt also reinforces:
+
+      * noise=True, classification=malicious  -> MALICIOUS
+        (observed scanning the internet with malicious intent)
+      * noise=True, classification=benign     -> CLEAN
+        (observed scanning the internet from a research / pentest source
+        that GreyNoise has classified — true benign noise)
+      * riot=True, noise=False                -> CLEAN_INFRA
+        (RIOT: the IP belongs to known business infrastructure such as
+        Microsoft Azure / Google / AWS / Cloudflare. This is NOT a
+        blanket 'safe traffic' verdict — attackers regularly spin up
+        VMs in these clouds and inherit the RIOT classification. We
+        emit a distinct verdict so the AI can weigh it correctly for
+        inbound-auth / lateral-movement / C2 contexts.)
+      * classification=unknown                -> SUSPICIOUS
+        (observed scanning but uncategorised)
+      * everything else                       -> no verdict
+        (not observed by their sensors — the analyst-facing card stays
+        informational rather than claiming a verdict either way)
+    """
     if _is_fail(r):
         return _err("greynoise", "Not in GreyNoise" if isinstance(r, dict) else r)
     classification = r.get("classification") or ""
+    noise = bool(r.get("noise"))
+    riot  = bool(r.get("riot"))
     out = {
-        "noise":          r.get("noise"),
-        "riot":           r.get("riot"),
+        "noise":          noise,
+        "riot":           riot,
         "classification": classification,
         "name":           r.get("name"),
         "actor":          r.get("actor") or r.get("name"),
@@ -362,11 +385,28 @@ def _p_gn(r):
         out["city"]         = meta.get("city")
         out["country"]      = meta.get("country")
         out["os"]           = meta.get("os")
-    # Source-level verdict
+    # Source-level verdict — see docstring for the full state table.
     if classification == "malicious":
         out["verdict"] = "MALICIOUS"
-    elif classification == "benign":
+    elif noise and classification == "benign":
         out["verdict"] = "CLEAN"
+        out["benign_note"] = (
+            f"GreyNoise observed this IP scanning the internet and "
+            f"classified the scanner as benign{(' (' + r.get('name') + ')') if r.get('name') else ''}."
+        )
+    elif riot and not noise:
+        # RIOT-only: known infrastructure, NOT a 'safe traffic' verdict.
+        # The dedicated verdict + note steer the AI away from clearing
+        # alerts solely on cloud-provider attribution.
+        out["verdict"] = "CLEAN_INFRA"
+        out["infra_note"] = (
+            f"GreyNoise RIOT: this IP belongs to {r.get('name') or 'known business infrastructure'}. "
+            "This identifies the OWNER of the IP, not the legitimacy of the "
+            "specific traffic. Attackers commonly spin up VMs in these "
+            "clouds and inherit the RIOT classification. Do NOT treat this "
+            "as exonerating evidence for inbound authentication, lateral "
+            "movement, C2 callbacks, or data exfiltration."
+        )
     elif classification == "unknown":
         out["verdict"] = "SUSPICIOUS"
     return out
