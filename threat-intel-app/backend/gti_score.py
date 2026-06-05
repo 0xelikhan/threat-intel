@@ -188,7 +188,6 @@ def score_ip(enrichment: dict) -> GTIScore:
     gn    = enrichment.get("greynoise")  or {}
     otx   = enrichment.get("otx")        or {}
     tor   = enrichment.get("tor")        or {}
-    shodan= enrichment.get("shodan")     or {}
 
     factors  = []
     verdict  = "UNKNOWN"
@@ -201,7 +200,6 @@ def score_ip(enrichment: dict) -> GTIScore:
     gn_noise    = gn.get("noise") or False
     is_tor      = tor.get("isExitNode") or False
     otx_cnt     = otx.get("pulseCount") or 0
-    vulns       = shodan.get("vulns") or []
 
     # ── Verdict ───────────────────────────────────────────────────────────────────
     if abuse_score >= 75 or vt_mal >= 5 or vt_rep < -50:
@@ -229,10 +227,8 @@ def score_ip(enrichment: dict) -> GTIScore:
             severity = "HIGH"
             if is_tor:
                 factors.append("Confirmed Tor exit node — anonymized threat actor traffic")
-        elif vulns or (abuse_score >= 50) or otx_cnt >= 5:
+        elif (abuse_score >= 50) or otx_cnt >= 5:
             severity = "MEDIUM"
-            if vulns:
-                factors.append(f"Shodan: {len(vulns)} known CVEs — {', '.join(vulns[:3])}")
         else:
             severity = "LOW"
 
@@ -257,8 +253,6 @@ def score_ip(enrichment: dict) -> GTIScore:
         modifier += 5; factors.append(f"OTX: {otx_cnt} threat community pulses")
     elif otx_cnt >= 3:
         modifier += 2
-    if len(vulns) >= 3:
-        modifier += 4
     if abuse_score == 100:
         modifier += 5; factors.append("AbuseIPDB: maximum abuse confidence score")
 
@@ -458,61 +452,6 @@ def score_url(enrichment: dict) -> GTIScore:
 
 
 # ─── PUBLIC INTERFACE ─────────────────────────────────────────────────────────────
-def score_email(data: dict, label: str = "email") -> GTIScore:
-    """Score an email-address IOC based on breach exposure. The breach
-    sources (HIBP, Dehashed) each contribute to the score; an
-    email appearing in many breaches is a meaningful compromise signal."""
-    factors = []
-    score = 0
-    verdict = "UNKNOWN"
-
-    hibp = data.get("hibp") or {}
-    if hibp and not hibp.get("error"):
-        n = int(hibp.get("breach_count") or 0)
-        if n >= 10:
-            score += 60
-            verdict = "MALICIOUS"
-            factors.append(f"HIBP: {n} breaches expose this email")
-        elif n >= 3:
-            score += 35
-            verdict = "SUSPICIOUS"
-            factors.append(f"HIBP: {n} breaches expose this email")
-        elif n >= 1:
-            score += 15
-            verdict = "SUSPICIOUS"
-            factors.append(f"HIBP: {n} breach(es)")
-        elif hibp.get("breach_count") == 0:
-            factors.append("HIBP: no breaches found")
-
-    dh = data.get("dehashed") or {}
-    if dh and not dh.get("error"):
-        t = int(dh.get("total") or 0)
-        if t >= 10:
-            score += 25
-            if verdict != "MALICIOUS":
-                verdict = "MALICIOUS"
-            factors.append(f"Dehashed: {t} leaked records")
-        elif t >= 3:
-            score += 15
-            if verdict == "UNKNOWN":
-                verdict = "SUSPICIOUS"
-            factors.append(f"Dehashed: {t} leaked records")
-
-    if not factors:
-        factors.append("No breach data available for this email.")
-        verdict = "UNKNOWN"
-
-    score = min(score, 100)
-    severity = "HIGH" if score >= 70 else "MEDIUM" if score >= 40 \
-               else "LOW" if score >= 20 else "NONE"
-    tier_label, color = _label_and_color(score, verdict)
-    return GTIScore(
-        score=score, verdict=verdict, severity=severity,
-        contributing_factors=factors,
-        ioc_type="email", label=label, color=color,
-    )
-
-
 def score_cve(data: dict, label: str = "cve") -> GTIScore:
     """Score a CVE based on NVD severity + EPSS probability + CISA KEV
     actively-exploited status. KEV match is the highest-confidence signal
@@ -599,10 +538,6 @@ def compute_gti_scores(enrichments: dict) -> dict:
     for url, data in (enrichments.get("urls") or {}).items():
         if isinstance(data, dict):
             scores[url] = score_url(data).to_dict()
-
-    for email, data in (enrichments.get("emails") or {}).items():
-        if isinstance(data, dict):
-            scores[email] = score_email(data, label=email).to_dict()
 
     for cve, data in (enrichments.get("cves") or {}).items():
         if isinstance(data, dict):

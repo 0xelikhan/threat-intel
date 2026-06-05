@@ -104,14 +104,6 @@ API_KEY_DEFINITIONS = {
         "placeholder": "ipinfo token",
         "group": "API Keys"
     },
-    "SHODAN_KEY": {
-        "label": "Shodan API Key",
-        "description": "Open ports, services, CVEs, banners.",
-        "required": False,
-        "url": "https://shodan.io",
-        "placeholder": "Shodan API key",
-        "group": "API Keys"
-    },
     "GREYNOISE_KEY": {
         "label": "GreyNoise API Key",
         "description": "Internet noise vs targeted attack classification.",
@@ -160,33 +152,7 @@ API_KEY_DEFINITIONS = {
         "placeholder": "PhishTank app key",
         "group": "API Keys"
     },
-    # ── Breach / dark-web / paste-site enrichment sources ────────────────────
-    "HIBP_KEY": {
-        "label": "HaveIBeenPwned API Key",
-        "description": "Breach history for email-address IOCs. Returns breach name, "
-                       "date, pwn count, and exposed data classes. Required for "
-                       "the /breachedaccount endpoint since 2019.",
-        "required": False,
-        "url": "https://haveibeenpwned.com/API/Key",
-        "placeholder": "HIBP API key",
-        "group": "API Keys"
-    },
-    "DEHASHED_EMAIL": {
-        "label": "Dehashed Account Email",
-        "description": "Account email for Dehashed credential-leak search (paired with DEHASHED_KEY for basic auth).",
-        "required": False,
-        "url": "https://dehashed.com",
-        "placeholder": "you@example.com",
-        "group": "API Keys"
-    },
-    "DEHASHED_KEY": {
-        "label": "Dehashed API Key",
-        "description": "Credential-leak database search across email / username / phone / IP. Use with DEHASHED_EMAIL for basic auth.",
-        "required": False,
-        "url": "https://dehashed.com/api",
-        "placeholder": "Dehashed API key",
-        "group": "API Keys"
-    },
+    # ── Paste-site / asset enrichment sources ────────────────────────────────
     "CRIMINAL_IP_KEY": {
         "label": "Criminal IP API Key",
         "description": "IP threat scoring (inbound / outbound) + VPN / proxy / Tor / scanner classification.",
@@ -211,14 +177,6 @@ API_KEY_DEFINITIONS = {
         "required": False,
         "url": "https://whoisxmlapi.com",
         "placeholder": "at_... key",
-        "group": "API Keys"
-    },
-    "SECURITYTRAILS_KEY": {
-        "label": "SecurityTrails API Key",
-        "description": "DNS history and subdomain enumeration. Free: 50/month.",
-        "required": False,
-        "url": "https://securitytrails.com",
-        "placeholder": "SecurityTrails API key",
         "group": "API Keys"
     },
     "CENSYS_API_KEY": {

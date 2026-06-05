@@ -354,57 +354,6 @@ def _p_gn(r):
     return out
 
 
-def _p_shodan(r):
-    if _is_fail(r):
-        # Shodan free "oss" plan returns 403 for /shodan/host/ because host
-        # lookups require query credits. That isn't a bad key — it's a plan
-        # limitation. Reclassify so the UI shows it the same way as other
-        # unconfigured sources rather than "auth failed".
-        if isinstance(r, dict) and r.get("error_type") == "auth_failed":
-            return {"error": "Shodan host lookup requires a paid plan",
-                    "error_type": "not_configured", "source": "shodan"}
-        return _err("shodan", r)
-    vulns = r.get("vulns") or {}
-    data_ports = r.get("data") or []
-    services = []
-    for s in data_ports[:15]:
-        services.append({
-            "port":     s.get("port"),
-            "transport": s.get("transport"),
-            "product":  s.get("product"),
-            "version":  s.get("version"),
-            "banner":   (s.get("data") or "").strip().splitlines()[0][:160] if s.get("data") else None,
-        })
-    ssl = None
-    for s in data_ports:
-        if s.get("ssl"):
-            cert = (s.get("ssl") or {}).get("cert") or {}
-            ssl = {
-                "subject": _safe(cert, "subject", "CN"),
-                "issuer":  _safe(cert, "issuer", "CN"),
-                "expires": cert.get("expires"),
-                "sha256":  cert.get("fingerprint", {}).get("sha256") if isinstance(cert.get("fingerprint"), dict) else None,
-            }
-            break
-    return {
-        "ports":        r.get("ports"),
-        "vulns":        list(vulns.keys())[:25],
-        "vulnsCount":   len(vulns),
-        "os":           r.get("os"),
-        "devtype":      r.get("devtype"),
-        "tags":         r.get("tags"),
-        "org":          r.get("org"),
-        "isp":          r.get("isp"),
-        "asn":          r.get("asn"),
-        "country":      r.get("country_name"),
-        "city":         r.get("city"),
-        "hostnames":    r.get("hostnames"),
-        "services":     services,
-        "ssl_cert":     ssl,
-        "verdict":      "SUSPICIOUS" if vulns else None,
-    }
-
-
 def _vt_top_labels(attrs: dict) -> list:
     """Pull the most specific detection labels from VT analysis results."""
     results = (attrs.get("last_analysis_results") or {})
@@ -980,8 +929,6 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
              params={"token": keys.get("IPINFO_TOKEN", "")}),
         _get(session, f"https://api.greynoise.io/v3/community/{ip}",
              headers={"key": keys.get("GREYNOISE_KEY", "")}),
-        _get(session, f"https://api.shodan.io/shodan/host/{ip}",
-             params={"key": keys.get("SHODAN_KEY", "")}),
         _get(session, f"https://www.virustotal.com/api/v3/ip_addresses/{ip}",
              headers={"x-apikey": keys.get("VIRUSTOTAL_KEY", "")}),
         _get(session, f"https://otx.alienvault.com/api/v1/indicators/IPv4/{ip}/general",
@@ -1005,22 +952,21 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         "abuseipdb":   abuse_data,
         "ipinfo":      ipinfo_data,
         "greynoise":   _p_gn(results[2]),
-        "shodan":      _p_shodan(results[3]),
-        "virustotal":  _p_vt_ip(results[4]),
-        "otx":         _p_otx(results[5]),
-        "circl_pdns":  _p_circl_pdns(results[6]),
-        "robtex":      _p_robtex(results[7]),
-        "hackertarget": _p_hackertarget(results[8]),
+        "virustotal":  _p_vt_ip(results[3]),
+        "otx":         _p_otx(results[4]),
+        "circl_pdns":  _p_circl_pdns(results[5]),
+        "robtex":      _p_robtex(results[6]),
+        "hackertarget": _p_hackertarget(results[7]),
         "local_feeds": _local_ip_check(ip),
     }
     # Censys (optional)
-    if censys_auth and not isinstance(results[9], Exception):
-        cs = _p_censys(results[9])
+    if censys_auth and not isinstance(results[8], Exception):
+        cs = _p_censys(results[8])
         if "error" not in cs:
             data["censys"] = cs
     # CrowdSec (optional)
-    if crowdsec_key and not isinstance(results[10], Exception):
-        cs2 = _p_crowdsec(results[10])
+    if crowdsec_key and not isinstance(results[9], Exception):
+        cs2 = _p_crowdsec(results[9])
         if "error" not in cs2:
             data["crowdsec"] = cs2
     # Feodo Tracker (offline list)
@@ -1233,34 +1179,6 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         osint["google_safebrowsing"] = gsb
     if osint:
         data["osint"] = osint
-
-    # SecurityTrails — DNS history, sister domains, current resolution
-    # detail. Keyed via SECURITYTRAILS_KEY. Returns historical A records
-    # and subdomain enumeration that complements crt.sh cert transparency.
-    st_key = keys.get("SECURITYTRAILS_KEY", "")
-    if st_key:
-        try:
-            st = await _get(
-                session, f"https://api.securitytrails.com/v1/domain/{domain}",
-                headers={"APIKEY": st_key, "Accept": "application/json"},
-            )
-            if isinstance(st, dict) and not st.get("error"):
-                data["securitytrails"] = {
-                    "apex_domain": st.get("apex_domain"),
-                    "hostname":    st.get("hostname"),
-                    "alexa_rank":  st.get("alexa_rank"),
-                    "subdomain_count": (st.get("subdomain_count")
-                                        or len(st.get("subdomains") or [])),
-                    "current_dns": {
-                        rt: (v or {}).get("values", [])[:3]
-                        for rt, v in (st.get("current_dns") or {}).items()
-                    },
-                }
-            elif isinstance(st, dict):
-                data["securitytrails"] = st
-        except Exception as e:
-            data["securitytrails"] = {"error": _humanise_exc(e),
-                                       "error_type": "unreachable"}
 
     # FullHunt — subdomain + service inventory. Keyed via FULLHUNT_KEY.
     fullhunt_key = keys.get("FULLHUNT_KEY", "")
@@ -1603,45 +1521,6 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
     return data
 
 
-# ─── Email enrichment ─────────────────────────────────────────────────────────
-async def enrich_email(session, email: str, keys: dict) -> dict:
-    """Enrich an email-address IOC against breach databases.
-      * hibp — breach-history list (count + per-breach details)
-      * dehashed — credential-leak database hits (when DEHASHED keys set)
-    HIBP and Dehashed each handle their own missing-key fallback
-    (returns {"error": "...", "error_type": "auth_failed"} which the
-    enrichment-summary tally treats as 'not configured', not 'flagged')."""
-    ck = _ck("email", email)
-    if ck in _cache:
-        return {**_cache[ck], "cached": True}
-
-    try:
-        from intel.breach_sources import (
-            hibp_email, dehashed_search,
-        )
-    except Exception as e:
-        return {"error": f"breach_sources unavailable: {e}"}
-
-    hibp_r, dh_r = await asyncio.gather(
-        hibp_email(session, email, keys.get("HIBP_KEY", "")),
-        dehashed_search(session, email, "email",
-                        keys.get("DEHASHED_EMAIL", ""),
-                        keys.get("DEHASHED_KEY", "")),
-        return_exceptions=True,
-    )
-
-    data: dict = {}
-    hibp = _ok_dict(hibp_r)
-    if hibp:
-        data["hibp"] = hibp
-    dh = _ok_dict(dh_r)
-    if dh:
-        data["dehashed"] = dh
-
-    _cache[ck] = data
-    return data
-
-
 # ─── AGENT ENTRY POINT ────────────────────────────────────────────────────────────
 def _summarize_ioc(per_source: dict) -> dict:
     """Count how many sources flagged this IOC as MALICIOUS / SUSPICIOUS / CLEAN."""
@@ -1680,7 +1559,6 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
         "ABUSEIPDB_KEY":       config.get("ABUSEIPDB_KEY"),
         "IPINFO_TOKEN":        config.get("IPINFO_TOKEN"),
         "GREYNOISE_KEY":       config.get("GREYNOISE_KEY"),
-        "SHODAN_KEY":          config.get("SHODAN_KEY"),
         "URLSCAN_KEY":         config.get("URLSCAN_KEY"),
         "OTX_KEY":             config.get("OTX_KEY"),
         "PULSEDIVE_KEY":       config.get("PULSEDIVE_KEY"),
@@ -1691,10 +1569,6 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
         "CROWDSEC_KEY":        config.get("CROWDSEC_KEY"),
         "GOOGLE_API_KEY":      config.get("GOOGLE_API_KEY"),
         "HONEYPOT_KEY":        config.get("HONEYPOT_KEY"),
-        # Breach / dark-web sources (added by the breach-enrichment feature)
-        "HIBP_KEY":            config.get("HIBP_KEY"),
-        "DEHASHED_EMAIL":      config.get("DEHASHED_EMAIL"),
-        "DEHASHED_KEY":        config.get("DEHASHED_KEY"),
         "CRIMINAL_IP_KEY":     config.get("CRIMINAL_IP_KEY"),
         # abuse.ch unified key — unlocks the authenticated endpoints for
         # MalwareBazaar, ThreatFox, and URLhaus (anonymous calls have
@@ -1712,16 +1586,12 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
     # (via on_partial) instead of waiting for the slowest type to land everything
     # at once. The final `enrichments` dict is identical either way.
     enrichments = {"ips": {}, "domains": {}, "hashes": {}, "urls": {},
-                   "emails": {}, "cves": {}}
+                   "cves": {}}
     type_iocs = {
         "ips":     iocs.get("ips", [])[:10],
         "domains": iocs.get("domains", [])[:10],
         "hashes":  iocs.get("hashes", [])[:10],
         "urls":    iocs.get("urls", [])[:5],
-        # Email enrichment — HIBP breach history + Dehashed credential
-        # leaks. Capped at 5 per investigation since each email triggers
-        # 2 API calls.
-        "emails":  iocs.get("emails", [])[:5],
         # CVE enrichment — NVD detail + EPSS exploitation probability +
         # live CISA KEV check. KEV catalog is downloaded once per run
         # via the cve_enrichment._kev_cache singleton.
@@ -1729,7 +1599,7 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
     }
     _enrichers = {"ips": enrich_ip, "domains": enrich_domain,
                   "hashes": enrich_hash, "urls": enrich_url,
-                  "emails": enrich_email, "cves": enrich_cve}
+                  "cves": enrich_cve}
 
     # Share the process-wide TCP/DNS pool. connector_owner=False keeps the
     # connector alive after this session closes so the next investigation

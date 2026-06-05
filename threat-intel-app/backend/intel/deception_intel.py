@@ -5,9 +5,6 @@ Free no-key sources (RIOT requires GREYNOISE_KEY which is already configured):
 
   GreyNoise RIOT       → /v3/riot/{ip} — is this a known safe service (Cloudflare,
                          Google, AWS)? If so we skip full enrichment.
-  Shodan InternetDB    → https://internetdb.shodan.io/{ip} — completely free,
-                         no key. Open ports + CPEs + CVEs + tags + hostnames in
-                         <100ms. Pre-enrichment fast path.
   DShield (SANS ISC)   → https://isc.sans.edu/api/ip/{ip}?json — attack count,
                          report count, threat level, block list status.
   StopForumSpam        → https://api.stopforumspam.org/api?json&ip={ip} — spam
@@ -69,18 +66,15 @@ async def enrich_deception(session: aiohttp.ClientSession, ip: str, keys: Dict) 
 
     tasks = [
         _riot(session, ip, gn_key),
-        _internetdb(session, ip),
         _dshield(session, ip),
         _stopforumspam(session, ip),
         _project_honeypot(session, ip, hp_key),
     ]
-    riot, internetdb, dshield, sfs, hp = await asyncio.gather(*tasks, return_exceptions=True)
+    riot, dshield, sfs, hp = await asyncio.gather(*tasks, return_exceptions=True)
 
     out: Dict = {}
     if isinstance(riot, dict) and "error" not in riot:
         out["greynoise_riot"] = riot
-    if isinstance(internetdb, dict) and "error" not in internetdb:
-        out["shodan_internetdb"] = internetdb
     if isinstance(dshield, dict) and "error" not in dshield:
         out["dshield"] = dshield
     if isinstance(sfs, dict) and "error" not in sfs:
@@ -129,31 +123,6 @@ async def _riot(session, ip: str, key: str) -> Dict:
             }
     except Exception as e:
         return {"error": str(e), "source": "greynoise_riot"}
-
-
-async def _internetdb(session, ip: str) -> Dict:
-    """Shodan InternetDB — free, no key, <100ms response."""
-    try:
-        async with session.get(
-            f"https://internetdb.shodan.io/{ip}", timeout=_TIMEOUT,
-        ) as r:
-            if r.status == 404:
-                return {"in_dataset": False}
-            if r.status != 200:
-                return {"error": f"HTTP {r.status}", "source": "internetdb"}
-            d = await r.json()
-            cves = d.get("vulns") or []
-            return {
-                "in_dataset":  True,
-                "ports":       (d.get("ports") or [])[:20],
-                "cpes":        (d.get("cpes") or [])[:8],
-                "vulns":       cves[:10],
-                "vuln_count":  len(cves),
-                "tags":        (d.get("tags") or [])[:8],
-                "hostnames":   (d.get("hostnames") or [])[:5],
-            }
-    except Exception as e:
-        return {"error": str(e), "source": "internetdb"}
 
 
 async def _dshield(session, ip: str) -> Dict:

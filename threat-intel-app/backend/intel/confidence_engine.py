@@ -106,16 +106,8 @@ def score_ip(ioc: str, enrichment: Dict, behavioral: Optional[Dict] = None,
                                f"actor={gn.get('actor') or gn.get('name')}",
                                "context"))
 
-    shodan = enrichment.get("shodan") or {}
-    sus_ports = {4444, 8080, 1080, 8888, 9001, 9050, 31337}
-    open_ports = set(shodan.get("ports") or [])
-    hit_ports = open_ports & sus_ports
-    if hit_ports:
-        factors.append(_factor("Suspicious open port(s)", 10,
-                               f"ports={sorted(hit_ports)}", "context"))
-
-    isp_org = " ".join([(abuse.get("isp") or ""), (enrichment.get("ipinfo") or {}).get("org") or "",
-                        (shodan.get("org") or ""), (shodan.get("isp") or "")]).lower()
+    isp_org = " ".join([(abuse.get("isp") or ""),
+                        (enrichment.get("ipinfo") or {}).get("org") or ""]).lower()
     bp_hits = [k for k in _BULLETPROOF_ASNS if k in isp_org]
     if bp_hits:
         factors.append(_factor("Bulletproof/abuse hosting ASN", 15,

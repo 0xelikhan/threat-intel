@@ -55,11 +55,10 @@ def _route_triage(state: SOCState) -> Literal["enrichment", "investigation", "dr
     if not state.get("should_proceed") and state.get("triage_score", 0) <= 0.10:
         return "dropped"
     iocs = state.get("iocs", {}) or {}
-    # Emails + CVEs are now enrichable (HIBP / Dehashed for emails;
-    # NVD / EPSS / CISA KEV for CVEs) — route to enrichment when the alert
-    # contains any of the supported IOC types.
+    # CVEs are enrichable via NVD / EPSS / CISA KEV. Emails are still
+    # extracted but no longer enriched (paid breach sources removed).
     has_enrichable = any((iocs.get(k) or []) for k in
-                         ("ips", "domains", "hashes", "urls", "emails", "cves"))
+                         ("ips", "domains", "hashes", "urls", "cves"))
     return "enrichment" if has_enrichable else "investigation"
 
 

@@ -1186,7 +1186,7 @@ _DEFANG_SAFE_DOMAINS = {
     "cisa.gov", "first.org", "cert.org", "cert.eu", "ncsc.gov.uk", "cyber.gov.au",
     # Security vendors analysts reference by name in client comms
     "virustotal.com", "abuseipdb.com", "alienvault.com", "otx.alienvault.com",
-    "urlscan.io", "shodan.io", "censys.io", "greynoise.io", "abuse.ch",
+    "urlscan.io", "censys.io", "greynoise.io", "abuse.ch",
     "threatfox.abuse.ch", "bazaar.abuse.ch", "malwarebazaar.com",
     "spamhaus.org", "phishtank.com",
     # AV / EDR vendors (often linked in detection writeups)
@@ -2835,7 +2835,6 @@ def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
     gn     = data.get("greynoise") or {}
     mal_t  = data.get("maltiverse") or {}
     pd     = data.get("pulsedive") or {}
-    shodan = data.get("shodan") or {}
     asn_rep= data.get("asn_reputation") or {}
     censys = data.get("censys") or {}
     crowdsec = data.get("crowdsec") or {}
@@ -2898,12 +2897,6 @@ def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
         if descs:
             behaviour_bits.append(
                 f"The hosting ASN has been flagged as abuse-friendly: {descs[0]}.")
-    if shodan and not shodan.get("error"):
-        ports = shodan.get("ports") or []
-        if ports:
-            port_str = ", ".join(str(p) for p in ports[:6])
-            behaviour_bits.append(f"Shodan sees open ports {port_str}.")
-
     # ── Reputation findings ───────────────────────────────────────────────
     reputation_bits = []
     score = abuse.get("abuseScore") if abuse else None
@@ -3244,15 +3237,6 @@ def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
                 f"Certificate Transparency logs show {certs} certificates "
                 f"issued across {len(subs)} subdomains, indicating active "
                 "TLS infrastructure.")
-
-    # SecurityTrails — DNS history + subdomain enumeration
-    st = data.get("securitytrails") or {}
-    if st and not st.get("error"):
-        sub_count = st.get("subdomain_count")
-        if sub_count and sub_count > 0:
-            sentences.append(
-                f"SecurityTrails enumerates {sub_count} historical / current "
-                f"subdomain{'s' if sub_count != 1 else ''} under this domain.")
 
     # FullHunt — attack-surface inventory
     fh = data.get("fullhunt") or {}
@@ -3727,7 +3711,7 @@ async def _gather_email_enrichment(log_text: str, parsed: Dict,
         # coverage.
         keys = {k: (config.get(k) or "") for k in (
             "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
-            "GREYNOISE_KEY", "SHODAN_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
+            "GREYNOISE_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
             "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
             "HYBRID_ANALYSIS_KEY",
         )}

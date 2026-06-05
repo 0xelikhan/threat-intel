@@ -72,7 +72,7 @@ class EnrichIOCSkill(Skill):
         _log = logging.getLogger("recon.skill.enrich_ioc")
         keys = {k: config.get(k, "") for k in (
             "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
-            "GREYNOISE_KEY", "SHODAN_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
+            "GREYNOISE_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
             "IPINFO_TOKEN", "WHOISXML_KEY", "CROWDSEC_KEY", "PHISHTANK_KEY",
         )}
 

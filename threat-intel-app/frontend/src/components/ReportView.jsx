@@ -68,7 +68,6 @@ function EnrichmentHighlights({ enrichments }) {
       if (data.abuseipdb?.abuseScore > 0) highlights.push({ ioc: ip, source: 'AbuseIPDB', finding: `Abuse score: ${data.abuseipdb.abuseScore}% (${data.abuseipdb.totalReports} reports)` });
       if (data.tor?.isExitNode) highlights.push({ ioc: ip, source: 'Tor', finding: 'Confirmed Tor exit node' });
       if (data.virustotal?.malicious > 0) highlights.push({ ioc: ip, source: 'VirusTotal', finding: `${data.virustotal.malicious} engines flagged as malicious` });
-      if (data.shodan?.vulns?.length > 0) highlights.push({ ioc: ip, source: 'Shodan', finding: `${data.shodan.vulns.length} known vulnerabilities: ${data.shodan.vulns.slice(0, 3).join(', ')}` });
       if (data.otx?.pulseCount > 0) highlights.push({ ioc: ip, source: 'OTX', finding: `Found in ${data.otx.pulseCount} OTX threat pulses` });
       if (data.greynoise?.classification && data.greynoise.classification !== 'unknown') highlights.push({ ioc: ip, source: 'GreyNoise', finding: `Classification: ${data.greynoise.classification} — ${data.greynoise.name || 'Unknown scanner'}` });
     });

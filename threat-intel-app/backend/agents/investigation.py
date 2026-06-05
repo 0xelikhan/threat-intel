@@ -60,9 +60,6 @@ def _src_flagged_malicious(src_name: str, payload: Any) -> bool:
         # GreyNoise classification "malicious" is the explicit malicious tag;
         # "benign" / "unknown" do NOT count.
         return (p.get("classification") or "").lower() == "malicious"
-    if s == "shodan":
-        # Vulns / open exposed ports aren't a malicious VERDICT on their own
-        return False
     if s in ("malwarebazaar", "threatfox", "hybrid_analysis"):
         # Any hit on these is a malicious verdict (they're malware-specific dbs)
         return bool(p.get("found") or p.get("malware_family") or p.get("malwareName"))
@@ -82,15 +79,6 @@ def _src_flagged_malicious(src_name: str, payload: Any) -> bool:
     if s == "deception":
         # Honeypot interaction is high-signal — treat as a flag
         return bool(p.get("hit") or p.get("honeypot_interaction"))
-    # ── Breach / dark-web sources ────────────────────────────────────────────
-    if s == "hibp":
-        # An email appearing in 3+ breaches is a meaningful compromised-account
-        # signal worth flagging. 10+ is the MALICIOUS verdict threshold inside
-        # the HIBP parser; here we use the lower 3-breach bar so even moderate
-        # exposure shows up in the enrichment-summary "flagged" tally.
-        return int(p.get("breach_count") or 0) >= 3
-    if s == "dehashed":
-        return int(p.get("total") or 0) >= 3
     if s == "criminal_ip":
         return (p.get("verdict") or "").upper() in ("MALICIOUS", "SUSPICIOUS")
     if s == "urlscan_screenshot":
@@ -240,8 +228,6 @@ def _compress(enrichments: dict) -> dict:
             "org":          (d.get("ipinfo") or {}).get("org"),
             "is_tor":       (d.get("tor") or {}).get("isExitNode"),
             "gn_class":     (d.get("greynoise") or {}).get("classification"),
-            "shodan_ports": (d.get("shodan") or {}).get("ports"),
-            "shodan_vulns": (d.get("shodan") or {}).get("vulns"),
             "otx_pulses":   (d.get("otx") or {}).get("pulseCount"),
             "active_today": (abuse.get("recent_activity") or {}).get("is_active_today"),
             "local_feeds":  (d.get("local_feeds") or {}).get("source"),
