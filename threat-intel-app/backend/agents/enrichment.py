@@ -245,12 +245,30 @@ def _err(source: str, reason) -> dict:
     # source returned no data at all (reason is None), report it that
     # way so the source card can show the right empty state.
     if reason is None:
-        msg = "no data"
-    elif isinstance(reason, Exception):
-        msg = _humanise_exc(reason)
-    else:
-        s = str(reason).strip()
-        msg = s if s and s.lower() != "none" else "no data"
+        return {"error": "no data", "source": source}
+    if isinstance(reason, Exception):
+        return {"error": _humanise_exc(reason), "source": source}
+    # When the parser received a categorical-error dict from _get / _post
+    # (circuit_open, auth_failed, rate_limited, timed_out, http_error,
+    # unreachable), preserve BOTH the human-readable message AND the
+    # error_type so the frontend can render the right translated phrasing
+    # instead of stringifying the whole dict via Python repr (which
+    # surfaces to the analyst as "{'error': 'circuit open...', 'error_type':
+    # 'circuit_open', 'skipped': True}" — looks like a stack trace leak).
+    if isinstance(reason, dict):
+        inner_err = reason.get("error")
+        out = {"source": source}
+        if isinstance(inner_err, str) and inner_err.strip():
+            out["error"] = inner_err.strip()
+        else:
+            out["error"] = "no data"
+        if reason.get("error_type"):
+            out["error_type"] = reason["error_type"]
+        if reason.get("skipped"):
+            out["skipped"] = True
+        return out
+    s = str(reason).strip()
+    msg = s if s and s.lower() != "none" else "no data"
     return {"error": msg, "source": source}
 
 def _is_fail(r) -> bool:
