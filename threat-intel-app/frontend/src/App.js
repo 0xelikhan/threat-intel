@@ -1603,7 +1603,11 @@ function SourceVerdict({ source, label, color = '#0fbcff' }) {
       <Typography sx={{
         fontSize: 11, color, lineHeight: 1.5,
         fontFamily: '"IBM Plex Mono", monospace',
-        wordBreak: 'break-all',
+        // break-word respects word boundaries for natural prose (OTX pulse
+        // names, AI summaries) but still breaks long unbroken tokens
+        // (hashes, URLs) when they don't fit the column.
+        wordBreak: 'break-word',
+        overflowWrap: 'anywhere',
       }}>
         {label}
       </Typography>
@@ -1668,7 +1672,19 @@ function _ocSources(result, ioc, type) {
     const pulses = d.otx.pulseCount ?? d.otx.pulse_count ?? 0;
     if (pulses > 0) {
       const top = (d.otx.relatedPulses || d.otx.pulses || [])[0];
-      out.push({ source: 'OTX', label: `${pulses} pulse${pulses === 1 ? '' : 's'}${top ? ` · ${String(top).slice(0,60)}` : ''}`,
+      // Cap the pulse-name suffix at 140 chars and cut at the nearest word
+      // boundary so it never truncates mid-word ('… Enemy of the State: Order
+      // in the C' was the analyst complaint). The container wraps to a second
+      // line so 140 still fits cleanly.
+      const _trunc = (s, max) => {
+        if (!s || s.length <= max) return s || '';
+        const cut = s.slice(0, max);
+        const sp  = cut.lastIndexOf(' ');
+        return (sp > max * 0.6 ? cut.slice(0, sp) : cut) + '…';
+      };
+      const topStr = top ? _trunc(String(top), 140) : '';
+      out.push({ source: 'OTX',
+                 label: `${pulses} pulse${pulses === 1 ? '' : 's'}${topStr ? ` · ${topStr}` : ''}`,
                  color: pulses >= 5 ? red : pulses >= 1 ? orange : tert });
     }
   }
