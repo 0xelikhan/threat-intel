@@ -1213,43 +1213,60 @@ function ThreatIntelSection({ result }) {
   const [openSource, setOpenSource] = useState(null);
 
   const sources = useMemo(() => {
-    // For each source: produce a summary string OR 'None' if there's nothing
-    // useful to display (no data / error / empty result). Empty/errored
-    // sources still appear in the list so the analyst sees coverage.
+    // Each row returns either a hit summary string or an empty-state
+    // reason string so the analyst sees WHY a source had nothing to
+    // contribute, instead of a wall of literal "None" values.
+    // Scan-history correlation is intentionally not surfaced: the
+    // backend explicitly skips it ("each scan stands alone" — see
+    // intel/file_correlation.py).
     const order = [
       ['VirusTotal',      ti.virustotal,
-        (d) => d?.found ? `${d.detection_ratio}${d.malware_family ? ' · '+d.malware_family : ''}` : null],
-      ['MalwareBazaar',   ti.malwarebazaar,
-        (d) => d?.found ? d.malware_family || 'match' : null],
-      ['Hybrid Analysis', ti.hybrid_analysis,
-        (d) => d?.found ? `${d.verdict} · score ${d.threat_score}` : null],
-      ['Feed cache',      ti.feed_cache,
-        (d) => d?.hit_count ? `${d.hit_count} hits` : null],
-      ['Scan history',    ti.scan_history,
         (d) => {
-          if (!d) return null;
-          const n = (d.exact?.length || 0) + (d.imphash?.length || 0)
-                  + (d.tlsh_similar?.length || 0) + (d.ssdeep_similar?.length || 0);
-          return n ? `${n} similar files` : null;
+          if (!d) return { empty: 'no SHA-256 to query' };
+          if (d.error) return { empty: d.error };
+          if (d.found) return { hit: `${d.detection_ratio}${d.malware_family ? ' · '+d.malware_family : ''}` };
+          return { empty: 'not in VirusTotal database' };
+        }],
+      ['MalwareBazaar',   ti.malwarebazaar,
+        (d) => {
+          if (!d) return { empty: 'no SHA-256 to query' };
+          if (d.error) return { empty: d.error };
+          if (d.found) return { hit: d.malware_family || 'match' };
+          return { empty: 'not in MalwareBazaar database' };
+        }],
+      ['Hybrid Analysis', ti.hybrid_analysis,
+        (d) => {
+          if (!d) return { empty: 'no SHA-256 to query' };
+          if (d.error) return { empty: d.error };
+          if (d.found) return { hit: `${d.verdict} · score ${d.threat_score}` };
+          return { empty: 'no prior sandbox detonation' };
+        }],
+      ['Feed cache',      ti.feed_cache,
+        (d) => {
+          if (!d) return { empty: 'feed cache not initialized' };
+          if (d.hit_count) return { hit: `${d.hit_count} hits` };
+          return { empty: 'no IOC matched cached feeds' };
         }],
       ['Domain pivots',   ti.domain_intel,
-        (d) => d?.domains?.length ? `${d.domains.length} domains` : null],
+        (d) => {
+          if (!d) return { empty: 'no domain IOCs extracted from file' };
+          if (d.domains?.length) return { hit: `${d.domains.length} domains` };
+          return { empty: 'no enrichment results for domains' };
+        }],
     ];
     return order;
   }, [ti]);
 
   // Top-level summary indicator — how many TI sources returned an actual hit.
-  const hitCount = sources.reduce((n, [, d, fn]) => n + (d && fn(d) ? 1 : 0), 0);
+  const hitCount = sources.reduce((n, [, d, fn]) => n + (fn(d).hit ? 1 : 0), 0);
   return (
     <SectionCard id="ti" label="Threat Intelligence" defaultPad={false}
       defaultOpen={false}
       summary={hitCount > 0 ? `${hitCount} source hit${hitCount > 1 ? 's' : ''}` : 'no hits'}>
       {sources.map(([name, data, summarize], i) => {
         const open = openSource === name;
-        const summary = data ? summarize(data) : null;
-        const hasError = data?.error;
-        const hasData  = !!summary && !hasError;
-        const chipColor = hasData ? 'error.main' : 'text.disabled';
+        const state = summarize(data);
+        const hasData = !!state.hit;
         return (
           <Box key={name}
             onClick={() => hasData && setOpenSource(open ? null : name)}
@@ -1265,9 +1282,11 @@ function ThreatIntelSection({ result }) {
                 fontWeight: 500 }}>
                 {name}
               </Typography>
-              <Typography sx={{ fontSize: 11, color: chipColor, ml: 'auto',
+              <Typography sx={{ fontSize: 11,
+                color: hasData ? 'error.main' : 'text.disabled',
+                ml: 'auto',
                 fontStyle: hasData ? 'normal' : 'italic' }}>
-                {hasData ? summary : 'None'}
+                {hasData ? state.hit : state.empty}
               </Typography>
               {hasData && (
                 <ChevronRight size={14} color="#848592" style={{
