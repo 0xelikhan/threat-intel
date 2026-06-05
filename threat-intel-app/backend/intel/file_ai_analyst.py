@@ -82,9 +82,11 @@ def _client(config, fast: bool = False):
 # "Likely Legitimate", not "Unknown Malware".
 from intel.calibration import CALIBRATION_PRINCIPLES as _CAL_PRINCIPLES  # noqa: E402
 
-_TRIAGE_SYSTEM = f"""You are a senior malware triage analyst. You receive
+_TRIAGE_SYSTEM = f"""OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes (—), en-dashes (–), or curly quotes. Use hyphens (-), commas, or restructure the sentence. This applies to every JSON string value and every line of prose.
+
+You are a senior malware triage analyst. You receive
 high-signal indicators from a static file scan and must classify the sample
-within seconds. Apply the calibration rules below — many submitted files are
+within seconds. Apply the calibration rules below. Many submitted files are
 legitimate vendor binaries, signed software, or known-good system tools.
 
 {_CAL_PRINCIPLES}
@@ -184,9 +186,11 @@ async def triage_classify(analysis: Dict, config) -> Optional[Dict]:
 #   • HEADLINE   — the narrative-heavy fields the analyst reads first
 #   • STRUCTURED — the list/object findings
 # Both share the same analyst persona so the voice is consistent.
-_DEEP_PERSONA = f"""You are a senior malware analyst and reverse engineer with 15
+_DEEP_PERSONA = f"""OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes (—), en-dashes (–), or curly quotes. Use hyphens (-), commas, or restructure the sentence. This applies to every string in the JSON you emit.
+
+You are a senior malware analyst and reverse engineer with 15
 years of experience at a major AV vendor and government CERT. You have analyzed
-hundreds of thousands of samples. You think like a detective — you look for what
+hundreds of thousands of samples. You think like a detective. You look for what
 is unusual, what does not fit, what the attacker was trying to hide, and what
 the COMBINATION of indicators tells you that no single indicator reveals alone.
 

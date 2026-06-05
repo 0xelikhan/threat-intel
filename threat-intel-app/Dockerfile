@@ -1,5 +1,9 @@
 # Stage 1: Build React frontend
-FROM node:20-alpine AS frontend-build
+# Pull from AWS Public ECR's Docker Hub mirror to avoid the anonymous
+# Docker Hub pull rate limit that bricks CI builds when many runs share
+# the same egress IP. Image content is identical (the mirror is byte-for-
+# byte from docker.io/library/node).
+FROM public.ecr.aws/docker/library/node:20-alpine AS frontend-build
 
 WORKDIR /frontend
 
@@ -11,8 +15,9 @@ RUN npm ci --legacy-peer-deps --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build
 
-# Stage 2: Python backend + built frontend
-FROM python:3.11-slim AS runtime
+# Stage 2: Python backend + built frontend.
+# Same Docker Hub mirror reason as above.
+FROM public.ecr.aws/docker/library/python:3.11-slim AS runtime
 
 WORKDIR /app
 

@@ -1289,7 +1289,9 @@ async def chat_history(run_id: str):
 def _build_chat_system_msg(state: dict) -> str:
     rs = state.get("response_summary") or {}
     raw = (state.get("raw_input") or "")[:1800]
-    return f"""You are RECON, an MDR analyst's assistant currently helping with a SPECIFIC
+    return f"""OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes (—), en-dashes (–), or curly quotes. Use hyphens (-), commas, or restructure the sentence. Analysts immediately spot AI text by the em-dash and discount it.
+
+You are RECON, an MDR analyst's assistant currently helping with a SPECIFIC
 investigation. You already produced an initial analysis below; the analyst is now
 asking follow-up questions or giving you context you didn't have.
 
@@ -2890,7 +2892,9 @@ class EmailRemediateRequest(BaseModel):
     severity:          str = ""
 
 
-_REMEDIATION_SYSTEM_PROMPT = """You are a senior incident responder and threat-intelligence
+_REMEDIATION_SYSTEM_PROMPT = """OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes (—), en-dashes (–), or curly quotes. Use hyphens (-), commas, or restructure the sentence. This applies to every word the customer or analyst will read.
+
+You are a senior incident responder and threat-intelligence
 analyst at a Managed Detection and Response provider with 10 years of experience.
 
 An analyst is about to send a security alert notification email to a customer or

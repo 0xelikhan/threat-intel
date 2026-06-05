@@ -13,6 +13,19 @@ from typing import Any, Dict
 _log = logging.getLogger("recon.investigation")
 
 
+# Hard formatting rule applied to every LLM system prompt in this module.
+# Em-dashes / en-dashes / smart quotes are tells that AI wrote the text;
+# the user has banned them in analyst-facing prose. Stating the rule in
+# every system prompt and stripping them from prompt bodies stops the
+# model from mirroring them in output.
+_STYLE_RULE = (
+    "OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes "
+    "(—), en-dashes (–), or curly quotes. Use hyphens (-), commas, "
+    "or restructure the sentence. This applies to every string you emit, "
+    "including JSON values shown to the analyst.\n\n"
+)
+
+
 # ─── Enrichment-summary header (computed server-side, not by the AI) ────────
 # Counts how many sources returned data vs how many flagged any IOC as
 # malicious. The result is prepended to the AI's summary so the analyst sees
@@ -438,10 +451,12 @@ def _get_type_focus(alert_type: str) -> str:
     return ""
 
 
-PROMPT = """You are a senior SOC analyst and threat-intelligence expert at a tier-1 MDR
+PROMPT = """OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes (—), en-dashes (–), or curly quotes. Use hyphens (-), commas, or restructure the sentence. This applies to every string you emit, including JSON values shown to the analyst.
+
+You are a senior SOC analyst and threat-intelligence expert at a tier-1 MDR
 provider (GCIA, GCFA, GCTI; 10+ years). You have investigated thousands of alerts. You
 know the vast majority of alerts are false positives or low-risk events. Your job is to
-ACCURATELY assess the true risk of this alert — not to find threats that aren't there.
+ACCURATELY assess the true risk of this alert, not to find threats that aren't there.
 
 You reason like a detective who requires evidence before drawing conclusions, not like
 someone who assumes guilt. Apply these principles STRICTLY:
@@ -1357,12 +1372,12 @@ async def run_investigation(state: dict, on_event=None) -> dict:
                 model = config.get_model()                # smart — final synthesis
                 fast_model = config.get_model(fast=True)   # fast — tool loop
                 type_focus = _get_type_focus(alert_type)
-                system_msg = f"""You are a senior MDR analyst (GCIA, GCFA, 10+ years) investigating a SOC alert.
+                system_msg = f"""{_STYLE_RULE}You are a senior MDR analyst (GCIA, GCFA, 10+ years) investigating a SOC alert.
 
 ALERT TYPE: {alert_type}
 
 You have a baseline of pre-enriched IOC data plus a set of TOOLS for additional lookups.
-Use tools to fill gaps and verify hypotheses — DO NOT call tools for things you already see in the baseline.
+Use tools to fill gaps and verify hypotheses. DO NOT call tools for things you already see in the baseline.
 
 Strategy:
 1. Read the alert and baseline data first
@@ -1371,10 +1386,10 @@ Strategy:
 4. When you have enough evidence, STOP calling tools and produce the final JSON assessment
 
 Tool-budget tips:
-- KEV/EPSS check is cheap and high-value — call it for any CVE mentioned
+- KEV/EPSS check is cheap and high-value. Call it for any CVE mentioned.
 - threat_actor_profile / find_threat_actors_by_ttps are great for attribution
 - phishing_kit / rmm / lolbas are fast offline checks
-- Don't call lookup_ip/domain/hash for IOCs already in the baseline — only for new ones the AI surfaces
+- Don't call lookup_ip/domain/hash for IOCs already in the baseline. Only for new ones the AI surfaces.
 {type_focus}"""
                 user_msg = f"""{feedback_block}{no_hallucinate_block}
 ## Alert content (first 1500 chars — may include analyst commentary mixed with the raw log)
@@ -1868,6 +1883,25 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
     # Multi-log feature retired — always strip any log_correlation the AI
     # may still emit. The submitted input is treated as a single alert.
     _log_correlation = None
+
+    # Belt-and-braces: even with the OUTPUT STYLE rule in every prompt,
+    # the LLM occasionally still emits em-dashes in key_findings /
+    # summary / threat_level_reasoning. Walk every string in `result`
+    # and strip them before the data leaves this agent.
+    try:
+        from intel.email_composer import _strip_em_dashes as _sed
+
+        def _walk(obj):
+            if isinstance(obj, str):
+                return _sed(obj)
+            if isinstance(obj, dict):
+                return {k: _walk(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [_walk(v) for v in obj]
+            return obj
+        result = _walk(result)
+    except Exception:
+        pass
 
     return {
         **state,
