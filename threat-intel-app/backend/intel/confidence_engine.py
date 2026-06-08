@@ -84,10 +84,6 @@ def score_ip(ioc: str, enrichment: Dict, behavioral: Optional[Dict] = None,
     if (enrichment.get("feodo_tracker") or {}).get("verdict") == "MALICIOUS":
         factors.append(_factor("Feodo Tracker match", 30, "Botnet C2 blocklist hit", "reputation"))
 
-    sslbl = enrichment.get("ssl_blacklist") or enrichment.get("sslbl") or {}
-    if sslbl.get("verdict") == "MALICIOUS":
-        factors.append(_factor("SSL Blacklist match", 30, "Known malicious TLS cert", "reputation"))
-
     cs = enrichment.get("crowdsec") or {}
     if (cs.get("score_overall") or 0) > 5:
         factors.append(_factor("CrowdSec score >5", 15,

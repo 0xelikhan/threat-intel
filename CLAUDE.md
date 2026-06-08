@@ -52,7 +52,15 @@ threat-intel-app/
 │   │   ├── mitre_data.py    # MITRE ATT&CK loader
 │   │   ├── misp_feeds.py    # CIRCL/DigitalSide/Botvrij flat hash dumps
 │   │   ├── misp_galaxies.py # Threat-actor / malpedia / ransomware lookup
+│   │   ├── known_good_baseline.py  # short-circuit for public DNS, MS auth, etc.
+│   │   ├── deobfuscator.py  # 12-format detector + CyberChef-Magic recursive decoder
+│   │   ├── prose_validator.py  # server-side de-dup of AI-emitted prose fields
+│   │   ├── query_parser.py  # lexer + AST + evaluator for the Query DSL
+│   │   ├── calibration_log.py  # analyst override JSONL recorder
 │   │   └── (40+ other modules — file analysis, sandbox, feeds, ...)
+│   ├── routers/             # FastAPI router modules (gradual main.py split)
+│   │   ├── calibration.py   # /api/calibration/override
+│   │   └── sandbox.py       # /api/sandbox/result/{sha256}
 │   └── tests/               # pytest, namespace-based grouping
 └── frontend/
     └── src/

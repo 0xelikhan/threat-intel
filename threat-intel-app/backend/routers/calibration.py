@@ -32,8 +32,8 @@ class CalibrationOverrideRequest(BaseModel):
 async def calibration_override(req: CalibrationOverrideRequest):
     """Record an analyst override of the AI verdict. Returns the stored
     record (with computed input_hash + prompt_version) so the UI can
-    confirm. Eval data for spotting prompt regressions — see
-    intel/calibration_log.py for the storage format."""
+    confirm. The JSONL log is consumed by scripts/eval_prompts.py for
+    A/B testing prompt changes against historical analyst judgement."""
     from intel.calibration_log import record_override
     rec = record_override(
         raw_input            = req.raw_input,
@@ -45,13 +45,3 @@ async def calibration_override(req: CalibrationOverrideRequest):
         alert_type           = req.alert_type,
     )
     return {"saved": True, "record": rec}
-
-
-@router.get("/api/calibration/stats")
-async def calibration_stats():
-    """Aggregate override stats — agreement rate, per-prompt-version
-    breakdown, level-pair counts (AI->Analyst), recent 20 overrides.
-    Used to spot regressions: a sudden spike in the override rate after
-    a prompt edit is a leading indicator."""
-    from intel.calibration_log import stats
-    return stats()

@@ -74,7 +74,7 @@ RUN mkdir -p backend/intel/misp_galaxy \
 # never fires and the confidence engine misses the 15-point blocklist
 # boost. ~10 MB total - cheap. Same per-list || fallback pattern so a
 # transient outage of any single source doesn't fail the whole deploy.
-RUN mkdir -p vendor/firehol vendor/ipsum \
+RUN mkdir -p vendor/firehol vendor/ipsum vendor/phishing-db \
     && for list in firehol_level1 firehol_level2 firehol_abusers_1d \
                    malware_filter dshield spamhaus_drop spamhaus_edrop; do \
          curl -fSL --retry 3 --retry-delay 2 \
@@ -88,6 +88,13 @@ RUN mkdir -p vendor/firehol vendor/ipsum \
           https://raw.githubusercontent.com/stamparm/ipsum/master/ipsum.txt \
         || (echo "WARNING: ipsum.txt download failed" \
             && rm -f vendor/ipsum/ipsum.txt)) \
+    && for list in ALL-phishing-domains phishing-domains-ACTIVE; do \
+         curl -fSL --retry 3 --retry-delay 2 \
+           -o "vendor/phishing-db/${list}.lst" \
+           "https://raw.githubusercontent.com/mitchellkrogza/Phishing.Database/master/${list}.lst" \
+         || (echo "WARNING: phishing-db ${list}.lst download failed" \
+             && rm -f "vendor/phishing-db/${list}.lst"); \
+       done \
     && chown -R recon:recon vendor
 
 COPY --from=frontend-build --chown=recon:recon /frontend/build ./frontend/build

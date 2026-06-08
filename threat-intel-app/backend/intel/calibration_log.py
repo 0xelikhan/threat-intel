@@ -50,7 +50,6 @@ import hashlib
 import json
 import subprocess
 import time
-from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -130,10 +129,12 @@ def record_override(
     return record
 
 
-def _iter_records() -> List[Dict[str, Any]]:
-    """Read every override record. JSONL means we can stream this for
-    big logs, but for the dashboard we just slurp it — even 10 000
-    overrides is < 5 MB and parses in milliseconds."""
+def iter_records() -> List[Dict[str, Any]]:
+    """Read every override record from the JSONL log. Public because
+    scripts/eval_prompts.py and scripts/prompt_hygiene.py both consume
+    the corpus. JSONL means we can stream this for big logs, but for
+    the analyst tooling we just slurp — even 10 000 overrides parses
+    in milliseconds."""
     if not _LOG_PATH.exists():
         return []
     out: List[Dict[str, Any]] = []
@@ -150,40 +151,3 @@ def _iter_records() -> List[Dict[str, Any]]:
     except Exception:
         pass
     return out
-
-
-def stats() -> Dict[str, Any]:
-    """Aggregate every override into a single summary blob — used by
-    GET /api/calibration/stats. Groups by prompt_version + ai_threat_
-    level so prompt regressions surface as cells in a 2-D table."""
-    records = _iter_records()
-    if not records:
-        return {
-            "total_overrides": 0,
-            "agreement_rate":  None,
-            "by_prompt_version": {},
-            "by_level_pair":     {},
-            "recent":            [],
-        }
-
-    total      = len(records)
-    agreed     = sum(1 for r in records if r.get("agreed"))
-    by_prompt  = defaultdict(Counter)
-    by_pair    = Counter()
-
-    for r in records:
-        pv = r.get("prompt_version", "?")
-        ai_lvl  = (r.get("ai_verdict")     or {}).get("threat_level", "?")
-        an_lvl  = (r.get("analyst_verdict") or {}).get("threat_level", "?")
-        by_prompt[pv][f"{ai_lvl}->{an_lvl}"] += 1
-        if not r.get("agreed"):
-            by_pair[f"{ai_lvl}->{an_lvl}"] += 1
-
-    return {
-        "total_overrides":    total - agreed,   # exclude pure agreements
-        "total_records":      total,
-        "agreement_rate":     round(agreed / total, 3) if total else None,
-        "by_prompt_version":  {pv: dict(c) for pv, c in by_prompt.items()},
-        "by_level_pair":      dict(by_pair.most_common(20)),
-        "recent":             records[-20:],
-    }
