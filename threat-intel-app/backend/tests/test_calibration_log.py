@@ -28,7 +28,7 @@ def _isolated_log(monkeypatch):
 
 
 def test_record_override_persists_and_returns_record():
-    from intel.calibration_log import record_override, _iter_records
+    from intel.calibration_log import record_override, iter_records
     rec = record_override(
         raw_input            = "User logged in from new device",
         ai_threat_level      = "MEDIUM",
@@ -43,7 +43,7 @@ def test_record_override_persists_and_returns_record():
     assert rec["agreed"] is False
     assert rec["input_hash"] != "empty"
     # Persisted to disk
-    persisted = _iter_records()
+    persisted = iter_records()
     assert len(persisted) == 1
     assert persisted[0]["analyst_verdict"]["reason"] == "Expected travel by user"
 
@@ -83,36 +83,14 @@ def test_input_hash_handles_empty():
     assert input_hash(None) == "empty"
 
 
-def test_stats_empty_returns_zero_shape():
-    from intel.calibration_log import stats
-    s = stats()
-    assert s["total_overrides"]   == 0
-    assert s["agreement_rate"]    is None
-    assert s["by_prompt_version"] == {}
-
-
-def test_stats_counts_overrides_vs_agreements():
-    from intel.calibration_log import record_override, stats
-    # 2 disagreements, 1 agreement -> 33% override rate among 3 records
+def test_iter_records_returns_recorded_overrides():
+    from intel.calibration_log import record_override, iter_records
     record_override("a", "HIGH",   0.9, "", "LOW")
     record_override("b", "MEDIUM", 0.6, "", "LOW")
-    record_override("c", "HIGH",   0.8, "", "HIGH")     # agreement
-    s = stats()
-    assert s["total_records"]      == 3
-    assert s["total_overrides"]    == 2
-    assert s["agreement_rate"]     == round(1 / 3, 3)
-
-
-def test_stats_groups_by_prompt_version_and_level_pair():
-    from intel.calibration_log import record_override, stats
-    record_override("a", "HIGH",   0.9, "", "LOW")
-    record_override("b", "MEDIUM", 0.6, "", "LOW")
-    s = stats()
-    pair = s["by_level_pair"]
-    assert "HIGH->LOW"   in pair
-    assert "MEDIUM->LOW" in pair
-    # prompt_version should be present in the by_prompt_version dict
-    assert len(s["by_prompt_version"]) >= 1
+    record_override("c", "HIGH",   0.8, "", "HIGH")
+    recs = iter_records()
+    assert len(recs) == 3
+    assert sum(1 for r in recs if not r["agreed"]) == 2
 
 
 def test_truncates_long_summary_and_reason():
@@ -123,14 +101,6 @@ def test_truncates_long_summary_and_reason():
                           "LOW", long_reason)
     assert len(rec["ai_verdict"]["summary"])      <= 240
     assert len(rec["analyst_verdict"]["reason"])  <= 600
-
-
-def test_recent_is_capped_at_20():
-    from intel.calibration_log import record_override, stats
-    for i in range(30):
-        record_override(f"alert-{i}", "HIGH", 0.9, "", "LOW")
-    s = stats()
-    assert len(s["recent"]) == 20
 
 
 def test_prompt_version_returns_some_string():
