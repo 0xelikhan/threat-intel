@@ -1019,25 +1019,23 @@ def _parse_additional_info(text):
 # ─── composer ─────────────────────────────────────────────────────────────────
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "email_templates"
 
-# Per-analyst drafts + rolling send history live under backend/data/.
-_DATA_DIR     = Path(__file__).resolve().parent.parent / "data"
-_DRAFTS_DIR   = _DATA_DIR / "email_drafts"
-_HISTORY_FILE = _DATA_DIR / "email_history.json"
+# Per-analyst drafts + rolling send history are kept IN MEMORY ONLY.
+# Email subjects / bodies / recipients contain analyst-derived data and
+# must never land on disk — see the no-persistence policy. State is lost
+# on container restart by design.
 _HISTORY_CAP  = 200
+_DRAFTS_CAP   = 200
+_drafts_mem:   "dict[str, Dict]" = {}
+_history_mem:  "list[Dict]"      = []
 
 
 def _slugify(s: str) -> str:
     return re.sub(r"[^a-z0-9_-]", "_", (s or "").lower())[:48]
 
 
-def _drafts_dir() -> Path:
-    _DRAFTS_DIR.mkdir(parents=True, exist_ok=True)
-    return _DRAFTS_DIR
-
-
 def save_draft(payload: Dict) -> Dict:
-    """Persist a composed email + its compose options. Returns the saved record."""
-    d = _drafts_dir()
+    """Stash a composed email + its compose options in memory. Returns the
+    saved record. Lost on restart — never persisted."""
     now = datetime.utcnow()
     alert = _slugify(payload.get("alert_type") or "generic")
     draft_id = f"{now.strftime('%Y%m%dT%H%M%S')}_{alert}"
@@ -1053,64 +1051,50 @@ def save_draft(payload: Dict) -> Dict:
         "parsed":      payload.get("parsed") or {},
         "options":     payload.get("options") or {},
     }
-    (d / f"{draft_id}.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
+    _drafts_mem[draft_id] = record
+    # Cheap FIFO eviction — newest insertion order preserved.
+    if len(_drafts_mem) > _DRAFTS_CAP:
+        for k in list(_drafts_mem.keys())[:-_DRAFTS_CAP]:
+            _drafts_mem.pop(k, None)
     return record
 
 
 def list_drafts() -> List[Dict]:
-    d = _drafts_dir()
     out = []
-    for p in sorted(d.glob("*.json"), reverse=True):
-        try:
-            rec = json.loads(p.read_text(encoding="utf-8"))
-            out.append({
-                "id":         rec.get("id", p.stem),
-                "saved_at":   rec.get("saved_at"),
-                "alert_type": rec.get("alert_type"),
-                "subject":    rec.get("subject", ""),
-                "to":         rec.get("to", ""),
-            })
-        except Exception:
-            continue
+    for rec in sorted(_drafts_mem.values(),
+                      key=lambda r: r.get("saved_at") or "", reverse=True):
+        out.append({
+            "id":         rec.get("id"),
+            "saved_at":   rec.get("saved_at"),
+            "alert_type": rec.get("alert_type"),
+            "subject":    rec.get("subject", ""),
+            "to":         rec.get("to", ""),
+        })
     return out
 
 
 def load_draft(draft_id: str) -> Optional[Dict]:
-    safe = _slugify(draft_id)
-    p = _drafts_dir() / f"{safe}.json"
-    if not p.exists():
-        return None
-    try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        return None
+    return _drafts_mem.get(_slugify(draft_id)) or _drafts_mem.get(draft_id)
 
 
 def delete_draft(draft_id: str) -> bool:
     safe = _slugify(draft_id)
-    p = _drafts_dir() / f"{safe}.json"
-    if not p.exists():
-        return False
-    p.unlink()
-    return True
+    if safe in _drafts_mem:
+        _drafts_mem.pop(safe)
+        return True
+    if draft_id in _drafts_mem:
+        _drafts_mem.pop(draft_id)
+        return True
+    return False
 
 
 def read_history() -> List[Dict]:
-    if not _HISTORY_FILE.exists():
-        return []
-    try:
-        data = json.loads(_HISTORY_FILE.read_text(encoding="utf-8"))
-        if isinstance(data, list):
-            return data
-    except Exception:
-        return []
-    return []
+    return list(_history_mem)
 
 
 def append_history(entry: Dict) -> None:
-    """Append a send-attempt record. Capped at _HISTORY_CAP, newest-first."""
-    _DATA_DIR.mkdir(parents=True, exist_ok=True)
-    hist = read_history()
+    """Append a send-attempt record to the in-memory list. Capped at
+    _HISTORY_CAP, newest-first. Lost on restart by design."""
     record = {
         "ts":      datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "to":      entry.get("to", ""),
@@ -1119,10 +1103,9 @@ def append_history(entry: Dict) -> None:
         "sent":    bool(entry.get("sent")),
         "error":   entry.get("error"),
     }
-    hist.insert(0, record)
-    if len(hist) > _HISTORY_CAP:
-        hist = hist[:_HISTORY_CAP]
-    _HISTORY_FILE.write_text(json.dumps(hist, indent=2), encoding="utf-8")
+    _history_mem.insert(0, record)
+    if len(_history_mem) > _HISTORY_CAP:
+        del _history_mem[_HISTORY_CAP:]
 
 
 def _value_or_na(v):

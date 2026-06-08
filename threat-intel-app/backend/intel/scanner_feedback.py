@@ -8,37 +8,22 @@ Scanner analyst feedback store + institutional-knowledge loop — spec §2.
 """
 
 from __future__ import annotations
-import json
+from collections import deque
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Dict, List, Optional
-
-_FILE = Path(__file__).resolve().parents[1] / "data" / "scanner_feedback.json"
-_FILE.parent.mkdir(parents=True, exist_ok=True)
+from typing import Deque, Dict, List, Optional
 
 
-def _load() -> List[Dict]:
-    if not _FILE.exists():
-        return []
-    try:
-        with open(_FILE, encoding="utf-8") as f:
-            return json.load(f) or []
-    except Exception:
-        return []
-
-
-def _save(items: List[Dict]) -> None:
-    try:
-        with open(_FILE, "w", encoding="utf-8") as f:
-            json.dump(items, f, indent=2, default=str)
-    except Exception:
-        pass
+# In-memory feedback store. Analyst thumbs / corrections / notes are
+# never persisted to disk (see platform no-persistence policy). The
+# institutional-knowledge prompt still works within the lifetime of the
+# same container.
+_FEEDBACK: Deque[Dict] = deque(maxlen=1000)
 
 
 def record(scan_id: str, thumbs: str, correction: Optional[Dict] = None,
            notes: Optional[str] = None, analyst: Optional[str] = None) -> Dict:
-    """Append a single feedback entry. Returns the persisted record."""
-    items = _load()
+    """Append a single feedback entry to the in-memory ring buffer.
+    Returns the stored record."""
     entry = {
         "scan_id":    scan_id,
         "thumbs":     thumbs,   # 'up' | 'down'
@@ -47,18 +32,16 @@ def record(scan_id: str, thumbs: str, correction: Optional[Dict] = None,
         "analyst":    (analyst or "").strip()[:80],
         "ts":         datetime.now(timezone.utc).isoformat(),
     }
-    items.insert(0, entry)
-    items = items[:1000]
-    _save(items)
+    _FEEDBACK.appendleft(entry)
     return entry
 
 
 def list_all(limit: int = 100) -> List[Dict]:
-    return _load()[:limit]
+    return list(_FEEDBACK)[:limit]
 
 
 def for_scan(scan_id: str) -> List[Dict]:
-    return [e for e in _load() if e.get("scan_id") == scan_id]
+    return [e for e in _FEEDBACK if e.get("scan_id") == scan_id]
 
 
 def institutional_knowledge_for(analysis: Dict, max_examples: int = 5) -> List[Dict]:
@@ -79,7 +62,7 @@ def institutional_knowledge_for(analysis: Dict, max_examples: int = 5) -> List[D
         return []
 
     history = {e.get("sha256"): e for e in get_scan_history() if e.get("sha256")}
-    fb = _load()
+    fb = list(_FEEDBACK)
     out: List[Dict] = []
 
     for entry in fb:

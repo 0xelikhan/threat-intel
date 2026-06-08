@@ -2,29 +2,18 @@
 
 from __future__ import annotations
 
-import json
-import os
-import tempfile
-from pathlib import Path
-
 import pytest
 
 
 @pytest.fixture(autouse=True)
-def _isolated_log(monkeypatch):
-    """Each test gets its own JSONL log file in a tempdir so we don't
-    pollute the real backend/data/calibration_overrides.jsonl."""
+def _isolated_log():
+    """Clear the in-memory ring buffer between tests so override counts
+    don't leak across cases. The platform no longer persists overrides
+    to disk; the records live in a process-local deque."""
     import intel.calibration_log as cl
-    tmp = tempfile.NamedTemporaryFile(
-        suffix=".jsonl", prefix="cal_test_", delete=False,
-    )
-    tmp.close()
-    monkeypatch.setattr(cl, "_LOG_PATH", Path(tmp.name))
+    cl._RECORDS.clear()
     yield
-    try:
-        os.unlink(tmp.name)
-    except FileNotFoundError:
-        pass
+    cl._RECORDS.clear()
 
 
 def test_record_override_persists_and_returns_record():
@@ -42,7 +31,7 @@ def test_record_override_persists_and_returns_record():
     assert rec["analyst_verdict"]["threat_level"] == "LOW"
     assert rec["agreed"] is False
     assert rec["input_hash"] != "empty"
-    # Persisted to disk
+    # Held in the in-memory ring buffer
     persisted = iter_records()
     assert len(persisted) == 1
     assert persisted[0]["analyst_verdict"]["reason"] == "Expected travel by user"
