@@ -46,6 +46,20 @@ EXTRACTABLE_TYPES = {
     "campaign",
 }
 
+# Module-level compiled patterns — previously each parse_stix_indicator
+# call re-imported re + recompiled one regex per object. With a TAXII
+# poll returning ~2000 objects per feed and 4 feeds, this was 8000
+# wasted compiles per poll cycle.
+import re as _re
+_RE_IPV4   = _re.compile(r"ipv4-addr:value\s*=\s*'([^']+)'")
+_RE_DOMAIN = _re.compile(r"domain-name:value\s*=\s*'([^']+)'")
+_RE_URL    = _re.compile(r"url:value\s*=\s*'([^']+)'")
+_RE_HASH   = _re.compile(
+    r"file:hashes\.['\"]?(?:SHA-256|SHA-1|MD5)['\"]?\s*=\s*'([^']+)'",
+    _re.IGNORECASE,
+)
+_RE_EMAIL  = _re.compile(r"email-addr:value\s*=\s*'([^']+)'")
+
 
 # ─── STIX OBJECT PARSER ──────────────────────────────────────────────────────────
 def parse_stix_indicator(obj: dict) -> dict | None:
@@ -55,32 +69,27 @@ def parse_stix_indicator(obj: dict) -> dict | None:
     ioc_type = None
 
     if "ipv4-addr:value" in pattern:
-        import re
-        m = re.search(r"ipv4-addr:value\s*=\s*'([^']+)'", pattern)
+        m = _RE_IPV4.search(pattern)
         if m:
             ioc_value = m.group(1)
             ioc_type = "ip"
     elif "domain-name:value" in pattern:
-        import re
-        m = re.search(r"domain-name:value\s*=\s*'([^']+)'", pattern)
+        m = _RE_DOMAIN.search(pattern)
         if m:
             ioc_value = m.group(1)
             ioc_type = "domain"
     elif "url:value" in pattern:
-        import re
-        m = re.search(r"url:value\s*=\s*'([^']+)'", pattern)
+        m = _RE_URL.search(pattern)
         if m:
             ioc_value = m.group(1)
             ioc_type = "url"
     elif "file:hashes" in pattern:
-        import re
-        m = re.search(r"file:hashes\.['\"]?(?:SHA-256|SHA-1|MD5)['\"]?\s*=\s*'([^']+)'", pattern, re.IGNORECASE)
+        m = _RE_HASH.search(pattern)
         if m:
             ioc_value = m.group(1).lower()
             ioc_type = "hash"
     elif "email-message:from_ref.value" in pattern or "email-addr:value" in pattern:
-        import re
-        m = re.search(r"email-addr:value\s*=\s*'([^']+)'", pattern)
+        m = _RE_EMAIL.search(pattern)
         if m:
             ioc_value = m.group(1).lower()
             ioc_type = "email"

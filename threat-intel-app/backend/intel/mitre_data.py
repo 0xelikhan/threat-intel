@@ -45,13 +45,33 @@ def get_all_techniques() -> list[dict]:
     return sorted(results, key=lambda x: x["id"])
 
 
+@lru_cache(maxsize=1)
+def _search_index() -> dict:
+    """One-shot lowercase substring index keyed off (id, name, tactic).
+    Returns {token_or_field_lower: [tech, ...]} — actually here we keep
+    a flat list of (haystack, tech) pairs because substring matching
+    can't use a hash directly. Built once per process; subsequent
+    search_techniques() calls do a single linear scan over the cached
+    pair list with no per-call .lower() / .get_all_techniques() walk."""
+    pairs = []
+    for t in get_all_techniques():
+        haystack = (t["id"] + "\n" + t["name"] + "\n" + t["tactic"]).lower()
+        pairs.append((haystack, t))
+    return {"pairs": pairs}
+
+
 def search_techniques(query: str) -> list[dict]:
     q = query.lower().strip()
     if len(q) < 2:
         return get_all_techniques()[:20]
-    return [t for t in get_all_techniques()
-            if q in t["id"].lower() or q in t["name"].lower()
-            or q in t["tactic"].lower()][:30]
+    pairs = _search_index()["pairs"]
+    out = []
+    for haystack, tech in pairs:
+        if q in haystack:
+            out.append(tech)
+            if len(out) >= 30:
+                break
+    return out
 
 
 # Kill-chain ordering — used to bucket an actor's TTPs as "look for before
