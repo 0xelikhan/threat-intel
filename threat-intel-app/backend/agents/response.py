@@ -26,6 +26,16 @@ ACTORS = [
 ]
 
 
+# Inverted index built once at module load — technique_id -> [actor, ...].
+# Was O(N_actors * N_techniques_per_actor) per call before; now hash
+# lookup per alert technique with O(matches) follow-up. Doesn't change
+# behaviour, just lifts the inner loop out.
+_ACTOR_BY_TECH: "dict[str, list[dict]]" = {}
+for _a in ACTORS:
+    for _tid in _a.get("techniques", []):
+        _ACTOR_BY_TECH.setdefault(_tid, []).append(_a)
+
+
 def _match_actors(mitre_techniques: list) -> list:
     """Match threat actors using MITRE ATT&CK groups + MISP galaxy enrichment.
     Falls back to the hardcoded ACTORS list if neither external source is loaded."""
@@ -46,12 +56,19 @@ def _match_actors(mitre_techniques: list) -> list:
     # source produced the match.
     tech_ids = [t.split(" ")[0] for t in mitre_techniques]
     n_alert = len(tech_ids) or 1
+    # Bucket matched-technique-ids per actor in a single pass over the
+    # alert techniques using the precomputed index.
+    actor_hits: "dict[int, list[str]]" = {}
+    for tid in tech_ids:
+        for actor in _ACTOR_BY_TECH.get(tid, ()):
+            actor_hits.setdefault(id(actor), []).append(tid)
     matched = []
     for actor in ACTORS:
-        hits = [t for t in actor["techniques"] if t in tech_ids]
-        if hits:
-            score = round(len(hits) / n_alert * 100)
-            matched.append({**actor, "matchedTechniques": hits, "score": score})
+        hits = actor_hits.get(id(actor))
+        if not hits:
+            continue
+        score = round(len(hits) / n_alert * 100)
+        matched.append({**actor, "matchedTechniques": hits, "score": score})
     return sorted(matched, key=lambda x: x["score"], reverse=True)[:5]
 
 

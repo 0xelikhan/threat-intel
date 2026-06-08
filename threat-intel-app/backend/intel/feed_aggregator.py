@@ -44,6 +44,20 @@ _cache_state = {
     "last_taxii_poll":   None,
     "last_freshrss_poll": None,
 }
+# Pre-built indexes maintained on every write so list_iocs(source=...) /
+# list_iocs(type_=...) can skip the full scan. Keyed off the IOC value.
+_by_source: "dict[str, set[str]]" = {}
+_by_type:   "dict[str, set[str]]" = {}
+
+
+def _index_put(entry: Dict) -> None:
+    v = entry.get("value")
+    if not v:
+        return
+    src = entry.get("source") or "unknown"
+    typ = entry.get("type")   or "unknown"
+    _by_source.setdefault(src, set()).add(v)
+    _by_type  .setdefault(typ, set()).add(v)
 
 
 def _load_cache():
@@ -88,14 +102,25 @@ def stats() -> Dict:
 def list_iocs(source: Optional[str] = None, type_: Optional[str] = None,
               since_hours: Optional[int] = None, limit: int = 500) -> List[Dict]:
     _load_cache()
-    out = []
+    iocs = _cache_state["iocs"]
+    # Skip the full scan when a source / type filter is active — the
+    # source/type index narrows the candidate set to just the matching
+    # IOC values, which we then dereference back into entries.
+    if source and type_:
+        candidates = _by_source.get(source, set()) & _by_type.get(type_, set())
+    elif source:
+        candidates = _by_source.get(source, set())
+    elif type_:
+        candidates = _by_type.get(type_, set())
+    else:
+        candidates = iocs.keys()
     cutoff = None
     if since_hours:
         cutoff = datetime.now(timezone.utc) - timedelta(hours=since_hours)
-    for entry in _cache_state["iocs"].values():
-        if source and entry.get("source") != source:
-            continue
-        if type_ and entry.get("type") != type_:
+    out = []
+    for v in candidates:
+        entry = iocs.get(v)
+        if not entry:
             continue
         if cutoff:
             ts = entry.get("seen_at")
@@ -195,6 +220,7 @@ async def poll_taxii(force: bool = False) -> Dict:
             if v not in _cache_state["iocs"]:
                 added += 1
             _cache_state["iocs"][v] = entry
+            _index_put(entry)
     _cache_state["last_taxii_poll"] = datetime.now(timezone.utc).isoformat()
     _save_cache()
     return {"added": added, "by_feed": by_feed,
@@ -248,12 +274,14 @@ async def poll_freshrss(url: str, api_key: str) -> Dict:
                     v = ioc["value"]
                     if v not in _cache_state["iocs"]:
                         added += 1
-                    _cache_state["iocs"][v] = {
+                    entry = {
                         **ioc,
                         "source":     f"FreshRSS · {source}",
                         "seen_at":    datetime.now(timezone.utc).isoformat(),
                         "from_article": title,
                     }
+                    _cache_state["iocs"][v] = entry
+                    _index_put(entry)
                 if item.get("id"):
                     ids_to_mark.append(item["id"])
             # Mark as read (best effort)

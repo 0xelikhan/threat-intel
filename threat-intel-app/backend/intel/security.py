@@ -116,7 +116,11 @@ _REDACT_AUDIT_FIELDS = {"error", "body", "log", "raw", "input", "message"}
 
 def _redact_audit_value(field: str, value):
     """Apply the redactor to a single audit-field value when it's a string and
-    the field name is in the sensitive set. Non-string types pass through."""
+    the field name is in the sensitive set. Non-string types pass through.
+    Redactor failures fail closed (return a marker) AND surface a separate
+    audit_system_error event so the operator notices that audits are no
+    longer being fully sanitised — silently swapping in a placeholder
+    used to hide real outages."""
     if not isinstance(value, str) or not value:
         return value
     if field not in _REDACT_AUDIT_FIELDS:
@@ -125,9 +129,11 @@ def _redact_audit_value(field: str, value):
         from intel.redactor import redact as _redact
         out = _redact(value)
         return out.redacted
-    except Exception:
-        # Fail-closed for audit too — if redaction can't run, drop the value
-        # rather than logging the raw string.
+    except Exception as _e:
+        try:
+            logger.error("audit redactor failed on field=%s: %s", field, _e)
+        except Exception:
+            pass
         return "{{REDACTOR_UNAVAILABLE}}"
 
 

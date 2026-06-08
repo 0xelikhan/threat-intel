@@ -235,10 +235,13 @@ def _loads_lenient(text: str) -> dict:
 
 
 def _compress(enrichments: dict) -> dict:
-    out = {}
+    # Pre-allocate buckets so the per-IOC body avoids setdefault() on
+    # every insert. ips / domains / hashes are disjoint categories so
+    # there's no merging to do across them.
+    out = {"ips": {}, "domains": {}, "hashes": {}}
     for ip, d in (enrichments.get("ips") or {}).items():
         abuse = d.get("abuseipdb") or {}
-        out.setdefault("ips", {})[ip] = {
+        out["ips"][ip] = {
             "abuse_score":  abuse.get("abuseScore"),
             "vt_malicious": (d.get("virustotal") or {}).get("malicious"),
             "country":      (d.get("ipinfo") or {}).get("country"),
@@ -252,7 +255,7 @@ def _compress(enrichments: dict) -> dict:
     for domain, d in (enrichments.get("domains") or {}).items():
         heur = d.get("heuristics") or {}
         nrd = heur.get("nrd") or {}
-        out.setdefault("domains", {})[domain] = {
+        out["domains"][domain] = {
             "vt_malicious":  (d.get("virustotal") or {}).get("malicious"),
             "otx_pulses":    (d.get("otx") or {}).get("pulseCount"),
             "pd_risk":       (d.get("pulsedive") or {}).get("risk"),
@@ -266,7 +269,7 @@ def _compress(enrichments: dict) -> dict:
             "local_feeds":   (d.get("local_feeds") or {}).get("source"),
         }
     for h, d in (enrichments.get("hashes") or {}).items():
-        out.setdefault("hashes", {})[h[:16] + "..."] = {
+        out["hashes"][h[:16] + "..."] = {
             "malware_name": (d.get("malwarebazaar") or {}).get("malwareName"),
             "vt_malicious": (d.get("virustotal") or {}).get("malicious"),
             "vt_name":      (d.get("virustotal") or {}).get("name"),
