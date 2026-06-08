@@ -2028,6 +2028,19 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
     except Exception:
         pass
 
+    # Server-side prose validation. Enforces the prompt rules
+    # mechanically so duplicated summary / analysis_assessment / key_
+    # findings never reach the analyst, regardless of which client
+    # consumes the result (frontend, MCP, email composer, /api/analyze
+    # JSON consumers). Strips forbidden keys, caps summary at 2
+    # sentences, drops paraphrased duplicates across fields. See
+    # intel/prose_validator.py for the contract.
+    try:
+        from intel.prose_validator import validate_investigation_result
+        result = validate_investigation_result(result)
+    except Exception as _e:
+        _log.debug("prose validation failed (non-fatal): %s", _e)
+
     return {
         **state,
         "investigation_result":   result,
