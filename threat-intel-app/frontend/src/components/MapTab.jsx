@@ -84,13 +84,15 @@ export default function MapTab({ result }) {
       setLeafletReady(true);
       // Container is often zero-sized while the parent Collapse expands —
       // re-measure shortly after so tiles paint. Safe to call repeatedly.
-      [60, 300, 700].forEach(ms => setTimeout(() => {
+      var sizeTimers = [60, 300, 700].map(ms => setTimeout(() => {
         try { map.invalidateSize(); } catch (_) {}
       }, ms));
+      mapInstanceRef.current._sizeTimers = sizeTimers;
     } catch (_) { /* never let map init crash the page */ }
 
     return () => {
       if (mapInstanceRef.current) {
+        (mapInstanceRef.current._sizeTimers || []).forEach(clearTimeout);
         try { mapInstanceRef.current.remove(); } catch (_) {}
         mapInstanceRef.current = null;
         setLeafletReady(false);

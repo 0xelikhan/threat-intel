@@ -86,14 +86,18 @@ class GenerateSigmaSkill(Skill):
             )
             return "" if resp.error else (resp.message or "").strip()
 
+        import asyncio as _asyncio
         sigma = await _gen()
         sigma = _strip_fences(sigma)
-        valid, err = _validate(sigma)
+        # sigma-cli is a subprocess call (up to 15s); run it in a worker
+        # thread so the event loop stays responsive for the rest of the
+        # response stage's concurrent work.
+        valid, err = await _asyncio.to_thread(_validate, sigma)
         errors: List[str] = [] if valid else [err]
         if not valid:
             sigma2 = await _gen()
             sigma2 = _strip_fences(sigma2)
-            v2, e2 = _validate(sigma2)
+            v2, e2 = await _asyncio.to_thread(_validate, sigma2)
             if v2:
                 sigma, valid, errors = sigma2, True, []
             else:

@@ -84,11 +84,20 @@ async def correlate(analysis: Dict, config) -> Dict:
                             or (analysis.get("file_name"))
                             or f"{sha256[:12]}.bin")
                 # Don't await — the polling loop is up to 10 min and the
-                # analyst is waiting on the synchronous response.
-                asyncio.create_task(
-                    auto_submit_and_poll(file_bytes, filename, sha256,
-                                          keys["HYBRID_ANALYSIS_KEY"])
-                )
+                # analyst is waiting on the synchronous response. Register
+                # the task so the GC doesn't collect it mid-flight (main.py
+                # exposes track_task() for this).
+                try:
+                    from main import track_task
+                    track_task(asyncio.create_task(
+                        auto_submit_and_poll(file_bytes, filename, sha256,
+                                              keys["HYBRID_ANALYSIS_KEY"])
+                    ))
+                except Exception:
+                    asyncio.create_task(
+                        auto_submit_and_poll(file_bytes, filename, sha256,
+                                              keys["HYBRID_ANALYSIS_KEY"])
+                    )
                 out["sandbox_auto_submitted"] = True
                 out["sandbox_status_path"] = f"/api/sandbox/result/{sha256}"
             except Exception as e:
