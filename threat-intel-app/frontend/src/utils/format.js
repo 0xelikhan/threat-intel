@@ -96,3 +96,114 @@ export function thresholdBucket(n, maliciousAt = 10, suspiciousAt = 3) {
   if (n > 0)             return 'yellow';
   return 'green';
 }
+
+
+// ─── verdict + threat-level color mapping ────────────────────────────────
+// Extracted from App.js levelStyle + verdictStyle so the color->verdict
+// contract can be tested in isolation. The actual hex values still
+// live in App.js (they're tied to theme tokens); here we expose the
+// CATEGORICAL bucket name (red / orange / yellow / blue / grey) since
+// tests shouldn't care about exact hex.
+
+const _LEVEL_TO_BUCKET = {
+  CRITICAL:      'red',
+  HIGH:          'orange',
+  MEDIUM:        'yellow',
+  LOW:           'blue',
+  INFORMATIONAL: 'grey',
+};
+const _VERDICT_TO_BUCKET = {
+  MALICIOUS:   'red',
+  SUSPICIOUS:  'orange',
+  CLEAN:       'green',
+  CLEAN_INFRA: 'blue',   // NEW (added when we fixed GreyNoise RIOT bug)
+  BENIGN:      'green',
+  UNKNOWN:     'grey',
+  UNDETECTED:  'grey',
+};
+
+
+/**
+ * Map a threat_level value to its color bucket. Case-insensitive.
+ * Unknown levels fall back to 'grey' (INFORMATIONAL).
+ *
+ * @param {string} level — CRITICAL / HIGH / MEDIUM / LOW / INFORMATIONAL
+ * @returns {'red'|'orange'|'yellow'|'blue'|'grey'}
+ */
+export function levelBucket(level) {
+  if (!level || typeof level !== 'string') return 'grey';
+  return _LEVEL_TO_BUCKET[level.toUpperCase()] || 'grey';
+}
+
+
+/**
+ * Map a verdict value to its color bucket. Case-insensitive.
+ * Unknown verdicts fall back to 'grey'. CLEAN_INFRA is intentionally
+ * blue (distinct from CLEAN's green) — surfaces the "this is known
+ * infrastructure but the SPECIFIC TRAFFIC may not be safe" nuance.
+ *
+ * @param {string} verdict
+ * @returns {'red'|'orange'|'green'|'blue'|'grey'}
+ */
+export function verdictBucket(verdict) {
+  if (!verdict || typeof verdict !== 'string') return 'grey';
+  return _VERDICT_TO_BUCKET[verdict.toUpperCase()] || 'grey';
+}
+
+
+// ─── Token-Jaccard overlap (de-dup helper for prose fields) ──────────────
+// The AnalystSummary card uses this to drop paraphrased duplicates
+// between summary / analysis_assessment / disposition_reason. Extracted
+// here so the de-dup behaviour can be unit-tested without rendering a
+// React tree.
+
+const _TOKEN_RE = /[a-z0-9@.-]{4,}/g;
+
+function _tokens(s) {
+  if (!s || typeof s !== 'string') return new Set();
+  return new Set(s.toLowerCase().match(_TOKEN_RE) || []);
+}
+
+
+/**
+ * Token-set overlap ratio between two strings — used by the
+ * AnalystSummary de-dup to detect paraphrased duplicates that a
+ * strict string-equal check misses.
+ *
+ *   overlap("user X deleted file Y", "the deletion of Y by user X")
+ *   ≈ 0.66 (overlap on user/x/deleted/file/y vs the/deletion/y/user/x)
+ *
+ * Returns intersection size / min(set_a.size, set_b.size). Range 0..1.
+ *
+ * @param {string} a
+ * @param {string} b
+ * @returns {number}
+ */
+export function tokenOverlap(a, b) {
+  if (!a || !b) return 0;
+  const setA = _tokens(a);
+  const setB = _tokens(b);
+  if (!setA.size || !setB.size) return 0;
+  let inter = 0;
+  for (const t of setA) if (setB.has(t)) inter++;
+  return inter / Math.max(1, Math.min(setA.size, setB.size));
+}
+
+
+/**
+ * Drop entries from `candidates` whose overlap with `against` exceeds
+ * the threshold. Used to de-dup analysis_assessment sentences against
+ * the already-rendered summary paragraph.
+ *
+ * @param {string[]} candidates
+ * @param {string|string[]} against — corpus to compare against
+ * @param {number} threshold — 0..1, drop when overlap >= this
+ * @returns {string[]} filtered list
+ */
+export function dropOverlapping(candidates, against, threshold = 0.5) {
+  if (!Array.isArray(candidates) || !candidates.length) return [];
+  const corpus = Array.isArray(against) ? against.filter(Boolean).join(' ')
+                                        : (against || '');
+  if (!corpus) return candidates.filter(Boolean);
+  return candidates.filter(s => s && tokenOverlap(s, corpus) < threshold);
+}

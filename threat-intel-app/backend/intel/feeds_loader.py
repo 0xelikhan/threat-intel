@@ -8,10 +8,16 @@ Sources:
   - vendor/ipsum/ipsum.txt          (aggregated, scored)
   - vendor/firehol/*.netset         (community blocklists)
   - vendor/phishing-db/*.lst        (phishing domains, IPs)
+  - https://feodotracker.abuse.ch/  (lazy-fetched at runtime, see
+                                     check_feodo). Lives outside vendor/
+                                     because we want it in production
+                                     too, where vendor/ is not copied.
 
 Memory: ~150 MB loaded once on first call, then cached forever.
 """
 import re
+import time
+import urllib.request
 from pathlib import Path
 from functools import lru_cache
 
@@ -135,7 +141,82 @@ def stats() -> dict:
     return {
         "malicious_ip_count":     len(malicious_ips()),
         "phishing_domain_count":  len(phishing_domains()),
+        "feodo_ip_count":         len(_feodo_state.get("ips") or set()),
         "ipsum_loaded":           IPSUM.exists(),
         "firehol_loaded":         FIREHOL.exists(),
         "phishing_db_loaded":     PHISH.exists(),
+        "feodo_loaded_at":        _feodo_state.get("fetched_at"),
     }
+
+
+# ─── Feodo Tracker (live HTTPS fetch, no vendor/ dependency) ───────────────
+# Feodo Tracker publishes a plain-text list of active C2 IPs at the URL
+# below. We pull it lazily on first lookup, cache for 6 hours, and check
+# IOCs against the in-memory set. Lives in feeds_loader rather than as
+# its own module so the check_ip() / check_domain() / check_feodo()
+# pattern stays uniform for callers (one import, three lookups).
+#
+# Previously feodo data came from `vendor/firehol/feodo.ipset` which
+# wasn't shipped in the production container, so agents/enrichment.py's
+# `from intel.feeds_loader import check_feodo` was a latent ImportError
+# guarded by try/except — Feodo never fired in prod. Bringing the fetch
+# in-process restores the signal.
+
+_FEODO_URL = "https://feodotracker.abuse.ch/downloads/ipblocklist.txt"
+_FEODO_TTL_S = 6 * 3600
+_feodo_state: dict = {"ips": set(), "fetched_at": 0.0, "error": None}
+
+
+def _refresh_feodo_if_stale() -> None:
+    """Pull the Feodo Tracker blocklist on first call + every 6h.
+    Failures (network, parse) leave the existing cache in place and
+    record the error in _feodo_state['error'] for diagnostics."""
+    if (_feodo_state["ips"]
+            and (time.time() - _feodo_state["fetched_at"]) < _FEODO_TTL_S):
+        return
+    try:
+        req = urllib.request.Request(
+            _FEODO_URL,
+            headers={"User-Agent": "RECON-MDR-Platform/1.0 (+feodo-poll)"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as r:
+            text = r.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        _feodo_state["error"] = type(e).__name__
+        # Don't blank the existing cache — keep the last-known-good set
+        # so a transient outage doesn't wipe out Feodo signal until the
+        # next successful refresh.
+        return
+    ips = set()
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if re.fullmatch(r"\d+\.\d+\.\d+\.\d+", line):
+            ips.add(line)
+    _feodo_state["ips"]        = ips
+    _feodo_state["fetched_at"] = time.time()
+    _feodo_state["error"]      = None
+
+
+def check_feodo(ip: str) -> dict | None:
+    """Return {"hit": True, "source": "feodo_tracker", ...} when the IP
+    appears on the Feodo Tracker active-C2 list. None on miss. Never
+    raises — network / parse failures degrade to None via the cache
+    fallback in _refresh_feodo_if_stale."""
+    if not ip:
+        return None
+    try:
+        _refresh_feodo_if_stale()
+    except Exception:
+        return None
+    if ip in (_feodo_state.get("ips") or set()):
+        return {
+            "hit":     True,
+            "source":  "feodo_tracker",
+            "summary": ("On the abuse.ch Feodo Tracker active-C2 list. "
+                        "These IPs serve Emotet / Dridex / TrickBot / "
+                        "QakBot C2; any outbound to one is high-signal."),
+            "url":     "https://feodotracker.abuse.ch/browse/",
+        }
+    return None

@@ -777,18 +777,6 @@ def _p_hackertarget(r):
     return {"record_count": len(rows), "rows": rows[:25]}
 
 
-def _p_sslbl(domain_or_cert_fp: str) -> dict:
-    """Local SSL Blacklist match (CSV pre-loaded). Match = MALICIOUS."""
-    try:
-        from intel.feeds_loader import check_sslbl
-        hit = check_sslbl(domain_or_cert_fp)
-        if hit:
-            return {**hit, "verdict": "MALICIOUS"}
-    except Exception:
-        pass
-    return {}
-
-
 def _p_feodo(ip: str) -> dict:
     """Local Feodo Tracker match. Match = MALICIOUS."""
     try:
