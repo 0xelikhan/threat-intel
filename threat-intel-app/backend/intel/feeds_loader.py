@@ -15,11 +15,15 @@ Sources:
 
 Memory: ~150 MB loaded once on first call, then cached forever.
 """
+import logging
 import re
+import threading
 import time
 import urllib.request
 from pathlib import Path
 from functools import lru_cache
+
+_log = logging.getLogger("recon.feeds_loader")
 
 VENDOR  = Path(__file__).parent.parent.parent / "vendor"
 IPSUM   = VENDOR / "ipsum" / "ipsum.txt"
@@ -55,8 +59,8 @@ def _parse_netset(path: Path) -> set:
                 continue
             if re.fullmatch(r"\d+\.\d+\.\d+\.\d+", line):
                 out.add(line)
-    except Exception:
-        pass
+    except Exception as e:
+        _log.warning("failed to parse netset %s: %s", path.name, e)
     return out
 
 
@@ -165,38 +169,53 @@ def stats() -> dict:
 _FEODO_URL = "https://feodotracker.abuse.ch/downloads/ipblocklist.txt"
 _FEODO_TTL_S = 6 * 3600
 _feodo_state: dict = {"ips": set(), "fetched_at": 0.0, "error": None}
+# Protect _feodo_state against concurrent refresh+lookup. Without this
+# two async tasks both seeing stale state would issue duplicate HTTP
+# requests AND race on the dict write. RLock so a single thread can
+# re-enter (defensive — the current code doesn't but future callers
+# might).
+_feodo_lock = threading.RLock()
 
 
 def _refresh_feodo_if_stale() -> None:
     """Pull the Feodo Tracker blocklist on first call + every 6h.
-    Failures (network, parse) leave the existing cache in place and
-    record the error in _feodo_state['error'] for diagnostics."""
+    Thread-safe: only one refresh runs at a time even under concurrent
+    lookups. Failures (network, parse) leave the existing cache in
+    place and record the error in _feodo_state['error'] for diagnostics.
+    """
+    # Cheap fast-path: re-read under the lock so we don't pay the
+    # network cost when another caller just refreshed.
     if (_feodo_state["ips"]
             and (time.time() - _feodo_state["fetched_at"]) < _FEODO_TTL_S):
         return
-    try:
-        req = urllib.request.Request(
-            _FEODO_URL,
-            headers={"User-Agent": "RECON-MDR-Platform/1.0 (+feodo-poll)"},
-        )
-        with urllib.request.urlopen(req, timeout=15) as r:
-            text = r.read().decode("utf-8", errors="replace")
-    except Exception as e:
-        _feodo_state["error"] = type(e).__name__
-        # Don't blank the existing cache — keep the last-known-good set
-        # so a transient outage doesn't wipe out Feodo signal until the
-        # next successful refresh.
-        return
-    ips = set()
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if re.fullmatch(r"\d+\.\d+\.\d+\.\d+", line):
-            ips.add(line)
-    _feodo_state["ips"]        = ips
-    _feodo_state["fetched_at"] = time.time()
-    _feodo_state["error"]      = None
+    with _feodo_lock:
+        # Double-checked locking — another thread may have refreshed
+        # while we were waiting for the lock.
+        if (_feodo_state["ips"]
+                and (time.time() - _feodo_state["fetched_at"]) < _FEODO_TTL_S):
+            return
+        try:
+            req = urllib.request.Request(
+                _FEODO_URL,
+                headers={"User-Agent": "RECON-MDR-Platform/1.0 (+feodo-poll)"},
+            )
+            with urllib.request.urlopen(req, timeout=15) as r:
+                text = r.read().decode("utf-8", errors="replace")
+        except Exception as e:
+            _feodo_state["error"] = type(e).__name__
+            _log.warning("feodo refresh failed: %s", e)
+            return
+        ips = set()
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if re.fullmatch(r"\d+\.\d+\.\d+\.\d+", line):
+                ips.add(line)
+        _feodo_state["ips"]        = ips
+        _feodo_state["fetched_at"] = time.time()
+        _feodo_state["error"]      = None
+        _log.info("feodo refresh OK: %d active C2 IPs", len(ips))
 
 
 def check_feodo(ip: str) -> dict | None:

@@ -30,8 +30,106 @@ from intel.taxii_poller import poll_all_feeds, parse_misp_csv, parse_misp_json
 from intel.auth import auth_configured, verify_credentials, current_user
 from gti_score import compute_gti_scores, get_highest_score
 
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def _lifespan(app):
+    """Replaces the deprecated @app.on_event("startup") + ("shutdown")
+    handlers. Code BEFORE the `yield` runs once at startup; code AFTER
+    runs at graceful shutdown (Ctrl-C, container stop). The two
+    halves are kept in this single function so startup-side state
+    (background tasks created here, sockets opened) can be referenced
+    by the shutdown side without module-level globals.
+    """
+    # ─── STARTUP ──────────────────────────────────────────────────────
+    import asyncio
+
+    async def _warm_one(name: str, mod_path: str, attr: str, arg=None):
+        import importlib, time
+        t0 = time.perf_counter()
+        try:
+            def _run():
+                m = importlib.import_module(mod_path)
+                fn = getattr(m, attr, None)
+                if not fn:
+                    return False
+                fn(arg) if arg is not None else fn()
+                return True
+            ok = await asyncio.to_thread(_run)
+            dt = time.perf_counter() - t0
+            _log.info("pre-warm %s: %s (%.1fs)", name, "OK" if ok else "skip", dt)
+        except Exception as e:
+            _log.warning("pre-warm %s: skip (%s)", name, e)
+
+    async def _warm_all():
+        light = [
+            ("KEV",            "intel.kev",                 "_index",          None),
+            ("EPSS",           "intel.epss",                "_index",          None),
+            ("LOLBAS",         "intel.lolbas",              "_catalog",        None),
+            ("MISP galaxy",    "intel.actor_data",          "_misp_lookup",    None),
+            ("MITRE",          "intel.mitre_data",          "_mitre",          None),
+            ("Atomic Red Team","intel.atomic_red_team",     "get_tests",       "T1059.001"),
+        ]
+        heavy = [
+            ("LOLDrivers",     "intel.loldrivers",          "_catalog",        None),
+            ("IP blocklists",  "intel.feeds_loader",        "malicious_ips",   None),
+            ("Phishing domains","intel.feeds_loader",       "phishing_domains",None),
+            ("Warning lists",  "intel.warninglist_filter",  "load_warninglists", None),
+            ("YARA rules",     "intel.yara_scanner",        "_ruleset",        None),
+        ]
+        await asyncio.gather(*[_warm_one(*m) for m in light + heavy])
+        # Register static-dataset namespaces in the TTL cache so they
+        # appear in /api/status. A long-TTL marker entry keeps the
+        # namespace non-empty for hit-rate accounting.
+        try:
+            from intel.cache import cache_for
+            for ns in ("mitre", "warninglists", "feodo", "sslbl", "kev"):
+                cache_for(ns).set("__warmed__", True)
+        except Exception as e:
+            _log.debug("cache namespace registration failed: %s", e)
+        _log.info("all intel pre-warm tasks complete")
+
+    asyncio.create_task(_warm_all())
+
+    # Spec §8: kick off the unified TAXII + FreshRSS polling loop.
+    try:
+        from intel.feed_aggregator import run_polling_loop
+        asyncio.create_task(run_polling_loop(lambda: config.get_all() if hasattr(config, "get_all") else {
+            "FRESHRSS_URL":     config.get("FRESHRSS_URL", ""),
+            "FRESHRSS_API_KEY": config.get("FRESHRSS_API_KEY", ""),
+        }))
+        _log.info("feed aggregator polling loop scheduled")
+    except Exception as e:
+        _log.warning("feed aggregator NOT started: %s", e)
+
+    _log.info("startup: pre-warm scheduled in background, accepting requests now")
+
+    # Self-diagnosis: once at startup, then every 15 min for /api/health.
+    try:
+        from intel.diagnose import run_startup_checks, background_health_loop
+        asyncio.create_task(run_startup_checks())
+        asyncio.create_task(background_health_loop(interval_s=900))
+        _log.info("self-diagnosis scheduled")
+    except Exception as e:
+        _log.warning("self-diagnosis NOT started: %s", e)
+
+    yield   # ─── App runs here ───────────────────────────────────────
+
+    # ─── SHUTDOWN ─────────────────────────────────────────────────────
+    # Close the shared TCP connector used by the enrichment fan-out so
+    # we don't leak sockets on graceful shutdown.
+    try:
+        from agents.enrichment import close_connector
+        await close_connector()
+    except Exception as e:
+        _log.debug("connector close failed: %s", e)
+
+
 app = FastAPI(title="Threat Intelligence Platform", version="3.0.0",
-              docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json")
+              docs_url="/api/docs", redoc_url=None,
+              openapi_url="/api/openapi.json",
+              lifespan=_lifespan)
 
 # Structured logging + per-request UUID. Configured before anything else
 # touches logging so the first log line carries the right format.
@@ -184,100 +282,9 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-async def _kick_prewarm():
-    """Schedule pre-warm to run in the background so the server starts immediately.
-    Each module is loaded in its own thread so a slow one (YARA, warning lists)
-    doesn't block the others. First analysis still benefits from whatever's
-    finished warming by then."""
-    import asyncio
-
-    async def _warm_one(name: str, mod_path: str, attr: str, arg=None):
-        import importlib, time
-        t0 = time.perf_counter()
-        try:
-            def _run():
-                m = importlib.import_module(mod_path)
-                fn = getattr(m, attr, None)
-                if not fn:
-                    return False
-                fn(arg) if arg is not None else fn()
-                return True
-            ok = await asyncio.to_thread(_run)
-            dt = time.perf_counter() - t0
-            _log.info("pre-warm %s: %s (%.1fs)", name, "OK" if ok else "skip", dt)
-        except Exception as e:
-            _log.warning("pre-warm %s: skip (%s)", name, e)
-
-    async def _warm_all():
-        # Light modules first so they're ready almost immediately,
-        # heavy ones (YARA, warning lists) finish in the background.
-        light = [
-            ("KEV",            "intel.kev",                 "_index",          None),
-            ("EPSS",           "intel.epss",                "_index",          None),
-            ("LOLBAS",         "intel.lolbas",              "_catalog",        None),
-            ("MISP galaxy",    "intel.actor_data",          "_misp_lookup",    None),
-            ("MITRE",          "intel.mitre_data",          "_mitre",          None),
-            ("Atomic Red Team","intel.atomic_red_team",     "get_tests",       "T1059.001"),
-        ]
-        heavy = [
-            ("LOLDrivers",     "intel.loldrivers",          "_catalog",        None),
-            ("IP blocklists",  "intel.feeds_loader",        "malicious_ips",   None),
-            ("Phishing domains","intel.feeds_loader",       "phishing_domains",None),
-            ("Warning lists",  "intel.warninglist_filter",  "load_warninglists", None),
-            ("YARA rules",     "intel.yara_scanner",        "_ruleset",        None),
-        ]
-        # Fan out — all warm in parallel; startup completes immediately
-        await asyncio.gather(*[_warm_one(*m) for m in light + heavy])
-        # Register static-dataset namespaces in the TTL cache so they
-        # appear in /api/status (the actual data lives in each module's
-        # own dict — we don't double-store). A long-TTL marker entry
-        # keeps the namespace non-empty for hit-rate accounting.
-        try:
-            from intel.cache import cache_for
-            for ns in ("mitre", "warninglists", "feodo", "sslbl", "kev"):
-                cache_for(ns).set("__warmed__", True)
-        except Exception:
-            pass
-        _log.info("all intel pre-warm tasks complete")
-
-    asyncio.create_task(_warm_all())
-
-    # Spec §8: kick off the unified TAXII + FreshRSS polling loop in the background
-    try:
-        from intel.feed_aggregator import run_polling_loop
-        asyncio.create_task(run_polling_loop(lambda: config.get_all() if hasattr(config, "get_all") else {
-            "FRESHRSS_URL":     config.get("FRESHRSS_URL", ""),
-            "FRESHRSS_API_KEY": config.get("FRESHRSS_API_KEY", ""),
-        }))
-        _log.info("feed aggregator polling loop scheduled")
-    except Exception as e:
-        _log.warning("feed aggregator NOT started: %s", e)
-
-    _log.info("startup: pre-warm scheduled in background, accepting requests now")
-
-    # Self-diagnosis: run once at startup so the operator sees what's
-    # broken in the logs, then continuously every 15 min so /api/health
-    # always reflects live source status.
-    try:
-        from intel.diagnose import run_startup_checks, background_health_loop
-        asyncio.create_task(run_startup_checks())
-        asyncio.create_task(background_health_loop(interval_s=900))
-        _log.info("self-diagnosis scheduled")
-    except Exception as e:
-        _log.warning("self-diagnosis NOT started: %s", e)
-
-
-@app.on_event("shutdown")
-async def _close_http_pool():
-    """Close the shared TCP connector used by the enrichment fan-out so
-    we don't leak sockets on graceful shutdown (Ctrl-C, container stop)."""
-    try:
-        from agents.enrichment import close_connector
-        await close_connector()
-    except Exception:
-        pass
-
+# Startup + shutdown logic moved to the _lifespan handler above
+# (FastAPI deprecated @app.on_event in favour of a single lifespan
+# context manager).
 
 _results: dict = {}
 # IOC pivot index: { ioc_value: [(run_id, timestamp_iso, threat_level), ...] }
@@ -471,38 +478,32 @@ def _webhooks_available() -> dict:
 
 
 def _intel_status() -> dict:
-    """Snapshot of how much offline intelligence is loaded."""
+    """Snapshot of how much offline intelligence is loaded. Each module's
+    stats() is called independently — a single broken stats() must not
+    blank the whole status report. Failures log at debug level so a
+    permanently-broken module surfaces in the build/dev logs."""
     out = {}
-    try:
-        from intel.feeds_loader import stats as f; out.update(f())
-    except Exception: pass
-    try:
-        from intel.actor_data import stats as a; out.update(a())
-    except Exception: pass
-    try:
-        from intel.kev import stats as k; out.update(k())
-    except Exception: pass
-    try:
-        from intel.epss import stats as e; out.update(e())
-    except Exception: pass
-    try:
-        from intel.lolbas import stats as l; out.update(l())
-    except Exception: pass
-    try:
-        from intel.loldrivers import stats as d; out.update(d())
-    except Exception: pass
-    try:
-        from intel.atomic_red_team import stats as t; out.update(t())
-    except Exception: pass
-    try:
-        from intel.yara_scanner import stats as y; out.update(y())
-    except Exception: pass
-    try:
-        from intel.phishing_kit  import stats as pk; out.update(pk())
-    except Exception: pass
-    try:
-        from intel.ja_fingerprints import stats as ja; out.update(ja())
-    except Exception: pass
+    _sources = [
+        ("feeds_loader",     "intel.feeds_loader"),
+        ("actor_data",       "intel.actor_data"),
+        ("kev",              "intel.kev"),
+        ("epss",             "intel.epss"),
+        ("lolbas",           "intel.lolbas"),
+        ("loldrivers",       "intel.loldrivers"),
+        ("atomic_red_team",  "intel.atomic_red_team"),
+        ("yara_scanner",     "intel.yara_scanner"),
+        ("phishing_kit",     "intel.phishing_kit"),
+        ("ja_fingerprints",  "intel.ja_fingerprints"),
+    ]
+    for name, mod_path in _sources:
+        try:
+            import importlib
+            mod = importlib.import_module(mod_path)
+            fn = getattr(mod, "stats", None)
+            if fn:
+                out.update(fn())
+        except Exception as e:
+            _log.debug("intel_status: %s.stats() failed: %s", name, e)
     return out
 
 
@@ -1033,7 +1034,7 @@ async def detection(req: DetectionRequest):
             f"  references: array of MITRE ATT&CK technique URLs like "
             f"    https://attack.mitre.org/techniques/Txxxx/\n"
             f"  author: RECON Platform\n"
-            f"  date: {datetime.now().strftime('%Y/%m/%d')}\n"
+            f"  date: {datetime.now(timezone.utc).strftime('%Y/%m/%d')}\n"
             f"  tags: {attack_tags}\n"
             f"  logsource: appropriate category/product (e.g. category: process_creation, product: windows)\n"
             f"  detection: selection block with actual IOC values and process / command-line patterns\n"
@@ -1207,7 +1208,7 @@ async def detection(req: DetectionRequest):
             f"Generate a YARA rule for detecting samples of the malware family '{family}'. "
             f"Output ONLY the YARA rule — no markdown fences, no commentary.\n\n"
             f"Requirements:\n"
-            f"  rule meta: description, author = 'RECON Platform', date = '{datetime.now().strftime('%Y-%m-%d')}', "
+            f"  rule meta: description, author = 'RECON Platform', date = '{datetime.now(timezone.utc).strftime('%Y-%m-%d')}', "
             f"    hash = first hash from the IOC list ({hashes[0] if hashes else 'unknown'}), "
             f"    mitre = first technique ID\n"
             f"  strings: pattern strings drawn from behavioral indicators — mutex names, registry keys, "
@@ -1400,7 +1401,7 @@ async def export_stix(run_id: str):
     bundle = _results[run_id].get("stix_bundle")
     if not bundle:
         raise HTTPException(404, "No STIX bundle for this run")
-    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     return JSONResponse(content=bundle,
                         headers={"Content-Disposition": f'attachment; filename="threat-intel-{ts}.stix.json"'})
 
@@ -1997,17 +1998,23 @@ async def scan_get(sha256: str):
     return scan
 
 
+class ScanHashRequest(BaseModel):
+    hash: str
+
+
 @app.post("/api/scan/hash")
-async def scan_hash(req: dict):
+async def scan_hash(req: ScanHashRequest):
     """Hash lookup — always a fresh TI query.
 
     Full per-investigation isolation: we do NOT return a prior scan from history,
     so a lookup never serves data saved from an earlier investigation."""
-    h = (req or {}).get("hash", "").strip().lower()
+    h = (req.hash or "").strip().lower()
     if not h:
         raise HTTPException(400, "hash required")
     if len(h) not in (32, 40, 64):
         raise HTTPException(400, "hash must be MD5 (32), SHA1 (40), or SHA256 (64) hex")
+    if not all(c in "0123456789abcdef" for c in h):
+        raise HTTPException(400, "hash must be hex characters only")
     out = {"hash": h, "sources": {}}
 
     # 2. No prior scan — query TI sources by hash and shape the result like a
@@ -2056,14 +2063,18 @@ async def scan_hash(req: dict):
     }
 
 
+class ScanUrlRequest(BaseModel):
+    url: str
+
+
 @app.post("/api/scan/url")
-async def scan_url_endpoint(req: dict):
+async def scan_url_endpoint(req: ScanUrlRequest):
     """Scan a URL: try to download (30s timeout, 50MB cap) for static
     file analysis, but soft-fail to URL-reputation-only when the remote
     site blocks the fetch. Many security URLs (abuseipdb / virustotal /
     urlscan) return 403 to non-browser clients — we still want to run
     URL enrichment + URLScan submission on those, not error out."""
-    url = (req or {}).get("url", "").strip()
+    url = (req.url or "").strip()
     if not url:
         raise HTTPException(400, "url required")
     if not url.startswith(("http://", "https://")):

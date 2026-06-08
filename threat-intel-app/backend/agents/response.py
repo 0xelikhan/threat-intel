@@ -36,8 +36,10 @@ def _match_actors(mitre_techniques: list) -> list:
         rich = match_threat_actors(mitre_techniques)
         if rich:
             return rich[:5]
-    except Exception:
-        pass
+    except Exception as _e:
+        import logging
+        logging.getLogger("recon.response").debug(
+            "MISP actor match failed, falling back: %s", _e)
     # Fallback: hardcoded list. Same precision-style score as the
     # primary MITRE path — matches / N_alert_techniques * 100 — so the
     # gate threshold has consistent meaning regardless of which data

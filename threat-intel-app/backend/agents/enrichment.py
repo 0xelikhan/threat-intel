@@ -777,15 +777,22 @@ def _p_hackertarget(r):
     return {"record_count": len(rows), "rows": rows[:25]}
 
 
+# Module-level import — feeds_loader is part of our own backend, so a
+# missing import is a hard bug, not a runtime degradation case. Importing
+# inside the function silently masked the historical case where
+# check_feodo didn't exist; now-fixed but moved out so a future regression
+# fails loudly at startup instead of one analysis at a time.
+from intel.feeds_loader import check_feodo as _check_feodo
+
+
 def _p_feodo(ip: str) -> dict:
     """Local Feodo Tracker match. Match = MALICIOUS."""
     try:
-        from intel.feeds_loader import check_feodo
-        hit = check_feodo(ip)
+        hit = _check_feodo(ip)
         if hit:
             return {**hit, "verdict": "MALICIOUS"}
-    except Exception:
-        pass
+    except Exception as _e:
+        _log.debug("feodo lookup failed for %s: %s", ip, _e)
     return {}
 
 
