@@ -177,52 +177,72 @@ _feodo_state: dict = {"ips": set(), "fetched_at": 0.0, "error": None}
 _feodo_lock = threading.RLock()
 
 
-def _refresh_feodo_if_stale() -> None:
-    """Pull the Feodo Tracker blocklist on first call + every 6h.
-    Thread-safe: only one refresh runs at a time even under concurrent
-    lookups. Failures (network, parse) leave the existing cache in
-    place and record the error in _feodo_state['error'] for diagnostics.
-    """
-    # Cheap fast-path: re-read under the lock so we don't pay the
-    # network cost when another caller just refreshed.
-    if (_feodo_state["ips"]
-            and (time.time() - _feodo_state["fetched_at"]) < _FEODO_TTL_S):
-        return
+# In-flight guard: a second caller that arrives while the first is
+# fetching shouldn't fire a duplicate HTTP request, but it also shouldn't
+# block — we hold the lock only long enough to claim the slot, then
+# release before the network call. Failed-fetch backoff (60 s) stops a
+# retry storm if Feodo Tracker is down.
+_feodo_inflight   = False
+_feodo_last_error = 0.0
+_FEODO_ERROR_BACKOFF_S = 60
+
+
+def refresh_feodo_now() -> None:
+    """Force-refresh the Feodo Tracker blocklist. Safe to call repeatedly
+    — concurrent callers coalesce. The network fetch happens OUTSIDE the
+    lock so per-IOC lookups never stall behind a slow upstream."""
+    global _feodo_inflight, _feodo_last_error
     with _feodo_lock:
-        # Double-checked locking — another thread may have refreshed
-        # while we were waiting for the lock.
-        if (_feodo_state["ips"]
-                and (time.time() - _feodo_state["fetched_at"]) < _FEODO_TTL_S):
+        if _feodo_inflight:
             return
-        try:
-            req = urllib.request.Request(
-                _FEODO_URL,
-                headers={"User-Agent": "RECON-MDR-Platform/1.0 (+feodo-poll)"},
-            )
-            with urllib.request.urlopen(req, timeout=15) as r:
-                text = r.read().decode("utf-8", errors="replace")
-        except Exception as e:
+        _feodo_inflight = True
+    try:
+        req = urllib.request.Request(
+            _FEODO_URL,
+            headers={"User-Agent": "RECON-MDR-Platform/1.0 (+feodo-poll)"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as r:
+            text = r.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        with _feodo_lock:
             _feodo_state["error"] = type(e).__name__
-            _log.warning("feodo refresh failed: %s", e)
-            return
-        ips = set()
-        for line in text.splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if re.fullmatch(r"\d+\.\d+\.\d+\.\d+", line):
-                ips.add(line)
+            _feodo_last_error = time.time()
+            _feodo_inflight = False
+        _log.warning("feodo refresh failed: %s", e)
+        return
+    ips = set()
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if re.fullmatch(r"\d+\.\d+\.\d+\.\d+", line):
+            ips.add(line)
+    with _feodo_lock:
         _feodo_state["ips"]        = ips
         _feodo_state["fetched_at"] = time.time()
         _feodo_state["error"]      = None
-        _log.info("feodo refresh OK: %d active C2 IPs", len(ips))
+        _feodo_inflight = False
+    _log.info("feodo refresh OK: %d active C2 IPs", len(ips))
+
+
+def _refresh_feodo_if_stale() -> None:
+    """Trigger a refresh when the cache is empty or older than the TTL.
+    Network I/O runs outside the lock. Suppressed for 60 s after a
+    failure to avoid retry storms."""
+    if (_feodo_state["ips"]
+            and (time.time() - _feodo_state["fetched_at"]) < _FEODO_TTL_S):
+        return
+    if (time.time() - _feodo_last_error) < _FEODO_ERROR_BACKOFF_S:
+        return
+    refresh_feodo_now()
 
 
 def check_feodo(ip: str) -> dict | None:
     """Return {"hit": True, "source": "feodo_tracker", ...} when the IP
     appears on the Feodo Tracker active-C2 list. None on miss. Never
-    raises — network / parse failures degrade to None via the cache
-    fallback in _refresh_feodo_if_stale."""
+    raises and never blocks the event loop on the network fetch — the
+    refresh path runs the urlopen call without holding any lock and the
+    pre-warm + periodic background task keep the cache hot."""
     if not ip:
         return None
     try:

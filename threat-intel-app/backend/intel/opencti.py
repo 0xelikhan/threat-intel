@@ -45,9 +45,13 @@ def _level_to_score(threat_level: str) -> int:
 
 
 def _client(url: str, token: str):
-    """Return a configured OpenCTIApiClient or raise."""
+    """Return a configured OpenCTIApiClient or raise. TLS verification is on
+    by default; operators with a self-hosted OpenCTI behind a private CA can
+    set OPENCTI_INSECURE_TLS=1 to fall back to ssl_verify=False."""
     from pycti import OpenCTIApiClient
-    return OpenCTIApiClient(url, token, log_level="error", ssl_verify=False)
+    import os as _os
+    verify = (_os.environ.get("OPENCTI_INSECURE_TLS") or "").lower() not in {"1", "true", "yes"}
+    return OpenCTIApiClient(url, token, log_level="error", ssl_verify=verify)
 
 
 async def push_result(result: dict, opencti_url: str, opencti_token: str) -> dict:

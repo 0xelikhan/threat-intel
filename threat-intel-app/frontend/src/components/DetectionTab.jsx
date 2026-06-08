@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { downloadFile } from './ExportBar';
 
 const TACTIC_COLORS = {
   'Initial Access': '#ff6b6b', 'Execution': '#ffa94d', 'Persistence': '#ffe566',
@@ -211,7 +212,7 @@ function SigmaGenerator({ analysisResult }) {
             <div style={S.label}>Generated Rule</div>
             <div style={{ display: 'flex', gap: '6px' }}>
               <button style={S.btn(false)} onClick={copy}>{copied ? '✓ COPIED' : 'COPY YAML'}</button>
-              <button style={S.btn(false)} onClick={() => { const b = new Blob([rule], {type:'text/yaml'}); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href=u; a.download='detection.sigma.yml'; a.click(); }}>⬇ DOWNLOAD</button>
+              <button style={S.btn(false)} onClick={() => downloadFile(rule, 'detection.sigma.yml', 'text/yaml')}>⬇ DOWNLOAD</button>
             </div>
           </div>
           <div style={S.code}>{rule}</div>
@@ -255,7 +256,7 @@ function KQLBuilder({ analysisResult }) {
             <div style={S.label}>Generated KQL</div>
             <div style={{ display: 'flex', gap: '6px' }}>
               <button style={S.btn(false)} onClick={copy}>{copied ? '✓ COPIED' : 'COPY KQL'}</button>
-              <button style={S.btn(false)} onClick={() => { const b = new Blob([query], {type:'text/plain'}); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href=u; a.download='detection.kql'; a.click(); }}>⬇ DOWNLOAD</button>
+              <button style={S.btn(false)} onClick={() => downloadFile(query, 'detection.kql', 'text/plain')}>⬇ DOWNLOAD</button>
             </div>
           </div>
           <div style={S.code}>{query}</div>
@@ -334,7 +335,7 @@ function QueryBuilder({ analysisResult }) {
             </div>
             <div style={{ display: 'flex', gap: '6px' }}>
               <button style={S.btn(false)} onClick={copy}>{copied ? '✓ COPIED' : 'COPY QUERY'}</button>
-              <button style={S.btn(false)} onClick={() => { const b = new Blob([query], {type:'text/plain'}); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href=u; a.download='detection.query.txt'; a.click(); }}>⬇ DOWNLOAD</button>
+              <button style={S.btn(false)} onClick={() => downloadFile(query, 'detection.query.txt', 'text/plain')}>⬇ DOWNLOAD</button>
             </div>
           </div>
           <div style={S.code}>{query}</div>

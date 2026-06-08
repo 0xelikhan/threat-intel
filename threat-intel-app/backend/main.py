@@ -22,7 +22,7 @@ from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from config import config, API_KEY_DEFINITIONS, FREE_APIS
 from agents.orchestrator import run_pipeline
@@ -75,6 +75,7 @@ async def _lifespan(app):
             ("LOLDrivers",     "intel.loldrivers",          "_catalog",        None),
             ("IP blocklists",  "intel.feeds_loader",        "malicious_ips",   None),
             ("Phishing domains","intel.feeds_loader",       "phishing_domains",None),
+            ("Feodo Tracker",  "intel.feeds_loader",        "refresh_feodo_now", None),
             ("Warning lists",  "intel.warninglist_filter",  "load_warninglists", None),
             ("YARA rules",     "intel.yara_scanner",        "_ruleset",        None),
         ]
@@ -90,26 +91,38 @@ async def _lifespan(app):
             _log.debug("cache namespace registration failed: %s", e)
         _log.info("all intel pre-warm tasks complete")
 
-    asyncio.create_task(_warm_all())
+    track_task(asyncio.create_task(_warm_all()))
 
     # Spec §8: kick off the unified TAXII + FreshRSS polling loop.
     try:
         from intel.feed_aggregator import run_polling_loop
-        asyncio.create_task(run_polling_loop(lambda: config.get_all() if hasattr(config, "get_all") else {
+        track_task(asyncio.create_task(run_polling_loop(lambda: config.get_all() if hasattr(config, "get_all") else {
             "FRESHRSS_URL":     config.get("FRESHRSS_URL", ""),
             "FRESHRSS_API_KEY": config.get("FRESHRSS_API_KEY", ""),
-        }))
+        })))
         _log.info("feed aggregator polling loop scheduled")
     except Exception as e:
         _log.warning("feed aggregator NOT started: %s", e)
+
+    # Feodo Tracker refresh every 6h — keeps the in-memory C2 list hot
+    # without ever blocking an enrichment fan-out on the upstream fetch.
+    async def _feodo_periodic():
+        from intel.feeds_loader import refresh_feodo_now
+        while True:
+            await asyncio.sleep(6 * 3600)
+            try:
+                await asyncio.to_thread(refresh_feodo_now)
+            except Exception as e:
+                _log.debug("feodo periodic refresh failed: %s", e)
+    track_task(asyncio.create_task(_feodo_periodic()))
 
     _log.info("startup: pre-warm scheduled in background, accepting requests now")
 
     # Self-diagnosis: once at startup, then every 15 min for /api/health.
     try:
         from intel.diagnose import run_startup_checks, background_health_loop
-        asyncio.create_task(run_startup_checks())
-        asyncio.create_task(background_health_loop(interval_s=900))
+        track_task(asyncio.create_task(run_startup_checks()))
+        track_task(asyncio.create_task(background_health_loop(interval_s=900)))
         _log.info("self-diagnosis scheduled")
     except Exception as e:
         _log.warning("self-diagnosis NOT started: %s", e)
@@ -130,6 +143,20 @@ app = FastAPI(title="Threat Intelligence Platform", version="3.0.0",
               docs_url="/api/docs", redoc_url=None,
               openapi_url="/api/openapi.json",
               lifespan=_lifespan)
+
+# Hold strong references to long-lived background tasks. asyncio only
+# keeps a weakref to scheduled tasks, so a fire-and-forget
+# `asyncio.create_task(...)` can be garbage-collected before the
+# coroutine completes. Any background work that outlives the request
+# that spawned it (sandbox polling, post-scan AI fan-out, periodic
+# refresh loops) should go through track_task() instead.
+_BG_TASKS: "set[asyncio.Task]" = set()
+
+
+def track_task(task: "asyncio.Task") -> "asyncio.Task":
+    _BG_TASKS.add(task)
+    task.add_done_callback(_BG_TASKS.discard)
+    return task
 
 # Structured logging + per-request UUID. Configured before anything else
 # touches logging so the first log line carries the right format.
@@ -190,7 +217,18 @@ def _clean_exc(e: BaseException, *, prefix: str = "") -> str:
         return _label(human or "unknown error")
     return _label(msg[:200])
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"],
+# CORS. The frontend is served same-origin from this app in production, so
+# CORS is only needed for the local dev server (CRA on :3000 → :8000). A
+# wildcard `*` combined with `allow_credentials=True` is rejected by every
+# modern browser (and is unsafe even when it's not), so the default origin
+# list is restricted. Operators can override via RECON_CORS=https://a,https://b.
+_cors_env = (os.environ.get("RECON_CORS") or "").strip()
+_cors_origins = (
+    [o.strip() for o in _cors_env.split(",") if o.strip()]
+    if _cors_env and _cors_env != "*"
+    else ["http://localhost:3000", "http://127.0.0.1:3000"]
+)
+app.add_middleware(CORSMiddleware, allow_origins=_cors_origins,
                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 # Compress JSON responses >= 1 KB. Browsers / proxies all negotiate gzip
@@ -272,6 +310,11 @@ app.add_middleware(AuditMiddleware)
 # lets the app boot locally without the secret, but every login attempt will
 # fail closed because auth_configured() also checks for username + hash.
 _SESSION_SECRET = os.environ.get("AUTH_SESSION_SECRET") or "dev-only-not-for-production"
+if (_SESSION_SECRET == "dev-only-not-for-production"
+        and (os.environ.get("RECON_ENV") or "").lower() == "production"):
+    _log.error(
+        "AUTH_SESSION_SECRET is unset in production — session cookies will be "
+        "signed with a public dev key. Set the env var before serving traffic.")
 app.add_middleware(
     SessionMiddleware,
     secret_key=_SESSION_SECRET,
@@ -286,13 +329,36 @@ app.add_middleware(
 # (FastAPI deprecated @app.on_event in favour of a single lifespan
 # context manager).
 
-_results: dict = {}
+from collections import OrderedDict
+
+
+class _BoundedDict(OrderedDict):
+    """Insertion-order dict that evicts the oldest entry once `_cap` is
+    exceeded. Re-assigning an existing key refreshes its position so
+    "recently touched" entries stick around. Used for the few module-level
+    caches (_results, _chats, _sandbox_jobs) that previously grew without
+    bound; a long-running container with steady analyst traffic could
+    have accumulated GBs of stale state over weeks otherwise."""
+
+    def __init__(self, cap: int):
+        super().__init__()
+        self._cap = cap
+
+    def __setitem__(self, key, value):
+        if key in self:
+            self.move_to_end(key)
+        super().__setitem__(key, value)
+        while len(self) > self._cap:
+            self.popitem(last=False)
+
+
+_results: dict = _BoundedDict(cap=500)
 # IOC pivot index: { ioc_value: [(run_id, timestamp_iso, threat_level), ...] }
 _ioc_index: dict[str, list[tuple]] = {}
 # Sandbox job tracker: { job_id: { state, submitted_at, sha256, ... } }
-_sandbox_jobs: dict[str, dict] = {}
+_sandbox_jobs: dict[str, dict] = _BoundedDict(cap=500)
 # Chat conversations per run: { run_id: [{role, content, timestamp}, ...] }
-_chats: dict[str, list] = {}
+_chats: dict[str, list] = _BoundedDict(cap=500)
 _taxii_cache: dict = {}
 _history: list = []
 
@@ -301,9 +367,13 @@ FRONTEND_BUILD = Path(__file__).parent.parent / "frontend" / "build"
 
 # ─── SCHEMAS ──────────────────────────────────────────────────────────────────────
 class AnalyzeRequest(BaseModel):
-    logText: str
+    # 1 MB pasteable log per request — keeps the LLM prompt bounded
+    # while still accepting full event-grid / Defender exports. The
+    # 50 MB outer cap is for the file-scan endpoints; pasted text is
+    # tighter.
+    logText: str = Field(..., min_length=1, max_length=1_000_000)
     inputType: str = "log"
-    label: Optional[str] = None
+    label: Optional[str] = Field(default=None, max_length=200)
     # Optional analyst-provided verdict and context. When present the
     # investigation prompt renders an "ANALYST VERDICT AND CONTEXT" block
     # at the top of the user message and instructs the AI to treat the
@@ -318,11 +388,11 @@ class SettingsRequest(BaseModel):
     keys: dict
 
 class DetectionRequest(BaseModel):
-    action: str
+    action: str = Field(..., max_length=64)
     iocs: Optional[dict] = None
     analysis: Optional[dict] = None
-    query: Optional[str] = None
-    mitreTechniques: Optional[list] = None
+    query: Optional[str] = Field(default=None, max_length=500)
+    mitreTechniques: Optional[list] = Field(default=None, max_length=100)
 
 class GTIScoreRequest(BaseModel):
     enrichments: dict
@@ -435,6 +505,12 @@ async def auth_login(req: LoginRequest, request: Request):
     if not auth_configured():
         raise HTTPException(503, "authentication is not configured on this deployment")
     if not verify_credentials(req.username, req.password):
+        try:
+            from intel.security import audit_log
+            audit_log("auth_failure", username=(req.username or "").strip()[:64],
+                      client=str(request.client.host) if request.client else None)
+        except Exception:
+            pass
         raise HTTPException(401, "invalid credentials")
     request.session["auth_user"] = req.username.strip()
     return {"ok": True, "user": req.username.strip()}
@@ -720,8 +796,7 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
         yield f"data: {json.dumps({'event': 'complete', 'runId': run_id, 'result': final, 'timestamp': _ts()})}\n\n"
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        _log.exception("analyze stream failed run_id=%s", run_id)
         yield f"data: {json.dumps({'event': 'error', 'runId': run_id, 'error': _clean_exc(e)})}\n\n"
     yield "data: [DONE]\n\n"
 
@@ -1903,7 +1978,7 @@ async def scan_file_v2(file: UploadFile = File(...)):
 
     # Kick off AI workflows in the background — caller doesn't wait for them
     if sha256:
-        asyncio.create_task(_finish_ai_in_background(sha256, data))
+        track_task(asyncio.create_task(_finish_ai_in_background(sha256, data)))
 
     return analysis
 
@@ -2079,6 +2154,28 @@ async def scan_url_endpoint(req: ScanUrlRequest):
         raise HTTPException(400, "url required")
     if not url.startswith(("http://", "https://")):
         raise HTTPException(400, "url must be http(s)")
+    # SSRF guard — analyst-supplied URL must not target internal
+    # infrastructure. Resolves the hostname and rejects anything that
+    # lands on RFC1918 / loopback / link-local / metadata service ranges.
+    # Redirects are then resolved manually below so a 302 to localhost
+    # can't bypass this check.
+    import ipaddress, socket
+    from urllib.parse import urlparse
+    def _is_internal_host(host: str) -> bool:
+        if not host:
+            return True
+        try:
+            for fam, _t, _p, _c, sa in socket.getaddrinfo(host, None):
+                ip = ipaddress.ip_address(sa[0])
+                if (ip.is_private or ip.is_loopback or ip.is_link_local
+                        or ip.is_multicast or ip.is_reserved
+                        or ip.is_unspecified):
+                    return True
+        except (socket.gaierror, ValueError):
+            return True
+        return False
+    if _is_internal_host(urlparse(url).hostname or ""):
+        raise HTTPException(400, "url targets a non-public address")
     import aiohttp
     # Most sites bot-detect on either UA or missing browser headers.
     # We send a full Chrome header set first; on 403/406/429 we retry
@@ -2121,23 +2218,38 @@ async def scan_url_endpoint(req: ScanUrlRequest):
 
     async def _try_fetch(headers):
         """Returns (data_bytes, status_code, exc_str). data is empty on
-        any non-200. Caller decides whether the result is a soft fail."""
+        any non-200. Caller decides whether the result is a soft fail.
+        Redirects are followed manually so the SSRF guard runs on each hop
+        (a remote 302 to http://127.0.0.1 would otherwise bypass the
+        check we ran on the original URL)."""
         try:
+            current = url
             async with aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=30),
                 headers=headers,
             ) as session:
-                async with session.get(url, allow_redirects=True) as r:
-                    if r.status != 200:
-                        return b"", r.status, ""
-                    chunks = []
-                    total = 0
-                    async for chunk in r.content.iter_chunked(64 * 1024):
-                        chunks.append(chunk)
-                        total += len(chunk)
-                        if total > 50 * 1024 * 1024:
-                            return b"", 413, "remote file exceeds 50 MB cap"
-                    return b"".join(chunks), 200, ""
+                for _hop in range(5):
+                    async with session.get(current, allow_redirects=False) as r:
+                        if r.status in (301, 302, 303, 307, 308):
+                            nxt = r.headers.get("Location") or ""
+                            if not nxt:
+                                return b"", r.status, ""
+                            from urllib.parse import urljoin
+                            current = urljoin(current, nxt)
+                            if _is_internal_host(urlparse(current).hostname or ""):
+                                return b"", 403, "redirect targets a non-public address"
+                            continue
+                        if r.status != 200:
+                            return b"", r.status, ""
+                        chunks = []
+                        total = 0
+                        async for chunk in r.content.iter_chunked(64 * 1024):
+                            chunks.append(chunk)
+                            total += len(chunk)
+                            if total > 50 * 1024 * 1024:
+                                return b"", 413, "remote file exceeds 50 MB cap"
+                        return b"".join(chunks), 200, ""
+                return b"", 0, "too many redirects"
         except Exception as e:
             return b"", 0, _clean_exc(e)
 
@@ -2264,7 +2376,7 @@ async def scan_url_endpoint(req: ScanUrlRequest):
         pass
     sha256 = (analysis.get("hashes") or {}).get("sha256")
     if sha256 and data:
-        asyncio.create_task(_finish_ai_in_background(sha256, data))
+        track_task(asyncio.create_task(_finish_ai_in_background(sha256, data)))
     return analysis
 
 
