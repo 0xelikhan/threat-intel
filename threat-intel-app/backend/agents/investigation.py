@@ -1114,8 +1114,12 @@ async def run_investigation(state: dict, on_event=None) -> dict:
         if on_event:
             try:
                 await on_event(entry)
-            except Exception:
-                pass
+            except Exception as _e:
+                # on_event is supplied by the orchestrator's SSE
+                # writer; a transient client-disconnect can raise here
+                # without the analysis itself being broken. Log at
+                # debug so it surfaces only when chasing this code path.
+                _log.debug("on_event failed: %s", _e)
 
     enrichments = state.get("enrichments", {})
     trace = state.get("agent_trace", [])
@@ -1871,8 +1875,8 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
     try:
         from intel.calibration import downshift_if_benign_only
         downshift_if_benign_only(result, label="RECON calibration")
-    except Exception:
-        pass
+    except Exception as _e:
+        _log.debug("calibration downshift failed: %s", _e)
 
     # ── Backfill / normalise threat_level_reasoning ──────────────────────────
     # Two problems to fix here:
@@ -2003,8 +2007,8 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                 return [_walk(v) for v in obj]
             return obj
         result = _walk(result)
-    except Exception:
-        pass
+    except Exception as _e:
+        _log.debug("em-dash strip walk failed: %s", _e)
 
     # Server-side prose validation. Enforces the prompt rules
     # mechanically so duplicated summary / analysis_assessment / key_

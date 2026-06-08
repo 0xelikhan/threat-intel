@@ -70,12 +70,19 @@ SECURITY_HEADERS = {
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         # Request body size cap. Matches the File Analyzer drop-zone copy.
+        # Use error_envelope() so the shape matches every other API
+        # error (frontend reads err.detail || err.error || ...; this
+        # used to ship only `detail` and broke the structured-error
+        # consumers).
         cl = request.headers.get("content-length")
         if cl and cl.isdigit() and int(cl) > _MAX_BODY:
-            return JSONResponse(
-                {"detail": f"request body too large (max {_MAX_BODY // (1024*1024)}MB)"},
-                status_code=413,
+            from intel.observability import error_envelope
+            body = error_envelope(
+                f"request body too large (max {_MAX_BODY // (1024*1024)}MB)",
+                code="payload_too_large",
+                status=413,
             )
+            return JSONResponse(body, status_code=413)
         response: Response = await call_next(request)
         for k, v in SECURITY_HEADERS.items():
             response.headers[k] = v
