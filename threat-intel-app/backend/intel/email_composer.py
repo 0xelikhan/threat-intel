@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 import re
 import smtplib
-from datetime import datetime
+from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from html import escape as html_escape
@@ -1036,7 +1036,7 @@ def _slugify(s: str) -> str:
 def save_draft(payload: Dict) -> Dict:
     """Stash a composed email + its compose options in memory. Returns the
     saved record. Lost on restart — never persisted."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     alert = _slugify(payload.get("alert_type") or "generic")
     draft_id = f"{now.strftime('%Y%m%dT%H%M%S')}_{alert}"
     record = {
@@ -1096,7 +1096,7 @@ def append_history(entry: Dict) -> None:
     """Append a send-attempt record to the in-memory list. Capped at
     _HISTORY_CAP, newest-first. Lost on restart by design."""
     record = {
-        "ts":      datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "ts":      datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "to":      entry.get("to", ""),
         "cc":      entry.get("cc", ""),
         "subject": entry.get("subject", ""),

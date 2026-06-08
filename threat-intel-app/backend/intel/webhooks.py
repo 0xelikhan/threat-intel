@@ -7,7 +7,7 @@ Configured via config.json keys:
   - WEBHOOK_GENERIC_URL  (raw POST of the analysis JSON)
 """
 import aiohttp
-from datetime import datetime
+from datetime import datetime, timezone
 
 LEVEL_EMOJI = {
     "CRITICAL": ":rotating_light:", "HIGH": ":warning:", "MEDIUM": ":yellow_circle:",
@@ -167,7 +167,7 @@ async def send_generic(url: str, result: dict) -> dict:
     """POST the full result JSON to a custom endpoint."""
     return await _post_json(url, {
         "platform": "RECON",
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "result": _short_text(result),
         "full":   result,
     })
