@@ -171,7 +171,8 @@ def test_probing_temperature_is_0_1():
     earlier 0.55 added creative variation but the ANCHORING RULE in the
     probing prompt already prevents template-y output. Higher temperature
     just risks speculation."""
-    src = open(investigation.__file__, encoding="utf-8").read()
+    with open(investigation.__file__, encoding="utf-8") as f:
+        src = f.read()
     # Look for the synth call for probing — the literal call site uses
     # _synth(probing_instr, ..., temperature=0.1)
     m = re.search(

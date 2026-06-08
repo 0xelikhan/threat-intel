@@ -329,7 +329,16 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         if current_user(request.session):
             return await call_next(request)
-        return JSONResponse({"detail": "auth required"}, status_code=401)
+        # Middleware can't raise HTTPException through the global handler —
+        # the exception fires before the handler chain. Build the envelope
+        # inline so 401s carry the same shape (error_code/request_id/ts)
+        # as every other API error response.
+        body = error_envelope(
+            detail="auth required",
+            code="auth_required",
+            status=401,
+        )
+        return JSONResponse(body, status_code=401)
 
 
 # Order matters — last add_middleware is OUTERMOST (runs first per request).
@@ -3173,11 +3182,11 @@ class EmailRemediateRequest(BaseModel):
     """Body for /api/email/remediate. Accepts whatever subset of parsed
     alert fields the email composer has populated — every field is
     optional because alert types vary widely."""
-    parsed:            dict = {}
+    parsed:            dict = Field(default_factory=dict)
     log_text:          str = ""
     alert_type:        str = ""
     threat_level:      str = ""
-    mitre_techniques:  list = []
+    mitre_techniques:  list = Field(default_factory=list)
     severity:          str = ""
 
 
