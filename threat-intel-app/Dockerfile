@@ -67,6 +67,29 @@ RUN mkdir -p backend/intel/misp_galaxy \
        done \
     && chown -R recon:recon backend/intel/misp_galaxy
 
+# Fetch offline IP/domain blocklists into vendor/ (the path
+# intel/feeds_loader.py expects). Without these in the container,
+# check_ip() / check_domain() / malicious_ips() / phishing_domains()
+# silently return empty in prod, so the "blocklist" badge in the UI
+# never fires and the confidence engine misses the 15-point blocklist
+# boost. ~10 MB total - cheap. Same per-list || fallback pattern so a
+# transient outage of any single source doesn't fail the whole deploy.
+RUN mkdir -p vendor/firehol vendor/ipsum \
+    && for list in firehol_level1 firehol_level2 firehol_abusers_1d \
+                   malware_filter dshield spamhaus_drop spamhaus_edrop; do \
+         curl -fSL --retry 3 --retry-delay 2 \
+           -o "vendor/firehol/${list}.netset" \
+           "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/${list}.netset" \
+         || (echo "WARNING: firehol ${list}.netset download failed" \
+             && rm -f "vendor/firehol/${list}.netset"); \
+       done \
+    && (curl -fSL --retry 3 --retry-delay 2 \
+          -o vendor/ipsum/ipsum.txt \
+          https://raw.githubusercontent.com/stamparm/ipsum/master/ipsum.txt \
+        || (echo "WARNING: ipsum.txt download failed" \
+            && rm -f vendor/ipsum/ipsum.txt)) \
+    && chown -R recon:recon vendor
+
 COPY --from=frontend-build --chown=recon:recon /frontend/build ./frontend/build
 
 RUN mkdir -p /app/data && chown recon:recon /app/data
