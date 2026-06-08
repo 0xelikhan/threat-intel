@@ -2,30 +2,27 @@
 Unified threat-intel feed aggregator — spec §8.
 
 Polls (1) public TAXII 2.1 servers and (2) a self-hosted FreshRSS instance via
-the GReader API, normalizes everything into a single feed_cache.json keyed by
-IOC value, and exposes it to the rest of RECON for fast pre-enrichment lookups.
+the GReader API and keeps everything in an IN-MEMORY cache keyed by IOC
+value.
 
 Cadence (started by main.py at startup):
   TAXII feeds      — every 6 hours
   FreshRSS articles — every 30 minutes
 
-Cache file: backend/data/feed_cache.json  (gitignored)
+The cache is NOT persisted to disk — analyst-derived correlations are
+out of scope for the no-persistence policy. On restart the cache is
+empty and refills on the next poll cycle.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import re
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
 from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
-
-CACHE_FILE = Path(__file__).resolve().parents[1] / "data" / "feed_cache.json"
-CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 # Spec §8 TAXII 2.x feed configuration
 TAXII_FEEDS = [
@@ -40,9 +37,8 @@ TAXII_FEEDS = [
 ]
 
 
-# ─── In-memory cache (loaded from disk on first access) ────────────────────────
+# ─── In-memory cache (never persisted) ────────────────────────────────
 _cache_state = {
-    "loaded": False,
     "iocs":   {},                    # ioc_value -> entry dict
     "articles": [],                  # last 100 FreshRSS articles
     "last_taxii_poll":   None,
@@ -51,32 +47,16 @@ _cache_state = {
 
 
 def _load_cache():
-    if _cache_state["loaded"]:
-        return
-    if CACHE_FILE.exists():
-        try:
-            with open(CACHE_FILE, encoding="utf-8") as f:
-                d = json.load(f)
-            _cache_state["iocs"]     = d.get("iocs", {})
-            _cache_state["articles"] = d.get("articles", [])
-            _cache_state["last_taxii_poll"]    = d.get("last_taxii_poll")
-            _cache_state["last_freshrss_poll"] = d.get("last_freshrss_poll")
-        except Exception as e:
-            logger.warning("feed_cache.json unreadable: %s", e)
-    _cache_state["loaded"] = True
+    # Kept as a no-op for the existing call sites — there is no disk
+    # cache to lazy-load any more; everything lives in _cache_state.
+    return
 
 
 def _save_cache():
-    try:
-        with open(CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump({
-                "iocs":     _cache_state["iocs"],
-                "articles": _cache_state["articles"][-100:],
-                "last_taxii_poll":    _cache_state["last_taxii_poll"],
-                "last_freshrss_poll": _cache_state["last_freshrss_poll"],
-            }, f, indent=2)
-    except Exception as e:
-        logger.error("failed to write feed_cache.json: %s", e)
+    # Persistence is intentionally disabled — see module docstring.
+    # Trim articles to the last 100 here since the writer used to do it
+    # and the rest of the code assumes the bound.
+    _cache_state["articles"] = _cache_state["articles"][-100:]
 
 
 # ─── Public lookup APIs ────────────────────────────────────────────────────────

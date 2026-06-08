@@ -123,34 +123,33 @@ async def hybrid_analysis_state(job_id: str, api_key: str) -> dict:
         return {"state": "ERROR", "error": str(e)}
 
 
+# In-memory sandbox status store. Bound to 500 SHA-256 keys with FIFO
+# eviction — file-scan content is not persisted to disk (see platform
+# no-persistence policy). The UI's poll endpoint still works within
+# the lifetime of the same container.
+_SANDBOX_CAP = 500
+_sandbox_results: "dict[str, dict]" = {}
+
+
+def _sandbox_set(sha256: str, state: dict) -> None:
+    _sandbox_results[sha256] = state
+    if len(_sandbox_results) > _SANDBOX_CAP:
+        for k in list(_sandbox_results.keys())[:-_SANDBOX_CAP]:
+            _sandbox_results.pop(k, None)
+
+
 async def auto_submit_and_poll(file_bytes: bytes, filename: str, sha256: str,
                                 api_key: str, poll_interval_s: int = 30,
                                 max_wait_s: int = 600) -> dict:
     """Submit a sample to Hybrid Analysis and poll until SUCCESS / ERROR /
-    timeout. Persists the final summary to backend/data/sandbox_results/
-    {sha256}.json so the UI can fetch it later. Returns the final summary
-    dict or an error dict.
-
-    Designed to be called as a background task (asyncio.create_task) from
-    the file analyzer when sandbox_submission_eligible fires — the user
-    doesn't wait, the result lands on disk when ready and the UI polls
-    for it via GET /api/sandbox/result/{sha256}."""
+    timeout. The final summary is stored IN MEMORY for the lifetime of
+    this container only — the UI polls for it via
+    GET /api/sandbox/result/{sha256}. Lost on restart by design."""
     import asyncio
-    import json
-    import logging
     import time
-    from pathlib import Path
-
-    _log = logging.getLogger("recon.sandbox.auto")
-    out_dir = Path(__file__).resolve().parents[1] / "data" / "sandbox_results"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    status_path  = out_dir / f"{sha256}.json"
 
     def _persist(state: dict) -> None:
-        try:
-            status_path.write_text(json.dumps(state, default=str, indent=2))
-        except Exception as e:
-            _log.warning("Failed to persist sandbox status for %s: %s", sha256, e)
+        _sandbox_set(sha256, state)
 
     submit_result = await submit_hybrid_analysis(file_bytes, filename, api_key)
     if not submit_result.get("ok"):
@@ -196,18 +195,9 @@ async def auto_submit_and_poll(file_bytes: bytes, filename: str, sha256: str,
 
 
 def load_sandbox_result(sha256: str) -> dict | None:
-    """Read the persisted sandbox status (or None if no submission ever
-    happened for this hash). Used by the UI polling endpoint."""
-    import json
-    from pathlib import Path
-    path = (Path(__file__).resolve().parents[1] / "data" /
-            "sandbox_results" / f"{sha256}.json")
-    if not path.exists():
-        return None
-    try:
-        return json.loads(path.read_text())
-    except Exception:
-        return None
+    """Return the in-memory sandbox status for this hash, or None when no
+    submission has happened in this container's lifetime."""
+    return _sandbox_results.get(sha256)
 
 
 async def hybrid_analysis_summary(job_id: str, api_key: str) -> dict | None:

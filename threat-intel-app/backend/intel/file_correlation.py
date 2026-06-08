@@ -11,14 +11,28 @@ from __future__ import annotations
 
 import asyncio
 import aiohttp
+from collections import OrderedDict
 from typing import Dict, List, Optional
 
-from pathlib import Path
 
 _TIMEOUT = aiohttp.ClientTimeout(total=15)
-_SCAN_HISTORY_DIR = Path(__file__).resolve().parents[1] / "data" / "scanned_files"
-_SCAN_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
-_SCAN_INDEX = _SCAN_HISTORY_DIR / "index.json"
+
+# Per-process scan store. Replaces the previous on-disk
+# backend/data/scanned_files/*.json layout — analyst-uploaded file
+# analyses are not persisted (see platform no-persistence policy). The
+# UI's progressive-scan polling still works against this dict because
+# the scan finishes within the lifetime of the same container; long-
+# term cross-restart history is intentionally not available.
+_SCAN_CAP = 500
+_scan_store: "OrderedDict[str, Dict]" = OrderedDict()
+
+
+def _scan_set(sha256: str, record: Dict) -> None:
+    if sha256 in _scan_store:
+        _scan_store.move_to_end(sha256)
+    _scan_store[sha256] = record
+    while len(_scan_store) > _SCAN_CAP:
+        _scan_store.popitem(last=False)
 
 
 # ─── public entry point ────────────────────────────────────────────────────────
@@ -236,59 +250,22 @@ async def _feed_cache_for_iocs(iocs: Dict) -> Optional[Dict]:
 
 
 def append_scan_history(analysis: Dict) -> None:
-    """Persist a scan record so future analyses can correlate against it.
-    Stored at backend/data/scanned_files/index.json (gitignored)."""
-    import json
+    """Stash a scan record in the per-process store so progressive AI
+    polling can find it later in the same container's lifetime. No
+    disk write — analyst-uploaded file content stays in memory only."""
     hashes = analysis.get("hashes") or {}
-    if not hashes.get("sha256"):
+    sha = hashes.get("sha256")
+    if not sha:
         return
-    entry = {
-        "sha256":    hashes.get("sha256"),
-        "md5":       hashes.get("md5"),
-        "sha1":      hashes.get("sha1"),
-        "tlsh":      hashes.get("tlsh"),
-        "ssdeep":    hashes.get("ssdeep"),
-        "imphash":   ((analysis.get("format_specific") or {}).get("pe") or {}).get("imphash"),
-        "filename":  analysis.get("filename"),
-        "size":      analysis.get("size"),
-        "analyzed_at": analysis.get("analyzed_at"),
-        "verdict":   analysis.get("verdict"),
-        "confidence": analysis.get("confidence"),
-        "yara_match_count": len(analysis.get("yara_matches") or []),
-    }
-    try:
-        # Full per-investigation isolation: write ONLY the per-file record. The
-        # scanner's progressive AI polls /api/scan/by-hash/{sha256}, which reads
-        # this single file, so it's required for the CURRENT scan's lifecycle. We
-        # no longer maintain a cross-scan index, so scans aren't accumulated into
-        # a history that a later investigation could see or correlate against.
-        with open(_SCAN_HISTORY_DIR / f"{entry['sha256']}.json", "w", encoding="utf-8") as f:
-            json.dump(analysis, f, indent=2, default=str)
-    except Exception:
-        pass
+    _scan_set(sha, analysis)
 
 
 def get_scan_history() -> List[Dict]:
-    import json
-    if not _SCAN_INDEX.exists():
-        return []
-    try:
-        with open(_SCAN_INDEX, encoding="utf-8") as f:
-            return json.load(f) or []
-    except Exception:
-        return []
+    return []
 
 
 def load_scan(sha256: str) -> Optional[Dict]:
-    import json
-    p = _SCAN_HISTORY_DIR / f"{sha256}.json"
-    if not p.exists():
-        return None
-    try:
-        with open(p, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return None
+    return _scan_store.get(sha256)
 
 
 # ─── domain pivots (WHOIS age + crt.sh) ───────────────────────────────────────

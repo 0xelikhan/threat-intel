@@ -2,19 +2,11 @@
 AI calibration tracking — record every analyst override of the AI verdict.
 
 Each override is a labeled training signal: the AI said X, the human
-said Y. Storing them in a single append-only log lets us:
-
-  * Spot prompt regressions before users complain (override rate
-    suddenly spikes after a prompt tweak → roll back).
-  * Build evals — a corpus of (input, AI verdict, analyst verdict)
-    triples is exactly what offline eval harnesses chew on.
-  * Surface trends in the UI (which threat-level brackets get overridden
-    most, which alert types the AI is consistently miscalling).
-
-Storage: backend/data/calibration_overrides.jsonl — one JSON object per
-line, append-only. JSONL is durable under crashes, trivial to ingest
-into any pandas / DuckDB / BigQuery pipeline later, and doesn't need a
-DB dependency.
+said Y. We hold a per-process in-memory ring buffer so the running
+operator can spot drift / regressions, but we DO NOT persist these
+records (analyst-derived input hashes + reasons are out of scope for
+the no-persistence policy that governs this platform). The buffer is
+lost on restart by design.
 
 Each record shape:
 
@@ -47,15 +39,17 @@ cell.
 from __future__ import annotations
 
 import hashlib
-import json
 import subprocess
 import time
+from collections import deque
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Deque, Dict, List, Optional
 
 
-_LOG_PATH = Path(__file__).resolve().parents[1] / "data" / "calibration_overrides.jsonl"
-_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+# In-memory ring buffer — last 5000 override records. Cleared on restart
+# by design (analyst-derived data is not persisted; see the platform
+# no-persistence policy).
+_RECORDS: Deque[Dict[str, Any]] = deque(maxlen=5000)
 
 
 _prompt_version_cached = None  # type: Optional[str]
@@ -121,33 +115,12 @@ def record_override(
             (analyst_threat_level or "").upper()
         ),
     }
-    try:
-        with open(_LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record) + "\n")
-    except Exception:
-        pass
+    _RECORDS.append(record)
     return record
 
 
 def iter_records() -> List[Dict[str, Any]]:
-    """Read every override record from the JSONL log. Public because
-    scripts/eval_prompts.py and scripts/prompt_hygiene.py both consume
-    the corpus. JSONL means we can stream this for big logs, but for
-    the analyst tooling we just slurp — even 10 000 overrides parses
-    in milliseconds."""
-    if not _LOG_PATH.exists():
-        return []
-    out: List[Dict[str, Any]] = []
-    try:
-        with open(_LOG_PATH, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    out.append(json.loads(line))
-                except Exception:
-                    continue
-    except Exception:
-        pass
-    return out
+    """Return a snapshot of every override record held in memory. The
+    eval / prompt-hygiene scripts that historically read the JSONL log
+    now see whatever the live process has accumulated since startup."""
+    return list(_RECORDS)

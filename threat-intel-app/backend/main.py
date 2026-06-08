@@ -45,6 +45,43 @@ async def _lifespan(app):
     # ─── STARTUP ──────────────────────────────────────────────────────
     import asyncio
 
+    # No-persistence policy: any analyst-derived state from a previous
+    # container's lifetime must not survive a restart. Wipe known
+    # legacy paths under backend/data/ on startup. config.json (operator
+    # API keys) is preserved — that's platform config, not analyst data.
+    try:
+        from pathlib import Path
+        import shutil
+        _data_dir = Path(__file__).resolve().parent / "data"
+        _doomed_files = (
+            "audit.log",
+            "calibration_overrides.jsonl",
+            "email_history.json",
+            "feed_cache.json",
+            "scanner_feedback.json",
+            "scanned_files.json",
+        )
+        _doomed_dirs = (
+            "scanned_files",
+            "email_drafts",
+            "cases",
+            "sandbox_results",
+        )
+        for name in _doomed_files:
+            try:
+                (_data_dir / name).unlink(missing_ok=True)
+            except Exception as _e:
+                _log.debug("cleanup skip %s: %s", name, _e)
+        for name in _doomed_dirs:
+            p = _data_dir / name
+            if p.exists():
+                try:
+                    shutil.rmtree(p, ignore_errors=True)
+                except Exception as _e:
+                    _log.debug("cleanup skip %s/: %s", name, _e)
+    except Exception as _e:
+        _log.debug("startup cleanup failed: %s", _e)
+
     async def _warm_one(name: str, mod_path: str, attr: str, arg=None):
         import importlib, time
         t0 = time.perf_counter()

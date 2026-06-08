@@ -132,16 +132,17 @@ def _redact_audit_value(field: str, value):
 
 
 def audit_log(event: str, **fields) -> None:
-    """Append a structured JSON line to backend/data/audit.log. String values
-    on sensitive field names (error/body/log/raw/input/message) are
-    redactor-rewritten before write so secrets in error traces don't leak."""
+    """Emit a structured audit record. Historically this wrote to
+    backend/data/audit.log; the platform's no-persistence policy means
+    we now route it to the structured logger instead so it lands in
+    container stdout (transient) rather than on a mounted volume
+    (durable). Sensitive fields are still redactor-rewritten so error
+    bodies / log content can't leak credentials into the log stream."""
     safe = {k: _redact_audit_value(k, v) for k, v in fields.items()}
-    rec = {"ts": datetime.now(timezone.utc).isoformat(), "event": event, **safe}
     try:
-        with open(_AUDIT_LOG, "a", encoding="utf-8") as f:
-            f.write(json.dumps(rec, default=str) + "\n")
-    except Exception as e:
-        logger.warning("audit_log write failed: %s", e)
+        logger.info("audit %s %s", event, json.dumps(safe, default=str)[:1500])
+    except Exception:
+        pass
 
 
 class AuditMiddleware(BaseHTTPMiddleware):
