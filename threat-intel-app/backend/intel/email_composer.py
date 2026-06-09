@@ -706,14 +706,41 @@ def _extract_section_value(lines, section, target):
     return ""
 
 
+# Concatenated modifiedProperties blocks (PIM / Entra export shape):
+#   modifiedProperties :displayName : NameOfPropertyoldValue : ""newValue : "X"modifiedProperties :displayName : ...
+# Matches one (displayName -> newValue/oldValue) triple per occurrence.
+_MP_INLINE_RE = re.compile(
+    r"modifiedProperties\s*:\s*"
+    r"displayName\s*:\s*(?P<display>[A-Za-z][A-Za-z0-9._]*?)\s*"
+    r"oldValue\s*:\s*\"(?P<oldv>[^\"]*)\"\s*"
+    r"newValue\s*:\s*\"(?P<newv>[^\"]*)\"",
+    re.IGNORECASE,
+)
+
+
 def _walk_modified_properties(lines, target_display, key="newValue"):
-    """Shared walker for modifiedProperties blocks. Returns trimmed newValue."""
+    """Shared walker for modifiedProperties blocks. Returns trimmed newValue.
+
+    Accepts two shapes:
+      multi-line (PowerShell pretty-print):
+          modifiedProperties :
+          displayName : Role.DisplayName
+          oldValue    : ""
+          newValue    : "Privileged Role Administrator"
+
+      concatenated (Entra ID PIM export — every field on one line):
+          modifiedProperties :displayName : Role.DisplayNameoldValue : ""newValue : "Privileged Role Administrator"
+    """
+    target_l = (target_display or "").lower()
+    key_l = (key or "").lower()
+
+    # Pass 1 — multi-line.
     in_block = False
     cur_display = cur_val = ""
     for raw in lines:
         line = raw.strip()
         if line.lower() in ("modifiedproperties :", "modifiedproperties:"):
-            if (in_block and cur_display.lower() == target_display.lower() and cur_val):
+            if (in_block and cur_display.lower() == target_l and cur_val):
                 return _trim_wrapped_quotes(cur_val)
             in_block, cur_display, cur_val = True, "", ""
             continue
@@ -721,7 +748,7 @@ def _walk_modified_properties(lines, target_display, key="newValue"):
         if line.lower() in ("targetresources :", "targetresources:",
                             "additionaldetails :", "additionaldetails:",
                             "initiatedby :", "initiatedby:"):
-            if cur_display.lower() == target_display.lower() and cur_val:
+            if cur_display.lower() == target_l and cur_val:
                 return _trim_wrapped_quotes(cur_val)
             in_block = False
             continue
@@ -729,9 +756,17 @@ def _walk_modified_properties(lines, target_display, key="newValue"):
         k, _, v = line.partition(":")
         k, v = k.strip(), v.strip()
         if k.lower() == "displayname": cur_display = v
-        elif k.lower() == key: cur_val = v
-    if in_block and cur_display.lower() == target_display.lower() and cur_val:
+        elif k.lower() == key_l: cur_val = v
+    if in_block and cur_display.lower() == target_l and cur_val:
         return _trim_wrapped_quotes(cur_val)
+
+    # Pass 2 — concatenated.
+    for raw in lines:
+        for m in _MP_INLINE_RE.finditer(raw):
+            if (m.group("display") or "").strip().lower() == target_l:
+                got = m.group("newv") if key_l == "newvalue" else m.group("oldv")
+                if got:
+                    return _trim_wrapped_quotes(got)
     return ""
 
 
@@ -739,13 +774,34 @@ def _extract_modified_property_new_value(lines, name):
     return _walk_modified_properties(lines, name, "newValue")
 
 
+# Concatenated targetResources block (one resource per occurrence):
+#   targetResources :id : <guid>displayName : <name>type : <Type>userPrincipalName : <upn>groupType : <grp>
+# Captures every field as a named group; the walker decides which is requested.
+_TR_INLINE_RE = re.compile(
+    r"targetResources\s*:\s*"
+    r"id\s*:\s*(?P<id>\S+?)\s*"
+    r"displayName\s*:\s*(?P<displayName>.*?)\s*"
+    r"type\s*:\s*(?P<type>[A-Za-z][A-Za-z0-9]*)\s*"
+    r"userPrincipalName\s*:\s*(?P<userPrincipalName>\S+?)\s*"
+    r"groupType\s*:\s*(?P<groupType>[^\r\n]*?)"
+    r"(?=(?:targetResources\s*:|modifiedProperties\s*:|additionalDetails\s*:|initiatedBy\s*:|\s*$))",
+    re.IGNORECASE,
+)
+
+
 def _walk_target_resources(lines, want_type, want_field):
+    """Find the first targetResources block whose `type` matches `want_type`
+    and return its `want_field` value. Accepts both multi-line and the
+    concatenated single-line shape that Entra ID PIM exports default to."""
+    target_t = (want_type or "").lower()
+
+    # Pass 1 — multi-line (original walker).
     in_block = False
     cur_type = cur_val = ""
     for raw in lines:
         line = raw.strip()
         if line.lower() in ("targetresources :", "targetresources:"):
-            if (in_block and cur_type.lower() == want_type.lower() and cur_val
+            if (in_block and cur_type.lower() == target_t and cur_val
                 and cur_val != "-"):
                 return _trim_wrapped_quotes(cur_val)
             in_block, cur_type, cur_val = True, "", ""
@@ -754,7 +810,7 @@ def _walk_target_resources(lines, want_type, want_field):
         if line.lower() in ("modifiedproperties :", "modifiedproperties:",
                             "additionaldetails :", "additionaldetails:",
                             "initiatedby :", "initiatedby:"):
-            if (cur_type.lower() == want_type.lower() and cur_val and cur_val != "-"):
+            if (cur_type.lower() == target_t and cur_val and cur_val != "-"):
                 return _trim_wrapped_quotes(cur_val)
             in_block = False
             continue
@@ -762,9 +818,22 @@ def _walk_target_resources(lines, want_type, want_field):
         k, _, v = line.partition(":")
         k, v = k.strip(), v.strip()
         if k.lower() == "type": cur_type = v
-        elif k.lower() == want_field: cur_val = v
-    if in_block and cur_type.lower() == want_type.lower() and cur_val and cur_val != "-":
+        elif k.lower() == want_field.lower(): cur_val = v
+    if in_block and cur_type.lower() == target_t and cur_val and cur_val != "-":
         return _trim_wrapped_quotes(cur_val)
+
+    # Pass 2 — concatenated.
+    field_l = (want_field or "").lower()
+    field_map = {k.lower(): k for k in
+                 ("id", "displayName", "type", "userPrincipalName", "groupType")}
+    field_key = field_map.get(field_l)
+    if field_key:
+        for raw in lines:
+            for m in _TR_INLINE_RE.finditer(raw):
+                if (m.group("type") or "").strip().lower() == target_t:
+                    val = (m.group(field_key) or "").strip()
+                    if val and val != "-":
+                        return _trim_wrapped_quotes(val)
     return ""
 
 
