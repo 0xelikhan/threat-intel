@@ -784,7 +784,37 @@ def _extract_target_resource_upn(lines):
     return _walk_target_resources(lines, "User", "userPrincipalName")
 
 
+_AD_INLINE_RE = re.compile(
+    r"key\s*:\s*(?P<key>[A-Za-z][A-Za-z0-9_]*?)\s*value\s*:\s*(?P<val>[^\r\n]*?)"
+    r"(?=(?:\s+key\s*:\s*[A-Za-z]|\s*$|\s*additionalDetails\s*:))",
+    re.IGNORECASE,
+)
+
+
 def _extract_additional_detail_value(lines, target_key):
+    """Pull a value from `additionalDetails` blocks.
+
+    Two real-world shapes are accepted:
+
+      multi-line (PowerShell pretty-print):
+          additionalDetails :
+          key : ipaddr
+          value : 89.104.236.4
+
+      concatenated (Entra ID PIM export / 'select-object -expandproperty'
+      output / browser-copy-from-table — all the bits land on one
+      physical line with no separator):
+          additionalDetails :key : ipaddrvalue : 89.104.236.4
+
+    The concatenated form was previously missed entirely because the
+    block-detector looked for a line that equalled 'additionaldetails :'
+    verbatim — concatenated PIM logs (the most common Entra alert paste)
+    have every field on the same line and slipped right past.
+    """
+    target_l = (target_key or "").lower()
+
+    # Pass 1 — multi-line shape (original behaviour, kept for back-compat
+    # with logs that already came in nicely formatted).
     in_block = False
     cur_key = ""
     for raw in lines:
@@ -802,8 +832,15 @@ def _extract_additional_detail_value(lines, target_key):
         k, _, v = line.partition(":")
         k, v = k.strip(), v.strip()
         if k.lower() == "key": cur_key = v
-        elif k.lower() == "value" and cur_key.lower() == target_key.lower():
+        elif k.lower() == "value" and cur_key.lower() == target_l:
             return v
+
+    # Pass 2 — concatenated shape. Walk every line and pull out each
+    # (key, value) pair inline. First exact-key match wins.
+    for raw in lines:
+        for m in _AD_INLINE_RE.finditer(raw):
+            if (m.group("key") or "").strip().lower() == target_l:
+                return (m.group("val") or "").strip()
     return ""
 
 
