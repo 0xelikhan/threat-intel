@@ -1590,7 +1590,7 @@ function ThreatScore({ result }) {
 // said something useful about this IOC. When sourceUrls.js knows a deep
 // link for (source, ioc, iocType), the source label becomes a clickable
 // anchor that opens the source's web UI prefilled with the indicator.
-function SourceVerdict({ source, label, color = '#0fbcff', ioc, iocType }) {
+function SourceVerdict({ source, label, why, color = '#0fbcff', ioc, iocType }) {
   const href = sourceUrl(source, ioc, iocType);
   const labelEl = href ? (
     <Box
@@ -1634,25 +1634,41 @@ function SourceVerdict({ source, label, color = '#0fbcff', ioc, iocType }) {
   );
   return (
     <Box sx={{
-      display: 'grid', gridTemplateColumns: '100px 1fr',
-      gap: 1, py: 0.5, alignItems: 'baseline',
+      display: 'grid', gridTemplateColumns: '110px 1fr',
+      gap: 1, py: 0.625, alignItems: 'baseline',
       borderRadius: '3px',
       px: 0.5, mx: -0.5,
       transition: 'background-color 0.12s ease',
       '&:hover': { backgroundColor: muiAlpha('#ffffff', 0.025) },
     }}>
       {labelEl}
-      <Typography sx={{
-        fontSize: 11, color, lineHeight: 1.5,
-        fontFamily: '"IBM Plex Mono", monospace',
-        // break-word respects word boundaries for natural prose (OTX pulse
-        // names, AI summaries) but still breaks long unbroken tokens
-        // (hashes, URLs) when they don't fit the column.
-        wordBreak: 'break-word',
-        overflowWrap: 'anywhere',
-      }}>
-        {label}
-      </Typography>
+      <Box>
+        <Typography sx={{
+          fontSize: 11, color, lineHeight: 1.5,
+          fontFamily: '"IBM Plex Mono", monospace',
+          // break-word respects word boundaries for natural prose (OTX pulse
+          // names, AI summaries) but still breaks long unbroken tokens
+          // (hashes, URLs) when they don't fit the column.
+          wordBreak: 'break-word',
+          overflowWrap: 'anywhere',
+        }}>
+          {label}
+        </Typography>
+        {why && (
+          <Typography sx={{
+            fontSize: 10.5,
+            color: 'text.tertiary',
+            lineHeight: 1.5,
+            mt: 0.25,
+            // Italic to visually separate "interpretation" from the
+            // hard-data label above.
+            fontStyle: 'italic',
+            wordBreak: 'break-word',
+          }}>
+            {why}
+          </Typography>
+        )}
+      </Box>
     </Box>
   );
 }
@@ -1691,10 +1707,16 @@ function _ocSources(result, ioc, type) {
     if (total) {
       const c = mal >= 5 ? red : mal >= 1 ? orange : susp >= 3 ? yellow : green;
       const extra = v.name ? ` · ${v.name}` : v.popular_family ? ` · ${v.popular_family}` : '';
-      out.push({ source: 'VirusTotal', label: `${flagged}/${total} flagged${extra}`, color: c });
+      const why =
+          mal >= 5 ? 'High-confidence malicious: 5+ AV engines independently flagged this indicator.'
+        : mal >= 1 ? 'Partial AV detection — at least one engine flagged this. Cross-check before acting.'
+        : susp >= 3 ? 'No malicious detection, but several engines flagged suspicious behaviour.'
+        :            'No AV engine flagged this indicator (clean by consensus).';
+      out.push({ source: 'VirusTotal', label: `${flagged}/${total} flagged${extra}`, color: c, why });
     } else if (v.reputation != null) {
       out.push({ source: 'VirusTotal', label: `reputation ${v.reputation}`,
-                 color: v.reputation < 0 ? orange : tert });
+                 color: v.reputation < 0 ? orange : tert,
+                 why: 'Community reputation score (-100 = malicious, +100 = trusted).' });
     }
   }
 
@@ -1705,7 +1727,12 @@ function _ocSources(result, ioc, type) {
     if (score != null) {
       const c = score >= 75 ? red : score >= 25 ? orange : score > 0 ? yellow : green;
       const reports = a.totalReports ? ` · ${a.totalReports} reports` : '';
-      out.push({ source: 'AbuseIPDB', label: `${score}% confidence${reports}`, color: c });
+      const why =
+          score >= 75 ? 'Confirmed abuser. AbuseIPDB ≥75% means multiple admins have reported this IP for attacks; safe to block.'
+        : score >= 25 ? 'Recent abuse reports but not yet conclusive — verify ASN / recent activity before blocking.'
+        : score > 0  ? 'A small number of historical reports — likely noise, but cross-check with other sources.'
+        :              'No abuse reports on file — IP is not currently flagged by AbuseIPDB.';
+      out.push({ source: 'AbuseIPDB', label: `${score}% confidence${reports}`, color: c, why });
     }
   }
 
@@ -1715,7 +1742,8 @@ function _ocSources(result, ioc, type) {
   if (d.misp_feeds && d.misp_feeds.matched_feeds?.length > 0) {
     const feeds = d.misp_feeds.matched_feeds.slice(0, 3).join(', ');
     out.push({ source: 'MISP Feeds',
-               label: `matched in ${feeds}`, color: red });
+               label: `matched in ${feeds}`, color: red,
+               why: 'Indicator is in published MISP community events. High-signal corroboration of malicious intent.' });
   }
 
   // OTX — pulse count + a top pulse name when present. Even when the
@@ -1738,13 +1766,18 @@ function _ocSources(result, ioc, type) {
         return (sp > max * 0.6 ? cut.slice(0, sp) : cut) + '…';
       };
       const topStr = top ? _trunc(String(top), 140) : '';
+      const why =
+          pulses >= 20 ? `Listed in ${pulses} AlienVault OTX community threat-intel pulses — broadly recognised as a known-bad indicator.`
+        : pulses >= 5  ? `Listed in ${pulses} OTX pulses — multiple researchers have correlated this with malicious activity.`
+        :                `Listed in ${pulses} OTX pulse${pulses === 1 ? '' : 's'} — emerging signal; review the pulse context.`;
       out.push({ source: 'OTX',
                  label: `${pulses} pulse${pulses === 1 ? '' : 's'}${topStr ? ` · ${topStr}` : ''}`,
-                 color: pulses >= 5 ? red : pulses >= 1 ? orange : tert });
+                 color: pulses >= 5 ? red : pulses >= 1 ? orange : tert, why });
     } else {
       out.push({ source: 'OTX',
                  label: 'no community pulses for this indicator',
-                 color: tert });
+                 color: tert,
+                 why: 'AlienVault OTX queried but no researcher has tagged this indicator in a public pulse.' });
     }
   }
 
@@ -1757,7 +1790,12 @@ function _ocSources(result, ioc, type) {
               : /benign|known/i.test(cls) ? green
               : /suspicious/i.test(cls) ? orange : tert;
       const extra = g.name ? ` · ${g.name}` : '';
-      out.push({ source: 'GreyNoise', label: `${cls}${extra}`, color: c });
+      const why =
+          /malicious/i.test(cls)      ? 'GreyNoise observed this IP actively scanning the internet for malicious purposes.'
+        : /benign|known/i.test(cls)   ? 'GreyNoise identifies this as known-good infrastructure (search crawler, CDN, etc.) — safe to ignore.'
+        : /suspicious/i.test(cls)     ? 'GreyNoise saw unusual scanning patterns — not confirmed malicious but worth attention.'
+        :                                'GreyNoise observed background internet scanner traffic from this IP.';
+      out.push({ source: 'GreyNoise', label: `${cls}${extra}`, color: c, why });
     }
   }
 
@@ -1770,7 +1808,12 @@ function _ocSources(result, ioc, type) {
               : /suspicious/i.test(cls) ? orange
               : /benign/i.test(cls) ? green : tert;
       const tags = (m.tag || []).slice(0, 3).join(', ');
-      out.push({ source: 'Maltiverse', label: `${cls}${tags ? ` · ${tags}` : ''}`, color: c });
+      const why =
+          /malicious/i.test(cls)  ? 'Maltiverse confirms this indicator is malicious; tags surface the specific category (e.g. tor, botnet, banker).'
+        : /suspicious/i.test(cls) ? 'Maltiverse flagged this indicator as suspicious — partial signal; review tags for context.'
+        : /benign/i.test(cls)     ? 'Maltiverse confirms this indicator is benign or on a known-good list.'
+        :                            'Maltiverse has classification data for this indicator; tags surface the category.';
+      out.push({ source: 'Maltiverse', label: `${cls}${tags ? ` · ${tags}` : ''}`, color: c, why });
     }
   }
 
@@ -1780,7 +1823,8 @@ function _ocSources(result, ioc, type) {
     const malware = t.malware || t.malware_alias || '';
     if (malware) {
       const seen = t.first_seen ? ` · first seen ${String(t.first_seen).slice(0,10)}` : '';
-      out.push({ source: 'ThreatFox', label: `${malware}${seen}`, color: red });
+      out.push({ source: 'ThreatFox', label: `${malware}${seen}`, color: red,
+                 why: 'abuse.ch ThreatFox tracks active malware C2 / payload IOCs in near-real-time. A hit means this indicator is currently in use by the named family.' });
     }
   }
 
@@ -1788,7 +1832,8 @@ function _ocSources(result, ioc, type) {
   if (d.malwarebazaar && !d.malwarebazaar.error) {
     const mb = d.malwarebazaar;
     const family = mb.malwareName || mb.signature || mb.malware_family || '';
-    if (family) out.push({ source: 'MalwareBazaar', label: family, color: red });
+    if (family) out.push({ source: 'MalwareBazaar', label: family, color: red,
+                           why: 'abuse.ch curates submitted malware samples with confirmed family attribution. A hit means analysts have studied and labelled this sample.' });
   }
 
   // URLScan — verdict + first scan.
@@ -1799,7 +1844,12 @@ function _ocSources(result, ioc, type) {
       const c = /malicious/i.test(verdict) ? red
               : /suspicious/i.test(verdict) ? orange
               : /benign|safe/i.test(verdict) ? green : tert;
-      out.push({ source: 'URLScan.io', label: verdict, color: c });
+      const why =
+          /malicious/i.test(verdict)  ? 'URLScan sandboxed this URL and flagged it malicious based on rendered content + network behaviour.'
+        : /suspicious/i.test(verdict) ? 'URLScan saw suspicious indicators when it rendered this URL — review the screenshot.'
+        : /benign|safe/i.test(verdict)? 'URLScan rendered this URL and found nothing suspicious.'
+        :                                'URLScan has a prior public scan for this URL.';
+      out.push({ source: 'URLScan.io', label: verdict, color: c, why });
     }
   }
 
@@ -1811,13 +1861,17 @@ function _ocSources(result, ioc, type) {
       const c = /critical|high/i.test(risk) ? red
               : /medium|moderate/i.test(risk) ? orange
               : /low/i.test(risk) ? yellow : tert;
-      out.push({ source: 'Pulsedive', label: `risk ${risk}`, color: c });
+      out.push({ source: 'Pulsedive', label: `risk ${risk}`, color: c,
+                 why: 'Pulsedive aggregates 50+ TI feeds. Risk level is the consensus assessment across all feeds carrying this indicator.' });
     }
   }
 
   // Spamhaus DBL — domain blocklist.
   if (d.spamhaus_dbl?.hit) {
-    out.push({ source: 'Spamhaus DBL', label: `${d.spamhaus_dbl.verdict || 'listed'}${d.spamhaus_dbl.code ? ` · ${d.spamhaus_dbl.code}` : ''}`, color: red });
+    out.push({ source: 'Spamhaus DBL',
+               label: `${d.spamhaus_dbl.verdict || 'listed'}${d.spamhaus_dbl.code ? ` · ${d.spamhaus_dbl.code}` : ''}`,
+               color: red,
+               why: 'On the Spamhaus Domain Block List. Used industry-wide for email + DNS filtering — high-confidence malicious.' });
   }
 
   // Criminal IP — inbound/outbound threat scoring.
@@ -1841,6 +1895,7 @@ function _ocSources(result, ioc, type) {
         source: 'Criminal IP',
         label: `inbound ${inb || '?'} · outbound ${outb || '?'}${flags.length ? ` · ${flags.join(', ')}` : ''}`,
         color: c,
+        why: 'Inbound = attacks targeting this IP; outbound = attacks originating from it. Anonymity flags (TOR/VPN/proxy) indicate the IP hides its true origin.',
       });
     }
   }
@@ -1855,7 +1910,8 @@ function _ocSources(result, ioc, type) {
     if (i.org)     bits.push(i.org);
     else if (i.asn) bits.push(i.asn);
     out.push({ source: 'IPInfo', label: bits.join(' · ') || 'no geo data',
-               color: tert });
+               color: tert,
+               why: 'Geolocation + ASN (autonomous system) ownership. Not a threat verdict; useful for spotting impossible-travel or unexpected hosting providers.' });
   }
 
   // Censys — open ports / services / certs on the host. The backend
@@ -1870,7 +1926,8 @@ function _ocSources(result, ioc, type) {
     if (c.country) meta.push(c.country);
     if (portNums.length) meta.push(`ports ${portNums.join(', ')}`);
     if (meta.length) {
-      out.push({ source: 'Censys', label: meta.join(' · '), color: tert });
+      out.push({ source: 'Censys', label: meta.join(' · '), color: tert,
+                 why: 'Censys continuously scans the public internet. Open ports show what services the host exposes — Tor relay ports (9001-9004), open SMB, exposed databases, etc. all tell you what the host actually does.' });
     }
   }
 
@@ -1892,6 +1949,7 @@ function _ocSources(result, ioc, type) {
         source: 'CrowdSec',
         label: `${lead}${extra.length ? ` · ${extra.join(', ')}` : ''}`,
         color: c,
+        why: 'CrowdSec aggregates real-time attack signals from a community of deployed sensors. Classifications + attack scenarios show what behaviour got the IP reported.',
       });
     }
   }
@@ -1903,7 +1961,8 @@ function _ocSources(result, ioc, type) {
     if (n > 0) {
       out.push({ source: 'CIRCL pDNS',
                  label: `${n} historical record${n === 1 ? '' : 's'}`,
-                 color: tert });
+                 color: tert,
+                 why: 'Passive DNS history from CIRCL. Many historical records = the indicator has hosted/resolved many things over time (could be infrastructure, could be DNS rotation for C2).' });
     }
   }
 
@@ -1911,7 +1970,8 @@ function _ocSources(result, ioc, type) {
   if (d.robtex && !d.robtex.error && (d.robtex.asn || d.robtex.as_name)) {
     const r = d.robtex;
     const lbl = [r.as_name, r.asn ? `AS${r.asn}` : null, r.bgproute].filter(Boolean).join(' · ');
-    if (lbl) out.push({ source: 'Robtex', label: lbl, color: tert });
+    if (lbl) out.push({ source: 'Robtex', label: lbl, color: tert,
+                        why: 'ASN ownership + BGP route. Tells you who runs the network. Bulletproof / abuse-tolerant hosters tend to show up repeatedly across malicious investigations.' });
   }
 
   // Hackertarget — reverse-IP (other hostnames on the same IP). The
@@ -1924,14 +1984,16 @@ function _ocSources(result, ioc, type) {
     if (n > 0) {
       out.push({ source: 'Hackertarget',
                  label: `${n} hostname${n === 1 ? '' : 's'} share this IP`,
-                 color: tert });
+                 color: tert,
+                 why: 'Reverse-DNS: other hostnames currently pointing at this IP. Many = shared hosting (lower attribution value); few or one = dedicated (higher attribution value).' });
     }
   }
 
   // Feodo Tracker — abuse.ch active-C2 list match.
   if (d.feodo_tracker && d.feodo_tracker.hit) {
     out.push({ source: 'Feodo Tracker',
-               label: 'on active C2 list', color: red });
+               label: 'on active C2 list', color: red,
+               why: 'abuse.ch maintains a curated list of active botnet C2 servers (Emotet, Dridex, TrickBot, QakBot). A hit means active malicious infrastructure — block immediately.' });
   }
 
   // Local offline feeds (firehol / ipsum / phishing.db). High-signal
@@ -1939,7 +2001,8 @@ function _ocSources(result, ioc, type) {
   if (d.local_feeds && d.local_feeds.hit) {
     out.push({ source: 'Local feeds',
                label: d.local_feeds.source || 'matched offline blocklist',
-               color: red });
+               color: red,
+               why: 'Matched a public threat-intel blocklist (firehol / ipsum / phishing-db). The source name shows which list; appearing on multiple lists raises confidence.' });
   }
 
   // URLhaus URL hit — abuse.ch malware-distribution database.
@@ -1949,6 +2012,7 @@ function _ocSources(result, ioc, type) {
       source: 'URLhaus',
       label: `${u.threat || 'malware-distribution'}${u.url_status ? ` · ${u.url_status}` : ''}`,
       color: red,
+      why: 'abuse.ch URLhaus tracks live malware-distribution URLs. A hit means this URL has served (or is currently serving) malware. URL status shows whether the URL is still live.',
     });
   }
 
@@ -1959,6 +2023,7 @@ function _ocSources(result, ioc, type) {
       source: 'URLhaus payload',
       label: `${u.signature || 'malware'}${u.url_count ? ` · ${u.url_count} URLs` : ''}`,
       color: red,
+      why: 'This hash has been distributed via URLs tracked by URLhaus. URL count = how many distinct URLs have served this payload (higher = more widespread campaign).',
     });
   }
 
@@ -1970,12 +2035,14 @@ function _ocSources(result, ioc, type) {
         source: 'CIRCL hashlookup',
         label: `known-good${h.ProductName ? ` · ${h.ProductName}` : ''}${h.FileName ? ` · ${h.FileName}` : ''}`,
         color: green,
+        why: 'Hash is in the NIST National Software Reference Library (NSRL) — confirmed legitimate software. Safe to dismiss as a false positive.',
       });
     } else if (h.trust != null) {
       out.push({
         source: 'CIRCL hashlookup',
         label: `trust ${h.trust}${h.FileName ? ` · ${h.FileName}` : ''}`,
         color: tert,
+        why: 'CIRCL has metadata for this hash but trust score is below the known-good threshold. Cross-check with VirusTotal / MalwareBazaar.',
       });
     }
   }
@@ -1991,6 +2058,7 @@ function _ocSources(result, ioc, type) {
       source: 'Hybrid Analysis',
       label: `${h.verdict || 'analyzed'}${score != null ? ` · score ${score}` : ''}${fam ? ` · ${fam}` : ''}`,
       color: c,
+      why: 'CrowdStrike Falcon Sandbox detonation result. Threat score is a behavioural rating (0-100); ≥70 = malicious behaviour confirmed in sandbox.',
     });
   }
 
@@ -2001,6 +2069,7 @@ function _ocSources(result, ioc, type) {
       source: 'Team Cymru MHR',
       label: `last seen ${t.last_seen || '?'}${t.detection_pct != null ? ` · ${t.detection_pct}% AV consensus` : ''}`,
       color: red,
+      why: 'Team Cymru tracks malware hashes seen in the wild + AV consensus. High % consensus across many engines = strong evidence the sample is malicious.',
     });
   }
 
@@ -2014,7 +2083,8 @@ function _ocSources(result, ioc, type) {
       if (o.indicator_count)  bits.push(`${o.indicator_count} indicator${o.indicator_count === 1 ? '' : 's'}`);
       if (o.report_count)     bits.push(`${o.report_count} report${o.report_count === 1 ? '' : 's'}`);
       if (o.observable_count) bits.push(`${o.observable_count} obs`);
-      out.push({ source: 'OpenCTI', label: bits.join(' · '), color: red });
+      out.push({ source: 'OpenCTI', label: bits.join(' · '), color: red,
+                 why: 'Match in your OpenCTI instance — this indicator has been previously analysed or tracked by your team. Highest-value internal signal.' });
     }
   }
 
@@ -2033,6 +2103,7 @@ function _ocSources(result, ioc, type) {
       source: 'Cert Transparency',
       label: `${n} cert${n === 1 ? '' : 's'}${subs ? ` · ${subs} unique subdomains` : ''}`,
       color: tert,
+      why: 'Public CT logs (crt.sh). Many historical certs across many subdomains = legitimate long-running infra; few or one = newly issued or limited use (more suspicious for phishing).',
     });
   }
 
@@ -2046,7 +2117,8 @@ function _ocSources(result, ioc, type) {
     const lbl = (first && last && first !== last)
       ? `archived ${first} → ${last}`
       : `last snapshot ${last || first}`;
-    out.push({ source: 'Wayback', label: lbl, color: tert });
+    out.push({ source: 'Wayback', label: lbl, color: tert,
+               why: 'Internet Archive snapshot history. Long history = established legitimate site; brand-new or no snapshots = newly stood up (consistent with phishing or C2 staging).' });
   }
 
   // Typosquat detector — flags lookalikes of well-known brands.
@@ -2055,6 +2127,7 @@ function _ocSources(result, ioc, type) {
       source: 'Typosquat',
       label: `looks like ${d.typosquat.brand}${d.typosquat.distance != null ? ` (edit distance ${d.typosquat.distance})` : ''}`,
       color: red,
+      why: 'Domain is an edit-distance match against a well-known brand. Typosquat domains are almost always set up for phishing or credential theft.',
     });
   }
 
@@ -2073,7 +2146,15 @@ function _ocSources(result, ioc, type) {
         ? red
         : (h.nrd?.age_days != null && h.nrd.age_days < 30) || (h.dga?.score || 0) >= 0.6
         ? orange : tert;
-      out.push({ source: 'Heuristics', label: bits.join(' · '), color: c });
+      const whyBits = [];
+      if (h.nrd?.is_same_day) whyBits.push('Same-day registration is near-certain phishing/C2 staging.');
+      else if (h.nrd?.age_days != null && h.nrd.age_days < 30)
+        whyBits.push('Domains <30 days old are the single strongest phishing/FP signal — well above the noise floor.');
+      if (h.dga?.score != null && h.dga.score >= 0.6)
+        whyBits.push('High DGA score = the domain name looks algorithmically generated (botnet C2 pattern).');
+      if (h.idn) whyBits.push('IDN homoglyph uses Unicode chars that visually mimic ASCII — classic brand-impersonation trick.');
+      out.push({ source: 'Heuristics', label: bits.join(' · '), color: c,
+                 why: whyBits.join(' ') });
     }
   }
 
@@ -2084,7 +2165,8 @@ function _ocSources(result, ioc, type) {
     const bits = [];
     if (f.subdomain_count) bits.push(`${f.subdomain_count} subdomains`);
     if ((f.ports || []).length) bits.push(`ports ${(f.ports || []).slice(0, 4).join(', ')}`);
-    out.push({ source: 'FullHunt', label: bits.join(' · '), color: tert });
+    out.push({ source: 'FullHunt', label: bits.join(' · '), color: tert,
+               why: 'FullHunt enumerates the attack surface of a domain (subdomains + open services). Larger footprint = bigger target / more potential entry points for attackers.' });
   }
 
   // DNS records (subset of osint) — A/AAAA/MX/NS visibility.
@@ -2096,7 +2178,8 @@ function _ocSources(result, ioc, type) {
     if ((dns.mx || []).length)   counts.push(`${dns.mx.length} MX`);
     if ((dns.ns || []).length)   counts.push(`${dns.ns.length} NS`);
     if (counts.length) {
-      out.push({ source: 'DNS records', label: counts.join(' · '), color: tert });
+      out.push({ source: 'DNS records', label: counts.join(' · '), color: tert,
+                 why: 'Live DNS query — what record types the domain currently resolves. MX = receives email; NS = its own nameservers. Useful for triaging email-based attacks.' });
     }
   }
 
@@ -2108,6 +2191,7 @@ function _ocSources(result, ioc, type) {
         source: 'Google Safe Browsing',
         label: `flagged: ${(g.threat_types || []).join(', ') || 'unsafe'}`,
         color: red,
+        why: 'Google\'s safe-browsing API actively flags this URL/domain. Browsers warn users on visit — high-confidence malicious classification.',
       });
     }
   }
@@ -2121,6 +2205,9 @@ function _ocSources(result, ioc, type) {
       source: 'PhishTank',
       label: `${verified ? 'verified phishing' : 'reported phishing'}${p.submission_time ? ` · ${String(p.submission_time).slice(0, 10)}` : ''}`,
       color: red,
+      why: verified
+        ? 'Community-verified phishing site — multiple PhishTank moderators have confirmed this URL is phishing.'
+        : 'Reported as phishing by a community member but not yet verified. Treat as suspicious pending confirmation.',
     });
   }
 
@@ -2137,6 +2224,7 @@ function _ocSources(result, ioc, type) {
       source: 'NVD',
       label: `CVSS ${score ?? '?'} ${sev || 'unrated'}${n.affected_products?.length ? ` · ${n.affected_products.slice(0,2).join(', ')}` : ''}`,
       color: c,
+      why: 'NIST National Vulnerability Database — CVSS score is the standardised severity (10 = maximum impact). HIGH/CRITICAL warrant immediate patching/mitigation.',
     });
   }
 
@@ -2150,6 +2238,7 @@ function _ocSources(result, ioc, type) {
       source: 'EPSS',
       label: `${e.score_pct ?? 0}% probability · ${e.percentile_pct ?? 0} percentile`,
       color: c,
+      why: 'EPSS predicts the probability a CVE will be exploited in the wild within 30 days. Percentile shows where this CVE ranks vs ALL CVEs. High % + high percentile = patch this first.',
     });
   }
 
@@ -2161,12 +2250,14 @@ function _ocSources(result, ioc, type) {
         source: 'CISA KEV',
         label: `ACTIVELY EXPLOITED · added ${k.date_added || '?'}${k.ransomware_use ? ' · ransomware use' : ''}`,
         color: red,
+        why: 'CISA confirms this vulnerability is being actively exploited in the wild. US federal agencies have a deadline to patch — your org should treat it as a P0.',
       });
     } else {
       out.push({
         source: 'CISA KEV',
         label: 'not in KEV catalog',
         color: green,
+        why: 'CISA is not tracking active exploitation of this CVE. Still patch on CVSS severity, but no urgent-incident pressure from the federal mandate side.',
       });
     }
   }
@@ -2181,6 +2272,9 @@ function _ocSources(result, ioc, type) {
       source: 'URLScan screenshot',
       label: `${u.malicious ? 'malicious' : 'archived scan'}${dateStr}`,
       color: c,
+      why: u.malicious
+        ? 'URLScan rendered this URL in a real browser and flagged it malicious. The archived screenshot shows exactly what the user saw.'
+        : 'URLScan has rendered this URL before (archived screenshot available). Useful for inspecting the page without visiting it yourself.',
     });
   }
 
@@ -2202,7 +2296,13 @@ function _ocSources(result, ioc, type) {
               : age < 30  ? orange
               : age < 180 ? yellow
               :             green;
-      out.push({ source: 'WHOIS', label: bits.join(' · '), color: c });
+      const why =
+          age == null  ? 'Domain registration data. Registrar + registrant info — useful for attribution and bulk-registration patterns.'
+        : age < 1      ? 'Registered today — near-certain phishing or C2 staging. The strongest single FP-vs-real signal.'
+        : age < 30     ? 'Newly registered (<30 days). Highly suspicious; legitimate orgs rarely use brand-new domains.'
+        : age < 180    ? 'Recently registered (<6 months). Worth a closer look but not by itself damning.'
+        :                'Established domain (>6 months). Lower phishing/C2 staging probability.';
+      out.push({ source: 'WHOIS', label: bits.join(' · '), color: c, why });
     }
   }
 
@@ -2356,8 +2456,8 @@ function PerIndicatorList({ sorted, result }) {
           }}>
             {sources.length > 0 ? (
               sources.map((s, j) => (
-                <SourceVerdict key={j} source={s.source} label={s.label} color={s.color}
-                  ioc={ioc} iocType={iocType}/>
+                <SourceVerdict key={j} source={s.source} label={s.label} why={s.why}
+                  color={s.color} ioc={ioc} iocType={iocType}/>
               ))
             ) : (
               <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontStyle: 'italic' }}>
