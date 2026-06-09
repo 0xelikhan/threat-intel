@@ -483,6 +483,7 @@ def _p_vt_ip(r):
         "malicious":      mal,
         "suspicious":     s.get("suspicious"),
         "harmless":       s.get("harmless"),
+        "undetected":     s.get("undetected"),
         "reputation":     attrs.get("reputation"),
         "country":        attrs.get("country"),
         "as_owner":       attrs.get("as_owner"),
@@ -505,6 +506,7 @@ def _p_vt_domain(r):
         "malicious":         mal,
         "suspicious":        s.get("suspicious"),
         "harmless":          s.get("harmless"),
+        "undetected":        s.get("undetected"),
         "reputation":        attrs.get("reputation"),
         "categories":        attrs.get("categories"),
         "creation_date":     attrs.get("creation_date"),
@@ -526,6 +528,8 @@ def _p_vt_file(r):
     out = {
         "malicious":           mal,
         "suspicious":          s.get("suspicious"),
+        "harmless":            s.get("harmless"),
+        "undetected":          s.get("undetected"),
         "name":                attrs.get("meaningful_name"),
         "type":                attrs.get("type_description"),
         "size":                attrs.get("size"),
@@ -551,6 +555,8 @@ def _p_vt_url(r):
     out = {
         "malicious":   mal,
         "suspicious":  s.get("suspicious"),
+        "harmless":    s.get("harmless"),
+        "undetected":  s.get("undetected"),
         "categories":  attrs.get("categories"),
         "last_analysis": attrs.get("last_analysis_date"),
         "title":       attrs.get("title"),
@@ -1676,13 +1682,14 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
         in_db = results_arr.get("in_database") if isinstance(results_arr, dict) else False
         if in_db:
             data["phishtank"] = {
-                "verified":     results_arr.get("verified"),
-                "phish_id":     results_arr.get("phish_id"),
-                "submitted_at": results_arr.get("submission_time"),
-                "verdict":      "MALICIOUS",
-                "summary":      ("PhishTank lists this URL as a verified phishing page"
-                                 if results_arr.get("verified")
-                                 else "PhishTank has this URL flagged (pending verification)"),
+                "in_database":      True,
+                "verified":         results_arr.get("verified"),
+                "phish_id":         results_arr.get("phish_id"),
+                "submission_time":  results_arr.get("submission_time"),
+                "verdict":          "MALICIOUS",
+                "summary":          ("PhishTank lists this URL as a verified phishing page"
+                                     if results_arr.get("verified")
+                                     else "PhishTank has this URL flagged (pending verification)"),
             }
 
     _cache[ck] = data
