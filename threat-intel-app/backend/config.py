@@ -331,7 +331,13 @@ class ConfigManager:
                     self._config = json.load(f)
                 self._mtime = CONFIG_FILE.stat().st_mtime
             except Exception:
-                self._config = {}
+                # Preserve whatever was already loaded — wiping to {}
+                # used to drop every file-stored API key when a
+                # concurrent _save() happened mid-read (json.load() on
+                # partial content raises). Next get() retries the
+                # reload; in the meantime callers see the last good
+                # state instead of falling all the way back to env-only.
+                pass
 
         # Merge in environment variables (env vars take precedence for Docker/CI)
         for key in API_KEY_DEFINITIONS:
@@ -353,9 +359,29 @@ class ConfigManager:
             self._load()
 
     def _save(self):
+        """Atomic save — write to a sibling temp file then os.replace so
+        a concurrent reader can never observe a partially-written JSON.
+        Without this, _maybe_reload() racing _save() would catch a
+        truncated read, JSON-decode would raise, and the in-memory
+        config would either be wiped (old behaviour) or stay stale
+        until the next save (new fail-soft behaviour). Either way the
+        analyst's last edit might appear to fail silently."""
+        import os as _os
+        import tempfile as _tempfile
         DATA_DIR.mkdir(parents=True, exist_ok=True)
-        with open(CONFIG_FILE, "w") as f:
-            json.dump(self._config, f, indent=2)
+        # NamedTemporaryFile in the same dir guarantees os.replace is
+        # cross-volume safe (replace requires same filesystem).
+        tmp = _tempfile.NamedTemporaryFile(
+            mode="w", dir=str(DATA_DIR), prefix=".config.", suffix=".tmp",
+            delete=False, encoding="utf-8",
+        )
+        try:
+            json.dump(self._config, tmp, indent=2)
+            tmp.flush()
+            _os.fsync(tmp.fileno())
+        finally:
+            tmp.close()
+        _os.replace(tmp.name, str(CONFIG_FILE))
         try:
             self._mtime = CONFIG_FILE.stat().st_mtime
         except OSError:
