@@ -250,40 +250,32 @@ async def sandbox_hash_lookup(sha256: str) -> dict:
 def recon_intel_inventory() -> dict:
     """Report what offline intelligence RECON has loaded and what integrations
     are configured. Useful for confirming readiness before an analysis."""
-    out = {}
-    try:
-        from intel.feeds_loader  import stats as f; out.update(f())
-    except Exception: pass
-    try:
-        from intel.actor_data    import stats as a; out.update(a())
-    except Exception: pass
-    try:
-        from intel.kev           import stats as k; out.update(k())
-    except Exception: pass
-    try:
-        from intel.epss          import stats as e; out.update(e())
-    except Exception: pass
-    try:
-        from intel.lolbas        import stats as l; out.update(l())
-    except Exception: pass
-    try:
-        from intel.loldrivers    import stats as d; out.update(d())
-    except Exception: pass
-    try:
-        from intel.atomic_red_team import stats as t; out.update(t())
-    except Exception: pass
-    try:
-        from intel.phishing_kit  import stats as pk; out.update(pk())
-    except Exception: pass
-    try:
-        from intel.ja_fingerprints import stats as ja; out.update(ja())
-    except Exception: pass
-    try:
-        from intel.rmm_abuse     import stats as r; out.update(r())
-    except Exception: pass
-    try:
-        from intel.yara_scanner  import stats as y; out.update(y())
-    except Exception: pass
+    import logging as _logging
+    _log = _logging.getLogger("recon.mcp.inventory")
+    out: dict = {}
+    errors: dict = {}
+    sources = (
+        ("feeds_loader",     "intel.feeds_loader"),
+        ("actor_data",       "intel.actor_data"),
+        ("kev",              "intel.kev"),
+        ("epss",             "intel.epss"),
+        ("lolbas",           "intel.lolbas"),
+        ("loldrivers",       "intel.loldrivers"),
+        ("atomic_red_team",  "intel.atomic_red_team"),
+        ("phishing_kit",     "intel.phishing_kit"),
+        ("ja_fingerprints",  "intel.ja_fingerprints"),
+        ("rmm_abuse",        "intel.rmm_abuse"),
+        ("yara_scanner",     "intel.yara_scanner"),
+    )
+    for label, mod_path in sources:
+        try:
+            mod = __import__(mod_path, fromlist=["stats"])
+            out.update(mod.stats())
+        except Exception as e:
+            errors[label] = f"{type(e).__name__}: {e}"
+            _log.debug("intel inventory %s: %s", label, e)
+    if errors:
+        out["_load_errors"] = errors
     return out
 
 
