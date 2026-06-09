@@ -68,6 +68,19 @@ def _humanise_exc(e: BaseException) -> str:
 _TIMEOUT = aiohttp.ClientTimeout(total=10)
 # Outer safety-net timeout (wraps the whole call, including parsing).
 _PER_SOURCE_TIMEOUT = float(os.getenv("ENRICH_SOURCE_TIMEOUT_S", "12"))
+# Hosts that consistently respond slower than the default — analysts kept
+# seeing "OTX: request timed out" on real malicious IPs because OTX's
+# pulse-aggregation can take 15-20s on indicators with hundreds of
+# pulses. Give the named hosts a longer safety-net so the source row
+# actually populates instead of silently failing. Other sources stay at
+# the tight 12s default so an unreachable host doesn't drag the whole
+# fan-out down.
+_SLOW_HOSTS = {
+    "otx.alienvault.com":        25.0,
+    "crt.sh":                    20.0,
+    "www.virustotal.com":        20.0,
+    "www.hybrid-analysis.com":   20.0,
+}
 # Cap on in-flight HTTP fan-out — protects downstream rate limits and
 # our own event loop from a thousand simultaneous sockets.
 _SEMAPHORE = asyncio.Semaphore(int(os.getenv("ENRICH_CONCURRENCY", "10")))
@@ -124,6 +137,7 @@ async def _get(session, url, **kw):
         _log.debug("circuit open — skipping %s", host)
         return {"error": f"circuit open for {host}", "error_type": "circuit_open",
                 "skipped": True}
+    safety = _SLOW_HOSTS.get(host or "", _PER_SOURCE_TIMEOUT)
 
     async def _do():
         async with session.get(url, timeout=_TIMEOUT, **kw) as r:
@@ -132,7 +146,7 @@ async def _get(session, url, **kw):
             return status, payload
     try:
         async with _SEMAPHORE:
-            status, payload = await asyncio.wait_for(_do(), timeout=_PER_SOURCE_TIMEOUT)
+            status, payload = await asyncio.wait_for(_do(), timeout=safety)
         # Tag categorical failures so the frontend can render them
         # consistently (auth → "check your key", rate-limit → "wait n s").
         if status in (401, 403):
@@ -153,7 +167,7 @@ async def _get(session, url, **kw):
         return payload
     except asyncio.TimeoutError:
         if host: breaker.record_failure(host)
-        return {"error": f"source timed out after {_PER_SOURCE_TIMEOUT:.0f}s",
+        return {"error": f"source timed out after {safety:.0f}s",
                 "error_type": "timed_out"}
     except Exception as e:
         if host: breaker.record_failure(host)
@@ -169,6 +183,7 @@ async def _post(session, url, **kw):
         _log.debug("circuit open — skipping %s", host)
         return {"error": f"circuit open for {host}", "error_type": "circuit_open",
                 "skipped": True}
+    safety = _SLOW_HOSTS.get(host or "", _PER_SOURCE_TIMEOUT)
 
     async def _do():
         async with session.post(url, timeout=_TIMEOUT, **kw) as r:
@@ -177,7 +192,7 @@ async def _post(session, url, **kw):
             return status, payload
     try:
         async with _SEMAPHORE:
-            status, payload = await asyncio.wait_for(_do(), timeout=_PER_SOURCE_TIMEOUT)
+            status, payload = await asyncio.wait_for(_do(), timeout=safety)
         if status in (401, 403):
             if host: breaker.record_failure(host)
             return {"error": f"auth failed (HTTP {status})", "error_type": "auth_failed"}
@@ -194,7 +209,7 @@ async def _post(session, url, **kw):
         return payload
     except asyncio.TimeoutError:
         if host: breaker.record_failure(host)
-        return {"error": f"source timed out after {_PER_SOURCE_TIMEOUT:.0f}s",
+        return {"error": f"source timed out after {safety:.0f}s",
                 "error_type": "timed_out"}
     except Exception as e:
         if host: breaker.record_failure(host)

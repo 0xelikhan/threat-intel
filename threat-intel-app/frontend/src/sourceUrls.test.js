@@ -126,4 +126,21 @@ describe('sourceUrl', () => {
     expect(out).toContain('cve.org/CVERecord');
     expect(out).toContain('id=CVE-2024-12345');
   });
+
+  test('CIRCL hashlookup picks the right algo from hash length', () => {
+    const md5    = 'd'.repeat(32);
+    const sha1   = '1'.repeat(40);
+    const sha256 = '2'.repeat(64);
+    expect(sourceUrl('CIRCL hashlookup', md5,    'hash'))
+      .toBe(`https://hashlookup.circl.lu/lookup/md5/${md5}`);
+    expect(sourceUrl('CIRCL hashlookup', sha1,   'hash'))
+      .toBe(`https://hashlookup.circl.lu/lookup/sha1/${sha1}`);
+    expect(sourceUrl('CIRCL hashlookup', sha256, 'hash'))
+      .toBe(`https://hashlookup.circl.lu/lookup/sha256/${sha256}`);
+  });
+
+  test('CIRCL hashlookup returns null for non-standard hash lengths', () => {
+    expect(sourceUrl('CIRCL hashlookup', 'abc', 'hash')).toBeNull();
+    expect(sourceUrl('CIRCL hashlookup', 'a'.repeat(50), 'hash')).toBeNull();
+  });
 });
