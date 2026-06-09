@@ -3459,7 +3459,22 @@ _INDEX_NOCACHE_HEADERS = {
 }
 
 if FRONTEND_BUILD.exists():
-    app.mount("/static", StaticFiles(directory=str(FRONTEND_BUILD / "static")), name="static")
+    # CRA emits content-hashed filenames under /static/ (main.<hash>.js,
+    # <chunk>.<hash>.chunk.js, main.<hash>.css). Hashed assets are
+    # immutable by construction — a new build mints a new hash — so we
+    # can safely tell browsers to cache them for a year. Default
+    # StaticFiles ships no Cache-Control, which means every page load
+    # does a conditional revalidation (etag round-trip) on a 670 KB JS
+    # bundle. Subclass + inject one Cache-Control header on every
+    # response.
+    class _ImmutableStatic(StaticFiles):
+        async def get_response(self, path, scope):
+            resp = await super().get_response(path, scope)
+            if resp.status_code == 200:
+                resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            return resp
+
+    app.mount("/static", _ImmutableStatic(directory=str(FRONTEND_BUILD / "static")), name="static")
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
