@@ -310,6 +310,27 @@ async def execute_tool(name: str, args: dict, config) -> dict:
         return {"error": str(e)[:200]}
 
 
+# Each enrich_* below internally cherry-picks the keys it needs, so we
+# pass the FULL configured key set instead of a hand-curated subset.
+# The earlier subset was missing ABUSECH_AUTH_KEY / HYBRID_ANALYSIS_KEY /
+# CRIMINAL_IP / CENSYS / CROWDSEC / PROXYCHECK / URLSCAN / WHOISXML /
+# GOOGLE / FULLHUNT etc., which meant the AI's tool calls during
+# investigation got a substantially degraded enrichment vs. the main
+# /api/analyze pipeline — abuse.ch endpoints in particular were hit
+# anonymously and rate-limited.
+def _all_keys(config) -> dict:
+    return {k: config.get(k) for k in (
+        "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "IPINFO_TOKEN", "GREYNOISE_KEY",
+        "OTX_KEY", "URLSCAN_KEY", "PULSEDIVE_KEY",
+        "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY", "HYBRID_ANALYSIS_KEY",
+        "CENSYS_API_ID", "CENSYS_API_SECRET", "CENSYS_PERSONAL_ACCESS_TOKEN",
+        "CROWDSEC_KEY", "CRIMINAL_IP_KEY", "PROXYCHECK_KEY",
+        "WHOISXML_KEY", "GOOGLE_API_KEY", "FULLHUNT_KEY",
+        "MALTIVERSE_KEY", "OPENCTI_URL", "OPENCTI_TOKEN",
+        "PHISHTANK_KEY",
+    )}
+
+
 # Individual tool implementations
 async def _t_lookup_ip(args, config):
     from agents.enrichment import enrich_ip
@@ -317,12 +338,8 @@ async def _t_lookup_ip(args, config):
     ip = args.get("ip", "").strip()
     if not ip:
         return {"error": "ip required"}
-    keys = {k: config.get(k) for k in (
-        "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "IPINFO_TOKEN",
-        "GREYNOISE_KEY", "OTX_KEY",
-    )}
     async with aiohttp.ClientSession() as session:
-        return await enrich_ip(session, ip, keys)
+        return await enrich_ip(session, ip, _all_keys(config))
 
 
 async def _t_lookup_domain(args, config):
@@ -331,9 +348,8 @@ async def _t_lookup_domain(args, config):
     d = args.get("domain", "").strip()
     if not d:
         return {"error": "domain required"}
-    keys = {k: config.get(k) for k in ("VIRUSTOTAL_KEY", "URLSCAN_KEY", "OTX_KEY", "PULSEDIVE_KEY")}
     async with aiohttp.ClientSession() as session:
-        return await enrich_domain(session, d, keys)
+        return await enrich_domain(session, d, _all_keys(config))
 
 
 async def _t_lookup_hash(args, config):
@@ -343,9 +359,8 @@ async def _t_lookup_hash(args, config):
     h = args.get("file_hash", "").strip()
     if not h:
         return {"error": "file_hash required"}
-    keys = {k: config.get(k) for k in ("VIRUSTOTAL_KEY", "OTX_KEY")}
     async with aiohttp.ClientSession() as session:
-        result = await enrich_hash(session, h, keys)
+        result = await enrich_hash(session, h, _all_keys(config))
     # NOTE: enrich_hash already runs the deep sandbox lookup for SHA-256, so we
     # don't make a second (slow) sandbox call here.
     drv = drv_lookup(h)

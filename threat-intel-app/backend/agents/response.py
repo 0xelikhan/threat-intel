@@ -597,6 +597,14 @@ analyst's UI strips them out, so writing them is wasted tokens."""
         pass
 
     # Attach JA3/JA4 TLS fingerprints if this looks like C2 activity
+    # Hoist alert_type out of the try block so it stays defined when the
+    # ja_fingerprints import fails. response_summary below reads it and
+    # we don't want a UnboundLocalError swallowing the whole stage.
+    alert_type = next(
+        (t.get("alert_type", "") for t in (state.get("agent_trace") or [])
+         if t.get("agent") == "triage"),
+        "",
+    )
     ja_fingerprints = []
     ja_sigma_snippet = ""
     ja_kql_snippet = ""
@@ -604,11 +612,6 @@ analyst's UI strips them out, so writing them is wasted tokens."""
         from intel.ja_fingerprints import (
             get_for_alert_type, get_for_mitre,
             as_sigma_yaml_snippet, as_kql_snippet,
-        )
-        alert_type = next(
-            (t.get("alert_type", "") for t in (state.get("agent_trace") or [])
-             if t.get("agent") == "triage"),
-            "",
         )
         ja_fingerprints = get_for_alert_type(alert_type) or get_for_mitre(mitre)
         if ja_fingerprints:
@@ -651,6 +654,19 @@ analyst's UI strips them out, so writing them is wasted tokens."""
         # analysts can tell evidence-backed facts from analyst inference.
         "confirmed_facts":     investigation.get("confirmed_facts", []),
         "analysis_assessment": investigation.get("analysis_assessment", []),
+        # analyst_notes is part of the AI investigation prompt output
+        # (1-2 paragraphs of senior-analyst context). Was missing from
+        # response_summary, so the UI block reading rs.analyst_notes
+        # silently never rendered.
+        "analyst_notes":       investigation.get("analyst_notes", ""),
+        # alert_type lives in the triage trace entry; surface it on
+        # response_summary so the frontend doesn't have to walk the
+        # trace array to find it.
+        "alert_type":          alert_type or "unknown",
+        # malware_family lifted out of investigation.get so the frontend
+        # can read rs.malware_family directly without falling back to
+        # the top-level state field.
+        "malware_family":      investigation.get("malware_family") or state.get("malware_family"),
         # Server-computed enrichment baseline — quoted at the top of the
         # Summary card so analysts see the empirical numbers before
         # reading any AI interpretation.

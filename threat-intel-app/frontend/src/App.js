@@ -338,7 +338,17 @@ function GeopoliticalContext({ result, bare }) {
               {gp.attribution.country && <> · country of origin: <strong>{gp.attribution.country}</strong></>}
               {gp.attribution.confidence != null && (
                 <Box component="span" sx={{ ml: 1, color: 'text.tertiary' }}>
-                  · confidence: {Math.round((gp.attribution.confidence || 0) * 100)}%
+                  · confidence: {
+                    // AI prompt asks for {name, confidence} but the
+                    // model sometimes returns confidence as a string
+                    // ('low' / 'medium' / 'high') and sometimes as a
+                    // number 0-1. Math.round('high' * 100) = NaN, which
+                    // rendered as the literal text "NaN%". Handle both
+                    // shapes explicitly.
+                    typeof gp.attribution.confidence === 'number'
+                      ? `${Math.round(gp.attribution.confidence * 100)}%`
+                      : String(gp.attribution.confidence)
+                  }
                 </Box>
               )}
             </Typography>
