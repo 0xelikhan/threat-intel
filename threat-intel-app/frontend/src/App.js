@@ -2027,7 +2027,11 @@ function _ocSources(result, ioc, type) {
     });
   }
 
-  // CIRCL hashlookup — known-good (NIST NSRL) file detection.
+  // CIRCL hashlookup — three branches: known-good (NSRL hit), known-bad
+  // (CIRCL explicitly flags it, e.g. EICAR), or just-known (metadata
+  // present but no verdict attached). Trust is provenance confidence on
+  // the metadata, not a clean/dirty signal — high trust on a malicious
+  // sample still means malicious.
   if (d.circl_hashlookup && !d.circl_hashlookup.error) {
     const h = d.circl_hashlookup;
     if (h.verdict === 'CLEAN') {
@@ -2037,12 +2041,25 @@ function _ocSources(result, ioc, type) {
         color: green,
         why: 'Hash is in the NIST National Software Reference Library (NSRL) — confirmed legitimate software. Safe to dismiss as a false positive.',
       });
+    } else if (h.known_malicious) {
+      out.push({
+        source: 'CIRCL hashlookup',
+        label: `known-malicious${h.FileName ? ` · ${h.FileName}` : ''}`,
+        color: red,
+        why: 'CIRCL explicitly flags this hash as known-malicious — independent corroboration alongside VT / MalwareBazaar.',
+      });
     } else if (h.trust != null) {
+      // Trust ≥80 + a filename means CIRCL recognises the file by name
+      // from a curated source. That's identifier context, not a clean
+      // signal — verdict still depends on VT / MalwareBazaar.
+      const named = h.trust >= 80 && h.FileName;
       out.push({
         source: 'CIRCL hashlookup',
         label: `trust ${h.trust}${h.FileName ? ` · ${h.FileName}` : ''}`,
         color: tert,
-        why: 'CIRCL has metadata for this hash but trust score is below the known-good threshold. Cross-check with VirusTotal / MalwareBazaar.',
+        why: named
+          ? 'CIRCL recognises this file by name from a curated source. Useful identifier context — verdict still depends on VirusTotal / MalwareBazaar.'
+          : 'CIRCL has metadata for this hash but neither known-good nor known-bad. Cross-check with VirusTotal / MalwareBazaar.',
       });
     }
   }
@@ -2904,15 +2921,18 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
                   :                                  '#E1B823';
   const summary = (rs?.summary || '').trim();
   // Attribution gate — precision-style score (matched / N_alert_techniques)
-  // is now ≥ 60% AND at least 3 techniques matched. Single-technique
-  // matches that hit "100% precision" against an APT are noise; the
-  // 3-match floor weeds those out. Analyst context that pushes overlap
+  // saturates at 100% the moment we observe 3 generic ransomware techniques
+  // (T1486 + T1490 + T1083), which every ransomware group uses, so a
+  // hash-only paste produces bogus "100% TTP overlap" attribution to
+  // whichever group happens to win the tie-break sort. Require ≥5 matched
+  // techniques AND ≥75 score so a real tactical fingerprint is needed
+  // before we suggest an actor name. Analyst context that pushes overlap
   // above the threshold (via re-analyze with feedback) is honoured
   // automatically because matched_actors re-runs each investigation.
   const topActor = (rs?.matched_actors || []).find(
     a => typeof a?.score === 'number'
-      && a.score >= 60
-      && (a.matchedTechniques?.length || 0) >= 3
+      && a.score >= 75
+      && (a.matchedTechniques?.length || 0) >= 5
   ) || null;
   // Plain-English summary from log_translator — written like an MDR analyst
   // briefing note (what / context / verdict / recommendation). Top of the
