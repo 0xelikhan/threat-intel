@@ -57,23 +57,56 @@ def _check(name: str, status: str, message: str, fix_hint: str = "",
 
 
 def check_required_packages() -> Dict[str, Any]:
-    """Every package this backend reaches for at runtime."""
+    """Every package this backend reaches for at runtime.
+
+    'required' packages are imported unconditionally — missing one is a
+    fail. 'optional' packages are wrapped in try/except ImportError at
+    every call site (YARA scanning degrades to a no-op when yara-python
+    isn't installed, etc.) — missing one is a warn, not a fail.
+    """
     required = ("openai", "aiohttp", "fastapi", "starlette", "pydantic",
-                "bcrypt", "itsdangerous", "feedparser", "taxii2client",
-                "stix2", "yaml", "yara", "mitreattack")
-    missing = []
+                "bcrypt", "itsdangerous", "taxii2client",
+                "stix2", "yaml", "mitreattack")
+    # 'yara' is yara-python; the YARA rule scanner falls back to a no-op
+    # when it isn't installed (every import is guarded). 'feedparser' was
+    # in the required list historically but nothing in the codebase
+    # imports it — removed entirely.
+    optional = ("yara",)
+
+    missing_req = []
     for p in required:
         try:
             importlib.import_module(p)
         except ImportError:
-            missing.append(p)
-    if not missing:
-        return _check("python_packages", "ok",
-                      f"All {len(required)} required packages importable.")
-    return _check("python_packages", "fail",
-                  f"{len(missing)} required package(s) missing: {', '.join(missing)}",
-                  fix_hint=f"Run `pip install {' '.join(missing)}` in the backend venv.",
-                  detail={"missing": missing})
+            missing_req.append(p)
+    missing_opt = []
+    for p in optional:
+        try:
+            importlib.import_module(p)
+        except ImportError:
+            missing_opt.append(p)
+
+    if missing_req:
+        return _check(
+            "python_packages", "fail",
+            f"{len(missing_req)} required package(s) missing: "
+            f"{', '.join(missing_req)}",
+            fix_hint=f"Run `pip install {' '.join(missing_req)}` in the backend venv.",
+            detail={"missing": missing_req, "optional_missing": missing_opt},
+        )
+    if missing_opt:
+        return _check(
+            "python_packages", "warn",
+            f"All {len(required)} required packages importable. "
+            f"Optional packages missing: {', '.join(missing_opt)} "
+            f"(features that depend on them degrade to no-op).",
+            fix_hint=f"Optional — install with `pip install {' '.join(missing_opt)}` "
+                     f"to enable: yara → YARA file-scan rules.",
+            detail={"optional_missing": missing_opt},
+        )
+    return _check("python_packages", "ok",
+                  f"All {len(required)} required + {len(optional)} optional "
+                  f"packages importable.")
 
 
 def check_mitre_dataset() -> Dict[str, Any]:
