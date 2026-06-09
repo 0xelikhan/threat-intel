@@ -1845,6 +1845,88 @@ function _ocSources(result, ioc, type) {
     }
   }
 
+  // IPInfo — ASN + country + org. Always has data for any public IP,
+  // so always render a row (was being queried but never surfaced).
+  if (d.ipinfo && !d.ipinfo.error && (d.ipinfo.country || d.ipinfo.asn || d.ipinfo.org)) {
+    const i = d.ipinfo;
+    const bits = [];
+    if (i.country) bits.push(i.country);
+    if (i.city)    bits.push(i.city);
+    if (i.org)     bits.push(i.org);
+    else if (i.asn) bits.push(i.asn);
+    out.push({ source: 'IPInfo', label: bits.join(' · ') || 'no geo data',
+               color: tert });
+  }
+
+  // Censys — open ports / services / certs on the host.
+  if (d.censys && !d.censys.error) {
+    const c = d.censys;
+    const ports = (c.services || c.ports || []).slice(0, 6).join(', ');
+    const meta = [];
+    if (c.country) meta.push(c.country);
+    if (ports)     meta.push(`ports ${ports}`);
+    if (meta.length) {
+      out.push({ source: 'Censys', label: meta.join(' · '), color: tert });
+    }
+  }
+
+  // CrowdSec CTI — reputation + scenarios the IP triggered.
+  if (d.crowdsec && !d.crowdsec.error) {
+    const cs = d.crowdsec;
+    const rep = cs.reputation || cs.classifications?.[0] || '';
+    if (rep) {
+      const c = /malicious|known/i.test(rep) ? red
+              : /suspicious/i.test(rep) ? orange : tert;
+      const scenarios = (cs.scenarios || []).slice(0, 2).join(', ');
+      out.push({ source: 'CrowdSec',
+                 label: `${rep}${scenarios ? ` · ${scenarios}` : ''}`,
+                 color: c });
+    }
+  }
+
+  // CIRCL passive DNS — count of historical DNS records.
+  if (d.circl_pdns && !d.circl_pdns.error) {
+    const p = d.circl_pdns;
+    const n = p.record_count ?? (p.answers?.length) ?? 0;
+    if (n > 0) {
+      out.push({ source: 'CIRCL pDNS',
+                 label: `${n} historical record${n === 1 ? '' : 's'}`,
+                 color: tert });
+    }
+  }
+
+  // Robtex — ASN + passive DNS summary.
+  if (d.robtex && !d.robtex.error && (d.robtex.asn || d.robtex.as_name)) {
+    const r = d.robtex;
+    const lbl = [r.as_name, r.asn ? `AS${r.asn}` : null, r.bgproute].filter(Boolean).join(' · ');
+    if (lbl) out.push({ source: 'Robtex', label: lbl, color: tert });
+  }
+
+  // Hackertarget — reverse-IP (other hostnames on the same IP).
+  if (d.hackertarget && !d.hackertarget.error) {
+    const ht = d.hackertarget;
+    const n = (ht.hostnames || []).length;
+    if (n > 0) {
+      out.push({ source: 'Hackertarget',
+                 label: `${n} hostname${n === 1 ? '' : 's'} share this IP`,
+                 color: tert });
+    }
+  }
+
+  // Feodo Tracker — abuse.ch active-C2 list match.
+  if (d.feodo_tracker && d.feodo_tracker.hit) {
+    out.push({ source: 'Feodo Tracker',
+               label: 'on active C2 list', color: red });
+  }
+
+  // Local offline feeds (firehol / ipsum / phishing.db). High-signal
+  // when matched, so surface even though the source name is generic.
+  if (d.local_feeds && d.local_feeds.hit) {
+    out.push({ source: 'Local feeds',
+               label: d.local_feeds.source || 'matched offline blocklist',
+               color: red });
+  }
+
   // URLhaus URL hit — abuse.ch malware-distribution database.
   if (d.urlhaus_url && !d.urlhaus_url.error) {
     const u = d.urlhaus_url;
