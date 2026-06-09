@@ -1966,10 +1966,12 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // Robtex — ASN + passive DNS summary.
-  if (d.robtex && !d.robtex.error && (d.robtex.asn || d.robtex.as_name)) {
+  // Robtex — ASN + passive DNS summary. Parser key is `asnName` (camel),
+  // not `as_name` — the snake-case version never existed, which silently
+  // dropped the org name from the label.
+  if (d.robtex && !d.robtex.error && (d.robtex.asn || d.robtex.asnName)) {
     const r = d.robtex;
-    const lbl = [r.as_name, r.asn ? `AS${r.asn}` : null, r.bgproute].filter(Boolean).join(' · ');
+    const lbl = [r.asnName, r.asn ? `AS${r.asn}` : null, r.bgproute].filter(Boolean).join(' · ');
     if (lbl) out.push({ source: 'Robtex', label: lbl, color: tert,
                         why: 'ASN ownership + BGP route. Tells you who runs the network. Bulletproof / abuse-tolerant hosters tend to show up repeatedly across malicious investigations.' });
   }
@@ -2096,19 +2098,19 @@ function _ocSources(result, ioc, type) {
     });
   }
 
-  // OpenCTI — operator's own CTI instance. Shows count of matched
-  // observables / indicators / reports.
-  if (d.opencti && !d.opencti.error) {
+  // OpenCTI — operator's own CTI instance. Backend's lookup_observable
+  // returns {found, score, labels, description, created, report_url}
+  // when there's a hit (skipped when OpenCTI isn't configured), so any
+  // payload with found=true is a real match.
+  if (d.opencti && !d.opencti.error && d.opencti.found) {
     const o = d.opencti;
-    const hits = (o.observable_count ?? 0) + (o.indicator_count ?? 0) + (o.report_count ?? 0);
-    if (hits > 0) {
-      const bits = [];
-      if (o.indicator_count)  bits.push(`${o.indicator_count} indicator${o.indicator_count === 1 ? '' : 's'}`);
-      if (o.report_count)     bits.push(`${o.report_count} report${o.report_count === 1 ? '' : 's'}`);
-      if (o.observable_count) bits.push(`${o.observable_count} obs`);
-      out.push({ source: 'OpenCTI', label: bits.join(' · '), color: red,
-                 why: 'Match in your OpenCTI instance — this indicator has been previously analysed or tracked by your team. Highest-value internal signal.' });
-    }
+    const bits = [];
+    if (o.score != null) bits.push(`score ${o.score}`);
+    const labels = (o.labels || []).filter(Boolean).slice(0, 3);
+    if (labels.length) bits.push(labels.join(', '));
+    if (!bits.length) bits.push('matched observable');
+    out.push({ source: 'OpenCTI', label: bits.join(' · '), color: red,
+               why: 'Match in your OpenCTI instance — this indicator has been previously analysed or tracked by your team. Highest-value internal signal.' });
   }
 
   // ─── Domain-specific rows ────────────────────────────────────────────
@@ -2130,18 +2132,21 @@ function _ocSources(result, ioc, type) {
     });
   }
 
-  // Wayback Machine — first / last snapshot dates.
-  if (d.wayback && !d.wayback.error
-      && (d.wayback.first_snapshot || d.wayback.last_snapshot)) {
+  // Wayback Machine — closest snapshot date (parser returns
+  // has_snapshots + closest_snapshot; first/last variants don't exist).
+  // Surface the "no snapshots" case too, since a brand-new domain
+  // missing from the Wayback Machine is itself a useful signal.
+  if (d.wayback && !d.wayback.error) {
     const w = d.wayback;
-    const _date = s => s ? String(s).slice(0, 10) : null;
-    const first = _date(w.first_snapshot);
-    const last  = _date(w.last_snapshot);
-    const lbl = (first && last && first !== last)
-      ? `archived ${first} → ${last}`
-      : `last snapshot ${last || first}`;
-    out.push({ source: 'Wayback', label: lbl, color: tert,
-               why: 'Internet Archive snapshot history. Long history = established legitimate site; brand-new or no snapshots = newly stood up (consistent with phishing or C2 staging).' });
+    if (w.has_snapshots && w.closest_snapshot) {
+      out.push({ source: 'Wayback',
+                 label: `closest snapshot ${String(w.closest_snapshot).slice(0,10)}`,
+                 color: tert,
+                 why: 'Internet Archive snapshot history. Long history = established legitimate site; brand-new or no snapshots = newly stood up (consistent with phishing or C2 staging).' });
+    } else if (w.has_snapshots === false) {
+      out.push({ source: 'Wayback', label: 'no archive history', color: orange,
+                 why: 'Domain has zero Wayback Machine snapshots — never archived by the Internet Archive. Consistent with newly-registered phishing/C2 staging infrastructure.' });
+    }
   }
 
   // Typosquat detector — flags lookalikes of well-known brands.
@@ -2192,24 +2197,30 @@ function _ocSources(result, ioc, type) {
                why: 'FullHunt enumerates the attack surface of a domain (subdomains + open services). Larger footprint = bigger target / more potential entry points for attackers.' });
   }
 
-  // DNS records (subset of osint) — A/AAAA/MX/NS visibility.
+  // DNS records (subset of osint) — A/AAAA/MX/NS visibility. Parser
+  // returns {records: {A:[…], AAAA:[…], MX:[…], NS:[…]}} (uppercase
+  // type keys, nested under `records`). Earlier code read dns.a /
+  // dns.aaaa / dns.mx / dns.ns directly, which never matched.
   if (d.osint?.dns_records && !d.osint.dns_records.error) {
-    const dns = d.osint.dns_records;
+    const recs = d.osint.dns_records.records || {};
     const counts = [];
-    if ((dns.a || []).length)    counts.push(`${dns.a.length} A`);
-    if ((dns.aaaa || []).length) counts.push(`${dns.aaaa.length} AAAA`);
-    if ((dns.mx || []).length)   counts.push(`${dns.mx.length} MX`);
-    if ((dns.ns || []).length)   counts.push(`${dns.ns.length} NS`);
+    if ((recs.A    || []).length) counts.push(`${recs.A.length} A`);
+    if ((recs.AAAA || []).length) counts.push(`${recs.AAAA.length} AAAA`);
+    if ((recs.MX   || []).length) counts.push(`${recs.MX.length} MX`);
+    if ((recs.NS   || []).length) counts.push(`${recs.NS.length} NS`);
     if (counts.length) {
       out.push({ source: 'DNS records', label: counts.join(' · '), color: tert,
                  why: 'Live DNS query — what record types the domain currently resolves. MX = receives email; NS = its own nameservers. Useful for triaging email-based attacks.' });
     }
   }
 
-  // Google Safe Browsing — phishing/malware classification.
+  // Google Safe Browsing — phishing/malware classification. Parser sets
+  // {match_count, threat_types, verdict}; `matched` boolean never
+  // existed. Trigger on match_count > 0 (verdict==='MALICIOUS' would
+  // also work but match_count is the primary signal).
   if (d.osint?.google_safebrowsing && !d.osint.google_safebrowsing.error) {
     const g = d.osint.google_safebrowsing;
-    if (g.matched) {
+    if ((g.match_count || 0) > 0) {
       out.push({
         source: 'Google Safe Browsing',
         label: `flagged: ${(g.threat_types || []).join(', ') || 'unsafe'}`,
