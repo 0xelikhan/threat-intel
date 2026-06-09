@@ -67,6 +67,11 @@ SECURITY_HEADERS = {
     "X-XSS-Protection":       "1; mode=block",
     "Referrer-Policy":        "strict-origin-when-cross-origin",
     "Permissions-Policy":     "camera=(), microphone=(), geolocation=()",
+    # Force HTTPS for two years + include subdomains + preload-list
+    # eligible. Only sent in production — local dev runs over plain
+    # HTTP and an HSTS header would brick the browser's localhost
+    # bookmark for two years.
+    # (Conditional injection happens in the middleware below.)
 }
 
 
@@ -89,6 +94,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response: Response = await call_next(request)
         for k, v in SECURITY_HEADERS.items():
             response.headers[k] = v
+        # HSTS is gated on RECON_HTTPS=1 so local dev (HTTP loopback) doesn't
+        # poison the browser's HTTPS-upgrade cache for two years. Production
+        # behind Azure Container Apps (TLS-terminated) sets RECON_HTTPS=1.
+        if os.environ.get("RECON_HTTPS", "").lower() in {"1", "true", "yes"}:
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=63072000; includeSubDomains; preload"
+            )
         return response
 
 

@@ -329,12 +329,23 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
         # the exception fires before the handler chain. Build the envelope
         # inline so 401s carry the same shape (error_code/request_id/ts)
         # as every other API error response.
+        # AuthGate runs OUTSIDE RequestIDMiddleware so the contextvar isn't
+        # populated yet when we reject; pull it from the inbound
+        # X-Request-ID header (reverse-proxy trace ID propagation) or
+        # generate a fresh UUID and prime the contextvar so error_envelope
+        # picks it up. Also stamp the header on the response so the
+        # client can grep logs.
+        import uuid as _uuid
+        from intel.observability import request_id_var
+        rid = request.headers.get("X-Request-ID") or str(_uuid.uuid4())
+        request_id_var.set(rid)
         body = error_envelope(
             detail="auth required",
             code="auth_required",
             status=401,
         )
-        return JSONResponse(body, status_code=401)
+        return JSONResponse(body, status_code=401,
+                            headers={"X-Request-ID": rid})
 
 
 # Order matters — last add_middleware is OUTERMOST (runs first per request).
