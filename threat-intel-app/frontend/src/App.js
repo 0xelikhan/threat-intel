@@ -1858,29 +1858,41 @@ function _ocSources(result, ioc, type) {
                color: tert });
   }
 
-  // Censys — open ports / services / certs on the host.
+  // Censys — open ports / services / certs on the host. The backend
+  // returns services as an array of dicts {port, transport, service,
+  // product, banner}; pull just the port numbers for the label.
   if (d.censys && !d.censys.error) {
     const c = d.censys;
-    const ports = (c.services || c.ports || []).slice(0, 6).join(', ');
+    const portNums = (c.services || []).slice(0, 8)
+      .map(s => (typeof s === 'object' ? s.port : s))
+      .filter(p => p != null);
     const meta = [];
     if (c.country) meta.push(c.country);
-    if (ports)     meta.push(`ports ${ports}`);
+    if (portNums.length) meta.push(`ports ${portNums.join(', ')}`);
     if (meta.length) {
       out.push({ source: 'Censys', label: meta.join(' · '), color: tert });
     }
   }
 
-  // CrowdSec CTI — reputation + scenarios the IP triggered.
+  // CrowdSec CTI — _p_crowdsec returns classifications / attack_details /
+  // behaviors / score_overall, not "reputation"/"scenarios". Show
+  // whichever signals exist for this IP.
   if (d.crowdsec && !d.crowdsec.error) {
     const cs = d.crowdsec;
-    const rep = cs.reputation || cs.classifications?.[0] || '';
-    if (rep) {
-      const c = /malicious|known/i.test(rep) ? red
-              : /suspicious/i.test(rep) ? orange : tert;
-      const scenarios = (cs.scenarios || []).slice(0, 2).join(', ');
-      out.push({ source: 'CrowdSec',
-                 label: `${rep}${scenarios ? ` · ${scenarios}` : ''}`,
-                 color: c });
+    const cls = (cs.classifications || []).filter(Boolean);
+    const attacks = (cs.attack_details || []).filter(Boolean);
+    const overall = cs.score_overall;
+    if (cls.length || attacks.length || (overall && overall > 0)) {
+      const lead = cls[0] || attacks[0] || `aggressiveness ${overall}`;
+      const extra = (cls.length > 1 ? cls.slice(1, 3) : attacks.slice(0, 2));
+      const c = /malicious|known|crawler.*bad/i.test(lead) ? red
+              : /suspicious|brute|exploit/i.test(lead) ? orange
+              : (overall || 0) >= 3 ? orange : tert;
+      out.push({
+        source: 'CrowdSec',
+        label: `${lead}${extra.length ? ` · ${extra.join(', ')}` : ''}`,
+        color: c,
+      });
     }
   }
 
@@ -1902,10 +1914,13 @@ function _ocSources(result, ioc, type) {
     if (lbl) out.push({ source: 'Robtex', label: lbl, color: tert });
   }
 
-  // Hackertarget — reverse-IP (other hostnames on the same IP).
+  // Hackertarget — reverse-IP (other hostnames on the same IP). The
+  // backend parser returns `rows` + `record_count`; was checking the
+  // wrong field name and the row never rendered.
   if (d.hackertarget && !d.hackertarget.error) {
-    const ht = d.hackertarget;
-    const n = (ht.hostnames || []).length;
+    const n = d.hackertarget.record_count
+              ?? (d.hackertarget.rows || []).length
+              ?? 0;
     if (n > 0) {
       out.push({ source: 'Hackertarget',
                  label: `${n} hostname${n === 1 ? '' : 's'} share this IP`,
