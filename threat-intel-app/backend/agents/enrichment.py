@@ -78,11 +78,12 @@ _PER_SOURCE_TIMEOUT = float(os.getenv("ENRICH_SOURCE_TIMEOUT_S", "12"))
 _SLOW_HOSTS = {
     # OTX's pulse-aggregation is the slowest source we hit. A long-
     # running Tor exit node (e.g. 185.220.101.1) appears in hundreds
-    # of pulses and observed response time has been >25 s. Bumped to
-    # 35 s — the analyze pipeline streams partial results as each
-    # category finishes, so a slow OTX just means its row populates a
-    # little later rather than the whole investigation stalling.
-    "otx.alienvault.com":        35.0,
+    # of pulses and analyst-observed response time has been >35 s on
+    # repeat queries. Pulled to 60 s — the analyze pipeline streams
+    # partial results as each category finishes, so OTX just shows
+    # up later in the source list rather than blocking the whole
+    # investigation.
+    "otx.alienvault.com":        60.0,
     "crt.sh":                    20.0,
     "www.virustotal.com":        20.0,
     "www.hybrid-analysis.com":   20.0,
