@@ -1965,6 +1965,145 @@ function _ocSources(result, ioc, type) {
     }
   }
 
+  // Hybrid Analysis — prior sandbox detonation (hashes only).
+  if (d.hybrid_analysis && !d.hybrid_analysis.error && d.hybrid_analysis.found) {
+    const h = d.hybrid_analysis;
+    const score = h.threat_score;
+    const c = score >= 70 ? red : score >= 40 ? orange
+            : h.verdict === 'malicious' ? red : tert;
+    const fam = h.malware_family || h.vx_family;
+    out.push({
+      source: 'Hybrid Analysis',
+      label: `${h.verdict || 'analyzed'}${score != null ? ` · score ${score}` : ''}${fam ? ` · ${fam}` : ''}`,
+      color: c,
+    });
+  }
+
+  // Team Cymru Malware Hash Registry — community-curated AV consensus.
+  if (d.team_cymru_mhr && !d.team_cymru_mhr.error && d.team_cymru_mhr.found) {
+    const t = d.team_cymru_mhr;
+    out.push({
+      source: 'Team Cymru MHR',
+      label: `last seen ${t.last_seen || '?'}${t.detection_pct != null ? ` · ${t.detection_pct}% AV consensus` : ''}`,
+      color: red,
+    });
+  }
+
+  // OpenCTI — operator's own CTI instance. Shows count of matched
+  // observables / indicators / reports.
+  if (d.opencti && !d.opencti.error) {
+    const o = d.opencti;
+    const hits = (o.observable_count ?? 0) + (o.indicator_count ?? 0) + (o.report_count ?? 0);
+    if (hits > 0) {
+      const bits = [];
+      if (o.indicator_count)  bits.push(`${o.indicator_count} indicator${o.indicator_count === 1 ? '' : 's'}`);
+      if (o.report_count)     bits.push(`${o.report_count} report${o.report_count === 1 ? '' : 's'}`);
+      if (o.observable_count) bits.push(`${o.observable_count} obs`);
+      out.push({ source: 'OpenCTI', label: bits.join(' · '), color: red });
+    }
+  }
+
+  // ─── Domain-specific rows ────────────────────────────────────────────
+  // Cert Transparency (crt.sh) — count of unique certs + subdomains.
+  if (d.certTransparency && !d.certTransparency.error && d.certTransparency.totalCerts != null) {
+    const ct = d.certTransparency;
+    const n = ct.totalCerts;
+    const subs = (ct.subdomains || []).length;
+    out.push({
+      source: 'Cert Transparency',
+      label: `${n} cert${n === 1 ? '' : 's'}${subs ? ` · ${subs} unique subdomains` : ''}`,
+      color: tert,
+    });
+  }
+
+  // Wayback Machine — first / last snapshot dates.
+  if (d.wayback && !d.wayback.error
+      && (d.wayback.first_snapshot || d.wayback.last_snapshot)) {
+    const w = d.wayback;
+    const _date = s => s ? String(s).slice(0, 10) : null;
+    const first = _date(w.first_snapshot);
+    const last  = _date(w.last_snapshot);
+    const lbl = (first && last && first !== last)
+      ? `archived ${first} → ${last}`
+      : `last snapshot ${last || first}`;
+    out.push({ source: 'Wayback', label: lbl, color: tert });
+  }
+
+  // Typosquat detector — flags lookalikes of well-known brands.
+  if (d.typosquat && d.typosquat.brand) {
+    out.push({
+      source: 'Typosquat',
+      label: `looks like ${d.typosquat.brand}${d.typosquat.distance != null ? ` (edit distance ${d.typosquat.distance})` : ''}`,
+      color: red,
+    });
+  }
+
+  // Domain heuristics — DGA score / newly-registered / IDN homoglyph.
+  if (d.heuristics && typeof d.heuristics === 'object') {
+    const h = d.heuristics;
+    const bits = [];
+    if (h.nrd?.is_same_day)        bits.push('registered TODAY');
+    else if (h.nrd?.age_days != null && h.nrd.age_days < 30)
+      bits.push(`registered ${h.nrd.age_days}d ago`);
+    if (h.dga?.score != null && h.dga.score >= 0.6)
+      bits.push(`DGA score ${h.dga.score.toFixed(2)}`);
+    if (h.idn)                     bits.push('IDN homoglyph');
+    if (bits.length) {
+      const c = (h.nrd?.is_same_day || h.idn || (h.dga?.score || 0) >= 0.8)
+        ? red
+        : (h.nrd?.age_days != null && h.nrd.age_days < 30) || (h.dga?.score || 0) >= 0.6
+        ? orange : tert;
+      out.push({ source: 'Heuristics', label: bits.join(' · '), color: c });
+    }
+  }
+
+  // FullHunt — subdomain inventory.
+  if (d.fullhunt && !d.fullhunt.error
+      && (d.fullhunt.subdomain_count || (d.fullhunt.ports || []).length)) {
+    const f = d.fullhunt;
+    const bits = [];
+    if (f.subdomain_count) bits.push(`${f.subdomain_count} subdomains`);
+    if ((f.ports || []).length) bits.push(`ports ${(f.ports || []).slice(0, 4).join(', ')}`);
+    out.push({ source: 'FullHunt', label: bits.join(' · '), color: tert });
+  }
+
+  // DNS records (subset of osint) — A/AAAA/MX/NS visibility.
+  if (d.osint?.dns_records && !d.osint.dns_records.error) {
+    const dns = d.osint.dns_records;
+    const counts = [];
+    if ((dns.a || []).length)    counts.push(`${dns.a.length} A`);
+    if ((dns.aaaa || []).length) counts.push(`${dns.aaaa.length} AAAA`);
+    if ((dns.mx || []).length)   counts.push(`${dns.mx.length} MX`);
+    if ((dns.ns || []).length)   counts.push(`${dns.ns.length} NS`);
+    if (counts.length) {
+      out.push({ source: 'DNS records', label: counts.join(' · '), color: tert });
+    }
+  }
+
+  // Google Safe Browsing — phishing/malware classification.
+  if (d.osint?.google_safebrowsing && !d.osint.google_safebrowsing.error) {
+    const g = d.osint.google_safebrowsing;
+    if (g.matched) {
+      out.push({
+        source: 'Google Safe Browsing',
+        label: `flagged: ${(g.threat_types || []).join(', ') || 'unsafe'}`,
+        color: red,
+      });
+    }
+  }
+
+  // ─── URL-specific rows ───────────────────────────────────────────────
+  // PhishTank — community phishing database.
+  if (d.phishtank && !d.phishtank.error && d.phishtank.in_database) {
+    const p = d.phishtank;
+    const verified = p.verified === true || p.verified === 'y';
+    out.push({
+      source: 'PhishTank',
+      label: `${verified ? 'verified phishing' : 'reported phishing'}${p.submission_time ? ` · ${String(p.submission_time).slice(0, 10)}` : ''}`,
+      color: red,
+    });
+  }
+
   // NVD CVE — score + severity + description summary.
   if (d.nvd && !d.nvd.error && d.nvd.found) {
     const n = d.nvd;
