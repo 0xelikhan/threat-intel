@@ -42,15 +42,60 @@ def _clean_sdk_err(e: BaseException) -> str:
 
 def _split_system(messages: List[Message]) -> Tuple[Optional[str], List[Message]]:
     """Pop the leading system message into a single string (Anthropic takes
-    system as a separate kwarg). Preserves order of the rest."""
+    system as a separate kwarg) AND translate OpenAI-shape tool messages
+    into Anthropic content-block format.
+
+    OpenAI uses:
+      - assistant turn with `tool_calls=[{id, function:{name, arguments}}]`
+      - tool result turn with `{role:"tool", tool_call_id, content}`
+    Anthropic uses content arrays:
+      - assistant with `[{type:"text"...}, {type:"tool_use", id, name, input}]`
+      - user with `[{type:"tool_result", tool_use_id, content}]`
+
+    The codebase emits OpenAI-shape messages everywhere, so the
+    translation lives here in the adapter (where the abstraction belongs)
+    rather than each caller learning Anthropic's shape.
+    """
     system_parts: List[str] = []
     rest: List[Message] = []
     for m in messages:
-        if m.get("role") == "system":
+        role = m.get("role")
+        if role == "system":
             c = m.get("content", "")
             system_parts.append(c if isinstance(c, str) else json.dumps(c))
-        else:
-            rest.append(m)
+            continue
+        if role == "tool":
+            # OpenAI tool-result → Anthropic user/tool_result block
+            rest.append({
+                "role": "user",
+                "content": [{
+                    "type":        "tool_result",
+                    "tool_use_id": m.get("tool_call_id", ""),
+                    "content":     m.get("content", "") or "",
+                }],
+            })
+            continue
+        if role == "assistant" and m.get("tool_calls"):
+            blocks: list = []
+            text = m.get("content")
+            if isinstance(text, str) and text.strip():
+                blocks.append({"type": "text", "text": text})
+            for tc in m.get("tool_calls") or []:
+                fn = tc.get("function") or {}
+                args_raw = fn.get("arguments") or "{}"
+                try:
+                    args = json.loads(args_raw) if isinstance(args_raw, str) else args_raw
+                except Exception:
+                    args = {}
+                blocks.append({
+                    "type":  "tool_use",
+                    "id":    tc.get("id", ""),
+                    "name":  fn.get("name", ""),
+                    "input": args if isinstance(args, dict) else {},
+                })
+            rest.append({"role": "assistant", "content": blocks})
+            continue
+        rest.append(m)
     sys = "\n\n".join(s for s in system_parts if s) or None
     return sys, rest
 

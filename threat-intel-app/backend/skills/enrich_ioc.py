@@ -70,10 +70,21 @@ class EnrichIOCSkill(Skill):
                     "score": 0, "sources": {}, "summary": [f"enrichment unavailable: {e}"]}
 
         _log = logging.getLogger("recon.skill.enrich_ioc")
+        # Full key set so the skill's enrichment matches the main /api/analyze
+        # pipeline. The earlier subset was missing ABUSECH_AUTH_KEY (so
+        # MalwareBazaar/ThreatFox/URLhaus all hit anonymously and were
+        # rate-limited), HYBRID_ANALYSIS_KEY, CENSYS / CRIMINAL_IP /
+        # PROXYCHECK / GOOGLE / FULLHUNT etc. Each enrich_* internally
+        # cherry-picks what it needs.
         keys = {k: config.get(k, "") for k in (
             "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
             "GREYNOISE_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
             "IPINFO_TOKEN", "WHOISXML_KEY", "CROWDSEC_KEY", "PHISHTANK_KEY",
+            "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY", "HYBRID_ANALYSIS_KEY",
+            "CENSYS_API_ID", "CENSYS_API_SECRET", "CENSYS_PERSONAL_ACCESS_TOKEN",
+            "CRIMINAL_IP_KEY", "PROXYCHECK_KEY",
+            "GOOGLE_API_KEY", "FULLHUNT_KEY",
+            "OPENCTI_URL", "OPENCTI_TOKEN",
         )}
 
         # ── cache lookup ──────────────────────────────────────────────────────
@@ -114,17 +125,19 @@ class EnrichIOCSkill(Skill):
                 cache.set(cache_key, data)
 
         # Derive verdict + score via the existing deterministic scorer for
-        # parity with the GTI panel; falls back to a coarse heuristic if it
-        # can't run.
+        # parity with the GTI panel. compute_gti_scores takes ONE arg
+        # (enrichments) keyed by plural type; the earlier two-arg call
+        # was a TypeError that swallowed into UNKNOWN/0 on every call.
         try:
             from gti_score import compute_gti_scores
-            scores = compute_gti_scores({ioc_type + "s": [ioc_value]},
-                                        {ioc_type + "s": {ioc_value: data}})
+            bucket_key = "hashes" if ioc_type in ("hash", "file") else f"{ioc_type}s"
+            scores = compute_gti_scores({bucket_key: {ioc_value: data}})
             entry = (scores or {}).get(ioc_value) or {}
             verdict = entry.get("verdict") or "UNKNOWN"
             score   = int(entry.get("score") or 0)
             factors = [f for f in (entry.get("contributing_factors") or [])][:6]
-        except Exception:
+        except Exception as _e:
+            _log.warning("gti scoring failed in enrich_ioc skill: %s", _e)
             verdict, score, factors = "UNKNOWN", 0, []
 
         return {
