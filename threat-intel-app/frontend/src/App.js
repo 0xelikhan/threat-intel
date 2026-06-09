@@ -1991,6 +1991,30 @@ function _ocSources(result, ioc, type) {
     }
   }
 
+  // ProxyCheck — VPN / proxy / Tor / hosting-IP classification. Backend
+  // queries proxycheck.io when PROXYCHECK_KEY is configured; parser
+  // returns {proxy, type, provider, country, asn, risk}. Was being
+  // queried but had no UI emitter, so the data never reached the
+  // analyst.
+  if (d.proxycheck && !d.proxycheck.error) {
+    const p = d.proxycheck;
+    if (p.proxy || (p.risk != null && p.risk > 0)) {
+      const t = (p.type || 'proxy').toUpperCase();
+      const c = (p.risk || 0) >= 66 || t === 'TOR' ? red
+              : (p.risk || 0) >= 33 || t === 'VPN' ? orange
+              :                                      yellow;
+      const bits = [t];
+      if (p.provider) bits.push(p.provider);
+      if (p.risk != null) bits.push(`risk ${p.risk}/100`);
+      out.push({
+        source: 'ProxyCheck',
+        label: bits.join(' · '),
+        color: c,
+        why: 'IP is identified as VPN / proxy / Tor exit / hosting infrastructure. Anonymity infrastructure hides the true origin; legitimate user traffic from these IPs is rare in enterprise contexts.',
+      });
+    }
+  }
+
   // Feodo Tracker — abuse.ch active-C2 list match.
   if (d.feodo_tracker && d.feodo_tracker.hit) {
     out.push({ source: 'Feodo Tracker',
@@ -2362,11 +2386,22 @@ function _ocSources(result, ioc, type) {
     criminal_ip: 'Criminal IP',         urlhaus_url: 'URLhaus',
     urlhaus_payload: 'URLhaus payload', circl_hashlookup: 'CIRCL hashlookup',
     nvd: 'NVD',                          epss: 'EPSS',
+    cisa_kev: 'CISA KEV',
     hybrid_analysis: 'Hybrid Analysis',
     whois: 'WHOIS',                      ipinfo: 'IPInfo',
     censys: 'Censys',                    crowdsec: 'CrowdSec',
     feodo_tracker: 'Feodo Tracker',
     misp_feeds: 'MISP Feeds',
+    // Previously omitted from this map — when these sources errored
+    // (timeout, auth fail, circuit-open) the failure was hidden from
+    // the analyst entirely. Adding them surfaces the failure state in
+    // the same dimmed "source-status" row format as the others.
+    proxycheck: 'ProxyCheck',           opencti: 'OpenCTI',
+    team_cymru_mhr: 'Team Cymru MHR',   hackertarget: 'Hackertarget',
+    robtex: 'Robtex',                   circl_pdns: 'CIRCL pDNS',
+    wayback: 'Wayback',                 certTransparency: 'Cert Transparency',
+    fullhunt: 'FullHunt',               phishtank: 'PhishTank',
+    urlscan_screenshot: 'URLScan screenshot',
   };
   const _surfaced = new Set(out.map(r => r.source));
   for (const [key, blob] of Object.entries(d || {})) {
