@@ -15,8 +15,11 @@ depend on it when LLM_PROVIDER != anthropic.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import AsyncIterator, List, Optional, Tuple
+
+_log = logging.getLogger("recon.providers.anthropic")
 
 from .base import LLMProvider, LLMResponse, LLMChunk, Message, Tool
 
@@ -128,10 +131,19 @@ class AnthropicProvider(LLMProvider):
             if btype == "text":
                 text_parts.append(getattr(block, "text", ""))
             elif btype == "tool_use":
+                # Anthropic delivers tool args as a parsed dict on
+                # `input`. If it's missing or None we used to silently
+                # swap in {} and execute the tool with no args; log it
+                # so a model-side regression is visible.
+                args = getattr(block, "input", None)
+                if not isinstance(args, dict) or not args:
+                    _log.warning("tool_use block missing input for %s",
+                                 getattr(block, "name", "?"))
+                    args = {} if not isinstance(args, dict) else args
                 tool_calls.append({
                     "id":        getattr(block, "id", ""),
                     "name":      getattr(block, "name", ""),
-                    "arguments": getattr(block, "input", {}) or {},
+                    "arguments": args,
                 })
         usage = getattr(resp, "usage", None)
         return LLMResponse(

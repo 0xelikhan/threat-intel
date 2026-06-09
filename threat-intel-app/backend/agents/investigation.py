@@ -1534,10 +1534,17 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                             trace.append(tool_trace)
                             await _emit(tool_trace)
                             # Feed the tool result back into the conversation (cap size)
+                            # 4000-char cap — enough for typical
+                            # enrichment + KEV + tool-output blobs
+                            # without overrunning the model's context.
+                            # Was 2500 which truncated mid-string on
+                            # verbose tools (large VT engine lists,
+                            # multi-pulse OTX hits) and fed malformed
+                            # JSON to the next iteration.
                             messages.append({
                                 "role":          "tool",
                                 "tool_call_id":  tc["id"],
-                                "content":       json.dumps(tool_result, default=str)[:2500],
+                                "content":       json.dumps(tool_result, default=str)[:4000],
                             })
                         # Continue the loop — AI may call more tools
                         continue
@@ -1786,6 +1793,23 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                     _synth(probing_instr, 1100, temperature=0.1),
                     return_exceptions=True,
                 )
+                # Log partial failures — a single half throwing used to
+                # leave the result silently incomplete (e.g. verdict +
+                # questions present, key_findings empty) with no breadcrumb.
+                _parts_labels = ("verdict", "findings", "probing")
+                _failed_parts = [
+                    lab for lab, p in zip(_parts_labels, (part_a, part_b, part_c))
+                    if isinstance(p, Exception) or not isinstance(p, dict) or not p
+                ]
+                if _failed_parts:
+                    _log.warning(
+                        "investigation synth partial failure (%s): %r / %r / %r",
+                        ",".join(_failed_parts), part_a, part_b, part_c,
+                    )
+                    tool_call_log.append({
+                        "tool": "_synth_partial_fail",
+                        "summary": f"synthesis halves failed: {', '.join(_failed_parts)}",
+                    })
                 result = {}
                 for part in (part_a, part_b, part_c):
                     if isinstance(part, dict):
@@ -1793,6 +1817,10 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                 if not result:
                     # All halves failed → surface to the single-shot fallback below
                     raise RuntimeError(f"synthesis failed: {part_a!r} / {part_b!r} / {part_c!r}")
+                # Always set needs_more_enrichment so the router gate
+                # downstream sees an explicit boolean even if the
+                # specific half that owned this key failed.
+                result.setdefault("needs_more_enrichment", False)
 
             except Exception as e:
                 # Tool-calling path failed — fall back to the original single-shot prompt

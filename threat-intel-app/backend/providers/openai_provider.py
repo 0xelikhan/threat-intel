@@ -11,9 +11,13 @@ matched OpenAI's format), so translation is mostly pass-through.
 from __future__ import annotations
 
 import json
+import logging
+import os
 from typing import AsyncIterator, List, Optional
 
 from config import config
+
+_log = logging.getLogger("recon.providers.openai")
 
 from .base import LLMProvider, LLMResponse, LLMChunk, Message, Tool
 
@@ -53,10 +57,17 @@ class OpenAIProvider(LLMProvider):
         base_url = config.get("OPENAI_BASE_URL") or ""
         model    = override_model or self._configured_model
         if "openai.azure.com" in base_url.lower():
+            # api_version can be overridden via OPENAI_API_VERSION when
+            # an operator needs a newer Azure surface (preview features,
+            # gpt-5-class deployments). Default tracks the latest stable
+            # GA preview at time of writing.
+            api_version = (config.get("OPENAI_API_VERSION")
+                           or os.environ.get("OPENAI_API_VERSION")
+                           or "2024-10-21")
             return AsyncAzureOpenAI(
                 api_key=key,
                 azure_endpoint=base_url.rstrip("/"),
-                api_version="2024-02-01",
+                api_version=api_version,
                 timeout=60.0,
                 max_retries=1,
             ), model
@@ -135,9 +146,15 @@ class OpenAIProvider(LLMProvider):
         msg = choice.message
         tool_calls = []
         for tc in (msg.tool_calls or []):
+            raw = tc.function.arguments or "{}"
             try:
-                args = json.loads(tc.function.arguments or "{}")
-            except Exception:
+                args = json.loads(raw)
+            except Exception as _e:
+                # Used to silently swap in {} which made the tool run with
+                # whatever its defaults were. Log it so a recurring parse
+                # failure (model misbehaviour, schema drift) is visible.
+                _log.warning("tool args JSON parse failed for %s: %s (raw=%r)",
+                             tc.function.name, _e, raw[:200])
                 args = {}
             tool_calls.append({"id": tc.id, "name": tc.function.name, "arguments": args})
         usage = getattr(resp, "usage", None)
