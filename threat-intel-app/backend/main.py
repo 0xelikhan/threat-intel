@@ -186,14 +186,10 @@ app = FastAPI(title="Threat Intelligence Platform", version="3.0.0",
 # `asyncio.create_task(...)` can be garbage-collected before the
 # coroutine completes. Any background work that outlives the request
 # that spawned it (sandbox polling, post-scan AI fan-out, periodic
-# refresh loops) should go through track_task() instead.
-_BG_TASKS: "set[asyncio.Task]" = set()
-
-
-def track_task(task: "asyncio.Task") -> "asyncio.Task":
-    _BG_TASKS.add(task)
-    task.add_done_callback(_BG_TASKS.discard)
-    return task
+# refresh loops) should go through track_task() instead. Implementation
+# in bg_utils.py so the test suite can exercise it without paying the
+# full main.py import cost.
+from bg_utils import _BG_TASKS, track_task  # noqa: F401
 
 # Structured logging + per-request UUID. Configured before anything else
 # touches logging so the first log line carries the right format.
@@ -375,28 +371,9 @@ app.add_middleware(
 # (FastAPI deprecated @app.on_event in favour of a single lifespan
 # context manager).
 
-from collections import OrderedDict
-
-
-class _BoundedDict(OrderedDict):
-    """Insertion-order dict that evicts the oldest entry once `_cap` is
-    exceeded. Re-assigning an existing key refreshes its position so
-    "recently touched" entries stick around. Used for the few module-level
-    caches (_results, _chats, _sandbox_jobs) that previously grew without
-    bound; a long-running container with steady analyst traffic could
-    have accumulated GBs of stale state over weeks otherwise."""
-
-    def __init__(self, cap: int):
-        super().__init__()
-        self._cap = cap
-
-    def __setitem__(self, key, value):
-        if key in self:
-            self.move_to_end(key)
-        super().__setitem__(key, value)
-        while len(self) > self._cap:
-            self.popitem(last=False)
-
+# BoundedDict lives in bg_utils.py so tests can hit it without paying
+# the full FastAPI import cost — see test_bounded_dict.py.
+from bg_utils import BoundedDict as _BoundedDict
 
 _results: dict = _BoundedDict(cap=500)
 # Sandbox job tracker: { job_id: { state, submitted_at, sha256, ... } }

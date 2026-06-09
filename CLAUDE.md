@@ -169,6 +169,17 @@ Stats are surfaced at `/api/status` under the `cache` and
 
 ## Security model
 
+* **No-persistence policy** — analyst-submitted data must NEVER hit disk.
+  Pasted logs, IOCs, scan results, calibration overrides, email drafts,
+  feed cache, and audit records all live in module-level in-memory
+  stores (capped via `_BoundedDict` or `deque(maxlen=...)`). The ONLY
+  acceptable file under `backend/data/` is `config.json` (operator API
+  keys). On startup the lifespan handler wipes any legacy
+  `audit.log` / `calibration_overrides.jsonl` / `email_history.json` /
+  `feed_cache.json` / `scanner_feedback.json` files plus
+  `scanned_files/` / `email_drafts/` / `cases/` / `sandbox_results/`
+  directories. Treat any new disk write under `backend/data/` (other
+  than the config file) as a code smell.
 * **Fail-closed redactor** (`intel/redactor.py`) — typed placeholders
   for PEM keys, AWS/Azure/OpenAI/Anthropic keys, JWTs, credentials,
   emails, IPs, MAC, UNC paths, hostnames, hex blobs. Confidence-scored.
@@ -177,8 +188,18 @@ Stats are surfaced at `/api/status` under the `cache` and
 * **Auth** — bcrypt password hash + signed HTTP-only cookie
   (SameSite=Strict, 12 h max age). `AuthGateMiddleware` walls off every
   `/api/*` route except `/api/auth/*`, `/api/health`, `/api/docs`.
-* **AuditMiddleware** — body cap 50 MB, redacts string values on
-  sensitive fields before writing.
+  The 401 response goes through `error_envelope()` inline (middleware
+  can't raise HTTPException), so it carries the same shape as every
+  other error.
+* **AuditMiddleware** — body cap 50 MB. `audit_log()` emits via the
+  structured logger to stdout (transient), NOT to a file — operator
+  log shipping is what makes it durable, not the platform.
+* **CORS** — `RECON_CORS` env var overrides the origin list; default is
+  `http://localhost:3000` + `http://127.0.0.1:3000` for dev. Wildcard +
+  credentials is rejected by the config (and by every browser anyway).
+* **SSRF guard** on `/api/scan/url` — resolves the hostname, rejects
+  RFC1918 / loopback / link-local / metadata-service addresses, follows
+  redirects manually with the same guard on every hop.
 * **CSP / X-Frame-Options / X-Content-Type-Options** via
   `SecurityHeadersMiddleware`.
 
@@ -279,6 +300,22 @@ observability. Anthropic / Ollama provider tests skip without creds.
   The TTL cache (`intel/cache.py::enrich` namespace) is a separate layer
   that DOES persist across runs for the same IOC — pick the right one
   for the use case.
+* **Bounded module-level state** (`_BoundedDict` in `main.py`) — `_results`,
+  `_chats`, `_sandbox_jobs` are capped at 500 entries with LRU eviction.
+  `intel/file_correlation.py::_scan_store` is a 500-entry `OrderedDict`.
+  `intel/calibration_log.py::_RECORDS` is a `deque(maxlen=5000)`.
+  Anything new that accumulates per-run state should use one of these
+  patterns — never an unbounded `dict = {}`.
+* **Background tasks** — fire-and-forget `asyncio.create_task(...)` calls
+  must go through `main.track_task(...)`. asyncio only keeps a weakref,
+  so a discarded reference can be GC'd mid-flight. The lifespan handler
+  uses this for the warm/poll/health loops; external modules can
+  `from main import track_task` (see `intel/file_correlation.py`).
+* **TI source pivots** — `frontend/src/sourceUrls.js` maps
+  `(source label, IOC type)` to a public-web-UI deep link. When the
+  per-IOC expanded view renders a source row, the source label becomes
+  an anchor if `sourceUrl()` returns a URL. Adding a new TI source?
+  Drop its `(source label) → URL builder` row in `BUILDERS`.
 
 ---
 
@@ -320,4 +357,12 @@ observability. Anthropic / Ollama provider tests skip without creds.
 * `fe7d7b7` — async concurrency: TCPConnector pool + semaphore + wait_for
 * `282c1cc` — TTL caching layer with per-namespace TTL + /api/status integration
 * `3c077fe` — frontend perf: GZip middleware + React.memo on top-level views
-* `<this commit>` — code organization: constants.py, models.py, CLAUDE.md
+* `447deb6` — lifespan handler + race lock + datetime tz + silent except logging + Pydantic + Dockerfile sanity
+* `ac6d432` — frontend leaks + perf + CORS + SSRF + auth logging + logText bound
+* `5a36e36` — no-persistence policy: every analyst-data store moved in-memory
+* `1e95ca4` — MITRE/feed/actor inverted indexes + module-level regex compilation
+* `e06ed50` — runtime correctness: datetime, auth envelope, Pydantic mutable defaults
+* `c8c143f` — clickable TI source labels deep-link to each source's web UI
+* `478322c` — agent/provider silent-failure logging + tool result truncation cap
+* `781eecb` — dropped 4 dead React components + MCP inventory error surfacing
+* `8ad5f34` — EmailComposer "+N more" expandable + triage/investigate hardening
