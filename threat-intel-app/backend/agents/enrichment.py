@@ -65,29 +65,35 @@ def _humanise_exc(e: BaseException) -> str:
     return msg[:200]
 
 # Transport timeout (aiohttp-internal — covers connect + read body).
+# This is the INNER timeout — fires before the wait_for safety net if
+# the upstream is slow. Default 10 s is fine for most sources; slow
+# hosts get a per-host override (see _SLOW_HOSTS) that bumps BOTH
+# the inner aiohttp timeout AND the outer wait_for cap. Previously
+# only wait_for was bumped, which meant OTX's 12-second body still
+# tripped the 10 s aiohttp timeout first — the visible "timed out"
+# wasn't from our safety net, it was from aiohttp internal.
 _TIMEOUT = aiohttp.ClientTimeout(total=10)
 # Outer safety-net timeout (wraps the whole call, including parsing).
 _PER_SOURCE_TIMEOUT = float(os.getenv("ENRICH_SOURCE_TIMEOUT_S", "12"))
-# Hosts that consistently respond slower than the default — analysts kept
-# seeing "OTX: request timed out" on real malicious IPs because OTX's
-# pulse-aggregation can take 15-20s on indicators with hundreds of
-# pulses. Give the named hosts a longer safety-net so the source row
-# actually populates instead of silently failing. Other sources stay at
-# the tight 12s default so an unreachable host doesn't drag the whole
-# fan-out down.
-_SLOW_HOSTS = {
-    # OTX's pulse-aggregation is the slowest source we hit. A long-
-    # running Tor exit node (e.g. 185.220.101.1) appears in hundreds
-    # of pulses and analyst-observed response time has been >35 s on
-    # repeat queries. Pulled to 60 s — the analyze pipeline streams
-    # partial results as each category finishes, so OTX just shows
-    # up later in the source list rather than blocking the whole
-    # investigation.
-    "otx.alienvault.com":        60.0,
-    "crt.sh":                    20.0,
-    "www.virustotal.com":        20.0,
-    "www.hybrid-analysis.com":   20.0,
+# Slow hosts: per-host (transport, safety) tuple. Transport must be
+# the aiohttp.ClientTimeout the session.get gets; safety is the outer
+# wait_for cap. Both have to grow together — bumping only the outer
+# one (what we did before) doesn't help because aiohttp fires first.
+_SLOW_HOSTS: "dict[str, tuple[aiohttp.ClientTimeout, float]]" = {
+    # OTX's /general endpoint takes 11-15 s anonymously and longer
+    # with an API key because pulse aggregation expands. The user
+    # was hitting "timed out" because of the 10 s inner aiohttp
+    # timeout, not the outer safety. Both bumped.
+    "otx.alienvault.com":      (aiohttp.ClientTimeout(total=90),  90.0),
+    "crt.sh":                  (aiohttp.ClientTimeout(total=20),  20.0),
+    "www.virustotal.com":      (aiohttp.ClientTimeout(total=20),  20.0),
+    "www.hybrid-analysis.com": (aiohttp.ClientTimeout(total=20),  20.0),
 }
+
+
+def _timeouts_for(host: str | None) -> "tuple[aiohttp.ClientTimeout, float]":
+    """Return (aiohttp transport timeout, outer wait_for cap) for a host."""
+    return _SLOW_HOSTS.get(host or "", (_TIMEOUT, _PER_SOURCE_TIMEOUT))
 # Cap on in-flight HTTP fan-out — protects downstream rate limits and
 # our own event loop from a thousand simultaneous sockets.
 _SEMAPHORE = asyncio.Semaphore(int(os.getenv("ENRICH_CONCURRENCY", "10")))
@@ -144,10 +150,10 @@ async def _get(session, url, **kw):
         _log.debug("circuit open — skipping %s", host)
         return {"error": f"circuit open for {host}", "error_type": "circuit_open",
                 "skipped": True}
-    safety = _SLOW_HOSTS.get(host or "", _PER_SOURCE_TIMEOUT)
+    transport_to, safety = _timeouts_for(host)
 
     async def _do():
-        async with session.get(url, timeout=_TIMEOUT, **kw) as r:
+        async with session.get(url, timeout=transport_to, **kw) as r:
             status = r.status
             payload = await r.json() if "json" in r.content_type else {"raw": await r.text()}
             return status, payload
@@ -190,10 +196,10 @@ async def _post(session, url, **kw):
         _log.debug("circuit open — skipping %s", host)
         return {"error": f"circuit open for {host}", "error_type": "circuit_open",
                 "skipped": True}
-    safety = _SLOW_HOSTS.get(host or "", _PER_SOURCE_TIMEOUT)
+    transport_to, safety = _timeouts_for(host)
 
     async def _do():
-        async with session.post(url, timeout=_TIMEOUT, **kw) as r:
+        async with session.post(url, timeout=transport_to, **kw) as r:
             status = r.status
             payload = await r.json() if "json" in r.content_type else {"raw": await r.text()}
             return status, payload
