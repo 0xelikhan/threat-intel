@@ -323,6 +323,15 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if not path.startswith("/api/") or path.startswith(_PUBLIC_PREFIXES):
             return await call_next(request)
+        # CORS preflight OPTIONS requests carry no credentials by design
+        # — browsers send them to discover whether the cross-origin POST
+        # is permitted. Gating them on auth means CORSMiddleware never
+        # gets to ship the Access-Control-Allow-* headers and the
+        # browser refuses the actual request without ever trying. Let
+        # OPTIONS pass through; CORSMiddleware (added INSIDE this one)
+        # will short-circuit it correctly.
+        if request.method == "OPTIONS":
+            return await call_next(request)
         if current_user(request.session):
             return await call_next(request)
         # Middleware can't raise HTTPException through the global handler —
