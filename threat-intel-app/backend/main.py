@@ -276,6 +276,29 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.add_middleware(RequestIDMiddleware)
 
 
+# HTTP HEAD support. FastAPI routes default to GET-only, so every
+# uptime monitor / browser favicon discovery / RFC-compliant client
+# that sends HEAD on a GET endpoint used to get a 405. Map HEAD → GET
+# upstream of the router, then strip the response body so the headers
+# still match what GET would have produced.
+@app.middleware("http")
+async def _head_to_get(request: Request, call_next):
+    if request.method == "HEAD":
+        request.scope["method"] = "GET"
+        response = await call_next(request)
+        response.body_iterator = _empty_body()
+        # Content-Length stays accurate (per HTTP/1.1 RFC 7230 §4.3.2:
+        # HEAD must return the same Content-Length as GET would).
+        return response
+    return await call_next(request)
+
+
+async def _empty_body():
+    if False:
+        yield b""
+    return
+
+
 # Global error envelope — additive. The existing `detail` key (which the
 # React frontend reads via `err.detail || err.error`) is preserved; new
 # fields (`error_code`, `details`, `request_id`, `ts`) are stacked on.
@@ -308,14 +331,25 @@ async def _validation_exc_handler(_request, exc: RequestValidationError):
 # default `Internal Server Error` plain-text 500 — which breaks the
 # `err.detail || err.error` shape every other API error response uses.
 @app.exception_handler(Exception)
-async def _catchall_exc_handler(_request, exc: Exception):
+async def _catchall_exc_handler(request, exc: Exception):
     _log.exception("unhandled exception in handler chain: %s", exc)
+    # ExceptionMiddleware fires OUTSIDE RequestIDMiddleware in
+    # Starlette's chain, so by the time we get here the
+    # current_request_id() contextvar has already been reset. Pull
+    # from the inbound header or mint a fresh UUID so the 500
+    # envelope can still carry a correlation id, then prime the
+    # contextvar so error_envelope() picks it up.
+    import uuid as _uuid
+    from intel.observability import request_id_var
+    rid = request.headers.get("X-Request-ID") or str(_uuid.uuid4())
+    request_id_var.set(rid)
     body = error_envelope(
         detail="Internal server error",
         code="internal_error",
         status=500,
     )
-    return _JSONResponse(body, status_code=500)
+    return _JSONResponse(body, status_code=500,
+                        headers={"X-Request-ID": rid})
 
 # Auth gate — everything under /api/* requires a session EXCEPT:
 #   * /api/health        — needed by the Docker HEALTHCHECK and the deploy probe
