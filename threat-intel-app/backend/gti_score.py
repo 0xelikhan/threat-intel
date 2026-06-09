@@ -161,8 +161,15 @@ def score_file(enrichment: dict) -> GTIScore:
 
     # ── Modifiers ─────────────────────────────────────────────────────────────────
     modifier = 0
+    # Use the real engine total when available (parser now carries
+    # harmless + undetected). VT's engine roster fluctuates; the old
+    # hardcoded "/72" sometimes mismatched the actual ratio shown in
+    # the per-source card by ±5.
+    vt_total = ((vt.get("malicious") or 0) + (vt.get("suspicious") or 0)
+                + (vt.get("harmless") or 0) + (vt.get("undetected") or 0))
     if vt_mal >= 50:
-        modifier += 8; factors.append(f"Very high VT detection count: {vt_mal}/72")
+        modifier += 8
+        factors.append(f"Very high VT detection count: {vt_mal}/{vt_total or 72}")
     elif vt_mal >= 30:
         modifier += 5
     if otx_cnt >= 10:
@@ -381,10 +388,16 @@ def score_url(enrichment: dict) -> GTIScore:
     """
     Score a URL.
     GTI URL logic similar to Domain, tailored for URL-specific properties.
+
+    Field-name note: the backend writes urlhaus_url (not urlhaus) and
+    phishtank with snake_case keys (in_database, verified). The original
+    code read urlhaus / phishtank.isPhishing / phishtank.inDatabase which
+    never matched anything, so URL scoring silently missed both sources
+    and a confirmed phishing URL only scored on the VT signal.
     """
     vt      = enrichment.get("virustotal") or {}
-    urlhaus = enrichment.get("urlhaus")    or {}
-    pt      = enrichment.get("phishtank")  or {}
+    urlhaus = enrichment.get("urlhaus_url") or {}
+    pt      = enrichment.get("phishtank")   or {}
 
     factors  = []
     verdict  = "UNKNOWN"
@@ -392,10 +405,14 @@ def score_url(enrichment: dict) -> GTIScore:
 
     vt_mal   = vt.get("malicious")   or 0
     vt_sus   = vt.get("suspicious")  or 0
-    uh_qs    = urlhaus.get("queryStatus") or ""
-    uh_threat= urlhaus.get("threat") or ""
-    is_phish = pt.get("isPhishing")  or False
-    in_pt    = pt.get("inDatabase")  or False
+    # urlhaus_url is only written when query_status == 'ok' AND not error,
+    # with verdict='MALICIOUS' attached. Presence is itself the hit signal.
+    uh_hit    = bool(urlhaus) and urlhaus.get("verdict") == "MALICIOUS"
+    uh_threat = urlhaus.get("threat") or ""
+    # phishtank parser writes in_database + verified; the dict is only
+    # constructed when in_database is True, so presence implies in_db.
+    in_pt    = bool(pt) and bool(pt.get("in_database"))
+    is_phish = bool(pt.get("verified"))
 
     # ── Verdict ───────────────────────────────────────────────────────────────────
     if vt_mal >= 5 or (is_phish and in_pt):
@@ -404,15 +421,15 @@ def score_url(enrichment: dict) -> GTIScore:
             factors.append(f"VT: {vt_mal} engines flagged URL as malicious")
         if is_phish:
             factors.append("PhishTank: confirmed phishing URL")
-    elif uh_qs == "is_malware" or vt_mal >= 2 or vt_sus >= 3:
-        verdict = "MALICIOUS" if uh_qs == "is_malware" else "SUSPICIOUS"
-        if uh_qs == "is_malware":
-            factors.append(f"URLHaus: active malware distribution — {uh_threat or 'unknown family'}")
+    elif uh_hit or vt_mal >= 2 or vt_sus >= 3:
+        verdict = "MALICIOUS" if uh_hit else "SUSPICIOUS"
+        if uh_hit:
+            factors.append(f"URLhaus: active malware distribution — {uh_threat or 'unknown family'}")
         elif vt_mal >= 2:
             factors.append(f"VT: {vt_mal} malicious, {vt_sus} suspicious")
     elif in_pt and not is_phish:
         verdict = "SUSPICIOUS"
-        factors.append("PhishTank: in database but not confirmed")
+        factors.append("PhishTank: in database but not yet verified")
     elif vt_mal == 0 and vt_sus == 0:
         verdict = "UNDETECTED"
 
@@ -421,9 +438,15 @@ def score_url(enrichment: dict) -> GTIScore:
         PHISH_KEYWORDS  = ["phish", "credential", "login", "banking", "financial", "steal"]
         MALWARE_KEYWORDS= ["malware", "ransomware", "exploit", "dropper", "loader"]
 
-        combined = (uh_threat + " " + (vt.get("categories") or "")).lower()
+        # vt.categories is a dict {engine_name: category_label}, not a string.
+        # The previous str-concat on a dict produced "{'EngineA': 'malicious'}"
+        # which fortunately happens to contain the keyword "malware" sometimes
+        # by accident; doing it properly here.
+        vt_cats = vt.get("categories") or {}
+        cat_str = " ".join(vt_cats.values()).lower() if isinstance(vt_cats, dict) else ""
+        combined = (uh_threat + " " + cat_str).lower()
 
-        if any(k in combined for k in MALWARE_KEYWORDS) or uh_qs == "is_malware":
+        if any(k in combined for k in MALWARE_KEYWORDS) or uh_hit:
             severity = "HIGH"
             factors.append("Active malware distribution URL")
         elif is_phish or any(k in combined for k in PHISH_KEYWORDS):

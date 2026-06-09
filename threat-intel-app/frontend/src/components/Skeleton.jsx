@@ -155,6 +155,32 @@ export function SkeletonAnalyze() {
   useEffect(() => { _ensureKeyframes(); }, []);
   return (
     <Box>
+      {/* "Analyzing" banner — explicit signal that the pipeline is
+          running. Sits at the top of the placeholder layout so analysts
+          can tell at a glance that the empty cards below are deferred
+          rendering, not an empty result. */}
+      <Box sx={{
+        mb: 1.5, p: '12px 14px', borderRadius: '4px',
+        backgroundColor: muiAlpha(_ACCENT, 0.08),
+        border: `1px solid ${muiAlpha(_ACCENT, 0.32)}`,
+        display: 'flex', alignItems: 'center', gap: 1.25,
+      }}>
+        <Box sx={{
+          width: 9, height: 9, borderRadius: '50%',
+          backgroundColor: _ACCENT,
+          animation: `${_PULSE_NAME} 1.4s ease-in-out infinite`,
+          flexShrink: 0,
+        }}/>
+        <Box sx={{
+          fontSize: 12.5, fontWeight: 600, color: _ACCENT,
+          letterSpacing: '0.04em', textTransform: 'uppercase',
+        }}>
+          Analyzing
+        </Box>
+        <Box sx={{ fontSize: 11.5, color: 'text.tertiary', ml: 0.5 }}>
+          triage → enrichment → investigation → response
+        </Box>
+      </Box>
       {/* Enrichment summary line (cyan banner) */}
       <Box sx={{
         mb: 1.5, p: '8px 12px', borderRadius: '4px',
