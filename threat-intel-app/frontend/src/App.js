@@ -45,6 +45,7 @@ import {
   CopyBtn    as MuiCopyBtn,
   CardDefaultOpenContext,
 } from './components/ui';
+import { sourceUrl } from './sourceUrls';
 
 // Code-split the three heaviest workspaces so they only load when the
 // analyst actually opens them. FileScannerView is the densest view in the
@@ -1586,20 +1587,30 @@ function ThreatScore({ result }) {
 }
 
 // Compact source-verdict row for the expanded view. One per TI source that
-// said something useful about this IOC.
-function SourceVerdict({ source, label, color = '#0fbcff' }) {
+// said something useful about this IOC. When sourceUrls.js knows a deep
+// link for (source, ioc, iocType), the source label becomes a clickable
+// anchor that opens the source's web UI prefilled with the indicator.
+function SourceVerdict({ source, label, color = '#0fbcff', ioc, iocType }) {
+  const href = sourceUrl(source, ioc, iocType);
+  const labelEl = (
+    <Typography sx={{
+      fontSize: 10, color: href ? 'primary.main' : 'text.tertiary',
+      textTransform: 'uppercase', letterSpacing: '0.06em',
+      fontWeight: 600,
+      textDecoration: 'none',
+      '&:hover': href ? { textDecoration: 'underline' } : undefined,
+    }} component={href ? 'a' : 'span'}
+       {...(href ? { href, target: '_blank', rel: 'noopener noreferrer',
+                     title: `Open ${source} for ${ioc}` } : {})}>
+      {source}
+    </Typography>
+  );
   return (
     <Box sx={{
       display: 'grid', gridTemplateColumns: '100px 1fr',
       gap: 1, py: 0.375, alignItems: 'baseline',
     }}>
-      <Typography sx={{
-        fontSize: 10, color: 'text.tertiary',
-        textTransform: 'uppercase', letterSpacing: '0.06em',
-        fontWeight: 600,
-      }}>
-        {source}
-      </Typography>
+      {labelEl}
       <Typography sx={{
         fontSize: 11, color, lineHeight: 1.5,
         fontFamily: '"IBM Plex Mono", monospace',
@@ -2045,7 +2056,8 @@ function PerIndicatorList({ sorted, result }) {
           }}>
             {sources.length > 0 ? (
               sources.map((s, j) => (
-                <SourceVerdict key={j} source={s.source} label={s.label} color={s.color}/>
+                <SourceVerdict key={j} source={s.source} label={s.label} color={s.color}
+                  ioc={ioc} iocType={iocType}/>
               ))
             ) : (
               <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontStyle: 'italic' }}>
