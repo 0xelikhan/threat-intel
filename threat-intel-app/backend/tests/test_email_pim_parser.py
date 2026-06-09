@@ -101,3 +101,76 @@ def test_empty_input_returns_empty():
     from intel.email_composer import _extract_additional_detail_value
     assert _extract_additional_detail_value([], "ipaddr") == ""
     assert _extract_additional_detail_value([""], "ipaddr") == ""
+
+
+# ─── targetResources (concatenated) ───────────────────────────────────
+# Real PIM "Add member to role" lines — 5 fields per resource, all
+# concatenated. The walker has to pick out the User-typed resource and
+# return its UPN / displayName.
+PIM_TARGET_RESOURCES_LINE = (
+    "targetResources :id : 00000000-0000-0000-0000-000000000001"
+    "displayName : -type : OtheruserPrincipalName : -groupType : -\n"
+    "targetResources :id : 7ea39fcc-63ba-4a91-894f-b41a20b45a98"
+    "displayName : -type : RequestuserPrincipalName : -groupType : -\n"
+    "targetResources :id : 96dde296-d788-42b8-8f79-996e72fe00de"
+    "displayName : Rewst Integrationtype : UseruserPrincipalName : "
+    "rewst@itsalto.comgroupType : -\n"
+    "targetResources :id : e8611ab8-c189-46e8-94e1-60213ab1f814"
+    "displayName : Privileged Role Administratortype : RoleuserPrincipalName : "
+    "-groupType : -\n"
+)
+
+
+def test_concatenated_target_resource_extracts_user_display_name():
+    """The most important field on a PIM alert: WHO got the role."""
+    from intel.email_composer import _extract_target_resource_display_name
+    out = _extract_target_resource_display_name(
+        PIM_TARGET_RESOURCES_LINE.splitlines(),
+    )
+    assert out == "Rewst Integration"
+
+
+def test_concatenated_target_resource_extracts_user_upn():
+    from intel.email_composer import _extract_target_resource_upn
+    out = _extract_target_resource_upn(
+        PIM_TARGET_RESOURCES_LINE.splitlines(),
+    )
+    assert out == "rewst@itsalto.com"
+
+
+def test_concatenated_target_resource_extracts_role_display_name():
+    """The second most important field: WHAT role got granted."""
+    from intel.email_composer import _extract_role_target_resource_display_name
+    out = _extract_role_target_resource_display_name(
+        PIM_TARGET_RESOURCES_LINE.splitlines(),
+    )
+    assert out == "Privileged Role Administrator"
+
+
+# ─── modifiedProperties (concatenated) ────────────────────────────────
+PIM_MODIFIED_PROPERTIES_LINE = (
+    'modifiedProperties :displayName : RoleDefinitionOriginIdoldValue : ""'
+    'newValue : "e8611ab8-c189-46e8-94e1-60213ab1f814"'
+    'modifiedProperties :displayName : RoleDefinitionOriginTypeoldValue : ""'
+    'newValue : "BuiltInRole"'
+    'modifiedProperties :displayName : TemplateIdoldValue : ""'
+    'newValue : "e8611ab8-c189-46e8-94e1-60213ab1f814"'
+)
+
+
+def test_concatenated_modified_property_extracts_new_value():
+    """Each modifiedProperty triple should resolve to its newValue."""
+    from intel.email_composer import _extract_modified_property_new_value
+    lines = [PIM_MODIFIED_PROPERTIES_LINE]
+    assert _extract_modified_property_new_value(
+        lines, "RoleDefinitionOriginType") == "BuiltInRole"
+    assert _extract_modified_property_new_value(
+        lines, "RoleDefinitionOriginId") == "e8611ab8-c189-46e8-94e1-60213ab1f814"
+    assert _extract_modified_property_new_value(
+        lines, "TemplateId") == "e8611ab8-c189-46e8-94e1-60213ab1f814"
+
+
+def test_concatenated_modified_property_unknown_key_returns_empty():
+    from intel.email_composer import _extract_modified_property_new_value
+    lines = [PIM_MODIFIED_PROPERTIES_LINE]
+    assert _extract_modified_property_new_value(lines, "NotAField") == ""
