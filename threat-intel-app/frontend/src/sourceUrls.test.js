@@ -103,8 +103,11 @@ describe('sourceUrl', () => {
       .toContain('api.first.org');
     expect(sourceUrl('EPSS', cve, 'cve'))
       .toContain('cve=' + cve);
+    // CISA KEV deep-links go through cve.org (cisa.gov blocks
+    // parametrized lookups via Cloudflare). cve.org/CVERecord is the
+    // canonical CVE record page and surfaces "Known Exploited" when set.
     expect(sourceUrl('CISA KEV', cve, 'cve'))
-      .toContain('cisa.gov');
+      .toContain('cve.org');
   });
 
   test('values with spaces or unicode are URL-encoded', () => {
@@ -116,5 +119,11 @@ describe('sourceUrl', () => {
     expect(sourceUrl('Spamhaus DBL', 'evil.example', 'domain'))
       .toContain('check.spamhaus.org');
     expect(sourceUrl('Spamhaus DBL', '1.2.3.4', 'ip')).toBeNull();
+  });
+
+  test('CISA KEV points at cve.org (avoids Cloudflare bot block)', () => {
+    const out = sourceUrl('CISA KEV', 'CVE-2024-12345', 'cve');
+    expect(out).toContain('cve.org/CVERecord');
+    expect(out).toContain('id=CVE-2024-12345');
   });
 });

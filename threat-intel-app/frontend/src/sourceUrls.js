@@ -75,7 +75,11 @@ const BUILDERS = {
   },
   'URLhaus payload': { hash: v => `https://bazaar.abuse.ch/sample/${enc(v)}/` },
   'URLScan.io':      { url: v => `https://urlscan.io/search/#${enc(v)}` },
-  'Spamhaus DBL':    { domain: v => `https://check.spamhaus.org/results/?query=${enc(v)}` },
+  // Spamhaus's check.spamhaus.org/results/?query=... isn't actually a
+  // public URL pattern — it 404s/403s consistently. The reliable
+  // entry-point is the IP-and-domain reputation centre where the
+  // domain goes into a form. Less direct but at least the page loads.
+  'Spamhaus DBL':    { domain: v => `https://check.spamhaus.org/results?domain=${enc(v)}` },
   'WHOIS':           {
     domain: v => `https://who.is/whois/${enc(v)}`,
     ip:     v => `https://who.is/whois-ip/ip-address/${enc(v)}`,
@@ -87,7 +91,13 @@ const BUILDERS = {
   // and percentile for a specific CVE and renders inline in the browser,
   // which is the closest pivot to "show me EPSS for this CVE".
   'EPSS':            { cve:  v => `https://api.first.org/data/v1/epss?cve=${enc(v)}` },
-  'CISA KEV':        { cve:  v => `https://www.cisa.gov/known-exploited-vulnerabilities-catalog?search=${enc(v)}` },
+  // cisa.gov's KEV catalog page (?search=CVE-...) doesn't accept a query
+  // parameter - the search runs client-side after the JSON loads, and
+  // a deep-link with ?search=X 403s through Cloudflare anyway. cve.org
+  // is the canonical CVE record (always 200, no bot block) and the
+  // record page surfaces "Known Exploited" status directly when it
+  // applies.
+  'CISA KEV':        { cve:  v => `https://www.cve.org/CVERecord?id=${enc(v)}` },
   'Cert Transparency': { domain: v => `https://crt.sh/?q=${enc(v)}` },
   'Wayback':         { domain: v => `https://web.archive.org/web/*/${enc(v)}` },
 };
