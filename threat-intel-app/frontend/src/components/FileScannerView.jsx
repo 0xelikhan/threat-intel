@@ -19,6 +19,7 @@ import {
 import { alpha as muiAlpha, useTheme } from '@mui/material/styles';
 import { Skeleton, SkeletonFileScanner } from './Skeleton';
 import URLScanLive from './URLScanLive';
+import { sourceUrl } from '../sourceUrls';
 import {
   FileSearch, Copy, Check, Search, Download,
   ArrowUpRight, AlertTriangle, Shield, Play, Plus,
@@ -1323,10 +1324,26 @@ function ThreatIntelSection({ result }) {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, p: '12px 16px' }}>
               <Box sx={{ width: 6, height: 6, borderRadius: 99,
                 backgroundColor: hasData ? 'error.main' : muiAlpha('#ffffff', 0.15) }}/>
-              <Typography sx={{ fontSize: 13, color: hasData ? 'text.primary' : 'text.tertiary',
-                fontWeight: 500 }}>
-                {name}
-              </Typography>
+              {(() => {
+                const href = sha256 ? sourceUrl(name, sha256, 'hash') : null;
+                return (
+                  <Typography sx={{ fontSize: 13,
+                    color: href
+                      ? 'primary.main'
+                      : (hasData ? 'text.primary' : 'text.tertiary'),
+                    fontWeight: 500,
+                    textDecoration: 'none',
+                    '&:hover': href ? { textDecoration: 'underline' } : undefined,
+                  }} component={href ? 'a' : 'span'}
+                     {...(href
+                       ? { href, target: '_blank', rel: 'noopener noreferrer',
+                           title: `Open ${name} for ${sha256.slice(0, 12)}…`,
+                           onClick: e => e.stopPropagation() }
+                       : {})}>
+                    {name}
+                  </Typography>
+                );
+              })()}
               <Typography sx={{ fontSize: 11,
                 color: hasData ? 'error.main' : 'text.disabled',
                 ml: 'auto',
