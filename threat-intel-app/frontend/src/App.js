@@ -2020,7 +2020,12 @@ function _ocSources(result, ioc, type) {
 
   // ─── Domain-specific rows ────────────────────────────────────────────
   // Cert Transparency (crt.sh) — count of unique certs + subdomains.
-  if (d.certTransparency && !d.certTransparency.error && d.certTransparency.totalCerts != null) {
+  // Skip the row when crt.sh has zero certs for the domain ("0 certs"
+  // is more confusing than informative — looks like the source ran but
+  // analyst can't tell whether that means "domain unregistered" or
+  // "issued certs but pre-CT" or "we missed something").
+  if (d.certTransparency && !d.certTransparency.error
+      && d.certTransparency.totalCerts) {
     const ct = d.certTransparency;
     const n = ct.totalCerts;
     const subs = (ct.subdomains || []).length;
