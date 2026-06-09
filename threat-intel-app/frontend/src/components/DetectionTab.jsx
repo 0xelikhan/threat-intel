@@ -9,14 +9,18 @@ const TACTIC_COLORS = {
 };
 const FLAGS = { 'Russia': '🇷🇺', 'China': '🇨🇳', 'North Korea': '🇰🇵', 'US/UK': '🇺🇸', 'Eastern Europe': '🌍', 'Unknown': '❓' };
 
+// Theme-aligned colors. Was using #4a9eff (off-palette) — switched to
+// #0fbcff (theme primary). Backgrounds + borders pull from the OpenCTI
+// dark palette so the tab matches the rest of the app instead of
+// looking 5° off.
 const S = {
-  panel: { background: '#0d1526', border: '1px solid #1e3a5f', borderRadius: '8px', padding: '20px' },
-  label: { fontSize: '10px', color: '#4a9eff', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px', display: 'block' },
-  input: { width: '100%', background: '#060d1a', border: '1px solid #1e3a5f', color: '#c8d6e5', padding: '10px 14px', borderRadius: '6px', fontFamily: 'Courier New', fontSize: '13px', outline: 'none', marginBottom: '10px' },
-  btn: (active) => ({ background: active ? '#1a3a6e' : '#0d1526', border: `1px solid ${active ? '#4a9eff' : '#2d3748'}`, color: active ? '#74c0fc' : '#718096', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', letterSpacing: '1px', fontFamily: 'Courier New', transition: 'all 0.15s' }),
-  code: { background: '#060d1a', border: '1px solid #1e3a5f', borderRadius: '6px', padding: '16px', fontFamily: 'Courier New', fontSize: '12px', color: '#c8d6e5', whiteSpace: 'pre-wrap', overflowX: 'auto', lineHeight: '1.7', maxHeight: '500px', overflowY: 'auto' },
-  tag: (c) => ({ background: `${c}22`, border: `1px solid ${c}66`, color: c, padding: '2px 8px', borderRadius: '3px', fontSize: '10px', fontFamily: 'Courier New', display: 'inline-block' }),
-  card: { background: '#0a1220', border: '1px solid #1e3a5f', borderRadius: '6px', padding: '12px', marginBottom: '8px', cursor: 'pointer' },
+  panel: { background: '#09101e', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '4px', padding: '20px' },
+  label: { fontSize: '10px', color: '#0fbcff', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '8px', display: 'block', fontWeight: 600 },
+  input: { width: '100%', background: '#0d2137', border: '1px solid #252A35', color: '#F2F2F3', padding: '10px 14px', borderRadius: '4px', fontFamily: 'IBM Plex Mono, Courier New, monospace', fontSize: '13px', outline: 'none', marginBottom: '10px', transition: 'border-color 0.15s ease' },
+  btn: (active) => ({ background: active ? 'rgba(15,188,255,0.18)' : 'transparent', border: `1px solid ${active ? '#0fbcff' : 'rgba(255,255,255,0.15)'}`, color: active ? '#0fbcff' : '#848592', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', letterSpacing: '0.06em', fontFamily: 'IBM Plex Sans, system-ui, sans-serif', fontWeight: 500, textTransform: 'none', transition: 'all 0.15s ease' }),
+  code: { background: '#0f1e38', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '4px', padding: '14px 16px', fontFamily: 'IBM Plex Mono, Courier New, monospace', fontSize: '12px', color: '#F2F2F3', whiteSpace: 'pre-wrap', overflowX: 'auto', lineHeight: '1.65', maxHeight: '500px', overflowY: 'auto' },
+  tag: (c) => ({ background: `${c}22`, border: `1px solid ${c}55`, color: c, padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontFamily: 'IBM Plex Mono, Courier New, monospace', display: 'inline-block', fontWeight: 500 }),
+  card: { background: '#0C1524', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '4px', padding: '12px', marginBottom: '8px', cursor: 'pointer', transition: 'border-color 0.15s ease, background-color 0.15s ease' },
 };
 
 const call = (action, body, opts = {}) =>
@@ -76,7 +80,7 @@ function MitreBrowser({ analysisResult }) {
           {results.map(tech => (
             <div key={tech.id} style={{ ...S.card, borderColor: selected?.id === tech.id ? '#4a9eff' : '#1e3a5f' }} onClick={() => setSelected(selected?.id === tech.id ? null : tech)}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                <span style={{ color: '#4a9eff', fontSize: '12px', minWidth: '80px', fontFamily: 'Courier New' }}>{tech.id}</span>
+                <span style={{ color: '#4a9eff', fontSize: '12px', minWidth: '80px', fontFamily: 'IBM Plex Mono, Courier New, monospace' }}>{tech.id}</span>
                 <span style={{ fontSize: '13px', color: '#e2e8f0' }}>{tech.name}</span>
               </div>
               <span style={S.tag(TACTIC_COLORS[tech.tactic] || '#718096')}>{tech.tactic}</span>
@@ -88,7 +92,7 @@ function MitreBrowser({ analysisResult }) {
           <div style={{ background: '#060d1a', border: '1px solid #1e3a5f', borderRadius: '6px', padding: '16px', maxHeight: '480px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
               <div>
-                <div style={{ color: '#4a9eff', fontSize: '13px', fontFamily: 'Courier New' }}>{selected.id}</div>
+                <div style={{ color: '#4a9eff', fontSize: '13px', fontFamily: 'IBM Plex Mono, Courier New, monospace' }}>{selected.id}</div>
                 <div style={{ color: '#e2e8f0', fontSize: '15px', fontWeight: 'bold' }}>{selected.name}</div>
               </div>
               <button onClick={() => setSelected(null)} style={S.btn(false)}>✕</button>
@@ -152,7 +156,7 @@ function ThreatActors({ analysisResult }) {
               <div style={{ fontSize: '11px', color: '#718096' }}>{actor.origin} · {actor.sponsor}</div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '18px', fontWeight: 'bold', color: scoreColor(actor.score), fontFamily: 'Courier New' }}>{actor.score}%</div>
+              <div style={{ fontSize: '18px', fontWeight: 'bold', color: scoreColor(actor.score), fontFamily: 'IBM Plex Mono, Courier New, monospace' }}>{actor.score}%</div>
               <div style={{ fontSize: '10px', color: '#4a5568' }}>TTP MATCH</div>
             </div>
           </div>
