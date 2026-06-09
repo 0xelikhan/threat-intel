@@ -82,7 +82,11 @@ const BUILDERS = {
   },
   'Hybrid Analysis': { hash: v => `https://www.hybrid-analysis.com/sample/${enc(v)}` },
   'NVD':             { cve:  v => `https://nvd.nist.gov/vuln/detail/${enc(v)}` },
-  'EPSS':            { cve:  v => `https://www.first.org/epss/data/queries?cve=${enc(v)}` },
+  // FIRST.org renders the user-facing EPSS page at /epss (no /data/queries
+  // path — that 404s). The api.first.org JSON endpoint returns the score
+  // and percentile for a specific CVE and renders inline in the browser,
+  // which is the closest pivot to "show me EPSS for this CVE".
+  'EPSS':            { cve:  v => `https://api.first.org/data/v1/epss?cve=${enc(v)}` },
   'CISA KEV':        { cve:  v => `https://www.cisa.gov/known-exploited-vulnerabilities-catalog?search=${enc(v)}` },
   'Cert Transparency': { domain: v => `https://crt.sh/?q=${enc(v)}` },
   'Wayback':         { domain: v => `https://web.archive.org/web/*/${enc(v)}` },

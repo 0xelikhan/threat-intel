@@ -97,8 +97,12 @@ describe('sourceUrl', () => {
     const cve = 'CVE-2024-12345';
     expect(sourceUrl('NVD', cve, 'cve'))
       .toBe(`https://nvd.nist.gov/vuln/detail/${cve}`);
+    // EPSS uses the api.first.org JSON endpoint — the canonical
+    // place to view the score and percentile for a CVE in a browser.
     expect(sourceUrl('EPSS', cve, 'cve'))
-      .toContain('first.org/epss');
+      .toContain('api.first.org');
+    expect(sourceUrl('EPSS', cve, 'cve'))
+      .toContain('cve=' + cve);
     expect(sourceUrl('CISA KEV', cve, 'cve'))
       .toContain('cisa.gov');
   });

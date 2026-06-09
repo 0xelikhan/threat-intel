@@ -1718,7 +1718,11 @@ function _ocSources(result, ioc, type) {
                label: `matched in ${feeds}`, color: red });
   }
 
-  // OTX — pulse count + a top pulse name when present.
+  // OTX — pulse count + a top pulse name when present. Even when the
+  // count is 0 we still emit a row so the analyst sees that OTX WAS
+  // queried and confirmed no community attribution; without this, the
+  // common case (no hits) makes OTX silently disappear from the source
+  // list and people think the integration is broken.
   if (d.otx && !d.otx.error) {
     const pulses = d.otx.pulseCount ?? d.otx.pulse_count ?? 0;
     if (pulses > 0) {
@@ -1737,6 +1741,10 @@ function _ocSources(result, ioc, type) {
       out.push({ source: 'OTX',
                  label: `${pulses} pulse${pulses === 1 ? '' : 's'}${topStr ? ` · ${topStr}` : ''}`,
                  color: pulses >= 5 ? red : pulses >= 1 ? orange : tert });
+    } else {
+      out.push({ source: 'OTX',
+                 label: 'no community pulses for this indicator',
+                 color: tert });
     }
   }
 
