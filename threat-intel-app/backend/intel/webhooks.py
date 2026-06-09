@@ -43,13 +43,32 @@ def _short_text(result: dict, max_iocs: int = 5) -> dict:
     }
 
 
+# Slack mrkdwn requires &, <, > to be entity-escaped — otherwise an AI
+# summary like "User <john> & admin" eats the angle-bracket spans and
+# breaks the renderer. https://api.slack.com/reference/surfaces/formatting
+def _slack_mrkdwn(text: str) -> str:
+    if not text:
+        return ""
+    return (str(text)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;"))
+
+
+def _slack_code_safe(text: str) -> str:
+    """Escape backticks inside text destined for a triple-backtick code
+    block. A stray ``` would close the block early and break formatting
+    for everything after it."""
+    return str(text).replace("```", "ʼʼʼ")
+
+
 # ─── SLACK ────────────────────────────────────────────────────────────────────────
 def _build_slack_blocks(result: dict, run_url: str | None = None) -> dict:
     s = _short_text(result)
     emoji = LEVEL_EMOJI.get(s["threat_level"], ":grey_question:")
     fields = []
     if s["actors"]:
-        fields.append({"type": "mrkdwn", "text": f"*Attribution*\n{', '.join(s['actors'])}"})
+        fields.append({"type": "mrkdwn", "text": f"*Attribution*\n{_slack_mrkdwn(', '.join(s['actors']))}"})
     if s["kev_count"]:
         fields.append({"type": "mrkdwn", "text": f"*KEV CVEs*\n{s['kev_count']} actively exploited"})
     if s["lolbas_count"]:
@@ -57,17 +76,18 @@ def _build_slack_blocks(result: dict, run_url: str | None = None) -> dict:
 
     blocks = [
         {"type": "header", "text": {"type": "plain_text", "text": f"{emoji} RECON · {s['threat_level']}"}},
-        {"type": "section", "text": {"type": "mrkdwn", "text": s["summary"][:2900]}},
+        {"type": "section", "text": {"type": "mrkdwn", "text": _slack_mrkdwn(s["summary"])[:2900]}},
         {"type": "section", "fields": [
             {"type": "mrkdwn", "text": f"*Confidence*\n{s['confidence']}%"},
             {"type": "mrkdwn", "text": f"*Indicators*\n{s['total_iocs']}"},
             {"type": "mrkdwn", "text": f"*MITRE TTPs*\n{s['mitre_count']}"},
-            {"type": "mrkdwn", "text": f"*Disposition*\n{s['disposition'] or 'pending'}"},
+            {"type": "mrkdwn", "text": f"*Disposition*\n{_slack_mrkdwn(s['disposition'] or 'pending')}"},
         ] + fields},
     ]
     if s["sample_iocs"]:
+        safe_iocs = "\n".join(_slack_code_safe(ioc) for ioc in s["sample_iocs"])
         blocks.append({"type": "section",
-                       "text": {"type": "mrkdwn", "text": "*Sample indicators*\n```" + "\n".join(s["sample_iocs"]) + "```"}})
+                       "text": {"type": "mrkdwn", "text": "*Sample indicators*\n```" + safe_iocs + "```"}})
     if run_url:
         blocks.append({"type": "actions", "elements": [
             {"type": "button", "text": {"type": "plain_text", "text": "Open in RECON"},
@@ -121,7 +141,12 @@ async def send_thehive(base_url: str, token: str, result: dict, run_url: str | N
         return {"ok": False, "error": "TheHive URL/token not configured"}
     s = _short_text(result)
     rs = result.get("response_summary", {}) or {}
-    severity_map = {"CRITICAL": 3, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFORMATIONAL": 1}
+    # TheHive 5 severity is 1..4 (1=Low, 2=Medium, 3=High, 4=Critical).
+    # The old map collapsed CRITICAL and HIGH both into 3, so every
+    # critical-class case was filed at HIGH severity in TheHive and
+    # never sorted to the top of the case queue.
+    # Ref: https://docs.strangebee.com/thehive/api-docs/#tag/Case
+    severity_map = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFORMATIONAL": 1}
     case_payload = {
         "title": f"RECON: {s['threat_level']} — {s['summary'][:120]}",
         "description": s["summary"] + (f"\n\n[Open in RECON]({run_url})" if run_url else ""),
