@@ -685,13 +685,18 @@ function HoneypotActivity({ result, bare }) {
         // sees the IP's identity alongside the deception findings.
         const ipinfo  = full?.ipinfo || {};
         const abuse   = full?.abuseipdb || {};
-        const country = ipinfo.country || abuse.countryCode || '';
+        // _p_abuse renames the AbuseIPDB API fields, so what the API
+        // calls `countryCode` / `abuseConfidenceScore` lives on our
+        // parsed dict as `country` / `abuseScore`. Reading the API
+        // names here (as the original code did) silently dropped the
+        // chip and the score.
+        const country = ipinfo.country || abuse.country || '';
         const asn     = ipinfo.asn || ipinfo.org || '';
         const isp     = ipinfo.org || abuse.isp || '';
         const city    = ipinfo.city || '';
         const region  = ipinfo.region || '';
         const usage   = abuse.usageType || '';
-        const abuseScore = abuse.abuseConfidenceScore;
+        const abuseScore = abuse.abuseScore;
         const recentReports = abuse.totalReports;
         const lastReportedAt = abuse.lastReportedAt;
         const headerChips = [
@@ -4900,7 +4905,17 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
         <Box sx={{ position: 'relative', mb: 1.25 }}>
           <Box component="textarea"
             value={logText} onChange={e=>setLogText(e.target.value)}
-            placeholder="Paste a log or describe what you saw"
+            placeholder="Paste a log or describe what you saw (Enter to analyze, Shift+Enter for newline)"
+            onKeyDown={e => {
+              // Enter = submit. Shift+Enter keeps the default newline so
+              // analysts can still paste / format multi-line logs. The
+              // analyze button carries data-recon-analyze so we trigger
+              // it via DOM rather than threading another callback prop.
+              if (e.key === 'Enter' && !e.shiftKey && logText.trim()) {
+                e.preventDefault();
+                document.querySelector('[data-recon-analyze]')?.click();
+              }
+            }}
             sx={{
               width: '100%',
               backgroundColor: 'background.secondary',
@@ -4934,9 +4949,14 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
             AgentPipeline button detects a bare URL and routes to
             /api/scan/url, otherwise it runs the log-analysis pipeline. */}
 
+        {/* Analyzing UX — the main panel keeps the "Analyzing" placeholder
+            for the full pipeline duration, so onPartial is intentionally a
+            no-op here. analyzing stays true until onComplete fires after
+            all four agents (triage → enrichment → investigation → response)
+            have run, preventing the half-rendered streaming view. */}
         <AgentPipeline logText={logText} label=""
           onComplete={(r) => { onAnalyzing?.(false); onResult(r); }}
-          onPartial={(p) => { onAnalyzing?.(false); onPartialResult(p); }}
+          onPartial={() => {}}
           onStart={() => { onResult(null); onAnalyzing?.(true); }}
           onScanUrl={(url) => { onScanUrl?.(url); setLogText(''); }}/>
 
