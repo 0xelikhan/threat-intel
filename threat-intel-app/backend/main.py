@@ -572,18 +572,6 @@ async def auth_me(request: Request):
     return {"user": user}
 
 
-def _check_ioc_pivot(iocs: dict, current_run_id: str) -> list[dict]:
-    """Disabled for full per-investigation isolation: no cross-investigation IOC
-    pivots are surfaced (a new investigation never reads data from prior runs)."""
-    return []
-
-
-def _index_iocs(run_id: str, iocs: dict, response_summary: dict):
-    """Disabled for full per-investigation isolation: IOCs from one investigation
-    are not indexed for/recalled by later ones."""
-    return
-
-
 def _webhooks_available() -> dict:
     try:
         from intel.webhooks import available
@@ -825,10 +813,13 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
         if trace:
             yield f"data: {json.dumps({'event': 'agent_update', 'runId': run_id, 'trace': trace[-1]})}\n\n"
 
-        # Final post-processing: IOC pivot + persist + index
+        # Final post-processing: per-investigation isolation means we
+        # never read state from a prior run, so ioc_pivot is always
+        # empty and there's nothing to index. Kept as an empty list in
+        # the result so the frontend's `result?.ioc_pivot || []` reader
+        # has the field it expects.
         final = _strip(state, run_id, label)
-        final["ioc_pivot"] = _check_ioc_pivot(state.get("iocs", {}), run_id)
-        _index_iocs(run_id, state.get("iocs", {}), final.get("response_summary", {}))
+        final["ioc_pivot"] = []
         _results[run_id] = state
 
         yield f"data: {json.dumps({'event': 'complete', 'runId': run_id, 'result': final, 'timestamp': _ts()})}\n\n"
