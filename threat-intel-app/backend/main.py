@@ -399,14 +399,11 @@ class _BoundedDict(OrderedDict):
 
 
 _results: dict = _BoundedDict(cap=500)
-# IOC pivot index: { ioc_value: [(run_id, timestamp_iso, threat_level), ...] }
-_ioc_index: dict[str, list[tuple]] = {}
 # Sandbox job tracker: { job_id: { state, submitted_at, sha256, ... } }
 _sandbox_jobs: dict[str, dict] = _BoundedDict(cap=500)
 # Chat conversations per run: { run_id: [{role, content, timestamp}, ...] }
 _chats: dict[str, list] = _BoundedDict(cap=500)
 _taxii_cache: dict = {}
-_history: list = []
 
 FRONTEND_BUILD = Path(__file__).parent.parent / "frontend" / "build"
 
@@ -518,7 +515,6 @@ async def health():
         "apiKeys":         {k: v["configured"] for k, v in status.items()},
         "requiredMissing": missing,
         "cachedRuns":      len(_results),
-        "historyCount":    len(_history),
         "webhooks":        _webhooks_available(),
         "intel_layer":     _intel_status(),
         "cache":           cache_block,
@@ -837,7 +833,6 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
         final["ioc_pivot"] = _check_ioc_pivot(state.get("iocs", {}), run_id)
         _index_iocs(run_id, state.get("iocs", {}), final.get("response_summary", {}))
         _results[run_id] = state
-        _add_history(run_id, final, label)
 
         yield f"data: {json.dumps({'event': 'complete', 'runId': run_id, 'result': final, 'timestamp': _ts()})}\n\n"
 
@@ -870,7 +865,6 @@ async def analyze_sync(req: AnalyzeRequest):
     _results[run_id] = state
     result = {k: v for k, v in state.items() if k != "stix_bundle"}
     result.update({"runId": run_id})
-    _add_history(run_id, result, req.label or "")
     return result
 
 
@@ -3010,10 +3004,10 @@ async def report_markdown(run_id: str):
 
 
 # ─── HISTORY ──────────────────────────────────────────────────────────────────────
-@app.get("/api/history")
-async def get_history():
-    return {"history": _history[-50:], "total": len(_history)}
-
+# /api/history listing was removed — investigations are not accumulated
+# into a cross-session history (no-persistence policy), so the listing
+# always returned []. Per-run fetch by id still works against the
+# in-memory _results store.
 @app.get("/api/history/{run_id}")
 async def get_history_item(run_id: str):
     if run_id not in _results:
@@ -3500,13 +3494,6 @@ if FRONTEND_BUILD.exists():
 
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────────
-def _add_history(run_id: str, result: dict, label: str):
-    """Disabled for full per-investigation isolation: investigations are not
-    accumulated into a cross-session history. (Per-run state is still held in
-    _results for the lifetime of the current run so chat / export / clarify on
-    THAT run keep working; nothing from one investigation feeds another.)"""
-    return
-
 def _ts():
     return datetime.now(timezone.utc).isoformat()
 

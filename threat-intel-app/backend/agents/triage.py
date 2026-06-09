@@ -377,7 +377,11 @@ def derive_alert_type(iocs: dict, cross_refs: dict) -> str:
     if cross_refs.get("phishing_kits"):
         return "phishing"
     if cross_refs.get("kev"):
-        if any(k.get("ransomware_use") for k in cross_refs["kev"]):
+        # Defensive: tolerate KEV entries that aren't dicts (a future
+        # KEV-feed schema change shouldn't crash the triage fast-path).
+        kev_list = cross_refs.get("kev") or []
+        if isinstance(kev_list, list) and any(
+                isinstance(k, dict) and k.get("ransomware_use") for k in kev_list):
             return "ransomware"
         return "exploitation"
     if cross_refs.get("rmm_abuse"):
@@ -661,7 +665,14 @@ async def run_triage(state: dict) -> dict:
             "priority_iocs": [],
         }
 
-    final_score = (ai_result.get("triage_score", heuristic_score) + heuristic_score) / 2
+    # AI sometimes returns triage_score as a string ("0.8") or even a
+    # word ("high") instead of a number — coerce defensively rather than
+    # crashing the whole triage pipeline with a TypeError.
+    try:
+        _ai_score = float(ai_result.get("triage_score", heuristic_score))
+    except (TypeError, ValueError):
+        _ai_score = heuristic_score
+    final_score = (_ai_score + heuristic_score) / 2
 
     elapsed_ms = int((time.perf_counter() - _t_start) * 1000)
     trace.append({

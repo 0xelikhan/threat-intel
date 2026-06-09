@@ -3,8 +3,10 @@ Sandbox routes — auto-submission polling for Hybrid Analysis.
 
 Extracted from main.py alongside calibration. The auto-submission
 itself runs as a background task fired from intel/file_correlation.py
-when sandbox_submission_eligible is True; this endpoint just surfaces
-the persisted result the polling loop writes to disk.
+when sandbox_submission_eligible is True; this endpoint surfaces the
+in-memory status the polling loop publishes via intel.sandbox._sandbox_set
+(no on-disk persistence per the platform no-persistence policy — see
+5a36e36).
 """
 
 from __future__ import annotations
