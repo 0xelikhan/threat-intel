@@ -1444,16 +1444,22 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
                                    f"distributed across {uh.get('url_count') or '?'} URLs"),
             }
     # CIRCL hashlookup — we already ran it above. Re-record the data here
-    # so the per-source UI shows it alongside everything else (the value
-    # is the "trust score below threshold" branch, since the known-good
-    # branch returned early above).
+    # so the per-source UI shows it alongside everything else. We're past
+    # the known-good short-circuit, so this branch covers two cases:
+    # (a) CIRCL explicitly flags the hash as KnownMalicious (EICAR,
+    #     widely-tracked malware samples) — surface that signal, don't
+    #     bury it under generic "below threshold" text.
+    # (b) CIRCL has SOME metadata but neither known-good nor known-bad
+    #     (UNKNOWN verdict; trust score is just provenance confidence).
     if isinstance(hl, dict) and not hl.get("error"):
+        known_malicious = bool(hl.get("KnownMalicious") or hl.get("hashlookup:malicious"))
         data["circl_hashlookup"] = {
-            "FileName":      hl.get("FileName"),
-            "FileSize":      hl.get("FileSize"),
-            "ProductName":   hl.get("ProductName"),
-            "trust":         hl.get("hashlookup:trust"),
-            "verdict":       None,
+            "FileName":        hl.get("FileName"),
+            "FileSize":        hl.get("FileSize"),
+            "ProductName":     hl.get("ProductName"),
+            "trust":           hl.get("hashlookup:trust"),
+            "known_malicious": known_malicious,
+            "verdict":         "MALICIOUS" if known_malicious else None,
         }
     # Hybrid Analysis (index shifted to 5 after URLhaus payload insertion)
     if hybrid_key and not isinstance(results[5], Exception):
