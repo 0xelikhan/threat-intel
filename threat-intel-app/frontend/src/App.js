@@ -2047,27 +2047,33 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // Hybrid Analysis — prior sandbox detonation (hashes only).
-  if (d.hybrid_analysis && !d.hybrid_analysis.error && d.hybrid_analysis.found) {
+  // Hybrid Analysis — prior sandbox detonation (hashes only). Backend only
+  // writes this key when there's an actual sandbox report, so presence +
+  // no error IS the "found" signal — no .found field to gate on.
+  if (d.hybrid_analysis && !d.hybrid_analysis.error) {
     const h = d.hybrid_analysis;
     const score = h.threat_score;
     const c = score >= 70 ? red : score >= 40 ? orange
-            : h.verdict === 'malicious' ? red : tert;
+            : (h.verdict || '').toUpperCase() === 'MALICIOUS' ? red : tert;
     const fam = h.malware_family || h.vx_family;
+    const verdictTxt = (h.verdict || h.verdict_raw || 'analyzed').toLowerCase();
     out.push({
       source: 'Hybrid Analysis',
-      label: `${h.verdict || 'analyzed'}${score != null ? ` · score ${score}` : ''}${fam ? ` · ${fam}` : ''}`,
+      label: `${verdictTxt}${score != null ? ` · score ${score}` : ''}${fam ? ` · ${fam}` : ''}`,
       color: c,
       why: 'CrowdStrike Falcon Sandbox detonation result. Threat score is a behavioural rating (0-100); ≥70 = malicious behaviour confirmed in sandbox.',
     });
   }
 
-  // Team Cymru Malware Hash Registry — community-curated AV consensus.
-  if (d.team_cymru_mhr && !d.team_cymru_mhr.error && d.team_cymru_mhr.found) {
+  // Team Cymru Malware Hash Registry — DNS-based hash reputation. Backend
+  // returns first_seen + detection_pct only when MHR has the hash, so
+  // presence is the hit signal (no .found field).
+  if (d.team_cymru_mhr && !d.team_cymru_mhr.error) {
     const t = d.team_cymru_mhr;
+    const fs = (t.first_seen || '').slice(0, 10);
     out.push({
       source: 'Team Cymru MHR',
-      label: `last seen ${t.last_seen || '?'}${t.detection_pct != null ? ` · ${t.detection_pct}% AV consensus` : ''}`,
+      label: `first seen ${fs || '?'}${t.detection_pct != null ? ` · ${t.detection_pct}% AV consensus` : ''}`,
       color: red,
       why: 'Team Cymru tracks malware hashes seen in the wild + AV consensus. High % consensus across many engines = strong evidence the sample is malicious.',
     });
@@ -2369,7 +2375,12 @@ function _ocSources(result, ioc, type) {
 }
 
 function PerIndicatorList({ sorted, result }) {
-  const [openIoc, setOpenIoc] = useState(null);
+  const [openIocs, setOpenIocs] = useState(() => new Set());
+  const toggleIoc = (ioc) => setOpenIocs(prev => {
+    const next = new Set(prev);
+    if (next.has(ioc)) next.delete(ioc); else next.add(ioc);
+    return next;
+  });
   return sorted.map(([ioc, d], i) => {
     const tr = tierFor(d.score);
     // Backend field is `ioc_type`; tolerate `type` as a fallback for any
@@ -2390,13 +2401,13 @@ function PerIndicatorList({ sorted, result }) {
     const expandable = sources.length > 0
                        || (d.contributing_factors || []).length > 1
                        || (urlScreenshot && urlScreenshot.found);
-    const open = openIoc === ioc;
+    const open = openIocs.has(ioc);
     return (
       <Box key={ioc} sx={{
         borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
       }}>
         <Box
-          onClick={() => expandable && setOpenIoc(open ? null : ioc)}
+          onClick={() => expandable && toggleIoc(ioc)}
           sx={{
             display: 'flex', gap: 1.5, alignItems: 'center', py: 0.875,
             cursor: expandable ? 'pointer' : 'default',
