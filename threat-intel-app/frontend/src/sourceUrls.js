@@ -85,6 +85,19 @@ const BUILDERS = {
     ip:     v => `https://who.is/whois-ip/ip-address/${enc(v)}`,
   },
   'Hybrid Analysis': { hash: v => `https://www.hybrid-analysis.com/sample/${enc(v)}` },
+  // CIRCL hashlookup serves per-hash JSON at /lookup/{algo}/{hash}. The
+  // algorithm is inferred from the hash length (md5=32, sha1=40,
+  // sha256=64); other lengths fall through to null so the label stays
+  // plain text instead of producing a broken link.
+  'CIRCL hashlookup': {
+    hash: v => {
+      const algo = v.length === 64 ? 'sha256'
+                 : v.length === 40 ? 'sha1'
+                 : v.length === 32 ? 'md5'
+                 : null;
+      return algo ? `https://hashlookup.circl.lu/lookup/${algo}/${enc(v)}` : null;
+    },
+  },
   'NVD':             { cve:  v => `https://nvd.nist.gov/vuln/detail/${enc(v)}` },
   // FIRST.org renders the user-facing EPSS page at /epss (no /data/queries
   // path — that 404s). The api.first.org JSON endpoint returns the score
