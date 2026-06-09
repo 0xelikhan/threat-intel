@@ -1122,9 +1122,25 @@ MITRE = [
 from agents.response import _match_actors as _match_threat_actors_fn
 
 
+def _llm_key_configured() -> bool:
+    """True when the active LLM provider has the credentials it needs.
+    Generalises the old OPENAI_API_KEY-only check so /api/chat and the
+    Sigma/KQL generator don't 503 when LLM_PROVIDER=anthropic or ollama.
+    Ollama is locally hosted with no key, so it's always configured."""
+    import os as _os
+    provider = (_os.environ.get("LLM_PROVIDER") or "openai").strip().lower()
+    if provider in ("openai", "azure", "azure-openai", "azureopenai"):
+        return bool(config.get("OPENAI_API_KEY"))
+    if provider == "anthropic":
+        return bool(config.get("ANTHROPIC_API_KEY") or _os.environ.get("ANTHROPIC_API_KEY"))
+    if provider == "ollama":
+        return True
+    return False
+
+
 async def _ai_gen(prompt: str) -> str:
-    if not config.get("OPENAI_API_KEY"):
-        return "# OpenAI API key not configured. Add it in Settings."
+    if not _llm_key_configured():
+        return "# LLM provider not configured. Add an API key in Settings."
     # Detection-content generation (Sigma/KQL/YARA) is a light, latency-sensitive
     # task → use the fast model tier.
     from providers import get_provider
@@ -1787,8 +1803,8 @@ async def chat_send(run_id: str, req: dict):
     user_msg = (req or {}).get("message", "").strip()
     if not user_msg:
         raise HTTPException(400, "message required")
-    if not config.get("OPENAI_API_KEY"):
-        raise HTTPException(503, "OpenAI key not configured")
+    if not _llm_key_configured():
+        raise HTTPException(503, "LLM provider not configured")
     return StreamingResponse(_chat_stream(run_id, user_msg),
                               media_type="text/event-stream",
                               headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
