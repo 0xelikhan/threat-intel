@@ -1,0 +1,6 @@
+# RECON Threat Intelligence Platform
+# Block all crawlers from the API surface — the analyze pipeline is
+# authenticated, expensive (LLM token spend per request), and the
+# endpoint shapes shouldn't end up in search indexes.
+User-agent: *
+Disallow: /api/

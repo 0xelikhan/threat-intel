@@ -3465,6 +3465,19 @@ if FRONTEND_BUILD.exists():
     async def serve_spa(full_path: str):
         if full_path.startswith("api/"):
             raise HTTPException(404)
+        # /favicon.ico convention path — browsers always request this even
+        # when index.html declares a different <link rel="icon">. Without
+        # a real file the SPA fallback served HTML, which made every
+        # browser console log a "Resource interpreted as Image" warning
+        # and a faviconLoad failure. Serve logo.png with image/x-icon so
+        # the tab gets a real icon.
+        if full_path == "favicon.ico":
+            logo = FRONTEND_BUILD / "logo.png"
+            if logo.exists():
+                return FileResponse(
+                    str(logo), media_type="image/x-icon",
+                    headers={"Cache-Control": "public, max-age=86400"},
+                )
         # Serve actual files from build/ when they exist (logo.png, favicon, manifest, etc.)
         if full_path:
             asset = FRONTEND_BUILD / full_path
