@@ -278,9 +278,21 @@ def validate_sigma_rule(yaml_content: str) -> tuple[bool, str]:
 def _make_client(config):
     """Returns the configured LLMProvider, or None when no AI key is set.
     Kept for backwards compat — the function name is a holdover; it now
-    returns an LLMProvider, not an SDK client."""
-    if not config.get("OPENAI_API_KEY"):
-        return None
+    returns an LLMProvider, not an SDK client.
+
+    Respects LLM_PROVIDER instead of assuming OpenAI: a deployment with
+    LLM_PROVIDER=anthropic and an Anthropic key but no OpenAI key was
+    previously short-circuited here as if it had no AI access at all.
+    """
+    import os as _os
+    provider_name = (_os.environ.get("LLM_PROVIDER") or "openai").strip().lower()
+    if provider_name in ("openai", "azure", "azure-openai", "azureopenai"):
+        if not config.get("OPENAI_API_KEY"):
+            return None
+    elif provider_name == "anthropic":
+        if not (config.get("ANTHROPIC_API_KEY") or _os.environ.get("ANTHROPIC_API_KEY")):
+            return None
+    # ollama is locally-hosted, no key required.
     try:
         from providers import get_provider
         return get_provider()

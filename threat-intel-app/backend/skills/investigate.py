@@ -94,7 +94,13 @@ class InvestigateSkill(Skill):
             "triage_score":           float((inputs or {}).get("triage_score") or 0.5),
         }
         out = await run_investigation(state)
-        result = out.get("investigation") or out
+        # run_investigation stores the AI dict under investigation_result
+        # (not "investigation"). The earlier fallback to `out` happened
+        # to capture threat_level / mitre_techniques / confidence (also
+        # spread to the top-level state) but lost summary / key_findings /
+        # ioc_assessments / recommended_actions / etc. that ONLY live in
+        # investigation_result. Pull from the right key.
+        result = out.get("investigation_result") or out
         return {
             "threat_level":         result.get("threat_level", "UNKNOWN"),
             "summary":              result.get("summary", ""),
