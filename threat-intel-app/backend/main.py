@@ -300,6 +300,23 @@ async def _validation_exc_handler(_request, exc: RequestValidationError):
     )
     return _JSONResponse(body, status_code=422)
 
+
+# Catch-all for anything that escapes the typed handlers above. Without
+# this, an uncaught exception (e.g. POSTing to a JSON endpoint with no
+# Content-Type header, which trips FastAPI's body parser BEFORE it
+# becomes a RequestValidationError) falls through to Starlette's
+# default `Internal Server Error` plain-text 500 — which breaks the
+# `err.detail || err.error` shape every other API error response uses.
+@app.exception_handler(Exception)
+async def _catchall_exc_handler(_request, exc: Exception):
+    _log.exception("unhandled exception in handler chain: %s", exc)
+    body = error_envelope(
+        detail="Internal server error",
+        code="internal_error",
+        status=500,
+    )
+    return _JSONResponse(body, status_code=500)
+
 # Auth gate — everything under /api/* requires a session EXCEPT:
 #   * /api/health        — needed by the Docker HEALTHCHECK and the deploy probe
 #   * /api/auth/*        — login / logout / me; you can't log in if login is gated
