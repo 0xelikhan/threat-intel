@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { Box, Stack, Typography, Button as MuiButton } from '@mui/material';
+import { alpha as muiAlpha } from '@mui/material/styles';
+import { Download, Check } from 'lucide-react';
 
 // ─── CSV EXPORT UTILITY ──────────────────────────────────────────────────────────
 
@@ -188,39 +191,33 @@ function ExportBar({ result }) {
   const ts = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
   const baseName = `threat-intel-${ts}`;
 
-  const btn = (label, onClick, color = '#4a9eff') => ({
-    onClick: () => { onClick(); setLastExport(label); setTimeout(() => setLastExport(null), 2000); },
-    style: {
-      background: lastExport === label ? `${color}22` : '#0d1526',
-      border: `1px solid ${lastExport === label ? color : '#1e3a5f'}`,
-      color: lastExport === label ? color : '#718096',
-      padding: '7px 14px', borderRadius: '4px', cursor: 'pointer',
-      fontSize: '11px', letterSpacing: '1px', fontFamily: 'Courier New',
-      transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: '6px'
-    }
-  });
+  const trigger = (label, fn) => () => {
+    fn();
+    setLastExport(label);
+    setTimeout(() => setLastExport(null), 2000);
+  };
 
   const exports = [
     {
-      label: '⬇ CSV (full)',
+      label: 'CSV (full)',
       desc: 'All IOCs with enrichment data',
       action: () => downloadFile(buildIOCCSV(result), `${baseName}.csv`, 'text/csv'),
-      color: '#51cf66'
+      color: '#17AB1F',
     },
     {
-      label: '⬇ Plain list',
+      label: 'Plain list',
       desc: 'One IOC per line',
       action: () => downloadFile(buildIOCPlaintext(result, false), `${baseName}-iocs.txt`),
-      color: '#74c0fc'
+      color: '#0fbcff',
     },
     {
-      label: '⬇ Defanged',
+      label: 'Defanged',
       desc: 'Safe for Slack / tickets',
       action: () => downloadFile(buildIOCPlaintext(result, true), `${baseName}-defanged.txt`),
-      color: '#74c0fc'
+      color: '#0fbcff',
     },
     {
-      label: '⬇ STIX 2.1',
+      label: 'STIX 2.1',
       desc: 'Machine-readable bundle',
       action: () => {
         if (result.stix_bundle) {
@@ -229,54 +226,92 @@ function ExportBar({ result }) {
           window.open(`${process.env.REACT_APP_API_URL?.replace('/analyze', '')}/export/stix/${result.runId}`, '_blank');
         }
       },
-      color: '#cc5de8'
+      color: '#B286FF',
     },
     {
-      label: '⬇ Sigma YAML',
+      label: 'Sigma YAML',
       desc: 'Detection rule',
       action: () => result.sigma_rule && downloadFile(result.sigma_rule, `${baseName}.sigma.yml`, 'text/yaml'),
-      color: '#ffa94d',
-      disabled: !result.sigma_rule
+      color: '#E6700F',
+      disabled: !result.sigma_rule,
     },
     {
-      label: '⬇ KQL',
+      label: 'KQL',
       desc: 'Sentinel query',
       action: () => result.kql_query && downloadFile(result.kql_query, `${baseName}.kql`, 'text/plain'),
-      color: '#ffa94d',
-      disabled: !result.kql_query
+      color: '#E6700F',
+      disabled: !result.kql_query,
     },
   ];
 
   return (
-    <div style={{ background: '#0d1526', border: '1px solid #1e3a5f', borderRadius: '8px', padding: '14px 16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <div style={{ fontSize: '10px', color: '#4a9eff', letterSpacing: '3px' }}>EXPORT</div>
-        <div style={{ fontSize: '11px', color: '#4a5568' }}>{totalIOCs} IOCs · {new Date().toLocaleString()}</div>
-      </div>
+    <Box sx={{
+      backgroundColor: 'background.paper',
+      border: t => `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+      borderRadius: '4px',
+      padding: '14px 16px',
+    }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.25 }}>
+        <Typography sx={{
+          fontSize: 10, color: 'primary.main',
+          letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 600,
+        }}>
+          Export
+        </Typography>
+        <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
+          {totalIOCs} IOC{totalIOCs === 1 ? '' : 's'} · {new Date().toLocaleString()}
+        </Typography>
+      </Stack>
 
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      <Box sx={{ display: 'flex', gap: 0.875, flexWrap: 'wrap' }}>
         {exports.map(({ label, desc, action, color, disabled }) => {
-          const b = btn(label, action, color);
+          const saved = lastExport === label;
           return (
-            <button
+            <MuiButton
               key={label}
-              {...b}
+              onClick={trigger(label, action)}
               disabled={disabled}
               title={desc}
-              style={{ ...b.style, opacity: disabled ? 0.3 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}
+              variant="outlined"
+              size="small"
+              startIcon={saved
+                ? <Check size={13}/>
+                : <Download size={13}/>}
+              sx={{
+                fontSize: 11,
+                fontWeight: 500,
+                letterSpacing: '0.04em',
+                textTransform: 'none',
+                px: 1.5, py: 0.625,
+                color: saved ? color : 'text.secondary',
+                borderColor: saved ? color : muiAlpha('#ffffff', 0.15),
+                backgroundColor: saved ? muiAlpha(color, 0.1) : 'transparent',
+                transition: 'all 0.15s ease',
+                '&:hover': {
+                  backgroundColor: muiAlpha(color, 0.08),
+                  borderColor: muiAlpha(color, 0.5),
+                  color,
+                },
+                '&.Mui-disabled': {
+                  opacity: 0.35,
+                  color: 'text.disabled',
+                  borderColor: muiAlpha('#ffffff', 0.08),
+                },
+              }}
             >
-              {lastExport === label ? '✓ saved' : label}
-            </button>
+              {saved ? 'saved' : label}
+            </MuiButton>
           );
         })}
-      </div>
+      </Box>
 
-      <div style={{ marginTop: '10px', fontSize: '11px', color: '#4a5568', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-        <span>CSV — paste into Excel or import into MISP</span>
-        <span>STIX — import into OpenCTI, MISP, or any TI platform</span>
-        <span>Defanged — safe to share in tickets, email, Slack</span>
-      </div>
-    </div>
+      <Box sx={{ mt: 1.25, fontSize: 11, color: 'text.tertiary',
+        display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+        <span>CSV - paste into Excel or import into MISP</span>
+        <span>STIX - import into OpenCTI, MISP, or any TI platform</span>
+        <span>Defanged - safe to share in tickets, email, Slack</span>
+      </Box>
+    </Box>
   );
 }
 

@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect, lazy, Suspense } from 'react';
 import {
-  ArrowUpRight, AlertCircle, X, FileSearch, Mail, Activity,
+  ArrowUpRight, AlertCircle, ChevronRight, X, FileSearch, Mail, Activity,
 } from 'lucide-react';
 
 import AgentPipeline     from './components/AgentPipeline';
@@ -1592,23 +1592,54 @@ function ThreatScore({ result }) {
 // anchor that opens the source's web UI prefilled with the indicator.
 function SourceVerdict({ source, label, color = '#0fbcff', ioc, iocType }) {
   const href = sourceUrl(source, ioc, iocType);
-  const labelEl = (
+  const labelEl = href ? (
+    <Box
+      component="a"
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`Open ${source} for ${ioc}`}
+      sx={{
+        display: 'inline-flex', alignItems: 'center', gap: 0.375,
+        fontSize: 10, fontWeight: 600,
+        color: 'primary.main',
+        textTransform: 'uppercase', letterSpacing: '0.06em',
+        textDecoration: 'none', cursor: 'pointer',
+        transition: 'color 0.15s ease',
+        // Show the link affordance only on the row's hover — keeps the
+        // resting state clean, makes the icon a directional cue when the
+        // analyst is scanning.
+        '& .recon-src-arrow': {
+          opacity: 0, transform: 'translate(-2px, 1px)',
+          transition: 'opacity 0.15s ease, transform 0.15s ease',
+        },
+        '&:hover': {
+          color: 'primary.light',
+          textDecoration: 'underline',
+          '& .recon-src-arrow': { opacity: 1, transform: 'translate(0, 1px)' },
+        },
+      }}
+    >
+      {source}
+      <ArrowUpRight className="recon-src-arrow" size={10}/>
+    </Box>
+  ) : (
     <Typography sx={{
-      fontSize: 10, color: href ? 'primary.main' : 'text.tertiary',
+      fontSize: 10, color: 'text.tertiary',
       textTransform: 'uppercase', letterSpacing: '0.06em',
       fontWeight: 600,
-      textDecoration: 'none',
-      '&:hover': href ? { textDecoration: 'underline' } : undefined,
-    }} component={href ? 'a' : 'span'}
-       {...(href ? { href, target: '_blank', rel: 'noopener noreferrer',
-                     title: `Open ${source} for ${ioc}` } : {})}>
+    }}>
       {source}
     </Typography>
   );
   return (
     <Box sx={{
       display: 'grid', gridTemplateColumns: '100px 1fr',
-      gap: 1, py: 0.375, alignItems: 'baseline',
+      gap: 1, py: 0.5, alignItems: 'baseline',
+      borderRadius: '3px',
+      px: 0.5, mx: -0.5,
+      transition: 'background-color 0.12s ease',
+      '&:hover': { backgroundColor: muiAlpha('#ffffff', 0.025) },
     }}>
       {labelEl}
       <Typography sx={{
@@ -2020,8 +2051,16 @@ function PerIndicatorList({ sorted, result }) {
           sx={{
             display: 'flex', gap: 1.5, alignItems: 'center', py: 0.875,
             cursor: expandable ? 'pointer' : 'default',
-            transition: 'background-color .12s',
-            '&:hover': expandable ? { backgroundColor: muiAlpha('#ffffff', 0.02) } : undefined,
+            transition: 'background-color .14s ease',
+            // Slightly more pronounced hover when the row is expandable, and a
+            // persistent tint while open so the analyst always knows which
+            // indicator they're inspecting in a long list.
+            backgroundColor: open ? muiAlpha('#ffffff', 0.025) : 'transparent',
+            '&:hover': expandable
+              ? { backgroundColor: open
+                    ? muiAlpha('#ffffff', 0.03)
+                    : muiAlpha('#ffffff', 0.022) }
+              : undefined,
           }}
         >
           <Dial score={d.score} color={tr.color} size={38}/>
@@ -2045,13 +2084,25 @@ function PerIndicatorList({ sorted, result }) {
             )}
           </Box>
           <Verdict verdict={d.verdict} size="small"/>
+          {expandable && (
+            <Box sx={{
+              color: 'text.tertiary',
+              display: 'flex', alignItems: 'center',
+              transition: 'transform 0.18s ease, color 0.18s ease',
+              transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+              ...(open && { color: 'primary.main' }),
+            }}>
+              <ChevronRight size={14}/>
+            </Box>
+          )}
         </Box>
 
         {open && (
           <Box sx={{
-            ml: '54px', mb: 1, mr: 1, p: '8px 12px',
-            backgroundColor: muiAlpha('#ffffff', 0.02),
-            border: `1px solid ${muiAlpha('#ffffff', 0.06)}`,
+            ml: '54px', mb: 1, mr: 1, p: '10px 14px',
+            backgroundColor: muiAlpha('#ffffff', 0.025),
+            border: `1px solid ${muiAlpha('#ffffff', 0.08)}`,
+            borderLeft: `2px solid ${muiAlpha(tr.color || '#0fbcff', 0.4)}`,
             borderRadius: '4px',
           }}>
             {sources.length > 0 ? (
