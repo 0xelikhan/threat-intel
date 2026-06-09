@@ -280,6 +280,16 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
       ? curr.filter(c => c !== cat)
       : [...curr, cat]);
   }, []);
+  // Within an expanded category, we cap the visible fields at 12 to keep
+  // huge categories scannable. Clicking the "+ N more" line opts that
+  // category in to a full render. Tracked separately so collapsing /
+  // re-expanding doesn't reset the show-all choice.
+  const [showAllCategories, setShowAllCategories] = useState([]);
+  const toggleShowAll = useCallback((cat) => {
+    setShowAllCategories(curr => curr.includes(cat)
+      ? curr.filter(c => c !== cat)
+      : [...curr, cat]);
+  }, []);
 
   // Sync enabled_fields whenever the selected template changes.
   useEffect(() => {
@@ -704,25 +714,35 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
                         </Typography>
                       </Box>
                     </Box>
-                    {expanded && (
-                      <Box sx={{ mt: 0.75, pl: 3 }}>
-                        {items.slice(0, 12).map((it, i) => (
-                          <Typography key={i} sx={{ fontSize: 11,
-                            color: 'text.tertiary', lineHeight: 1.55,
-                            wordBreak: 'break-word' }}>
-                            <Box component="span" sx={{ color: 'text.primary' }}>
-                              {it.label}:
-                            </Box>{' '}{String(it.value).slice(0, 120)}
-                          </Typography>
-                        ))}
-                        {items.length > 12 && (
-                          <Typography sx={{ fontSize: 10,
-                            color: 'text.disabled', mt: 0.25 }}>
-                            + {items.length - 12} more
-                          </Typography>
-                        )}
-                      </Box>
-                    )}
+                    {expanded && (() => {
+                      const showAll = showAllCategories.includes(cat);
+                      const visible = showAll ? items : items.slice(0, 12);
+                      return (
+                        <Box sx={{ mt: 0.75, pl: 3 }}>
+                          {visible.map((it, i) => (
+                            <Typography key={i} sx={{ fontSize: 11,
+                              color: 'text.tertiary', lineHeight: 1.55,
+                              wordBreak: 'break-word' }}>
+                              <Box component="span" sx={{ color: 'text.primary' }}>
+                                {it.label}:
+                              </Box>{' '}{String(it.value).slice(0, 120)}
+                            </Typography>
+                          ))}
+                          {items.length > 12 && (
+                            <Typography
+                              onClick={(e) => { e.stopPropagation(); toggleShowAll(cat); }}
+                              sx={{ fontSize: 10, color: 'primary.main',
+                                mt: 0.25, cursor: 'pointer', userSelect: 'none',
+                                '&:hover': { textDecoration: 'underline' },
+                              }}>
+                              {showAll
+                                ? `− show fewer`
+                                : `+ ${items.length - 12} more (click to expand)`}
+                            </Typography>
+                          )}
+                        </Box>
+                      );
+                    })()}
                   </Box>
                 );
               })}

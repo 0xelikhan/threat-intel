@@ -113,9 +113,15 @@ class InvestigateSkill(Skill):
 
     @staticmethod
     def _empty(error: str = "") -> Dict[str, Any]:
+        # Must mirror every key declared in output_schema. Was missing
+        # confirmed_facts / analysis_assessment / enrichment_summary —
+        # callers that destructure those (e.g. the response agent)
+        # crashed with KeyError when the investigation module failed to
+        # import or returned this empty shape on outer-exception fallback.
         return {
             "threat_level": "UNKNOWN", "summary": error, "key_findings": [],
             "mitre_techniques": [], "ioc_assessments": [], "recommended_actions": [],
             "clarifying_questions": [], "confidence": 0.0, "probing_questions": [],
+            "confirmed_facts": [], "analysis_assessment": [], "enrichment_summary": {},
             "raw": {},
         }
