@@ -474,14 +474,23 @@ class ConfigManager:
         return status
 
     def get_settings_response(self) -> dict:
-        """For the settings page — returns masked key values."""
+        """For the settings page — returns masked key values only.
+
+        Security: never ships rawValue. Earlier code emitted the raw
+        plaintext key in a rawValue field "for the settings page"; the
+        masking was a frontend-side choice, so any HAR export, browser
+        cache, devtools network panel, or analyst-session intercept
+        exposed every configured API key as plaintext over an authed
+        but otherwise-normal HTTP response. The frontend never read
+        the field (the user re-types when updating), so removing it
+        is a pure removal.
+        """
         result = {}
         for key, defn in API_KEY_DEFINITIONS.items():
             val = self.get(key)
             default = defn.get("default", "")
             result[key] = {
                 "value": val if (val == default or not val) else "•" * min(len(val), 20),
-                "rawValue": val,  # sent only to settings page, masked in display
                 "configured": bool(val and val != default),
                 "label": defn["label"],
                 "description": defn["description"],
