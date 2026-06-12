@@ -260,8 +260,12 @@ async def check_api_key_reachability(config_module) -> List[Dict[str, Any]]:
 
 
 async def check_ai_provider(config_module) -> Dict[str, Any]:
-    """Send a tiny test message through the provider abstraction."""
-    if not config_module.get("OPENAI_API_KEY"):
+    """Send a tiny test message through the provider abstraction. Picks
+    the configured-key check based on LLM_PROVIDER so the diagnostic
+    doesn't flag Anthropic / Ollama deployments as broken just because
+    OPENAI_API_KEY is unset."""
+    from providers import provider_configured
+    if not provider_configured(config_module):
         e = _err("OPENAI_API_KEY_MISSING")
         return _check("ai_provider", "fail", e["detail"], fix_hint=e["fix_hint"])
     try:

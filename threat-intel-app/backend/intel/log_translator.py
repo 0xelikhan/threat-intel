@@ -106,19 +106,12 @@ async def translate_log(raw: str, config) -> Optional[Dict]:
         return None
 
     # Gate by the active LLM provider so we don't burn a request when
-    # there's no chance of success. Ollama is locally-hosted and needs no
-    # key, so it's always "configured" — the earlier check returned None
-    # for Ollama deployments and silently skipped log normalization.
-    _provider = (os.environ.get("LLM_PROVIDER") or "openai").strip().lower()
-    if _provider in ("openai", "azure", "azure-openai", "azureopenai"):
-        if not config.get("OPENAI_API_KEY"):
-            return None
-    elif _provider == "anthropic":
-        if not (config.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")):
-            return None
-    # ollama: no key required; fall through
+    # there's no chance of success. Delegates to the shared helper so
+    # the openai/anthropic/ollama logic lives in exactly one place.
+    from providers import get_provider, provider_configured
+    if not provider_configured(config):
+        return None
 
-    from providers import get_provider
     provider = get_provider()
     # Log-format normalization is light + latency-sensitive (gates IOC
     # extraction) — use the fast model tier when the provider supports it.
