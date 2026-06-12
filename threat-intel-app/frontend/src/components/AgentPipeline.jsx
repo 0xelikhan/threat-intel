@@ -3,7 +3,7 @@
  * Pipeline visualisation: MUI Box + IconButton + Button, severity colours
  * pulled from theme.palette so it inherits the OpenCTI dark theme.
  */
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Box, Typography, Button,
   alpha,
@@ -38,6 +38,16 @@ function AgentPipeline({ logText, label, onComplete, onStart, onPartial, onScanU
   const [done, setDone]       = useState(false);
   const [current, setCurrent] = useState(null);
   const readerRef = useRef(null);
+
+  // Cancel any in-flight SSE reader on unmount. Without this, navigating
+  // away mid-analysis leaves fetch consuming bandwidth + the backend
+  // burning LLM cost on a stream nothing's reading. The cleanup also
+  // fires on the next mount (StrictMode dev double-invoke), but
+  // .cancel() is idempotent and we've nulled the ref afterwards.
+  useEffect(() => () => {
+    try { readerRef.current?.cancel(); } catch {}
+    readerRef.current = null;
+  }, []);
 
   const inputIsUrl = isBareUrl(logText);
 
