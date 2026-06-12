@@ -159,7 +159,17 @@ class AnthropicProvider(LLMProvider):
                    or os.environ.get("ANTHROPIC_API_KEY") or "")
         except Exception:
             key = os.environ.get("ANTHROPIC_API_KEY") or ""
-        return AsyncAnthropic(api_key=key, timeout=60.0, max_retries=1)
+        # Cache the SDK client across calls so its underlying httpx pool
+        # (DNS + keep-alive + TLS session reuse) survives. Same rationale
+        # as the OpenAI provider — a single analyze fires multiple
+        # concurrent LLM calls and shouldn't pay TLS handshake cost on
+        # every one. Rebuilt when the key rotates.
+        cached_key = getattr(self, "_cached_key", None)
+        if cached_key == key and getattr(self, "_cached_client", None) is not None:
+            return self._cached_client
+        self._cached_client = AsyncAnthropic(api_key=key, timeout=60.0, max_retries=1)
+        self._cached_key    = key
+        return self._cached_client
 
     async def complete(
         self,
