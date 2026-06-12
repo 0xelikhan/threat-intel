@@ -116,8 +116,9 @@ foreach ($kind in 'hash','ip','domain','url','cve','email') {
         $d   = $_.Value
         Write-Host ""
         Write-Host ("--- {0} [{1}] ---" -f $ioc, $kind) -ForegroundColor Green
-        # Per-IOC verdict from the GTI scorer (if scored)
-        $score = $r.scores.$ioc
+        # Per-IOC verdict from the GTI scorer (if scored). Backend stores
+        # it under gti_scores (not scores) — the dict is keyed by IOC value.
+        $score = $r.gti_scores.$ioc
         if ($score) {
             Write-Host ("  score={0}  verdict={1}" -f $score.score, $score.verdict)
             if ($score.contributing_factors) {

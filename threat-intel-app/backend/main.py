@@ -3201,7 +3201,12 @@ async def email_compose_ai(req: EmailComposeAIRequest):
         "EMAIL_FROM_NAME":    config.get("EMAIL_FROM_NAME"),
         "EMAIL_FROM_ADDRESS": config.get("EMAIL_FROM_ADDRESS"),
         "EMAIL_SIGNATURE":    config.get("EMAIL_SIGNATURE"),
-        # Enrichment APIs — every key compose_ai's fan-out looks at
+        # Enrichment APIs — full set. The earlier "every enrichment-API
+        # key" comment was wrong: ABUSECH_AUTH_KEY / Censys / CrowdSec /
+        # Criminal IP / ProxyCheck / FullHunt / OpenCTI / PhishTank were
+        # silently missing, so compose_ai's enrichment fan-out had the
+        # same throttling-on-abuse.ch + skipped-source problems as the
+        # other key-stripped call sites we just fixed.
         "VIRUSTOTAL_KEY":     config.get("VIRUSTOTAL_KEY"),
         "ABUSEIPDB_KEY":      config.get("ABUSEIPDB_KEY"),
         "OTX_KEY":            config.get("OTX_KEY"),
@@ -3214,6 +3219,17 @@ async def email_compose_ai(req: EmailComposeAIRequest):
         "GOOGLE_API_KEY":     config.get("GOOGLE_API_KEY"),
         "HYBRID_ANALYSIS_KEY": config.get("HYBRID_ANALYSIS_KEY"),
         "MALWAREBAZAAR_API_KEY": config.get("MALWAREBAZAAR_API_KEY"),
+        "ABUSECH_AUTH_KEY":   config.get("ABUSECH_AUTH_KEY"),
+        "CENSYS_API_ID":      config.get("CENSYS_API_ID"),
+        "CENSYS_API_SECRET":  config.get("CENSYS_API_SECRET"),
+        "CENSYS_PERSONAL_ACCESS_TOKEN": config.get("CENSYS_PERSONAL_ACCESS_TOKEN"),
+        "CROWDSEC_KEY":       config.get("CROWDSEC_KEY"),
+        "CRIMINAL_IP_KEY":    config.get("CRIMINAL_IP_KEY"),
+        "PROXYCHECK_KEY":     config.get("PROXYCHECK_KEY"),
+        "FULLHUNT_KEY":       config.get("FULLHUNT_KEY"),
+        "OPENCTI_URL":        config.get("OPENCTI_URL"),
+        "OPENCTI_TOKEN":      config.get("OPENCTI_TOKEN"),
+        "PHISHTANK_KEY":      config.get("PHISHTANK_KEY"),
     }
     options = dict(req.options or {})
     if not options.get("team_name"):
