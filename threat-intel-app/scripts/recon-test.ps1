@@ -75,15 +75,35 @@ if ($Raw) {
 $rs = $r.response_summary
 Write-Host ""
 Write-Host ("=== RECON run · {0:N1}s total ===" -f $sw.Elapsed.TotalSeconds) -ForegroundColor Cyan
-Write-Host ("verdict: {0}    threat: {1}    disposition: {2}" -f `
-    $rs.verdict, $rs.threat_level, $rs.disposition)
+# response_summary doesn't carry a top-level `verdict` or `disposition` —
+# threat_level is the canonical verdict and disposition lives nested at
+# analyst_summary.disposition. The original strings were placeholder
+# field paths from an earlier API draft; correcting so the summary
+# header actually shows something.
+$dispText = if ($rs.analyst_summary -and $rs.analyst_summary.disposition) {
+    $rs.analyst_summary.disposition
+} else { '(none)' }
+$confText = if ($rs.confidence -ne $null) {
+    "{0:P0}" -f [double]$rs.confidence
+} else { 'n/a' }
+Write-Host ("threat_level: {0}    confidence: {1}    disposition: {2}" -f `
+    $rs.threat_level, $confText, $dispText)
 
-# Stage timings
+# Stage timings. agent_trace mixes top-level stage completion events
+# (status=complete with elapsed_ms set) AND tool-call sub-events the
+# investigation agent emits (no status, no elapsed_ms — only `summary`
+# describing the tool result). The earlier code summed every entry's
+# elapsed_ms which printed "investigation=0ms" twice before the real
+# completion. Filter to status=complete to get one row per stage.
 if ($r.agent_trace) {
-    $stages = $r.agent_trace | ForEach-Object {
-        "{0}={1}ms" -f $_.agent, [int]$_.elapsed_ms
-    }
+    $stages = $r.agent_trace |
+        Where-Object { $_.status -eq 'complete' -and $_.elapsed_ms } |
+        ForEach-Object { "{0}={1}ms" -f $_.agent, [int]$_.elapsed_ms }
     Write-Host ("stages: {0}" -f ($stages -join '  '))
+    $tool_events = ($r.agent_trace | Where-Object { -not $_.status }).Count
+    if ($tool_events -gt 0) {
+        Write-Host ("        + {0} AI tool call{1}" -f $tool_events, $(if ($tool_events -eq 1) {''} else {'s'}))
+    }
 }
 
 # Attribution — exactly what the frontend gate sees (≥75 score, ≥5 matched)
