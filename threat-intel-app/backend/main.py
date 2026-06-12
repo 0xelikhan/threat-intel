@@ -2394,22 +2394,79 @@ async def scan_url_endpoint(req: ScanUrlRequest):
     # can't bypass this check.
     import ipaddress, socket
     from urllib.parse import urlparse
-    def _is_internal_host(host: str) -> bool:
-        if not host:
-            return True
-        try:
-            for fam, _t, _p, _c, sa in socket.getaddrinfo(host, None):
-                ip = ipaddress.ip_address(sa[0])
-                if (ip.is_private or ip.is_loopback or ip.is_link_local
-                        or ip.is_multicast or ip.is_reserved
-                        or ip.is_unspecified):
-                    return True
-        except (socket.gaierror, ValueError):
-            return True
-        return False
-    if _is_internal_host(urlparse(url).hostname or ""):
-        raise HTTPException(400, "url targets a non-public address")
     import aiohttp
+
+    def _ip_is_internal(ip_str: str) -> bool:
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            return True
+        return bool(ip.is_private or ip.is_loopback or ip.is_link_local
+                    or ip.is_multicast or ip.is_reserved or ip.is_unspecified)
+
+    def _resolve_public(host: str) -> list[str]:
+        """Resolve `host` and return ONLY public IPs. Empty list means the
+        host is unresolvable or every A/AAAA pointed somewhere internal.
+        The caller treats empty as "block the request" — there is no
+        "best-effort partial" path."""
+        if not host:
+            return []
+        try:
+            infos = socket.getaddrinfo(host, None)
+        except (socket.gaierror, ValueError, UnicodeError):
+            return []
+        ips: list[str] = []
+        seen: set[str] = set()
+        for _fam, _t, _p, _c, sa in infos:
+            ip = sa[0]
+            if ip in seen:
+                continue
+            seen.add(ip)
+            if _ip_is_internal(ip):
+                # Reject the whole host: if ANY resolution is internal we
+                # can't safely pin to the public subset (a DNS-rebinding
+                # attacker can have us hit either one).
+                return []
+            ips.append(ip)
+        return ips
+
+    class _PinnedResolver(aiohttp.AbstractResolver):
+        """aiohttp resolver that returns ONLY the pre-resolved set of IPs.
+        Closes the DNS-rebinding window between the SSRF pre-check and
+        aiohttp's connect-time lookup: we resolved once, decided the
+        target was safe, and now aiohttp uses ONLY that decision.
+
+        keyed by (host) -> list of {host, family} entries in
+        aiohttp.resolver result shape. Anything aiohttp asks to resolve
+        that isn't in the map raises OSError, which aiohttp surfaces as a
+        connection failure (the redirect path needs to add new hosts to
+        the map before the next hop).
+        """
+        def __init__(self, pinned: "dict[str, list[str]]"):
+            self._pinned = pinned
+
+        async def resolve(self, host, port=0, family=socket.AF_UNSPEC):
+            ips = self._pinned.get(host.lower())
+            if not ips:
+                raise OSError(f"host not in pinned set: {host}")
+            return [{
+                "hostname": host, "host": ip, "port": port,
+                "family": (socket.AF_INET6 if ":" in ip else socket.AF_INET),
+                "proto":  0, "flags": 0,
+            } for ip in ips]
+
+        async def close(self):
+            return
+
+    # Pin the initial host. Internal target → 400 before we even open the
+    # session, matching the previous behaviour but now with the same map
+    # that aiohttp will use at connect time so DNS can't flip on us.
+    _pinned_ips: "dict[str, list[str]]" = {}
+    _initial_host = (urlparse(url).hostname or "").lower()
+    _initial_ips = _resolve_public(_initial_host)
+    if not _initial_ips:
+        raise HTTPException(400, "url targets a non-public address")
+    _pinned_ips[_initial_host] = _initial_ips
     # Most sites bot-detect on either UA or missing browser headers.
     # We send a full Chrome header set first; on 403/406/429 we retry
     # once with Firefox in case the first signature was fingerprinted.
@@ -2454,10 +2511,15 @@ async def scan_url_endpoint(req: ScanUrlRequest):
         any non-200. Caller decides whether the result is a soft fail.
         Redirects are followed manually so the SSRF guard runs on each hop
         (a remote 302 to http://127.0.0.1 would otherwise bypass the
-        check we ran on the original URL)."""
+        check we ran on the original URL). Each hop's host is pre-resolved
+        and the resulting IP set is pinned in the connector's resolver so
+        aiohttp's connect-time DNS lookup can't return a different (now-
+        internal) address."""
         try:
             current = url
+            connector = aiohttp.TCPConnector(resolver=_PinnedResolver(_pinned_ips))
             async with aiohttp.ClientSession(
+                connector=connector,
                 timeout=aiohttp.ClientTimeout(total=30),
                 headers=headers,
             ) as session:
@@ -2469,8 +2531,12 @@ async def scan_url_endpoint(req: ScanUrlRequest):
                                 return b"", r.status, ""
                             from urllib.parse import urljoin
                             current = urljoin(current, nxt)
-                            if _is_internal_host(urlparse(current).hostname or ""):
-                                return b"", 403, "redirect targets a non-public address"
+                            _hop_host = (urlparse(current).hostname or "").lower()
+                            if _hop_host not in _pinned_ips:
+                                _hop_ips = _resolve_public(_hop_host)
+                                if not _hop_ips:
+                                    return b"", 403, "redirect targets a non-public address"
+                                _pinned_ips[_hop_host] = _hop_ips
                             continue
                         if r.status != 200:
                             return b"", r.status, ""
