@@ -514,8 +514,8 @@ async def update_settings(req: SettingsRequest):
 
 @app.post("/api/settings/test")
 async def test_key():
-    if not config.get("OPENAI_API_KEY") and not os.environ.get("ANTHROPIC_API_KEY"):
-        return {"ok": False, "error": "No LLM API key configured"}
+    if not _llm_key_configured():
+        return {"ok": False, "error": "No LLM provider configured for the active LLM_PROVIDER"}
     from providers import get_provider
     provider = get_provider()
     resp = await provider.complete(

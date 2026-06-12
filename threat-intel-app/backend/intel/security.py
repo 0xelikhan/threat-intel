@@ -143,6 +143,20 @@ def _redact_audit_value(field: str, value):
     try:
         from intel.redactor import redact as _redact
         out = _redact(value)
+        # Honor fail-closed semantics. The redactor returns rejected=True
+        # when its own confidence in completeness fell below the
+        # threshold; emitting out.redacted in that case would still ship
+        # a possibly-incomplete sanitised value to the audit log, which
+        # defeats the point of the safety check. Drop to a typed
+        # placeholder + log the reason so an operator can investigate
+        # the inputs that triggered it without seeing the raw value.
+        if getattr(out, "rejected", False):
+            try:
+                logger.warning("audit redactor rejected field=%s: %s",
+                               field, getattr(out, "reject_reason", "low confidence"))
+            except Exception:
+                pass
+            return "{{REDACTOR_REJECTED}}"
         return out.redacted
     except Exception as _e:
         try:
