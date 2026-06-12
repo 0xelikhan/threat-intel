@@ -603,6 +603,27 @@ class LoginRequest(BaseModel):
     password: str = Field(..., min_length=1, max_length=1024)
 
 
+# Per-IP login throttle. Sliding 60-second window of failure timestamps;
+# after 5 failures the IP gets a 429 with Retry-After until the oldest
+# failure expires. Without this, the bcrypt-rounds=12 cost (~250ms per
+# verify) is the only thing slowing a brute-force attempt — and an
+# attacker who concurrent-POSTs can still saturate worker capacity.
+_LOGIN_FAILURES: dict = _BoundedDict(cap=2000)
+_LOGIN_WINDOW_S    = 60
+_LOGIN_MAX_FAILURES = 5
+
+
+def _login_client_ip(request: Request) -> str:
+    # X-Forwarded-For only honoured if a reverse proxy set it (and the
+    # platform is deployed behind one). For local dev it's the direct
+    # client. Don't trust an arbitrary inbound XFF — strip to the
+    # left-most untrusted address only when the header is present.
+    xff = request.headers.get("X-Forwarded-For", "")
+    if xff:
+        return xff.split(",", 1)[0].strip()[:64]
+    return (str(request.client.host) if request.client else "unknown")[:64]
+
+
 @app.post("/api/auth/login")
 async def auth_login(req: LoginRequest, request: Request):
     """Validate credentials and start a signed-cookie session. 503 when the
@@ -610,14 +631,41 @@ async def auth_login(req: LoginRequest, request: Request):
     empty deployment doesn't silently 401 forever)."""
     if not auth_configured():
         raise HTTPException(503, "authentication is not configured on this deployment")
+    # Per-IP throttle check. Walk the IP's window, drop expired entries,
+    # then check the live count.
+    _ip = _login_client_ip(request)
+    _now = time.time()
+    _window = _LOGIN_FAILURES.get(_ip) or []
+    _window = [t for t in _window if (_now - t) < _LOGIN_WINDOW_S]
+    if len(_window) >= _LOGIN_MAX_FAILURES:
+        _retry_after = int(max(1, _LOGIN_WINDOW_S - (_now - _window[0])))
+        # Emit an audit event so the brute-force attempt shows up in
+        # the same stream as the underlying auth_failure records.
+        try:
+            from intel.security import audit_log
+            audit_log("auth_throttled", client=_ip,
+                      window_failures=len(_window),
+                      retry_after_s=_retry_after)
+        except Exception:
+            pass
+        raise HTTPException(
+            429, "too many failed login attempts — wait and retry",
+            headers={"Retry-After": str(_retry_after)},
+        )
     if not verify_credentials(req.username, req.password):
+        # Record this failure inside the sliding window.
+        _window.append(_now)
+        _LOGIN_FAILURES[_ip] = _window
         try:
             from intel.security import audit_log
             audit_log("auth_failure", username=(req.username or "").strip()[:64],
-                      client=str(request.client.host) if request.client else None)
+                      client=_ip)
         except Exception:
             pass
         raise HTTPException(401, "invalid credentials")
+    # Successful login clears the failure window for this IP so a
+    # legitimate user who mistyped once isn't stuck for 60s.
+    _LOGIN_FAILURES[_ip] = []
     request.session["auth_user"] = req.username.strip()
     # Log successful logins too — a security audit trail with only
     # failures is incomplete. An attacker who steals a credential and
@@ -626,7 +674,7 @@ async def auth_login(req: LoginRequest, request: Request):
     try:
         from intel.security import audit_log
         audit_log("auth_success", username=req.username.strip()[:64],
-                  client=str(request.client.host) if request.client else None)
+                  client=_login_client_ip(request))
     except Exception:
         pass
     return {"ok": True, "user": req.username.strip()}
@@ -643,7 +691,7 @@ async def auth_logout(request: Request):
         try:
             from intel.security import audit_log
             audit_log("auth_logout", username=_user[:64],
-                      client=str(request.client.host) if request.client else None)
+                      client=_login_client_ip(request))
         except Exception:
             pass
     return {"ok": True}
