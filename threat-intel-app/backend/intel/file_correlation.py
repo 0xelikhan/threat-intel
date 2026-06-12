@@ -46,6 +46,12 @@ async def correlate(analysis: Dict, config) -> Dict:
     keys = {
         "VIRUSTOTAL_KEY":      config.get("VIRUSTOTAL_KEY"),
         "HYBRID_ANALYSIS_KEY": config.get("HYBRID_ANALYSIS_KEY"),
+        # abuse.ch unified Auth-Key — MalwareBazaar / ThreatFox / URLhaus all
+        # use the same one. Anonymous requests have been rate-limited /
+        # soft-blocked since mid-2024 so file scans were silently hitting
+        # MalwareBazaar without auth and getting throttled.
+        "ABUSECH_AUTH_KEY":    (config.get("ABUSECH_AUTH_KEY")
+                                or config.get("MALWAREBAZAAR_API_KEY")),
     }
 
     out: Dict = {}
@@ -56,7 +62,7 @@ async def correlate(analysis: Dict, config) -> Dict:
     async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:
         tasks = {
             "virustotal":      _vt_file(session, sha256, keys["VIRUSTOTAL_KEY"])  if sha256 else _noop(),
-            "malwarebazaar":   _malwarebazaar(session, sha256)                    if sha256 else _noop(),
+            "malwarebazaar":   _malwarebazaar(session, sha256, keys["ABUSECH_AUTH_KEY"]) if sha256 else _noop(),
             "hybrid_analysis": _hybrid_analysis(session, sha256, keys["HYBRID_ANALYSIS_KEY"]) if sha256 else _noop(),
             "feed_cache":      _feed_cache_for_iocs(iocs),
         }
@@ -168,12 +174,15 @@ async def _vt_file(session, sha256, key) -> Optional[Dict]:
 
 
 # ─── MalwareBazaar ─────────────────────────────────────────────────────────────
-async def _malwarebazaar(session, sha256) -> Optional[Dict]:
+async def _malwarebazaar(session, sha256, auth_key: str = "") -> Optional[Dict]:
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    if auth_key:
+        headers["Auth-Key"] = auth_key
     try:
         async with session.post(
             "https://mb-api.abuse.ch/api/v1/",
             data=f"query=get_info&hash={sha256}",
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            headers=headers,
         ) as r:
             if r.status != 200:
                 return {"error": f"HTTP {r.status}"}

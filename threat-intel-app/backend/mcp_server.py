@@ -85,23 +85,41 @@ async def analyze_log(log_text: str) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Individual IOC reputation
 # ═══════════════════════════════════════════════════════════════════════════════
+
+# Full configured key set so MCP tool callers get the same enrichment
+# coverage as /api/analyze. The earlier cherry-picked subsets silently
+# dropped abuse.ch unified auth, Hybrid Analysis, Censys, CrowdSec,
+# Criminal IP, ProxyCheck, Maltiverse, OpenCTI, FullHunt, WhoisXML,
+# and Google Safe Browsing — making the MCP "lookup" tools quietly
+# weaker than the docstrings promised.
+def _mcp_keys(cfg) -> dict:
+    return {k: cfg.get(k) for k in (
+        "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "IPINFO_TOKEN", "GREYNOISE_KEY",
+        "OTX_KEY", "URLSCAN_KEY", "PULSEDIVE_KEY",
+        "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY", "HYBRID_ANALYSIS_KEY",
+        "CENSYS_API_ID", "CENSYS_API_SECRET", "CENSYS_PERSONAL_ACCESS_TOKEN",
+        "CROWDSEC_KEY", "CRIMINAL_IP_KEY", "PROXYCHECK_KEY",
+        "WHOISXML_KEY", "GOOGLE_API_KEY", "FULLHUNT_KEY",
+        "MALTIVERSE_KEY", "OPENCTI_URL", "OPENCTI_TOKEN",
+        "PHISHTANK_KEY",
+    )}
+
+
 @mcp.tool()
 async def lookup_ip(ip: str) -> dict:
     """Comprehensive IP reputation across all configured sources.
 
     Sources: offline blocklists (52K+ IPs), AbuseIPDB, VirusTotal, GreyNoise,
-    Shodan, OTX, IPInfo geolocation, Tor exit list, ASN reputation (flags
-    bulletproof hosters / VPNs / anonymizers).
+    OTX, IPInfo geolocation, Tor exit list, Censys, CrowdSec, Criminal IP,
+    ProxyCheck, Maltiverse, OpenCTI, CIRCL passive DNS, Robtex, Hackertarget
+    reverse-IP, Feodo Tracker active-C2 list, Google Safe Browsing, ASN
+    reputation (flags bulletproof hosters / VPNs / anonymizers).
     """
     from config import config as _cfg
     from agents.enrichment import enrich_ip
     import aiohttp
-    keys = {k: _cfg.get(k) for k in (
-        "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "IPINFO_TOKEN",
-        "GREYNOISE_KEY", "URLSCAN_KEY", "OTX_KEY",
-    )}
     async with aiohttp.ClientSession() as session:
-        return await enrich_ip(session, ip, keys)
+        return await enrich_ip(session, ip, _mcp_keys(_cfg))
 
 
 @mcp.tool()
@@ -109,16 +127,16 @@ async def lookup_domain(domain: str) -> dict:
     """Comprehensive domain reputation + heuristics.
 
     Sources: VirusTotal, URLScan, OTX, Pulsedive, certificate transparency,
-    WHOIS, Wayback Machine, Spamhaus DBL, Maltiverse, OpenCTI (if configured),
-    plus offline heuristics: NRD age, same-day registration flag, DGA score,
+    WHOIS / WhoisXML, Wayback Machine, Spamhaus DBL, Maltiverse, OpenCTI,
+    FullHunt subdomain inventory, Google Safe Browsing, DNS records, plus
+    offline heuristics: NRD age, same-day registration flag, DGA score,
     IDN / punycode attack detection, typosquat brand matching.
     """
     from config import config as _cfg
     from agents.enrichment import enrich_domain
     import aiohttp
-    keys = {k: _cfg.get(k) for k in ("VIRUSTOTAL_KEY", "URLSCAN_KEY", "OTX_KEY", "PULSEDIVE_KEY")}
     async with aiohttp.ClientSession() as session:
-        return await enrich_domain(session, domain, keys)
+        return await enrich_domain(session, domain, _mcp_keys(_cfg))
 
 
 @mcp.tool()
@@ -126,17 +144,17 @@ async def lookup_hash(file_hash: str) -> dict:
     """Comprehensive file-hash reputation + sandbox lookup.
 
     Accepts MD5, SHA-1, or SHA-256. Queries: VirusTotal, MalwareBazaar,
-    ThreatFox, OTX, Team Cymru MHR (free, DNS-based), Maltiverse, Hybrid
-    Analysis cloud sandbox (if SHA-256), LOLDrivers BYOVD catalog.
+    ThreatFox, OTX, Team Cymru MHR (free, DNS-based), Maltiverse, URLhaus
+    payload, CIRCL hashlookup, Hybrid Analysis cloud sandbox (if SHA-256),
+    OpenCTI, MISP feeds, LOLDrivers BYOVD catalog.
     """
     from config import config as _cfg
     from agents.enrichment import enrich_hash
     from intel.sandbox import lookup_all as sandbox_lookup
     from intel.loldrivers import lookup_hash as drv_lookup
     import aiohttp
-    keys = {k: _cfg.get(k) for k in ("VIRUSTOTAL_KEY", "OTX_KEY")}
     async with aiohttp.ClientSession() as session:
-        base = await enrich_hash(session, file_hash, keys)
+        base = await enrich_hash(session, file_hash, _mcp_keys(_cfg))
     if len(file_hash) == 64:
         base["sandbox"] = await sandbox_lookup(file_hash, _cfg)
     base["loldrivers"] = drv_lookup(file_hash)
