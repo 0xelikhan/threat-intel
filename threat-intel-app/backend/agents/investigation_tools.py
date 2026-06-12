@@ -18,13 +18,16 @@ TOOL_SCHEMAS = [
         "function": {
             "name": "lookup_ip_reputation",
             "description": (
-                "Get full reputation for an IP across all available sources: VirusTotal, "
-                "AbuseIPDB confidence score, Shodan ports/services/vulns, GreyNoise "
-                "classification, OTX pulse count, IPInfo geo+ASN, Tor exit status, offline "
-                "blocklists (52K+ IPs), Spamhaus context, ASN reputation (bulletproof / "
-                "VPN / anonymizer). Use when you have an IP and want to know whether it's "
-                "malicious, what's hosted there, what country/ASN, or whether it's known "
-                "anonymizer infrastructure."
+                "Get full reputation for an IP across all configured sources: VirusTotal, "
+                "AbuseIPDB confidence score, GreyNoise classification (incl. RIOT), OTX "
+                "pulse count, IPInfo geo+ASN, Tor exit status, offline blocklists (52K+ "
+                "IPs), Censys open-ports + TLS cert, CrowdSec attack scenarios, Criminal "
+                "IP inbound/outbound threat scoring, ProxyCheck VPN/proxy classification, "
+                "Maltiverse, CIRCL passive DNS, Hackertarget reverse-IP, Feodo Tracker "
+                "active-C2 list, Google Safe Browsing, BGP ranking, ASN reputation "
+                "(bulletproof / VPN / anonymizer). Use when you have an IP and want to "
+                "know whether it's malicious, what's hosted there, what country/ASN, or "
+                "whether it's known anonymizer infrastructure."
             ),
             "parameters": {
                 "type": "object",
@@ -39,11 +42,13 @@ TOOL_SCHEMAS = [
             "name": "lookup_domain_reputation",
             "description": (
                 "Get full reputation + heuristics for a domain: VirusTotal, OTX, URLScan, "
-                "Pulsedive, Spamhaus DBL, certificate transparency subdomains, WHOIS "
-                "(registration date), Wayback Machine snapshot history, NRD age, DGA score, "
-                "IDN/punycode detection, typosquat brand matching, Maltiverse. Use when you "
-                "have a domain and want to know if it's malicious, when it was registered, "
-                "whether it impersonates a brand, or whether it's algorithmically generated."
+                "Pulsedive, Spamhaus DBL, certificate transparency subdomains (crt.sh), "
+                "WHOIS (registration date), Wayback Machine snapshot history, NRD age, "
+                "DGA score, IDN/punycode detection, typosquat brand matching, Maltiverse, "
+                "OpenCTI, FullHunt subdomain inventory, Google Safe Browsing, DNS records, "
+                "offline phishing-domain blocklists. Use when you have a domain and want "
+                "to know if it's malicious, when it was registered, whether it impersonates "
+                "a brand, or whether it's algorithmically generated."
             ),
             "parameters": {
                 "type": "object",
@@ -59,10 +64,11 @@ TOOL_SCHEMAS = [
             "description": (
                 "Get full reputation for a file hash (MD5 / SHA-1 / SHA-256): VirusTotal, "
                 "MalwareBazaar malware family + tags, ThreatFox malware/confidence, OTX, "
+                "URLhaus payload tracking, CIRCL hashlookup (NSRL known-good vs known-bad), "
                 "Team Cymru MHR (free DNS-based first-seen + detection %), Hybrid Analysis "
-                "sandbox report (if SHA-256), LOLDrivers BYOVD catalog "
-                "match. Use when you have a hash and want to know malware family, "
-                "first-seen date, sandbox verdict, or BYOVD status."
+                "sandbox report (if SHA-256), Maltiverse, OpenCTI, MISP community feeds, "
+                "LOLDrivers BYOVD catalog match. Use when you have a hash and want to know "
+                "malware family, first-seen date, sandbox verdict, or BYOVD status."
             ),
             "parameters": {
                 "type": "object",
