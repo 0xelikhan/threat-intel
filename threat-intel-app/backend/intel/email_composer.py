@@ -3348,18 +3348,32 @@ def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
 
 def _fmt_hash_enrichment(h: str, data: Dict) -> str:
     """Client-readable summary for a file hash. Pulls VirusTotal,
-    MalwareBazaar, Hybrid Analysis, and any signing / family / size
-    context we have."""
+    MalwareBazaar, ThreatFox, URLhaus payload, CIRCL hashlookup, Hybrid
+    Analysis, Team Cymru MHR, and MISP feeds — every hash source the
+    backend writes. Earlier code read vt.family / vt.popular_name /
+    vt.first_submission_date (none of which the parser sets — the right
+    keys are malware_family / first_submission) and ignored every source
+    beyond VT/MB/HA, so hash emails about confirmed malware never
+    mentioned URLhaus or ThreatFox even when the indicator was active
+    C2 infrastructure.
+    """
     if not data or not isinstance(data, dict):
         return ""
 
     vt = data.get("virustotal") or {}
     mb = data.get("malwarebazaar") or {}
     ha = data.get("hybrid_analysis") or {}
+    tf = data.get("threatfox") or {}
+    up = data.get("urlhaus_payload") or {}
+    circl = data.get("circl_hashlookup") or {}
+    cymru = data.get("team_cymru_mhr") or {}
+    misp = data.get("misp_feeds") or {}
+    otx = data.get("otx") or {}
 
     sentences: List[str] = []
 
-    # VirusTotal — engine ratio + family + signer + dates
+    # VirusTotal — engine ratio + family + dates. Parser writes
+    # malware_family (suggested_threat_label) and first_submission.
     if vt and not vt.get("error"):
         mal = vt.get("malicious", 0) or 0
         susp = vt.get("suspicious", 0) or 0
@@ -3369,23 +3383,26 @@ def _fmt_hash_enrichment(h: str, data: Dict) -> str:
             sentences.append(
                 f"VirusTotal flags the file as {verdict}, "
                 f"with {mal + susp} of {total} engines detecting it.")
-            fam = (vt.get("family") or vt.get("popular_name") or "").strip()
+            fam = (vt.get("malware_family") or "").strip()
             if fam:
                 sentences.append(f"VirusTotal labels the family as {fam}.")
         elif total:
             sentences.append(
                 f"VirusTotal shows the file clean across {total} engines.")
-        first = (vt.get("first_seen") or vt.get("first_submission_date") or "")
+        first = vt.get("first_submission")
         if first:
-            sentences.append(
-                f"It was first submitted to VirusTotal on {str(first)[:10]}.")
-        signer = (vt.get("signer") or vt.get("signature_info", {}).get("signer") or "")
-        if signer:
-            sentences.append(f"The file is digitally signed by {signer}.")
+            # first_submission is a Unix epoch from VT
+            try:
+                from datetime import datetime, timezone
+                ds = datetime.fromtimestamp(int(first), tz=timezone.utc).strftime("%Y-%m-%d")
+                sentences.append(f"It was first submitted to VirusTotal on {ds}.")
+            except (TypeError, ValueError):
+                pass
 
-    # MalwareBazaar — confirmation + tags
-    if mb.get("found"):
-        family = mb.get("malware_family") or mb.get("signature")
+    # MalwareBazaar — confirmation + tags. _p_mb returns malware_family
+    # but doesn't set a `found` flag; presence with non-error is the hit.
+    if mb and not mb.get("error") and (mb.get("malware_family") or mb.get("malwareName")):
+        family = mb.get("malware_family") or mb.get("malwareName")
         tags = mb.get("tags") or []
         piece = f"MalwareBazaar has the file catalogued"
         if family:
@@ -3394,7 +3411,47 @@ def _fmt_hash_enrichment(h: str, data: Dict) -> str:
             piece += f" (tagged {', '.join(tags[:3])})"
         sentences.append(piece + ".")
 
-    # Hybrid Analysis
+    # ThreatFox — active malware C2 / payload tracking
+    if tf and not tf.get("error"):
+        fam = tf.get("malware") or tf.get("malware_family")
+        if fam:
+            sentences.append(f"ThreatFox tracks this hash as active {fam} payload.")
+
+    # URLhaus payload — distributed via known malware URLs
+    if up and not up.get("error") and up.get("verdict") == "MALICIOUS":
+        sig = up.get("signature") or "malware"
+        n_urls = up.get("url_count")
+        piece = f"URLhaus tracks this hash as {sig}"
+        if n_urls:
+            piece += f", distributed across {n_urls} URL{'s' if n_urls != 1 else ''}"
+        sentences.append(piece + ".")
+
+    # CIRCL hashlookup — known-good (NSRL) or explicitly known-malicious
+    if circl and not circl.get("error"):
+        if circl.get("verdict") == "CLEAN":
+            prod = circl.get("ProductName") or circl.get("FileName") or "a known-good file"
+            sentences.append(f"CIRCL hashlookup identifies the file as {prod} (NSRL clean).")
+        elif circl.get("known_malicious"):
+            sentences.append("CIRCL hashlookup explicitly flags the file as known-malicious.")
+
+    # Team Cymru MHR — DNS-based malware reputation
+    if cymru and not cymru.get("error") and cymru.get("detection_pct") is not None:
+        sentences.append(
+            f"Team Cymru MHR shows {cymru['detection_pct']}% AV-engine consensus on this hash.")
+
+    # MISP feeds — community-curated event hits
+    if misp and misp.get("matched_feeds"):
+        feeds = ", ".join(misp["matched_feeds"][:3])
+        sentences.append(f"The hash is published in MISP community feeds ({feeds}).")
+
+    # OTX pulses
+    if otx and not otx.get("error"):
+        pulses = otx.get("pulseCount") or otx.get("pulse_count") or 0
+        if pulses >= 5:
+            sentences.append(
+                f"AlienVault OTX lists the hash across {pulses} community threat-intel pulses.")
+
+    # Hybrid Analysis sandbox detonation
     if ha and not ha.get("error"):
         v = (ha.get("verdict") or "").strip().lower()
         score = ha.get("threat_score")
@@ -3410,12 +3467,23 @@ def _fmt_hash_enrichment(h: str, data: Dict) -> str:
 
 
 def _fmt_url_enrichment(url: str, data: Dict) -> str:
-    """Client-readable summary for a URL."""
+    """Client-readable summary for a URL. Pulls from VirusTotal, URLhaus
+    (the canonical malware-distribution list), PhishTank, ThreatFox, OTX,
+    and URLScan's archived-screenshot lookup — the actual sources URL
+    enrichment writes. Earlier code read data["urlscan"] (a domain-bucket
+    key) and ignored urlhaus_url / phishtank / threatfox entirely, so
+    customer emails about a confirmed phishing or malware-distribution
+    URL only mentioned the VT count and never the explicit malice signal.
+    """
     if not data or not isinstance(data, dict):
         return ""
 
     vt = data.get("virustotal") or {}
-    us = data.get("urlscan") or {}
+    us = data.get("urlscan_screenshot") or {}
+    uh = data.get("urlhaus_url") or {}
+    pt = data.get("phishtank") or {}
+    tf = data.get("threatfox") or {}
+    otx = data.get("otx") or {}
 
     sentences: List[str] = []
 
@@ -3431,18 +3499,38 @@ def _fmt_url_enrichment(url: str, data: Dict) -> str:
             sentences.append(
                 f"VirusTotal shows the URL clean across {total} engines.")
 
-    if us and not us.get("error"):
-        v = (us.get("verdict") or "").strip().lower()
-        if v in ("malicious", "suspicious"):
-            page_title = (us.get("page_title") or "").strip()
-            piece = f"URLScan rates the URL as {v}"
-            if page_title:
-                piece += f" (page title \"{page_title[:60]}\")"
-            sentences.append(piece + ".")
-        elif us.get("country") and us.get("page_server"):
+    if uh and not uh.get("error"):
+        threat = (uh.get("threat") or "malware distribution").strip()
+        n_urls = uh.get("payload_count")
+        piece = f"URLhaus confirms the URL distributes {threat}"
+        if n_urls:
+            piece += f" (linked to {n_urls} known payload{'s' if n_urls != 1 else ''})"
+        sentences.append(piece + ".")
+
+    if pt and not pt.get("error") and pt.get("in_database"):
+        verified = bool(pt.get("verified"))
+        sentences.append(
+            "PhishTank lists this URL as community-verified phishing." if verified
+            else "PhishTank has this URL flagged as phishing (pending verification).")
+
+    if tf and not tf.get("error"):
+        fam = tf.get("malware") or tf.get("malware_family")
+        if fam:
+            sentences.append(f"ThreatFox tracks this URL as active {fam} infrastructure.")
+
+    if otx and not otx.get("error"):
+        pulses = otx.get("pulseCount") or otx.get("pulse_count") or 0
+        if pulses >= 5:
             sentences.append(
-                f"URLScan recorded the destination as hosted in "
-                f"{us['country']} on {us['page_server']}.")
+                f"AlienVault OTX lists the URL across {pulses} community threat-intel pulses.")
+
+    if us and not us.get("error") and us.get("found"):
+        if us.get("malicious"):
+            sentences.append("URLScan's archived scan rates this URL as malicious.")
+        elif us.get("scan_country"):
+            sentences.append(
+                f"URLScan's archived scan recorded the destination as hosted in "
+                f"{us['scan_country']}.")
 
     short_url = url if len(url) <= 80 else url[:77] + "…"
     if not sentences:
@@ -3797,14 +3885,21 @@ async def _gather_email_enrichment(log_text: str, parsed: Dict,
             return {"lines": "", "raw": {}}
 
         # Snapshot the keys we need into a plain dict so enrichment can
-        # read them without going through ConfigManager. The keys
-        # mirror the URL-scan endpoint's set so we get the same
-        # coverage.
+        # read them without going through ConfigManager. Full key set so
+        # this matches the /api/analyze pipeline — the earlier subset was
+        # missing ABUSECH_AUTH_KEY (so MalwareBazaar/ThreatFox/URLhaus
+        # got rate-limited on every email), plus Censys / CrowdSec /
+        # Criminal IP / ProxyCheck / FullHunt / OpenCTI / PhishTank.
         keys = {k: (config.get(k) or "") for k in (
             "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
             "GREYNOISE_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
             "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
             "HYBRID_ANALYSIS_KEY",
+            "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY",
+            "CENSYS_API_ID", "CENSYS_API_SECRET", "CENSYS_PERSONAL_ACCESS_TOKEN",
+            "CROWDSEC_KEY", "CRIMINAL_IP_KEY", "PROXYCHECK_KEY",
+            "FULLHUNT_KEY", "OPENCTI_URL", "OPENCTI_TOKEN",
+            "PHISHTANK_KEY",
         )}
 
         import aiohttp as _aiohttp
