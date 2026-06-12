@@ -2434,7 +2434,15 @@ function _ocSources(result, ioc, type) {
     if (blob.error_type === 'circuit_open') {
       status = `temporarily skipped (recent failures opened the breaker — retry in a few minutes)`;
     } else if (blob.error_type === 'auth_failed') {
-      status = `couldn't authenticate — verify the ${label} API key in data/config.json`;
+      // abuse.ch issues a unified Auth-Key that all three of its APIs
+      // share — when it expires/rotates, ThreatFox/MalwareBazaar/URLhaus
+      // all fail together. Point the analyst at the right rotation
+      // surface instead of the generic "edit config.json" hint.
+      const isAbuseCh = ['ThreatFox', 'MalwareBazaar', 'URLhaus', 'URLhaus payload', 'Feodo Tracker']
+        .includes(label);
+      status = isAbuseCh
+        ? `couldn't authenticate — rotate the abuse.ch Auth-Key at https://auth.abuse.ch and update ABUSECH_AUTH_KEY in Settings`
+        : `couldn't authenticate — verify the ${label} API key in Settings`;
     } else if (blob.error_type === 'rate_limited') {
       status = `rate-limited (HTTP 429) — daily quota or burst limit reached`;
     } else if (blob.error_type === 'timed_out') {

@@ -184,6 +184,15 @@ async def _malwarebazaar(session, sha256, auth_key: str = "") -> Optional[Dict]:
             data=f"query=get_info&hash={sha256}",
             headers=headers,
         ) as r:
+            if r.status == 401:
+                # abuse.ch rejected the Auth-Key. Make the error
+                # actionable so an operator seeing the source row in
+                # the UI knows the fix is to rotate the key — without
+                # rotating, every MalwareBazaar/ThreatFox/URLhaus call
+                # on the same key will keep failing.
+                return {"error": "auth failed (HTTP 401) — rotate ABUSECH_AUTH_KEY at https://auth.abuse.ch",
+                        "error_type": "auth_failed",
+                        "fix_hint": "abuse.ch issues free Auth-Keys. The current key is expired or revoked."}
             if r.status != 200:
                 return {"error": f"HTTP {r.status}"}
             d = await r.json()
