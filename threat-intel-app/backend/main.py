@@ -619,13 +619,33 @@ async def auth_login(req: LoginRequest, request: Request):
             pass
         raise HTTPException(401, "invalid credentials")
     request.session["auth_user"] = req.username.strip()
+    # Log successful logins too — a security audit trail with only
+    # failures is incomplete. An attacker who steals a credential and
+    # successfully logs in is the most interesting event to have on
+    # tape, not the failed brute-force attempts.
+    try:
+        from intel.security import audit_log
+        audit_log("auth_success", username=req.username.strip()[:64],
+                  client=str(request.client.host) if request.client else None)
+    except Exception:
+        pass
     return {"ok": True, "user": req.username.strip()}
 
 
 @app.post("/api/auth/logout")
 async def auth_logout(request: Request):
     """Clear the session cookie. Safe to call when not logged in."""
+    # Capture the user BEFORE we clear the session so the audit log
+    # actually has someone to attribute the logout to.
+    _user = current_user(request.session) or ""
     request.session.clear()
+    if _user:
+        try:
+            from intel.security import audit_log
+            audit_log("auth_logout", username=_user[:64],
+                      client=str(request.client.host) if request.client else None)
+        except Exception:
+            pass
     return {"ok": True}
 
 
