@@ -2911,7 +2911,16 @@ async def startup_check():
         except ImportError:
             pkg_status[name] = "missing"
 
-    required = ("OPENAI_API_KEY",)
+    # Pick the required key based on the active LLM_PROVIDER instead of
+    # hardcoding OPENAI_API_KEY. Anthropic deployments need
+    # ANTHROPIC_API_KEY; Ollama needs nothing (local install).
+    _llm_provider = (os.environ.get("LLM_PROVIDER") or "openai").strip().lower()
+    if _llm_provider == "anthropic":
+        required = ("ANTHROPIC_API_KEY",)
+    elif _llm_provider == "ollama":
+        required = ()
+    else:
+        required = ("OPENAI_API_KEY",)
     optional = ("VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "GREYNOISE_KEY",
                 "OTX_KEY", "URLSCAN_KEY", "PULSEDIVE_KEY", "CENSYS_ID",
                 "CENSYS_SECRET", "HYBRID_ANALYSIS_KEY", "CROWDSEC_KEY",
