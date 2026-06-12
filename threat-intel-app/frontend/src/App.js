@@ -3530,7 +3530,16 @@ function FeedbackInline({ result, onStart, onPartial, onComplete }) {
   const [statement, setStatement] = useState('');
   const [sending, setSending]     = useState(false);
   const [error, setError]         = useState(null);
+  const readerRef                 = useRef(null);
   const originalLog = result?.raw_input || '';
+  // Cancel any in-flight SSE reader on unmount so navigating away from
+  // the feedback panel mid-analyze doesn't leave fetch consuming the
+  // stream + the backend burning LLM cost for nobody. Pairs with the
+  // backend-side _stream task-cancel fix landed in b2ca5f4.
+  useEffect(() => () => {
+    try { readerRef.current?.cancel(); } catch {}
+    readerRef.current = null;
+  }, []);
   if (!originalLog) return null;
 
   const submit = async () => {
@@ -3554,6 +3563,7 @@ function FeedbackInline({ result, onStart, onPartial, onComplete }) {
         throw new Error(err.error || err.detail || `HTTP ${resp.status}`);
       }
       const reader = resp.body.getReader();
+      readerRef.current = reader;
       const dec = new TextDecoder();
       let buf = '';
       while (true) {
@@ -3655,6 +3665,18 @@ function ChatWithRecon({ result, bare,
   const [pendingQuestion, setPendingQuestion] = useState(null);
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
+  // In-flight SSE readers for the chat send + feedback re-analyze paths.
+  // Cancelled on unmount so a tab close mid-stream doesn't keep the
+  // backend writing tokens nobody reads — matches the AgentPipeline
+  // unmount cleanup pattern from 5e80017.
+  const chatReaderRef     = useRef(null);
+  const feedbackReaderRef = useRef(null);
+  useEffect(() => () => {
+    try { chatReaderRef.current?.cancel();     } catch {}
+    try { feedbackReaderRef.current?.cancel(); } catch {}
+    chatReaderRef.current     = null;
+    feedbackReaderRef.current = null;
+  }, []);
 
   const runId = result?.runId;
   const rs    = result?.response_summary || {};
@@ -3698,6 +3720,7 @@ function ChatWithRecon({ result, bare,
         throw new Error(err.error || err.detail || `HTTP ${resp.status}`);
       }
       const reader = resp.body.getReader();
+      feedbackReaderRef.current = reader;
       const dec = new TextDecoder();
       let buf = '';
       while (true) {
@@ -3836,6 +3859,7 @@ function ChatWithRecon({ result, bare,
 
       // Stream SSE events, append text tokens + tool-call records to the assistant message
       const reader = resp.body.getReader();
+      chatReaderRef.current = reader;
       const dec = new TextDecoder();
       let buf = '';
       while (true) {
