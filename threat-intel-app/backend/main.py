@@ -3501,13 +3501,15 @@ async def email_compose_ai(req: EmailComposeAIRequest):
 class EmailRemediateRequest(BaseModel):
     """Body for /api/email/remediate. Accepts whatever subset of parsed
     alert fields the email composer has populated — every field is
-    optional because alert types vary widely."""
+    optional because alert types vary widely. Field caps mirror the
+    other /api/email/* request models so a 50 MB body can't be sent
+    in as a "log" and round-trip into the LLM prompt unbounded."""
     parsed:            dict = Field(default_factory=dict)
-    log_text:          str = ""
-    alert_type:        str = ""
-    threat_level:      str = ""
-    mitre_techniques:  list = Field(default_factory=list)
-    severity:          str = ""
+    log_text:          str = Field(default="",                max_length=200_000)
+    alert_type:        str = Field(default="",                max_length=64)
+    threat_level:      str = Field(default="",                max_length=32)
+    mitre_techniques:  list = Field(default_factory=list,     max_length=100)
+    severity:          str = Field(default="",                max_length=32)
 
 
 _REMEDIATION_SYSTEM_PROMPT = """OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes (—), en-dashes (–), or curly quotes. Use hyphens (-), commas, or restructure the sentence. This applies to every word the customer or analyst will read.
