@@ -30,6 +30,7 @@ from __future__ import annotations
 import contextvars
 import logging
 import os
+import re
 import sys
 import time
 import uuid
@@ -53,15 +54,24 @@ def current_request_id() -> Optional[str]:
 
 # ─── request ID middleware ────────────────────────────────────────────────────
 _HEADER_NAME = "X-Request-ID"
+# Accept only canonical UUIDv4-ish strings (32 hex + 4 hyphens, length 36).
+# Anything else gets a fresh UUID so an attacker can't smuggle arbitrary text
+# into the log stream by setting X-Request-ID, can't blend traffic with a
+# pre-existing rid to confuse forensics, and can't pollute the response
+# header echoed back to other tooling.
+_RID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
     """Stamp every request with a UUID. Reuses an inbound `X-Request-ID`
-    header when the client sent one (so reverse proxies can propagate
-    their own trace ID) and falls back to a fresh UUID otherwise."""
+    header ONLY when it parses as a UUID (so a trusted reverse proxy can
+    propagate its own trace ID without giving an untrusted client a slot
+    to inject arbitrary text into our logs) and falls back to a fresh
+    UUID otherwise."""
 
     async def dispatch(self, request: Request, call_next):
-        rid = request.headers.get(_HEADER_NAME) or str(uuid.uuid4())
+        inbound = request.headers.get(_HEADER_NAME)
+        rid = inbound if inbound and _RID_RE.match(inbound) else str(uuid.uuid4())
         token = request_id_var.set(rid)
         try:
             response = await call_next(request)
