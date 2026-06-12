@@ -480,7 +480,7 @@ _results: dict = _BoundedDict(cap=500)
 _sandbox_jobs: dict[str, dict] = _BoundedDict(cap=500)
 # Chat conversations per run: { run_id: [{role, content, timestamp}, ...] }
 _chats: dict[str, list] = _BoundedDict(cap=500)
-_taxii_cache: dict = {}
+_taxii_cache: dict = _BoundedDict(cap=100)
 
 FRONTEND_BUILD = Path(__file__).parent.parent / "frontend" / "build"
 
@@ -1081,7 +1081,7 @@ async def analyze_clarify(run_id: str, req: ClarifyRequest):
 # doesn't carry hashes; abuse.ch's MalwareBazaar does. This endpoint is
 # called on demand from the frontend so we don't slow down /api/analyze
 # with extra outbound HTTPS calls per matched actor.
-_MB_HASH_CACHE: dict = {}   # family_name.lower() -> {ts, payload}
+_MB_HASH_CACHE: dict = _BoundedDict(cap=500)   # family_name.lower() -> {ts, payload}
 
 @app.get("/api/attribution/hashes")
 async def attribution_hashes(family: str, limit: int = 10):
