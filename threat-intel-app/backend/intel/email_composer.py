@@ -1145,15 +1145,26 @@ def save_draft(payload: Dict) -> Dict:
     now = datetime.now(timezone.utc)
     alert = _slugify(payload.get("alert_type") or "generic")
     draft_id = f"{now.strftime('%Y%m%dT%H%M%S')}_{alert}"
+
+    # Bound each free-form field so a 50 MB body (allowed by the audit
+    # middleware) doesn't sit in _drafts_mem at full size — 200 drafts ×
+    # 50 MB is 10 GB of RSS. Caps match the same envelope the
+    # /api/email/send EmailSendRequest enforces, with a little extra room
+    # for the parsed metadata blob the composer attaches to the record.
+    def _cap_str(v, n):
+        if not isinstance(v, str):
+            return ""
+        return v[:n]
+
     record = {
         "id":          draft_id,
         "saved_at":    now.isoformat(timespec="seconds") + "Z",
-        "alert_type":  payload.get("alert_type"),
-        "subject":     payload.get("subject", ""),
-        "text":        payload.get("text", ""),
-        "html":        payload.get("html", ""),
-        "to":          payload.get("to", ""),
-        "cc":          payload.get("cc", ""),
+        "alert_type":  _cap_str(payload.get("alert_type"), 64),
+        "subject":     _cap_str(payload.get("subject"),    300),
+        "text":        _cap_str(payload.get("text"),       200_000),
+        "html":        _cap_str(payload.get("html"),       400_000),
+        "to":          _cap_str(payload.get("to"),         2_000),
+        "cc":          _cap_str(payload.get("cc"),         2_000),
         "parsed":      payload.get("parsed") or {},
         "options":     payload.get("options") or {},
     }
