@@ -167,6 +167,20 @@ async def _lifespan(app):
     yield   # ─── App runs here ───────────────────────────────────────
 
     # ─── SHUTDOWN ─────────────────────────────────────────────────────
+    # Cancel every long-lived background task we spawned at startup
+    # (warm-up, feed polling, Feodo refresh, health probe, diagnostics).
+    # Without explicit cancellation uvicorn waits for them on shutdown
+    # — the periodic loops have `while True: await asyncio.sleep(6h)`
+    # so the await never returns and uvicorn's grace period eventually
+    # SIGKILLs the worker. Doing it ourselves gives a clean exit.
+    try:
+        from bg_utils import _BG_TASKS
+        for _bg in list(_BG_TASKS):
+            if not _bg.done():
+                _bg.cancel()
+    except Exception as _e:
+        _log.debug("bg task cancel failed: %s", _e)
+
     # Close the shared TCP connector used by the enrichment fan-out so
     # we don't leak sockets on graceful shutdown.
     try:
