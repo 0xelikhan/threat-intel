@@ -477,7 +477,11 @@ class AnalyzeRequest(BaseModel):
     # at the top of the user message and instructs the AI to treat the
     # analyst's findings as authoritative when they conflict with its own
     # inference. Used by the post-analysis feedback re-run flow.
-    analystFeedback: Optional[str] = None
+    # Capped at 4 KB — the investigation prompt truncates to 2000 chars
+    # internally; the schema cap stops an analyst from re-paste-attacking
+    # the body cap with megabyte-long "feedback" that the prompt would
+    # have thrown away anyway.
+    analystFeedback: Optional[str] = Field(default=None, max_length=4_000)
 
 class TaxiiPollRequest(BaseModel):
     sinceHours: int = 24
@@ -590,8 +594,13 @@ async def diagnose():
 
 # ─── Auth ────────────────────────────────────────────────────────────────────
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    # Cap both fields so an attacker can't ship megabyte-long credentials
+    # to slow down bcrypt verification (bcrypt only hashes the first 72
+    # bytes of password but reads the whole input first). Username sees
+    # a constant-time comparison; password feeds bcrypt.checkpw. 256/1024
+    # is well above any realistic credential length.
+    username: str = Field(..., min_length=1, max_length=256)
+    password: str = Field(..., min_length=1, max_length=1024)
 
 
 @app.post("/api/auth/login")
