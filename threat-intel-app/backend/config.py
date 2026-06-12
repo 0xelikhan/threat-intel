@@ -403,8 +403,33 @@ class ConfigManager:
         self._save()
 
     def is_configured(self) -> bool:
-        required = [k for k, v in API_KEY_DEFINITIONS.items() if v.get("required")]
-        return all(self.get(k) for k in required)
+        """True when every key the active LLM provider needs is set, plus
+        every other key flagged required=True. OPENAI_API_KEY is marked
+        required in API_KEY_DEFINITIONS but only OPENAI deployments
+        actually need it; Anthropic deployments need ANTHROPIC_API_KEY
+        and Ollama needs none. The old all-required-keys check rejected
+        non-OpenAI deployments as setup_required even when their provider
+        was reachable, so /api/analyze/sync 503'd."""
+        import os as _os
+        provider = (_os.environ.get("LLM_PROVIDER") or "openai").strip().lower()
+        # LLM-related required keys: pick per active provider.
+        if provider in ("openai", "azure", "azure-openai", "azureopenai"):
+            llm_required = ("OPENAI_API_KEY",)
+        elif provider == "anthropic":
+            llm_required = ("ANTHROPIC_API_KEY",)
+        else:
+            # ollama: locally-hosted, no key required.
+            llm_required = ()
+        # Every key marked required EXCEPT the LLM-related ones we've
+        # already handled (so OPENAI_API_KEY isn't counted twice or
+        # falsely required on a non-OpenAI deployment).
+        _LLM_KEYS = {"OPENAI_API_KEY", "ANTHROPIC_API_KEY"}
+        other_required = [k for k, v in API_KEY_DEFINITIONS.items()
+                          if v.get("required") and k not in _LLM_KEYS]
+        for k in llm_required:
+            if not self.get(k):
+                return False
+        return all(self.get(k) for k in other_required)
 
     def get_model(self, fast: bool = False) -> str:
         """Pick the model/deployment for a call. `fast=True` returns the
@@ -416,6 +441,16 @@ class ConfigManager:
         return self.get("AI_MODEL", "gpt-4o-mini")
 
     def get_ai_provider(self) -> str:
+        """Return the active LLM provider name. Used by /api/health for
+        the status badge. Previously this ignored LLM_PROVIDER entirely
+        and only distinguished azure vs vanilla OpenAI, so Anthropic /
+        Ollama deployments reported "openai" in the health response."""
+        import os as _os
+        provider = (_os.environ.get("LLM_PROVIDER") or "openai").strip().lower()
+        if provider == "anthropic":
+            return "anthropic"
+        if provider == "ollama":
+            return "ollama"
         return "azure" if "openai.azure.com" in self.get("OPENAI_BASE_URL", "") else "openai"
 
     def is_azure_openai(self) -> bool:
