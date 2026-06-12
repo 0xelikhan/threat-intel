@@ -139,7 +139,16 @@ class AnthropicProvider(LLMProvider):
                 "anthropic package not installed — `pip install anthropic` "
                 "or switch LLM_PROVIDER to openai/ollama"
             ) from e
-        key = os.environ.get("ANTHROPIC_API_KEY") or ""
+        # Prefer the Settings-stored config.json key for symmetry with
+        # the OpenAI provider (which also reads from config). Fall back
+        # to the env var so existing Docker / CI deployments that
+        # already export ANTHROPIC_API_KEY keep working.
+        try:
+            from config import config as _cfg
+            key = (_cfg.get("ANTHROPIC_API_KEY")
+                   or os.environ.get("ANTHROPIC_API_KEY") or "")
+        except Exception:
+            key = os.environ.get("ANTHROPIC_API_KEY") or ""
         return AsyncAnthropic(api_key=key, timeout=60.0, max_retries=1)
 
     async def complete(
