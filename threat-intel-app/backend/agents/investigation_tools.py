@@ -337,35 +337,43 @@ def _all_keys(config) -> dict:
     )}
 
 
+# Per-tool aiohttp helper — reuses the process-wide TCPConnector instead of
+# spinning up a fresh pool (and a fresh DNS cache, fresh TLS handshakes)
+# every time the LLM calls a tool. connector_owner=False means closing the
+# session doesn't close the shared connector, so it survives across many
+# investigation runs the same way the main enrichment fan-out does.
+def _tool_session():
+    import aiohttp
+    from agents.enrichment import _get_connector
+    return aiohttp.ClientSession(connector=_get_connector(), connector_owner=False)
+
+
 # Individual tool implementations
 async def _t_lookup_ip(args, config):
     from agents.enrichment import enrich_ip
-    import aiohttp
     ip = args.get("ip", "").strip()
     if not ip:
         return {"error": "ip required"}
-    async with aiohttp.ClientSession() as session:
+    async with _tool_session() as session:
         return await enrich_ip(session, ip, _all_keys(config))
 
 
 async def _t_lookup_domain(args, config):
     from agents.enrichment import enrich_domain
-    import aiohttp
     d = args.get("domain", "").strip()
     if not d:
         return {"error": "domain required"}
-    async with aiohttp.ClientSession() as session:
+    async with _tool_session() as session:
         return await enrich_domain(session, d, _all_keys(config))
 
 
 async def _t_lookup_hash(args, config):
     from agents.enrichment import enrich_hash
     from intel.loldrivers import lookup_hash as drv_lookup
-    import aiohttp
     h = args.get("file_hash", "").strip()
     if not h:
         return {"error": "file_hash required"}
-    async with aiohttp.ClientSession() as session:
+    async with _tool_session() as session:
         result = await enrich_hash(session, h, _all_keys(config))
     # NOTE: enrich_hash already runs the deep sandbox lookup for SHA-256, so we
     # don't make a second (slow) sandbox call here.
