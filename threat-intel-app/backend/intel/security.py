@@ -292,7 +292,20 @@ def validate_file_upload(content: bytes, max_mb: int = 10) -> Tuple[bool, str]:
 # ─── security self-check ───────────────────────────────────────────────────────
 def security_self_check(config) -> dict:
     has_secret    = bool(os.environ.get("RECON_SECRET"))
-    has_openai    = bool(config.get("OPENAI_API_KEY"))
+    # Provider-aware AI-key check so Anthropic / Ollama deployments
+    # don't fail this self-check just because OPENAI_API_KEY is unset.
+    try:
+        from providers import provider_configured
+        has_llm = provider_configured(config)
+    except Exception:
+        has_llm = bool(config.get("OPENAI_API_KEY"))
+    _llm_provider = (os.environ.get("LLM_PROVIDER") or "openai").strip().lower()
+    if _llm_provider == "anthropic":
+        _llm_label = "Anthropic key configured"
+    elif _llm_provider == "ollama":
+        _llm_label = "Ollama endpoint reachable"
+    else:
+        _llm_label = "OpenAI key configured"
     is_https      = (os.environ.get("RECON_HTTPS") or "").lower() in {"1", "true", "yes"}
     cors_strict   = (os.environ.get("RECON_CORS") or "*") != "*"
     in_prod       = is_production()
@@ -304,7 +317,7 @@ def security_self_check(config) -> dict:
          "detail": "Suppresses error traces; required when shipping"},
         {"name": "API key encryption",     "pass": has_secret,
          "detail": "Set RECON_SECRET to enable at-rest Fernet encryption of API keys"},
-        {"name": "OpenAI key configured",  "pass": has_openai,
+        {"name": _llm_label,               "pass": has_llm,
          "detail": "Required for AI investigation, log translation, training quiz"},
         {"name": "CORS restricted",        "pass": cors_strict,
          "detail": "Set RECON_CORS to a specific origin list (currently *)"},
