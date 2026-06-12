@@ -41,6 +41,17 @@ def _clean_sdk_err(e: BaseException) -> str:
 class OpenAIProvider(LLMProvider):
     def __init__(self, model: Optional[str] = None):
         self._configured_model = model or config.get("AI_MODEL") or "gpt-4o-mini"
+        # Reuse the SDK client across calls so the underlying httpx pool
+        # (DNS cache, keep-alive sockets, TLS sessions) survives. Rebuilt
+        # when the config tuple (key / base_url / api_version) changes,
+        # which lets a Settings-UI key rotation take effect on the next
+        # call without a restart. The previous code constructed a fresh
+        # AsyncOpenAI every complete() — fine in tests, but in production
+        # an investigation that fires 3 parallel synthesis calls + a
+        # tool-call loop spent real time on TLS handshakes that should
+        # have been pooled.
+        self._cached_client = None
+        self._cached_key:  Optional[tuple] = None
 
     @property
     def name(self) -> str:
@@ -56,27 +67,36 @@ class OpenAIProvider(LLMProvider):
         key      = config.get("OPENAI_API_KEY") or ""
         base_url = config.get("OPENAI_BASE_URL") or ""
         model    = override_model or self._configured_model
-        if "openai.azure.com" in base_url.lower():
-            # api_version can be overridden via OPENAI_API_VERSION when
-            # an operator needs a newer Azure surface (preview features,
-            # gpt-5-class deployments). Default tracks the latest stable
-            # GA preview at time of writing.
-            api_version = (config.get("OPENAI_API_VERSION")
-                           or os.environ.get("OPENAI_API_VERSION")
-                           or "2024-10-21")
-            return AsyncAzureOpenAI(
+        is_azure = "openai.azure.com" in base_url.lower()
+        # api_version can be overridden via OPENAI_API_VERSION when an
+        # operator needs a newer Azure surface (preview features,
+        # gpt-5-class deployments). Default tracks the latest stable GA
+        # preview at time of writing.
+        api_version = (config.get("OPENAI_API_VERSION")
+                       or os.environ.get("OPENAI_API_VERSION")
+                       or "2024-10-21")
+        cache_key = (is_azure, key, base_url.rstrip("/"), api_version)
+        if self._cached_client is not None and self._cached_key == cache_key:
+            return self._cached_client, model
+
+        if is_azure:
+            client = AsyncAzureOpenAI(
                 api_key=key,
                 azure_endpoint=base_url.rstrip("/"),
                 api_version=api_version,
                 timeout=60.0,
                 max_retries=1,
-            ), model
-        return AsyncOpenAI(
-            api_key=key,
-            base_url=base_url or "https://api.openai.com/v1",
-            timeout=60.0,
-            max_retries=1,
-        ), model
+            )
+        else:
+            client = AsyncOpenAI(
+                api_key=key,
+                base_url=base_url or "https://api.openai.com/v1",
+                timeout=60.0,
+                max_retries=1,
+            )
+        self._cached_client = client
+        self._cached_key    = cache_key
+        return client, model
 
     async def complete(
         self,
