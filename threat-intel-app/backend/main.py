@@ -1872,17 +1872,22 @@ async def _chat_stream(run_id: str, user_msg: str):
                     "message again."
                 )
 
+        # Persist the assistant turn BEFORE streaming. The 12ms-per-word
+        # SSE drip below can be interrupted by client disconnect
+        # (GeneratorExit propagates through the next yield), and we don't
+        # want an orphaned user turn — same failure mode the except
+        # handler below fixes for the tool-loop error path, applied here
+        # to the cancellation path.
+        history.append({"role": "assistant", "content": final_content,
+                         "tool_calls": tool_calls_made, "timestamp": _ts()})
+        _chats[run_id] = history
+
         # Stream the final answer word-by-word so the UI fills progressively.
         tokens = final_content.split(" ")
         for i, w in enumerate(tokens):
             chunk = (" " if i > 0 else "") + w
             yield f"data: {json.dumps({'event': 'token', 'text': chunk})}\n\n"
             await asyncio.sleep(0.012)
-
-        # Persist the assistant turn
-        history.append({"role": "assistant", "content": final_content,
-                         "tool_calls": tool_calls_made, "timestamp": _ts()})
-        _chats[run_id] = history
 
         yield f"data: {json.dumps({'event': 'done', 'tool_calls': tool_calls_made, 'reply': final_content})}\n\n"
     except Exception as e:
