@@ -2329,7 +2329,7 @@ async def scan_get(sha256: str):
 
 
 class ScanHashRequest(BaseModel):
-    hash: str
+    hash: str = Field(..., max_length=128)
 
 
 @app.post("/api/scan/hash")
@@ -2403,7 +2403,7 @@ async def scan_hash(req: ScanHashRequest):
 
 
 class ScanUrlRequest(BaseModel):
-    url: str
+    url: str = Field(..., max_length=4096)
 
 
 @app.post("/api/scan/url")
@@ -2752,8 +2752,12 @@ async def scan_rules_list():
 
 
 class CustomRuleSave(BaseModel):
-    name: str
-    rule: str
+    # save_rule() runs _safe_name() over the slug so the path is bounded,
+    # but cap inputs at the schema layer to keep DoS surface tight.
+    # 200 KB is enough for the most complex YARA rule a real hunter
+    # writes by hand — anything bigger is generated noise.
+    name: str = Field(..., max_length=128)
+    rule: str = Field(..., max_length=200_000)
 
 
 @app.post("/api/scan/rules")
@@ -2818,7 +2822,7 @@ async def scan_compare(req: dict):
 
 
 class YaraHuntRequest(BaseModel):
-    rule: str
+    rule: str = Field(..., max_length=200_000)
 
 
 @app.post("/api/scan/hunt")
@@ -2866,8 +2870,8 @@ async def scan_hunt(req: YaraHuntRequest):
 
 # ─── ITERATIVE REFINEMENT (spec §2) ──────────────────────────────────────────
 class ScanClarifyRequest(BaseModel):
-    scan_id: str          # SHA-256 of the scanned file
-    answers: dict         # {question_text: answer_text}
+    scan_id: str = Field(..., max_length=128)   # SHA-256 of the scanned file
+    answers: dict                               # {question_text: answer_text}
 
 
 @app.post("/api/scan/clarify")
@@ -2926,11 +2930,11 @@ async def scan_clarify(req: ScanClarifyRequest):
 
 
 class ScanFeedbackRequest(BaseModel):
-    scan_id: str
-    thumbs: str          # 'up' | 'down'
+    scan_id:    str           = Field(..., max_length=128)
+    thumbs:     str           = Field(..., max_length=8)    # 'up' | 'down'
     correction: Optional[dict] = None
-    notes: Optional[str] = ""
-    analyst: Optional[str] = ""
+    notes:      Optional[str] = Field(default="", max_length=4_000)
+    analyst:    Optional[str] = Field(default="", max_length=128)
 
 
 @app.post("/api/scan/feedback")
