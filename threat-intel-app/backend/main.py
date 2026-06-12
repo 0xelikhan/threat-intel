@@ -1123,6 +1123,7 @@ async def attribution_hashes(family: str, limit: int = 10):
                 "needs_auth_key": True}
 
     import aiohttp
+    from agents.enrichment import _get_connector
     limit = max(1, min(int(limit or 10), 50))
     headers = {
         "User-Agent": "RECON/1.0 (+attribution-pivot)",
@@ -1130,6 +1131,8 @@ async def attribution_hashes(family: str, limit: int = 10):
     }
     try:
         async with aiohttp.ClientSession(
+            connector=_get_connector(),
+            connector_owner=False,
             timeout=aiohttp.ClientTimeout(total=12),
         ) as session:
             async with session.post(
@@ -2183,7 +2186,12 @@ async def scan_file_v2(file: UploadFile = File(...)):
             "MALWAREBAZAAR_API_KEY", "ABUSECH_AUTH_KEY",
             "MALTIVERSE_KEY", "POLYSWARM_KEY",
         )}
+        # Share the process-wide TCPConnector so the file scanner doesn't
+        # spin up a fresh DNS cache + TLS handshakes for every upload.
+        from agents.enrichment import _get_connector
         async with _aiohttp.ClientSession(
+            connector=_get_connector(),
+            connector_owner=False,
             timeout=_aiohttp.ClientTimeout(total=30),
         ) as _sess:
             _ti_res, _eh_res = await asyncio.gather(
@@ -2341,8 +2349,11 @@ async def scan_hash(req: ScanHashRequest):
     vt = mb = ha = {}
     try:
         import aiohttp
+        from agents.enrichment import _get_connector
         # 30s total cap so a hung TI source can't lock the request forever.
         async with aiohttp.ClientSession(
+            connector=_get_connector(),
+            connector_owner=False,
             timeout=aiohttp.ClientTimeout(total=30),
         ) as session:
             from intel.file_correlation import _vt_file, _malwarebazaar, _hybrid_analysis
@@ -2654,7 +2665,10 @@ async def scan_url_endpoint(req: ScanUrlRequest):
         )}
         # Run hash correlation (file_correlation) + per-IOC enrichment in
         # parallel — every source the platform supports gets a fair shot.
+        from agents.enrichment import _get_connector
         async with aiohttp.ClientSession(
+            connector=_get_connector(),
+            connector_owner=False,
             timeout=aiohttp.ClientTimeout(total=30),
         ) as sess:
             ti_res, url_enr, dom_enr, hash_enr = await asyncio.gather(
