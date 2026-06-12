@@ -40,18 +40,38 @@ _COOLDOWN_S        = int(os.environ.get("CIRCUIT_BREAKER_COOLDOWN_S", "300"))
 
 
 class _HostState:
-    __slots__ = ("failure_streak", "open_until", "total_failures", "total_successes")
+    __slots__ = ("failure_streak", "open_until", "total_failures",
+                 "total_successes", "probe_in_flight")
 
     def __init__(self) -> None:
         self.failure_streak  = 0
         self.open_until      = 0.0   # monotonic
         self.total_failures  = 0
         self.total_successes = 0
+        # Set when a probe call has been "claimed" via is_open() in the
+        # half-open window; cleared on the next record_success/failure.
+        # Without this gate, every concurrent call that hits is_open()
+        # after the cooldown expired proceeds simultaneously and pounds
+        # a still-broken host. Honours the docstring's "single probe"
+        # promise.
+        self.probe_in_flight = False
 
 
 class CircuitBreaker:
     """Thread-safe per-host breaker. Lazy state — hosts only enter the
-    table on first failure."""
+    table on first failure.
+
+    State transitions (per host):
+      closed   →  N consecutive failures  →  open
+      open     →  cooldown elapsed         →  half-open (one probe allowed)
+      half-open → probe success            →  closed (streak reset)
+      half-open → probe failure            →  open again (new cooldown)
+
+    The half-open state is enforced inside is_open(): the FIRST caller
+    that hits is_open() after the cooldown expired flips probe_in_flight
+    and gets False (proceed); every subsequent caller while the probe is
+    still outstanding gets True (rejected).
+    """
 
     def __init__(self,
                  failure_threshold: int = _FAILURE_THRESHOLD,
@@ -63,13 +83,28 @@ class CircuitBreaker:
 
     # ── primary API ───────────────────────────────────────────────────────────
     def is_open(self, host: str) -> bool:
-        """True if the breaker is currently rejecting calls to `host`."""
+        """True if the breaker is currently rejecting calls to `host`.
+
+        Side effect: in the half-open window (cooldown expired with an
+        existing open_until set), atomically claims a probe slot for the
+        first caller and rejects every subsequent caller until that
+        probe completes with record_success/record_failure.
+        """
         with self._lock:
             st = self._hosts.get(host)
             if st is None:
                 return False
             if st.open_until and time.monotonic() < st.open_until:
+                # Still inside the cooldown window: closed off entirely.
                 return True
+            if st.open_until:
+                # Cooldown elapsed but open_until is still set — we're
+                # half-open. First caller wins; everyone else waits for
+                # the probe to resolve.
+                if st.probe_in_flight:
+                    return True
+                st.probe_in_flight = True
+                return False
             return False
 
     def record_success(self, host: str) -> None:
@@ -77,6 +112,7 @@ class CircuitBreaker:
             st = self._hosts.setdefault(host, _HostState())
             st.failure_streak  = 0
             st.open_until      = 0.0
+            st.probe_in_flight = False
             st.total_successes += 1
 
     def record_failure(self, host: str) -> None:
@@ -84,6 +120,7 @@ class CircuitBreaker:
             st = self._hosts.setdefault(host, _HostState())
             st.failure_streak  += 1
             st.total_failures  += 1
+            st.probe_in_flight  = False
             if st.failure_streak >= self._threshold:
                 st.open_until = time.monotonic() + self._cooldown
 
@@ -92,16 +129,24 @@ class CircuitBreaker:
         """Per-host status block, suitable for /api/status output."""
         now = time.monotonic()
         with self._lock:
-            return {
-                host: {
-                    "state":       "open" if (st.open_until and now < st.open_until) else "closed",
-                    "failures":    st.total_failures,
-                    "successes":   st.total_successes,
-                    "streak":      st.failure_streak,
+            out = {}
+            for host, st in self._hosts.items():
+                if st.open_until and now < st.open_until:
+                    state = "open"
+                elif st.open_until and st.probe_in_flight:
+                    state = "half_open_probing"
+                elif st.open_until:
+                    state = "half_open"
+                else:
+                    state = "closed"
+                out[host] = {
+                    "state":        state,
+                    "failures":     st.total_failures,
+                    "successes":    st.total_successes,
+                    "streak":       st.failure_streak,
                     "reopens_in_s": max(0, int(st.open_until - now)) if st.open_until else 0,
                 }
-                for host, st in self._hosts.items()
-            }
+            return out
 
     def reset(self) -> None:
         """Wipe all state — used by tests."""
