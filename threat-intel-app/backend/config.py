@@ -375,17 +375,31 @@ class ConfigManager:
             mode="w", dir=str(DATA_DIR), prefix=".config.", suffix=".tmp",
             delete=False, encoding="utf-8",
         )
+        tmp_path = tmp.name
+        replaced = False
         try:
-            json.dump(self._config, tmp, indent=2)
-            tmp.flush()
-            _os.fsync(tmp.fileno())
+            try:
+                json.dump(self._config, tmp, indent=2)
+                tmp.flush()
+                _os.fsync(tmp.fileno())
+            finally:
+                tmp.close()
+            _os.replace(tmp_path, str(CONFIG_FILE))
+            replaced = True
+            try:
+                self._mtime = CONFIG_FILE.stat().st_mtime
+            except OSError:
+                pass
         finally:
-            tmp.close()
-        _os.replace(tmp.name, str(CONFIG_FILE))
-        try:
-            self._mtime = CONFIG_FILE.stat().st_mtime
-        except OSError:
-            pass
+            # Clean up the temp file if the replace never happened (disk
+            # full mid-write, encoding error, fsync failure, …). The old
+            # path left orphan .config.<rand>.tmp files in data/ on every
+            # failed save — a slow disk leak that took weeks to notice.
+            if not replaced:
+                try:
+                    _os.unlink(tmp_path)
+                except OSError:
+                    pass
 
     def get(self, key: str, default: str = "") -> str:
         self._maybe_reload()
