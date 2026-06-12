@@ -428,12 +428,19 @@ if (_SESSION_SECRET == "dev-only-not-for-production"
     _log.error(
         "AUTH_SESSION_SECRET is unset in production — session cookies will be "
         "signed with a public dev key. Set the env var before serving traffic.")
+# Cookie Secure flag gated on RECON_HTTPS so local plain-HTTP dev can
+# actually receive the session cookie. https_only=True ships the Secure
+# attribute, which strict HTTP clients (PowerShell Invoke-RestMethod /
+# .NET HttpClient) reject over plain HTTP — so any non-browser smoke
+# test or CLI helper hitting localhost:8000 couldn't establish a session.
+# Production behind Azure Container Apps (TLS-terminated) sets RECON_HTTPS=1.
+_HTTPS_ONLY = (os.environ.get("RECON_HTTPS") or "").lower() in {"1", "true", "yes"}
 app.add_middleware(
     SessionMiddleware,
     secret_key=_SESSION_SECRET,
     session_cookie="recon_session",
     same_site="strict",
-    https_only=True,
+    https_only=_HTTPS_ONLY,
     max_age=60 * 60 * 12,  # 12 h
 )
 
