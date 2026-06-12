@@ -106,15 +106,19 @@ async def vt_hash_relationships(session: aiohttp.ClientSession, sha: str, key: s
 
 
 # ─── MalwareBazaar similar samples by family ───────────────────────────────────
-async def malwarebazaar_similar(session: aiohttp.ClientSession, family: str) -> Dict:
+async def malwarebazaar_similar(session: aiohttp.ClientSession, family: str,
+                                 abusech_key: str = "") -> Dict:
     """Pull recent samples tagged with the same family — useful for pivot."""
     if not family:
         return {}
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    if abusech_key:
+        headers["Auth-Key"] = abusech_key
     try:
         async with session.post(
             "https://mb-api.abuse.ch/api/v1/",
             data=f"query=get_taginfo&tag={family}&limit=10",
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            headers=headers,
             timeout=_TIMEOUT,
         ) as r:
             if r.status != 200:

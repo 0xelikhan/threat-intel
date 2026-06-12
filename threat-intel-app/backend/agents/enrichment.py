@@ -1505,7 +1505,7 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         _vt_co = vt_hash_relationships(session, hash_val, keys.get("VIRUSTOTAL_KEY", ""))
         family = ((data.get("malwarebazaar") or {}).get("malware_family") or
                   (data.get("threatfox") or {}).get("malware_family"))
-        _mb_co = malwarebazaar_similar(session, family) if family else _skip()
+        _mb_co = malwarebazaar_similar(session, family, abusech_key) if family else _skip()
     except Exception:
         _vt_co, _mb_co = _skip(), _skip()
     if len(hash_val) == 64:
