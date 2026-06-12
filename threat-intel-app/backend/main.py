@@ -396,8 +396,9 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
         # picks it up. Also stamp the header on the response so the
         # client can grep logs.
         import uuid as _uuid
-        from intel.observability import request_id_var
-        rid = request.headers.get("X-Request-ID") or str(_uuid.uuid4())
+        from intel.observability import request_id_var, _RID_RE
+        inbound = request.headers.get("X-Request-ID")
+        rid = inbound if inbound and _RID_RE.match(inbound) else str(_uuid.uuid4())
         request_id_var.set(rid)
         body = error_envelope(
             detail="auth required",
