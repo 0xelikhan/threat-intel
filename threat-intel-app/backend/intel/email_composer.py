@@ -2914,8 +2914,9 @@ def _strip_asn_prefix(org: str) -> Tuple[str, str]:
 def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
     """Client-readable summary paragraph for an IP. Pulls from every
     API source we have — AbuseIPDB, VirusTotal, IPInfo, GreyNoise,
-    Maltiverse, Pulsedive, Shodan, ASN reputation, Tor — and renders
-    as natural-language sentences so the customer can read it without
+    Maltiverse, Pulsedive, Censys, CrowdSec, Criminal IP, ProxyCheck,
+    Feodo Tracker, BGP ranking, ASN reputation, Tor — and renders as
+    natural-language sentences so the customer can read it without
     decoding CLI-style fragments."""
     if not data or not isinstance(data, dict):
         return ""
