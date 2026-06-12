@@ -28,8 +28,23 @@ _DEFAULT_MODEL = "llama3.2"
 
 class OllamaProvider(LLMProvider):
     def __init__(self, model: Optional[str] = None):
-        self._configured_model = model or os.environ.get("OLLAMA_MODEL") or _DEFAULT_MODEL
-        self._base = (os.environ.get("OLLAMA_BASE_URL") or "http://localhost:11434").rstrip("/")
+        # Prefer Settings-stored config for symmetry with the OpenAI
+        # provider. Env-var fallback covers existing deployments that
+        # already export OLLAMA_MODEL / OLLAMA_BASE_URL. OLLAMA_BASE_URL
+        # is registered in API_KEY_DEFINITIONS as a settable field so
+        # operators expect the Settings UI to work.
+        try:
+            from config import config as _cfg
+            cfg_base  = _cfg.get("OLLAMA_BASE_URL") or ""
+            cfg_model = _cfg.get("OLLAMA_MODEL") or ""
+        except Exception:
+            cfg_base = cfg_model = ""
+        self._configured_model = (model or cfg_model
+                                  or os.environ.get("OLLAMA_MODEL")
+                                  or _DEFAULT_MODEL)
+        self._base = (cfg_base
+                      or os.environ.get("OLLAMA_BASE_URL")
+                      or "http://localhost:11434").rstrip("/")
 
     @property
     def name(self) -> str:

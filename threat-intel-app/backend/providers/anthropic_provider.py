@@ -121,7 +121,17 @@ def _to_anthropic_tools(tools: Optional[List[Tool]]) -> Optional[list]:
 
 class AnthropicProvider(LLMProvider):
     def __init__(self, model: Optional[str] = None):
-        self._configured_model = model or os.environ.get("ANTHROPIC_MODEL") or _DEFAULT_MODEL
+        # Same precedence story as the API key: prefer Settings/config
+        # over env so operators can switch Claude model deployments
+        # without redeploying the container.
+        try:
+            from config import config as _cfg
+            cfg_model = _cfg.get("ANTHROPIC_MODEL") or ""
+        except Exception:
+            cfg_model = ""
+        self._configured_model = (model or cfg_model
+                                  or os.environ.get("ANTHROPIC_MODEL")
+                                  or _DEFAULT_MODEL)
 
     @property
     def name(self) -> str:
