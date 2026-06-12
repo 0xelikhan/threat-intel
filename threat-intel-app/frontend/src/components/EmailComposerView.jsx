@@ -20,8 +20,32 @@ import {
 } from '@mui/material';
 import { alpha as muiAlpha } from '@mui/material/styles';
 import { Mail, Copy, Check, Eye, RefreshCcw, AlertCircle, Sparkles, Zap, Wand2, ChevronRight } from 'lucide-react';
+import DOMPurify from 'dompurify';
 
 const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
+
+// HTML sanitizer config for the rendered-email preview. The backend
+// compose pipeline builds HTML from f-string templates that interpolate
+// AI output (LLM text) + IOC strings + customer-supplied names. None of
+// those produce script tags in the happy path, but the preview pane
+// renders the HTML via dangerouslySetInnerHTML — so a prompt that
+// coaxes the model to emit a <script>, an onerror= handler, or a
+// data:javascript: URL would execute in the analyst's session. Strip
+// every executable surface (script, event handlers, dangerous URI
+// schemes) before render. Forbid the few tags an email-style template
+// has no need for so the allowlist stays tight without DOMPurify's
+// HTML-page-grade defaults letting iframes etc. through.
+const _SANITIZE_CFG = {
+  FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form',
+                 'input', 'button', 'meta', 'link'],
+  FORBID_ATTR: ['onload', 'onerror', 'onclick', 'onmouseover', 'onfocus',
+                 'onblur', 'onchange', 'onsubmit', 'srcdoc'],
+  ALLOW_DATA_ATTR: false,
+};
+function sanitizeEmailHtml(html) {
+  if (!html || typeof html !== 'string') return '';
+  return DOMPurify.sanitize(html, _SANITIZE_CFG);
+}
 
 const RESPONSE_OPTIONS = [
   { id: '',                                 label: 'None' },
@@ -916,7 +940,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
               minHeight: 280, maxHeight: 720, overflow: 'auto',
               p: '20px 24px',
             }}>
-              <Box dangerouslySetInnerHTML={{ __html: composed.html }} sx={{
+              <Box dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(composed.html) }} sx={{
                 color: '#111', fontFamily: 'Arial, Helvetica, sans-serif',
                 fontSize: 14, lineHeight: 1.5,
                 '& a': { color: '#2563eb' },
