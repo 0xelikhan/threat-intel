@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
+from collections import OrderedDict
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional
 
@@ -38,12 +40,36 @@ TAXII_FEEDS = [
 
 
 # ─── In-memory cache (never persisted) ────────────────────────────────
-_cache_state = {
-    "iocs":   {},                    # ioc_value -> entry dict
+# IOC dict has to be bounded — URLhaus alone publishes ~30k indicators,
+# ThreatFox similar, and we re-poll every 6 hours. Without a cap the
+# dict (plus _by_source / _by_type indexes that mirror its keys) grows
+# until the backend OOMs. 50k is the rough cap each one of the live
+# feeds prints in a snapshot, so this holds a full poll cycle.
+_FEED_CACHE_CAP = int(os.environ.get("FEED_CACHE_CAP", "50000"))
+_cache_state: Dict[str, "OrderedDict | list | str | None"] = {
+    "iocs":   OrderedDict(),         # ioc_value -> entry dict (FIFO-evicted)
     "articles": [],                  # last 100 FreshRSS articles
     "last_taxii_poll":   None,
     "last_freshrss_poll": None,
 }
+
+
+def _ioc_put(value: str, entry: Dict) -> None:
+    """Insert/update an IOC entry, evicting the oldest when over cap.
+    Re-touching an existing key moves it to the end so frequently-seen
+    IOCs stick around longer than one-off hits."""
+    iocs = _cache_state["iocs"]
+    if value in iocs:
+        iocs.move_to_end(value)
+    iocs[value] = entry
+    while len(iocs) > _FEED_CACHE_CAP:
+        old_key, old_entry = iocs.popitem(last=False)
+        # Keep the indexes consistent — leaving stale set entries would
+        # have list_iocs(source=...) return ghost values.
+        src = (old_entry or {}).get("source") or "unknown"
+        typ = (old_entry or {}).get("type")   or "unknown"
+        _by_source.get(src, set()).discard(old_key)
+        _by_type  .get(typ, set()).discard(old_key)
 # Pre-built indexes maintained on every write so list_iocs(source=...) /
 # list_iocs(type_=...) can skip the full scan. Keyed off the IOC value.
 _by_source: "dict[str, set[str]]" = {}
@@ -219,7 +245,7 @@ async def poll_taxii(force: bool = False) -> Dict:
             v = entry["value"]
             if v not in _cache_state["iocs"]:
                 added += 1
-            _cache_state["iocs"][v] = entry
+            _ioc_put(v, entry)
             _index_put(entry)
     _cache_state["last_taxii_poll"] = datetime.now(timezone.utc).isoformat()
     _save_cache()
@@ -280,7 +306,7 @@ async def poll_freshrss(url: str, api_key: str) -> Dict:
                         "seen_at":    datetime.now(timezone.utc).isoformat(),
                         "from_article": title,
                     }
-                    _cache_state["iocs"][v] = entry
+                    _ioc_put(v, entry)
                     _index_put(entry)
                 if item.get("id"):
                     ids_to_mark.append(item["id"])
