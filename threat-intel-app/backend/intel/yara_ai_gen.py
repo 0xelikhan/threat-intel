@@ -111,7 +111,7 @@ def _pick_mutexes(result: Dict, limit: int = 5) -> List[str]:
 
 async def generate_yara_for_file(result: Dict, ai_call) -> Dict:
     """ai_call: async (prompt: str) -> str — same shape as main._ai_gen."""
-    from datetime import datetime
+    from datetime import datetime, timezone
     sha256 = (result.get("hashes") or {}).get("sha256") or ""
     pe     = (result.get("format_specific") or {}).get("pe") or {}
     family = (result.get("threat_intel") or {}).get("malware_family_consensus") or "unknown"
@@ -137,7 +137,11 @@ async def generate_yara_for_file(result: Dict, ai_call) -> Dict:
         }
 
     base = _BASE_PROMPT.format(
-        date=datetime.now().strftime("%Y-%m-%d"),
+        # UTC so two containers in different timezones produce identical
+        # YARA rule metadata for the same sample (rule.date inconsistency
+        # was the deduplication-by-content failure the SOC team hit when
+        # the same hash analyzed twice produced "different" rules).
+        date=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         sha256=sha256,
         imphash=pe.get("imphash") or "n/a",
         file_type=(result.get("type") or {}).get("detected_mime", "unknown"),
