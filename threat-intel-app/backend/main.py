@@ -3311,11 +3311,19 @@ class EmailComposeRequest(BaseModel):
 
 
 class EmailSendRequest(BaseModel):
-    subject: str
-    body_text: str
-    body_html: str
-    to: str
-    cc: Optional[str] = ""
+    # CRLF in any header value would propagate into the MIME headers
+    # email_composer.send_smtp() builds. While SMTP RCPT TO won't honour
+    # a Bcc: smuggled through the To field, the rendered headers reach
+    # the recipient's MUA — which DOES display whatever extra header
+    # rows the analyst's input invented. Pattern blocks \r and \n in
+    # every address-shape field plus subject; body fields can carry
+    # newlines because they're MIME bodies, not headers. Caps match
+    # what a reasonable customer-comms email looks like.
+    subject:   str = Field(..., max_length=300, pattern=r"^[^\r\n]*$")
+    body_text: str = Field(..., max_length=200_000)
+    body_html: str = Field(..., max_length=400_000)
+    to:        str = Field(..., max_length=2_000, pattern=r"^[^\r\n]*$")
+    cc: Optional[str] = Field(default="", max_length=2_000, pattern=r"^[^\r\n]*$")
 
 
 class EmailTemplateSave(BaseModel):
