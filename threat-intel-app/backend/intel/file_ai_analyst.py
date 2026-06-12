@@ -63,14 +63,16 @@ SOPHISTICATION_LEVELS = [
 DETECTION_DIFFICULTY = ["Easy", "Moderate", "Difficult", "Very Difficult"]
 
 
-# ─── OpenAI client (Azure-aware) ──────────────────────────────────────────────
+# ─── LLM client (provider-aware) ──────────────────────────────────────────────
 def _client(config, fast: bool = False):
     # Returns (provider, model) — provider is an LLMProvider from providers/.
-    # None, None when no AI key is configured (caller short-circuits).
-    if not config.get("OPENAI_API_KEY"):
-        return None, None
+    # None, None when the active LLM provider isn't configured (caller
+    # short-circuits). Previously gated on OPENAI_API_KEY only, which
+    # short-circuited file AI analysis on Anthropic / Ollama deployments.
     try:
-        from providers import get_provider
+        from providers import get_provider, provider_configured
+        if not provider_configured(config):
+            return None, None
         return get_provider(), config.get_model(fast=fast)
     except Exception:
         return None, None

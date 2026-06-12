@@ -131,9 +131,9 @@ around it. No em dashes or en dashes — use commas or restructure.
 
 async def summarize_file(analysis: Dict, config) -> Optional[str]:
     """2-3 sentence file analysis summary. Provider-agnostic via providers/."""
-    if not (config.get("OPENAI_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")):
+    from providers import get_provider, provider_configured
+    if not provider_configured(config):
         return None
-    from providers import get_provider
     provider = get_provider()
     # Short 2-3 sentence summary — light, latency-sensitive → fast model tier.
     model = config.get_model(fast=True) if hasattr(config, "get_model") else None

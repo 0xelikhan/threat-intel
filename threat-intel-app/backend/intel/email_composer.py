@@ -4036,9 +4036,13 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     if not log_text or not log_text.strip():
         return {"error": "log_text required"}
 
-    key = config.get("OPENAI_API_KEY")
-    if not key:
-        return {"error": "OPENAI_API_KEY not configured"}
+    # Provider-aware gate so Anthropic / Ollama deployments can use the
+    # AI email composer. The earlier OPENAI_API_KEY-only check returned
+    # the "not configured" error even when the provider abstraction was
+    # working fine under a non-OpenAI LLM_PROVIDER.
+    from providers import provider_configured
+    if not provider_configured(config):
+        return {"error": "LLM provider not configured"}
 
     # Short customer-facing email — light, latency-sensitive → fast model tier.
     # NOTE: `config` here is a plain dict (passed from the endpoint), not the

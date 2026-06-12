@@ -631,8 +631,12 @@ async def run_triage(state: dict) -> dict:
             "priority_iocs":  [],
         }
 
-    openai_key = config.get("OPENAI_API_KEY")
-    if ai_result is None and openai_key:
+    # Use the provider-abstraction-aware check so triage runs the AI
+    # path on Anthropic / Ollama deployments too; the old direct
+    # OPENAI_API_KEY check skipped AI triage entirely on non-OpenAI
+    # deployments and silently fell through to the heuristic-only result.
+    from providers import provider_configured
+    if ai_result is None and provider_configured(config):
         try:
             from providers import get_provider
             provider = get_provider()
