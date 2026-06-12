@@ -426,9 +426,16 @@ app.add_middleware(AuditMiddleware)
 _SESSION_SECRET = os.environ.get("AUTH_SESSION_SECRET") or "dev-only-not-for-production"
 if (_SESSION_SECRET == "dev-only-not-for-production"
         and (os.environ.get("RECON_ENV") or "").lower() == "production"):
-    _log.error(
-        "AUTH_SESSION_SECRET is unset in production — session cookies will be "
-        "signed with a public dev key. Set the env var before serving traffic.")
+    # Fail-closed: a production deploy that boots with the public dev
+    # key signs every session cookie with a string anyone can read in
+    # this file. The earlier _log.error() was easy to miss in noisy
+    # container startup logs and the platform would happily serve
+    # forgeable sessions. Refuse to construct the middleware instead
+    # so the deploy probe fails until the operator wires the env var.
+    raise RuntimeError(
+        "AUTH_SESSION_SECRET is required when RECON_ENV=production. "
+        "Set it to a 32+ byte random string before serving traffic."
+    )
 # Cookie Secure flag gated on RECON_HTTPS so local plain-HTTP dev can
 # actually receive the session cookie. https_only=True ships the Secure
 # attribute, which strict HTTP clients (PowerShell Invoke-RestMethod /
