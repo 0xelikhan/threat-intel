@@ -215,13 +215,25 @@ async def hybrid_analysis_summary(job_id: str, api_key: str) -> dict | None:
                 d = await r.json()
     except Exception:
         return None
+    # malware_family is consumed as a string by the file-scanner UI
+    # (`' · ' + s.malware_family`). vx_family is normally a string;
+    # classification_tags is a list. Earlier code returned whichever was
+    # truthy, so the type alternated between string and list and the UI
+    # rendered " · tag1,tag2,tag3" (raw Array.toString) when vx_family
+    # was missing. Normalise to a string here.
+    vx = d.get("vx_family")
+    if isinstance(vx, str) and vx:
+        family_str = vx
+    else:
+        tags = d.get("classification_tags") or []
+        family_str = ", ".join(t for t in tags if isinstance(t, str))[:140]
     return {
         "source":         "Hybrid Analysis",
         "verdict":        d.get("verdict", "unknown"),
         "threat_score":   d.get("threat_score"),
         "av_detect":      d.get("av_detect"),
-        "vx_family":      d.get("vx_family"),
-        "malware_family": d.get("vx_family") or d.get("classification_tags", []),
+        "vx_family":      vx,
+        "malware_family": family_str,
         "submit_name":    d.get("submit_name"),
         "environment":    d.get("environment_description"),
         "type_short":     d.get("type_short", []),
