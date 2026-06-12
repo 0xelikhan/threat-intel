@@ -42,20 +42,34 @@ def auth_configured() -> bool:
 
 
 def verify_credentials(username: str, password: str) -> bool:
-    """Constant-time check: returns True only when the supplied username
+    """Constant-time-ish check: returns True only when the supplied username
     matches AUTH_USERNAME *and* bcrypt verifies the supplied password against
     AUTH_PASSWORD_HASH. Returns False on any error so a bad/corrupt hash can't
     leak a 500 with a stack trace.
 
-    Note: we still call bcrypt.checkpw even on a username mismatch so the
+    bcrypt.checkpw runs even when the username doesn't match so the
     response time doesn't reveal whether the username was wrong vs the
-    password — both paths pay the bcrypt cost."""
+    password — both paths pay the bcrypt cost. Username comparison uses
+    secrets.compare_digest so a per-character timing comparison can't
+    leak how much of the supplied username prefix-matches the real one
+    (Python's == short-circuits on the first differing byte)."""
     if not auth_configured():
         return False
+    import secrets
     try:
-        ok_user = (username or "").strip() == _USERNAME
-        # checkpw is constant-time per char; passing a dummy hash on user
-        # mismatch keeps timing identical to the genuine-user-wrong-pw path.
+        # compare_digest needs same-length inputs to avoid a length-
+        # disclosure side-channel; padding the supplied username to the
+        # configured one's length keeps it constant-time-ish. Both
+        # sides become bytes since compare_digest rejects mixed types.
+        _u_bytes = (username or "").strip().encode("utf-8")[:256]
+        _ref_bytes = _USERNAME.encode("utf-8") if isinstance(_USERNAME, str) else _USERNAME
+        ok_user = (secrets.compare_digest(
+                       _u_bytes.ljust(len(_ref_bytes), b"\x00")[:len(_ref_bytes)],
+                       _ref_bytes)
+                   and len(_u_bytes) == len(_ref_bytes))
+        # checkpw runs unconditionally even on user mismatch so timing
+        # is identical between the genuine-user-wrong-pw path and the
+        # wrong-user path.
         ok_pass = bcrypt.checkpw((password or "").encode("utf-8"), _PASSWORD_HASH)
         return ok_user and ok_pass
     except Exception:
