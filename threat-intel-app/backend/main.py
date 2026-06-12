@@ -3730,6 +3730,12 @@ async def email_send_test(req: dict):
     to = (req or {}).get("to") or ""
     if not to:
         raise HTTPException(400, "to address required")
+    # Same CRLF defense as EmailSendRequest — the `to` value flows into a
+    # MIME To: header via email_composer.send_smtp, and Python's email
+    # module doesn't filter \r\n in header values. Reject early so an
+    # attacker can't smuggle Bcc: / Reply-To: rows into the test path.
+    if not isinstance(to, str) or len(to) > 2_000 or "\r" in to or "\n" in to:
+        raise HTTPException(400, "to address malformed")
     smtp_cfg = {
         "EMAIL_SMTP_HOST":     config.get("EMAIL_SMTP_HOST"),
         "EMAIL_SMTP_PORT":     config.get("EMAIL_SMTP_PORT"),
