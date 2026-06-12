@@ -808,6 +808,14 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
     run_id = str(uuid.uuid4())
     yield f"data: {json.dumps({'event': 'start', 'runId': run_id, 'timestamp': _ts()})}\n\n"
 
+    # Background tasks (enrichment, investigation) we asyncio.create_task and
+    # await later in the generator. If the client disconnects mid-stream
+    # (browser tab closed, network blip), Python cancels the generator but
+    # asyncio's event loop still holds strong refs to these tasks — they'd
+    # run to completion in the background, burning LLM cost on a dead
+    # client. Track them here and cancel in the finally block.
+    _bg_tasks: list[asyncio.Task] = []
+
     try:
         # Initial state matches SOCState shape
         state = {
@@ -863,6 +871,7 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
             async def _on_enrich_partial(snap, _q=enr_q):
                 await _q.put(("partial", snap))
             enr_task = asyncio.create_task(run_enrichment(state, on_partial=_on_enrich_partial))
+            _bg_tasks.append(enr_task)
             async for frame in _drain_events(enr_task, enr_q, run_id, label):
                 yield frame
             state = await enr_task
@@ -913,6 +922,7 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
         async def _on_inv_event(entry, _q=inv_q):
             await _q.put(("trace", entry))
         inv_task = asyncio.create_task(run_investigation(state, on_event=_on_inv_event))
+        _bg_tasks.append(inv_task)
         async for frame in _drain_events(inv_task, inv_q, run_id, label):
             yield frame
         state = await inv_task
@@ -962,6 +972,14 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
     except Exception as e:
         _log.exception("analyze stream failed run_id=%s", run_id)
         yield f"data: {json.dumps({'event': 'error', 'runId': run_id, 'error': _clean_exc(e)})}\n\n"
+    finally:
+        # Cancel any background tasks the client never got to see finish.
+        # On normal completion they're already done so cancel() is a no-op;
+        # on client disconnect (GeneratorExit / CancelledError) this stops
+        # the orphan from continuing to run.
+        for _t in _bg_tasks:
+            if not _t.done():
+                _t.cancel()
     yield "data: [DONE]\n\n"
 
 @app.post("/api/analyze")
