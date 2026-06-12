@@ -2199,9 +2199,15 @@ async def scan_hash(req: ScanHashRequest):
             timeout=aiohttp.ClientTimeout(total=30),
         ) as session:
             from intel.file_correlation import _vt_file, _malwarebazaar, _hybrid_analysis
+            # Pass the abuse.ch unified auth key so MalwareBazaar doesn't
+            # hit anonymously and get rate-limited. Same fix the broader
+            # file_correlation.correlate() path got — this direct
+            # /api/scan/hash call site was a separate, parallel use.
+            _abusech = (config.get("ABUSECH_AUTH_KEY")
+                        or config.get("MALWAREBAZAAR_API_KEY") or "")
             r_vt, r_mb, r_ha = await asyncio.gather(
                 _vt_file(session, h, config.get("VIRUSTOTAL_KEY", "")),
-                _malwarebazaar(session, h),
+                _malwarebazaar(session, h, _abusech),
                 _hybrid_analysis(session, h, config.get("HYBRID_ANALYSIS_KEY", "")),
                 return_exceptions=True,
             )
