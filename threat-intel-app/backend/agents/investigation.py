@@ -2061,12 +2061,28 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
     except Exception as _e:
         _log.debug("prose validation failed (non-fatal): %s", _e)
 
+    # Coerce confidence to a clean 0.0-1.0 float. The prompt explicitly
+    # asks for 0.0-1.0 but the model sometimes returns the percentage
+    # form ("85" meaning 0.85) or even the string "high" / "medium".
+    # Frontend multiplies by 100 for display, so an uncoerced 85 would
+    # render as "8500%" on the disposition pill.
+    _raw_conf = result.get("confidence", 0.5)
+    if isinstance(_raw_conf, (int, float)):
+        _conf = float(_raw_conf)
+        if _conf > 1.0 and _conf <= 100.0:
+            _conf = _conf / 100.0
+        _conf = max(0.0, min(1.0, _conf))
+    elif isinstance(_raw_conf, str):
+        _conf = {"high": 0.85, "medium": 0.55, "low": 0.25}.get(
+            _raw_conf.strip().lower(), 0.5)
+    else:
+        _conf = 0.5
     return {
         **state,
         "investigation_result":   result,
         "mitre_techniques":       result.get("mitre_techniques", []),
         "threat_level":           result.get("threat_level", "MEDIUM"),
-        "confidence":             result.get("confidence", 0.5),
+        "confidence":             _conf,
         "needs_more_enrichment":  result.get("needs_more_enrichment", False),
         "clarifying_questions":   result.get("clarifying_questions", []),
         "context_impact":         result.get("context_impact", ""),
