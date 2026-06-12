@@ -47,3 +47,24 @@ def get_provider(name: str | None = None) -> LLMProvider:
 def list_providers() -> list[str]:
     """The names get_provider() will accept."""
     return ["openai", "azure", "anthropic", "ollama"]
+
+
+def provider_configured(config) -> bool:
+    """True when the active LLM provider has the credentials it needs.
+
+    Many callers historically gated AI calls on `config.get("OPENAI_API_KEY")`
+    directly, which silently disabled AI features on Anthropic / Ollama
+    deployments even though everything underneath went through
+    get_provider(). This helper picks the right key per provider so a
+    single hardcoded check no longer leaks across the abstraction.
+
+    Ollama is locally-hosted with no key, so it always returns True.
+    """
+    selected = (os.environ.get("LLM_PROVIDER") or "openai").strip().lower()
+    if selected in ("openai", "azure", "azure-openai", "azureopenai"):
+        return bool(config.get("OPENAI_API_KEY"))
+    if selected == "anthropic":
+        return bool(config.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY"))
+    if selected == "ollama":
+        return True
+    return False

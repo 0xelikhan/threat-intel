@@ -1385,8 +1385,11 @@ async def run_investigation(state: dict, on_event=None) -> dict:
 
     result = None
     tool_call_log = []
-    openai_key = config.get("OPENAI_API_KEY")
-    if openai_key:
+    # Provider-aware gate — Anthropic / Ollama deployments were silently
+    # marked ai_unavailable by the OPENAI_API_KEY-only check even though
+    # the underlying provider works fine.
+    from providers import provider_configured
+    if provider_configured(config):
         try:
             from providers import get_provider
             provider = get_provider()

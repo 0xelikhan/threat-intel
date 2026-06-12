@@ -105,7 +105,17 @@ def _build():
 graph = _build()
 
 
-async def run_pipeline(raw_input: str, input_type: str = "log") -> dict:
+async def run_pipeline(raw_input: str, input_type: str = "log",
+                        analyst_feedback: str = "") -> dict:
+    """End-to-end pipeline driver. Used by /api/analyze/sync and the
+    skill registry — the streaming /api/analyze path builds its own
+    initial state because it interleaves SSE writes between stages.
+
+    analyst_feedback: optional analyst-supplied verdict / context. When
+    non-empty the investigation prompt treats it as authoritative,
+    overriding AI inference when they conflict. Previously sync analyze
+    silently dropped this even though the request schema accepts it.
+    """
     initial: SOCState = {
         "raw_input":             raw_input,
         "input_type":            input_type,
@@ -127,5 +137,6 @@ async def run_pipeline(raw_input: str, input_type: str = "log") -> dict:
         "iteration_count":       0,
         "cross_refs":            {},
         "email_analysis":        {},
+        "analyst_feedback":      (analyst_feedback or "").strip(),
     }
     return await graph.ainvoke(initial)

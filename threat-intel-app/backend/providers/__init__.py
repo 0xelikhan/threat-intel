@@ -22,6 +22,7 @@ Normalised tool-call format (returned in resp.tool_calls):
 """
 
 from .base    import LLMProvider, LLMResponse, LLMChunk
-from .factory import get_provider
+from .factory import get_provider, provider_configured
 
-__all__ = ["LLMProvider", "LLMResponse", "LLMChunk", "get_provider"]
+__all__ = ["LLMProvider", "LLMResponse", "LLMChunk",
+           "get_provider", "provider_configured"]

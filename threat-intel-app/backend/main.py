@@ -898,7 +898,12 @@ async def analyze_sync(req: AnalyzeRequest):
     if not config.is_configured():
         raise HTTPException(503, "Add API keys in Settings first.")
     run_id = str(uuid.uuid4())
-    state = await run_pipeline(req.logText, req.inputType)
+    # Forward analystFeedback to the pipeline; the schema accepts it and
+    # the streaming endpoint already threads it through, but sync had
+    # been silently dropping it (run_pipeline previously didn't accept
+    # the kwarg).
+    state = await run_pipeline(req.logText, req.inputType,
+                                analyst_feedback=req.analystFeedback or "")
     gti_scores = compute_gti_scores(state.get("enrichments", {}))
     state["gti_scores"] = gti_scores
     _results[run_id] = state
@@ -1123,19 +1128,13 @@ from agents.response import _match_actors as _match_threat_actors_fn
 
 
 def _llm_key_configured() -> bool:
-    """True when the active LLM provider has the credentials it needs.
-    Generalises the old OPENAI_API_KEY-only check so /api/chat and the
-    Sigma/KQL generator don't 503 when LLM_PROVIDER=anthropic or ollama.
-    Ollama is locally hosted with no key, so it's always configured."""
-    import os as _os
-    provider = (_os.environ.get("LLM_PROVIDER") or "openai").strip().lower()
-    if provider in ("openai", "azure", "azure-openai", "azureopenai"):
-        return bool(config.get("OPENAI_API_KEY"))
-    if provider == "anthropic":
-        return bool(config.get("ANTHROPIC_API_KEY") or _os.environ.get("ANTHROPIC_API_KEY"))
-    if provider == "ollama":
-        return True
-    return False
+    """Thin wrapper around providers.provider_configured() for callers
+    in this module that pass the ConfigManager singleton implicitly.
+    The shared helper now lives in providers/factory.py so triage,
+    investigation, email composer, file analyst etc. all gate on the
+    same logic instead of each rolling their own OPENAI_API_KEY check."""
+    from providers import provider_configured
+    return provider_configured(config)
 
 
 async def _ai_gen(prompt: str) -> str:
@@ -3308,10 +3307,18 @@ async def email_remediate(req: EmailRemediateRequest):
     from providers import get_provider
     import json as _json
 
-    if not config.get("OPENAI_API_KEY"):
-        from intel.error_messages import lookup as _lookup
-        err = _lookup("OPENAI_API_KEY_MISSING")
-        raise HTTPException(503, err["detail"])
+    if not _llm_key_configured():
+        # Use the OPENAI_API_KEY_MISSING error message when the active
+        # provider IS openai/azure so the existing analyst-facing copy
+        # still surfaces; for anthropic/ollama just say the provider
+        # isn't configured.
+        import os as _os
+        _prov = (_os.environ.get("LLM_PROVIDER") or "openai").strip().lower()
+        if _prov in ("openai", "azure", "azure-openai", "azureopenai"):
+            from intel.error_messages import lookup as _lookup
+            err = _lookup("OPENAI_API_KEY_MISSING")
+            raise HTTPException(503, err["detail"])
+        raise HTTPException(503, "LLM provider not configured")
 
     # Compact, AI-friendly representation of the alert details.
     parsed = req.parsed or {}
