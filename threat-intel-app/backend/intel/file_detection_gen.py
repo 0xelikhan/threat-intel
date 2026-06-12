@@ -13,7 +13,7 @@ The Sigma rule is run through pysigma validation when available.
 
 from __future__ import annotations
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List
 
 
@@ -87,7 +87,10 @@ def _unique_strings_for_memory(result: Dict, limit: int = 10) -> List[str]:
 
 # ─── Sigma ────────────────────────────────────────────────────────────────────
 def _gen_sigma(sha256, sha1, md5, mutexes) -> Dict:
-    today = datetime.now().strftime("%Y/%m/%d")
+    # Use UTC for the rule date so two containers running in different
+    # timezones produce identical Sigma output for the same sample.
+    # Sigma convention is YYYY/MM/DD; UTC is the de-facto baseline.
+    today = datetime.now(timezone.utc).strftime("%Y/%m/%d")
     rid = str(uuid.uuid4())
     hash_block = []
     if sha256: hash_block.append(f"      - {sha256}")
@@ -287,7 +290,7 @@ def _gen_volatility(unique_strings, mutexes) -> Dict:
         "  meta:\n"
         "    description = \"RECON-generated memory hunt — unique strings + mutexes from sample\"\n"
         "    author = \"RECON Platform\"\n"
-        f"    date = \"{datetime.now().strftime('%Y-%m-%d')}\"\n"
+        f"    date = \"{datetime.now(timezone.utc).strftime('%Y-%m-%d')}\"\n"
         "  strings:\n" + "\n".join(yarastr) + "\n"
         "  condition:\n"
         "    2 of them\n"
