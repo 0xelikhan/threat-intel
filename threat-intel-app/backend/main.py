@@ -3442,7 +3442,10 @@ async def email_draft_get(draft_id: str):
 
 @app.post("/api/email/drafts")
 async def email_draft_save(req: dict):
-    """Persist a composed email to backend/data/email_drafts/."""
+    """Stash a composed email in the in-memory drafts store. Lost on
+    restart by design — per the platform's no-persistence policy. The
+    old docstring claimed it persisted to backend/data/email_drafts/
+    but save_draft has only ever touched _drafts_mem."""
     from intel.email_composer import save_draft
     return save_draft(req or {})
 

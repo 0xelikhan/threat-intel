@@ -3295,29 +3295,39 @@ def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
                 piece += f" (threat associations: {', '.join(threats[:3])})"
             sentences.append(piece + ".")
 
-    # URLScan history
+    # URLScan history. _p_urlscan returns {malicious(bool), score, tags,
+    # categories, page_title, page_country, ...}; earlier code read .total
+    # and .last_scan_date (neither of which the parser sets) so the
+    # URLScan paragraph never appeared. Treat the presence of a verdict
+    # or page metadata as the hit signal.
     if urlscan and not urlscan.get("error"):
-        total = urlscan.get("total")
-        if total:
-            mal_s = urlscan.get("malicious") or 0
-            last = (urlscan.get("last_scan_date") or "")[:10]
-            piece = f"URLScan has {total} prior submission{'s' if total != 1 else ''}"
-            if last:
-                piece += f" (most recent {last})"
-            if mal_s:
-                piece += f", {mal_s} flagged malicious"
+        if urlscan.get("malicious"):
+            page_title = (urlscan.get("page_title") or "").strip()
+            piece = "URLScan's prior scan flagged the domain as malicious"
+            if page_title:
+                piece += f" (page title \"{page_title[:60]}\")"
             sentences.append(piece + ".")
+        elif urlscan.get("page_country") or urlscan.get("page_server"):
+            country = (urlscan.get("page_country") or "").strip()
+            server = (urlscan.get("page_server") or "").strip()
+            bits = []
+            if country: bits.append(f"hosted in {country}")
+            if server:  bits.append(f"server {server}")
+            if bits:
+                sentences.append(
+                    "URLScan's prior scan recorded the destination " +
+                    " on ".join(bits) + ".")
 
-    # Wayback Machine
+    # Wayback Machine. Parser writes closest_snapshot (not first_snapshot).
     if wayback:
         if wayback.get("has_snapshots") is False and not _is_known_generated:
             sentences.append(
                 "The Wayback Machine has no archived snapshots — unusual for "
                 "an established business domain.")
-        elif wayback.get("first_snapshot"):
+        elif wayback.get("closest_snapshot"):
             sentences.append(
-                f"The Wayback Machine first archived the domain on "
-                f"{str(wayback.get('first_snapshot'))[:10]}.")
+                f"The Wayback Machine archive snapshot dates back to "
+                f"{str(wayback.get('closest_snapshot'))[:10]}.")
 
     # Cert Transparency — useful when many subdomains hint at infra reuse
     if crt and not crt.get("error"):
@@ -3340,6 +3350,33 @@ def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
             if ports:     bits.append(f"open ports {', '.join(str(p) for p in ports[:6])}")
             sentences.append(
                 "FullHunt's attack-surface scan reports " + " and ".join(bits) + ".")
+
+    # Typosquat — high-signal phishing indicator. Backend's _typosquat_check
+    # writes {brand, distance} when the domain is an edit-distance match
+    # against a well-known brand. These were absent from the email entirely
+    # despite being one of the strongest single signals for a phishing case.
+    ts = data.get("typosquat") or {}
+    if ts and ts.get("brand"):
+        dist = ts.get("distance")
+        piece = f"The domain is a typosquat of {ts['brand']}"
+        if dist is not None:
+            piece += f" (edit distance {dist})"
+        sentences.append(piece + " — a near-certain brand-impersonation phishing signal.")
+
+    # Local offline blocklists (firehol / ipsum / phishing-db). A hit on
+    # one of these curated public lists is high-signal corroboration.
+    lf = data.get("local_feeds") or {}
+    if lf and lf.get("hit"):
+        src = lf.get("source") or "a public threat-intel blocklist"
+        sentences.append(f"The domain appears on {src}, an offline blocklist of known-bad infrastructure.")
+
+    # Google Safe Browsing — browsers actively warn users on visit.
+    gsb = (data.get("osint") or {}).get("google_safebrowsing") or {}
+    if gsb and (gsb.get("match_count") or 0) > 0:
+        threats = gsb.get("threat_types") or []
+        kind = ", ".join(threats[:3]).lower() if threats else "unsafe content"
+        sentences.append(
+            f"Google Safe Browsing flags the domain for {kind} — browsers display a warning page on visit.")
 
     if not sentences:
         return ""
