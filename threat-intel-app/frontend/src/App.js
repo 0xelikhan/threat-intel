@@ -3763,10 +3763,12 @@ function ChatWithRecon({ result, bare,
   // Load history when run changes
   useEffect(() => {
     if (!runId) return;
+    let alive = true;
     fetch(`/api/chat/${runId}`)
       .then(r => r.ok ? r.json() : { messages: [] })
-      .then(d => setMessages(d.messages || []))
-      .catch(() => setMessages([]));
+      .then(d => { if (alive) setMessages(d.messages || []); })
+      .catch(() => { if (alive) setMessages([]); });
+    return () => { alive = false; };
   }, [runId]);
 
   // Auto-scroll on new message
@@ -5494,10 +5496,12 @@ function AppMain({ authUser, setAuthState }) {
 
   // Fetch which webhook destinations are configured on the backend
   useEffect(() => {
+    let alive = true;
     fetch('/api/health')
       .then(r => r.json())
-      .then(d => setWebhooks(d.webhooks || {}))
+      .then(d => { if (alive) setWebhooks(d.webhooks || {}); })
       .catch(() => {});
+    return () => { alive = false; };
   }, []);
 
   // Auto-detect bulk: 12+ indicators → default to table view
