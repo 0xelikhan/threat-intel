@@ -104,15 +104,50 @@ def scan_bytes(data: bytes, timeout: int = 8) -> list[dict]:
     out = []
     for m in matches[:30]:
         meta = m.meta or {}
+        # Surface the actual matched strings so the frontend can show
+        # WHERE in the file the rule fired. Field names mirror the custom-
+        # rule scanner output ({id, offset, matched}) so the FileScannerView
+        # renderer (which reads s.id / s.offset / s.matched) treats both
+        # paths identically. yara-python ≥4.3 uses StringMatch objects with
+        # .identifier + .instances; older tuple-based API is
+        # (offset, identifier, data). Handle both without crashing.
+        matched_strings: list = []
+        for s in (m.strings or [])[:6]:
+            ident = getattr(s, "identifier", None)
+            if ident is not None:
+                for inst in (getattr(s, "instances", None) or [])[:2]:
+                    raw = getattr(inst, "matched_data", b"") or b""
+                    try:
+                        snippet = raw[:80].decode("utf-8", errors="replace")
+                    except Exception:
+                        snippet = repr(raw[:80])
+                    matched_strings.append({
+                        "id":      ident,
+                        "offset":  getattr(inst, "offset", 0),
+                        "matched": snippet,
+                    })
+            elif isinstance(s, tuple) and len(s) >= 3:
+                # legacy (offset, identifier, data)
+                offset, ident2, raw = s[0], s[1], s[2]
+                try:
+                    snippet = raw[:80].decode("utf-8", errors="replace") if isinstance(raw, (bytes, bytearray)) else str(raw)[:80]
+                except Exception:
+                    snippet = repr(raw)[:80]
+                matched_strings.append({
+                    "id":      ident2,
+                    "offset":  offset,
+                    "matched": snippet,
+                })
         out.append({
-            "rule":         m.rule,
-            "namespace":    m.namespace,
-            "tags":         list(m.tags or [])[:6],
-            "description":  str(meta.get("description") or meta.get("desc") or "")[:200],
-            "author":       str(meta.get("author") or "")[:80],
-            "reference":    str(meta.get("reference") or meta.get("ref") or "")[:200],
-            "score":        meta.get("score") or meta.get("threat_level"),
-            "strings_hit":  len(m.strings or []),
+            "rule":            m.rule,
+            "namespace":       m.namespace,
+            "tags":            list(m.tags or [])[:6],
+            "description":     str(meta.get("description") or meta.get("desc") or "")[:200],
+            "author":          str(meta.get("author") or "")[:80],
+            "reference":       str(meta.get("reference") or meta.get("ref") or "")[:200],
+            "score":           meta.get("score") or meta.get("threat_level"),
+            "strings_hit":     len(matched_strings),
+            "matched_strings": matched_strings[:10],
         })
     return out
 
