@@ -2061,22 +2061,31 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
     except Exception as _e:
         _log.debug("prose validation failed (non-fatal): %s", _e)
 
-    # Coerce confidence to a clean 0.0-1.0 float. The prompt explicitly
-    # asks for 0.0-1.0 but the model sometimes returns the percentage
-    # form ("85" meaning 0.85) or even the string "high" / "medium".
-    # Frontend multiplies by 100 for display, so an uncoerced 85 would
-    # render as "8500%" on the disposition pill.
-    _raw_conf = result.get("confidence", 0.5)
-    if isinstance(_raw_conf, (int, float)):
-        _conf = float(_raw_conf)
-        if _conf > 1.0 and _conf <= 100.0:
-            _conf = _conf / 100.0
-        _conf = max(0.0, min(1.0, _conf))
-    elif isinstance(_raw_conf, str):
-        _conf = {"high": 0.85, "medium": 0.55, "low": 0.25}.get(
-            _raw_conf.strip().lower(), 0.5)
-    else:
-        _conf = 0.5
+    def _coerce_conf(raw, default=0.5):
+        """Normalise the AI-emitted confidence into a clean 0.0-1.0 float.
+        The prompt asks for 0.0-1.0 but the model occasionally returns
+        the percentage form ("85" meaning 0.85) or a qualitative string
+        ("high" / "medium" / "low"). Frontend multiplies by 100 for
+        display, so an uncoerced 85 would render as "8500%"."""
+        if isinstance(raw, bool):
+            return default
+        if isinstance(raw, (int, float)):
+            v = float(raw)
+            if v > 1.0 and v <= 100.0:
+                v = v / 100.0
+            return max(0.0, min(1.0, v))
+        if isinstance(raw, str):
+            return {"high": 0.85, "medium": 0.55, "low": 0.25}.get(
+                raw.strip().lower(), default)
+        return default
+
+    _conf = _coerce_conf(result.get("confidence", 0.5))
+    # threat_actor.confidence has the same shape problem — clamp it too
+    # so the geopolitical attribution block doesn't ship a raw "high"
+    # string or a 0-100 number downstream.
+    _ta = result.get("threat_actor")
+    if isinstance(_ta, dict) and "confidence" in _ta:
+        _ta = {**_ta, "confidence": _coerce_conf(_ta.get("confidence"), default=0.5)}
     return {
         **state,
         "investigation_result":   result,
@@ -2087,7 +2096,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
         "clarifying_questions":   result.get("clarifying_questions", []),
         "context_impact":         result.get("context_impact", ""),
         "malware_family":         result.get("malware_family"),
-        "threat_actor":           result.get("threat_actor"),
+        "threat_actor":           _ta,
         "campaign":               result.get("campaign"),
         "attack_stage":           result.get("attack_stage"),
         "geopolitical":           geopolitical,
