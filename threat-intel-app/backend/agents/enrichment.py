@@ -100,7 +100,15 @@ _SEMAPHORE = asyncio.Semaphore(int(os.getenv("ENRICH_CONCURRENCY", "10")))
 # Backwards-compat alias — older code in this module imports TIMEOUT.
 TIMEOUT = _TIMEOUT
 
-_cache: dict = {}
+# Per-pipeline-run dedup cache. The full /api/analyze flow clears this
+# at the top of run_enrichment(), but skill-registry / MCP / direct
+# enrich_* callers never go through run_enrichment, so the dict would
+# grow linearly forever as Claude Desktop / Cursor users hit the MCP
+# lookup tools. BoundedDict gives FIFO eviction at 1000 entries — much
+# larger than any single analysis needs but still capped, so MCP usage
+# can't drain memory over a multi-day container lifetime.
+from bg_utils import BoundedDict as _BoundedDict
+_cache: dict = _BoundedDict(cap=1000)
 _tor_nodes: set = set()
 _tor_fetched: float = 0.0
 
