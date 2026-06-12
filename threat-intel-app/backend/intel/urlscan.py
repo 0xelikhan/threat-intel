@@ -71,7 +71,12 @@ async def get_result(uuid: str, api_key: str) -> dict:
         "server":        page.get("server"),
         "asn":           page.get("asn"),
         "asnname":       page.get("asnname"),
-        "tls_subject":   (page.get("tlsValidFrom") and page.get("tlsValidTo")
+        # tls_validity stores the cert's NotBefore → NotAfter range.
+        # Earlier code called this `tls_subject` which is the wrong name
+        # for the actual content — tls_subject is the cert's CN/Subject
+        # DN, not the validity window. The field was unused by any
+        # frontend reader so the rename is safe.
+        "tls_validity":  (page.get("tlsValidFrom") and page.get("tlsValidTo")
                           and f"{page.get('tlsValidFrom')} → {page.get('tlsValidTo')}") or None,
         "domains_seen":  (lists.get("domains") or [])[:20],
         "ips_seen":      (lists.get("ips") or [])[:20],
