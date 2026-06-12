@@ -3319,11 +3319,16 @@ async def get_history_item(run_id: str):
 
 # ─── EMAIL COMPOSER ─────────────────────────────────────────────────────────────
 class EmailParseRequest(BaseModel):
-    log_text: str
+    # The endpoint enforces _EMAIL_LOG_MAX (200 KB) at the handler too,
+    # but anchoring the cap at the schema means the validation error is
+    # consistent (ValidationError) instead of an HTTPException for the
+    # same overflow.
+    log_text: str = Field(..., max_length=200_000)
 
 
 class EmailComposeRequest(BaseModel):
-    alert_type: str
+    # alert_type maps to a fixed set of ALERT_TYPES — short slug.
+    alert_type: str = Field(..., max_length=64)
     parsed: dict
     options: Optional[dict] = None
     ip1: Optional[dict] = None
@@ -3347,8 +3352,12 @@ class EmailSendRequest(BaseModel):
 
 
 class EmailTemplateSave(BaseModel):
-    alert_type: str
-    body: str
+    # alert_type slug is matched against a fixed ALERT_TYPES set in
+    # save_template; body becomes a template file the composer renders
+    # with f-string substitutions. 200 KB is well above any sane
+    # template (the bundled ones are ~5 KB max).
+    alert_type: str = Field(..., max_length=64)
+    body:       str = Field(..., max_length=200_000)
 
 
 @app.get("/api/email/templates")
