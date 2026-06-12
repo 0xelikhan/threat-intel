@@ -59,7 +59,18 @@ async def correlate(analysis: Dict, config) -> Dict:
     # Full per-investigation isolation: do NOT correlate against prior scans
     # ("similar files" by sha256/imphash/tlsh/ssdeep). Each scan stands alone.
 
-    async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:
+    # Reuse the process-wide TCPConnector (DNS cache + keep-alive
+    # sockets + TLS sessions) instead of building a fresh pool per
+    # file scan. File correlation hits 4-7 TI sources concurrently —
+    # without sharing the connector, every scan paid a full TLS
+    # handshake to each. connector_owner=False keeps the singleton
+    # alive after this session closes.
+    from agents.enrichment import _get_connector
+    async with aiohttp.ClientSession(
+        timeout=_TIMEOUT,
+        connector=_get_connector(),
+        connector_owner=False,
+    ) as session:
         tasks = {
             "virustotal":      _vt_file(session, sha256, keys["VIRUSTOTAL_KEY"])  if sha256 else _noop(),
             "malwarebazaar":   _malwarebazaar(session, sha256, keys["ABUSECH_AUTH_KEY"]) if sha256 else _noop(),
