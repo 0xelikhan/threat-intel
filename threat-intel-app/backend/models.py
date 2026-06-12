@@ -29,6 +29,8 @@ _MODEL_NAMES = (
     "GTIScoreRequest",
     "LoginRequest",
     "ClarifyRequest",
+    "ScanHashRequest",
+    "ScanUrlRequest",
     "CustomRuleSave",
     "YaraHuntRequest",
     "ScanClarifyRequest",
@@ -38,6 +40,7 @@ _MODEL_NAMES = (
     "EmailSendRequest",
     "EmailTemplateSave",
     "EmailComposeAIRequest",
+    "EmailRemediateRequest",
 )
 
 
