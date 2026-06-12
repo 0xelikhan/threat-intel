@@ -180,19 +180,37 @@ def audit_log(event: str, **fields) -> None:
         pass
 
 
+def _audit_client_ip(request) -> Optional[str]:
+    """Return the IP we should attribute this request to in the audit log.
+    Behind a TLS-terminating proxy (Azure Container Apps, nginx,
+    Cloudflare), request.client.host is always the proxy's internal
+    address — useless for forensics. Honour X-Forwarded-For only when
+    RECON_TRUST_PROXY is set so a dev box doesn't accidentally believe
+    a client-supplied header. Returns at most 64 chars; left-most XFF
+    entry is the originating client per RFC 7239 conventions."""
+    if (os.environ.get("RECON_TRUST_PROXY") or "").lower() in {"1", "true", "yes"}:
+        xff = request.headers.get("X-Forwarded-For", "")
+        if xff:
+            return xff.split(",", 1)[0].strip()[:64]
+    if request.client:
+        return str(request.client.host)[:64]
+    return None
+
+
 class AuditMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         try:
             response = await call_next(request)
         except Exception as e:
             audit_log("request_error", path=str(request.url.path),
-                      method=request.method, error=str(e)[:200])
+                      method=request.method, error=str(e)[:200],
+                      client=_audit_client_ip(request))
             raise
         if request.url.path.startswith("/api/"):
             audit_log("api_call",
                       path=str(request.url.path), method=request.method,
                       status=response.status_code,
-                      client=str(request.client.host) if request.client else None)
+                      client=_audit_client_ip(request))
         return response
 
 
