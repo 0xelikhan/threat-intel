@@ -1868,7 +1868,25 @@ async def _chat_stream(run_id: str, user_msg: str):
 
         yield f"data: {json.dumps({'event': 'done', 'tool_calls': tool_calls_made, 'reply': final_content})}\n\n"
     except Exception as e:
-        yield f"data: {json.dumps({'event': 'error', 'error': _clean_exc(e)})}\n\n"
+        # Persist a marker assistant turn so the user turn we already
+        # wrote at the top doesn't sit orphaned in history. Without
+        # this, a refresh-mid-error leaves the conversation with an
+        # outstanding user message and no AI reply, which confuses the
+        # next chat turn ("user said X then Y back-to-back, why?") and
+        # makes forensics harder ("did the AI reply or not?").
+        _err = _clean_exc(e)
+        try:
+            history.append({
+                "role": "assistant",
+                "content": "[chat error — the AI failed to respond. Try again.]",
+                "tool_calls": tool_calls_made,
+                "error": _err,
+                "timestamp": _ts(),
+            })
+            _chats[run_id] = history
+        except Exception:
+            pass
+        yield f"data: {json.dumps({'event': 'error', 'error': _err})}\n\n"
     yield "data: [DONE]\n\n"
 
 
