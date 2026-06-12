@@ -1952,6 +1952,12 @@ async def chat_send(run_id: str, req: dict):
     user_msg = (req or {}).get("message", "").strip()
     if not user_msg:
         raise HTTPException(400, "message required")
+    # 32 KB is well above any real chat message, well below the 50 MB
+    # AuditMiddleware envelope. Without this an attacker who can post
+    # to /api/chat could send a giant body that gets prepended to the
+    # next investigation prompt + persisted in _chats verbatim.
+    if len(user_msg) > 32_000:
+        raise HTTPException(400, "message too long (max 32 KB)")
     if not _llm_key_configured():
         raise HTTPException(503, "LLM provider not configured")
     return StreamingResponse(_chat_stream(run_id, user_msg),
