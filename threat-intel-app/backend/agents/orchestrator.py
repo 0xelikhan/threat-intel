@@ -22,13 +22,21 @@ from agents.investigation import run_investigation
 from agents.response import run_response
 
 
-class SOCState(TypedDict):
+class SOCState(TypedDict, total=False):
+    """LangGraph pipeline state. total=False because the agents lift
+    different keys at different stages (triage adds behavioral_indicators,
+    investigation adds investigation_result + threat_actor, etc.) and
+    the orchestrator builds an initial state that doesn't carry every
+    one. Listing the keys here keeps mypy / IDE inspection honest about
+    what's available downstream."""
     raw_input:             str
     input_type:            str
     triage_score:          float
     iocs:                  dict
+    suppressed_iocs:       dict
     should_proceed:        bool
     triage_reasoning:      str
+    behavioral_indicators: dict
     enrichments:           dict
     investigation_result:  dict
     mitre_techniques:      list
@@ -43,6 +51,27 @@ class SOCState(TypedDict):
     iteration_count:       int
     cross_refs:            dict
     email_analysis:        dict
+    # Analyst-provided context for the re-analyze flow; the investigation
+    # prompt prepends this as authoritative input when set. Was added to
+    # the initial state builder but never declared on the type.
+    analyst_feedback:      str
+    # Fields the agents lift onto state but the type didn't enumerate:
+    log_translation:       dict
+    defender_parse:        dict
+    multi_log:             dict
+    log_count:             int
+    gti_scores:            dict
+    confidence_scores:     dict
+    malware_family:        str
+    threat_actor:          dict
+    campaign:              str
+    attack_stage:          str
+    geopolitical:          dict
+    tool_call_log:         list
+    log_correlation:       dict
+    analyst_answers:       dict
+    clarifying_questions:  list
+    context_impact:        str
 
 
 def _route_triage(state: SOCState) -> Literal["enrichment", "investigation", "dropped"]:
