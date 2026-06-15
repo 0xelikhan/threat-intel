@@ -507,7 +507,11 @@ class AnalyzeRequest(BaseModel):
     analystFeedback: Optional[str] = Field(default=None, max_length=4_000)
 
 class TaxiiPollRequest(BaseModel):
-    sinceHours: int = 24
+    # 1 hour to 30 days is the reasonable window the UI dropdown maps to.
+    # An unbounded int let a caller pass negative values (future date,
+    # returns nothing) or absurdly large ones (no upstream impact but a
+    # confusing UI surface).
+    sinceHours: int = Field(default=24, ge=1, le=720)
 
 class SettingsRequest(BaseModel):
     keys: dict
@@ -3813,13 +3817,28 @@ async def ingest_misp(file: UploadFile = File(...)):
 async def taxii_poll(req: TaxiiPollRequest, background_tasks: BackgroundTasks):
     poll_id = str(uuid.uuid4())
     async def _poll():
-        _taxii_cache[poll_id] = await poll_all_feeds(since_hours=req.sinceHours)
+        # Catch every exception — BackgroundTasks runs this AFTER the
+        # response is already sent, so an uncaught raise has no caller
+        # to surface to. Without the store-error path the GET poller
+        # saw {"status": "pending"} forever on a backend that had
+        # actually failed; the client retried indefinitely with no
+        # signal anything was wrong.
+        try:
+            _taxii_cache[poll_id] = await poll_all_feeds(since_hours=req.sinceHours)
+        except Exception as _e:
+            _log.exception("taxii poll %s failed", poll_id)
+            _taxii_cache[poll_id] = {"error": _clean_exc(_e, prefix="taxii poll")}
     background_tasks.add_task(_poll)
     return {"pollId": poll_id, "status": "polling"}
 
 @app.get("/api/taxii/results/{poll_id}")
 async def taxii_results(poll_id: str):
-    return {"status": "complete", **_taxii_cache[poll_id]} if poll_id in _taxii_cache else {"status": "pending"}
+    cached = _taxii_cache.get(poll_id)
+    if cached is None:
+        return {"status": "pending"}
+    if "error" in cached:
+        return {"status": "error", "error": cached["error"]}
+    return {"status": "complete", **cached}
 
 @app.get("/api/taxii/feeds")
 async def taxii_feeds():
