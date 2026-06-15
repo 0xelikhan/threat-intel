@@ -1718,11 +1718,16 @@ def _summarize_ioc(per_source: dict) -> dict:
             sources.append({"source": name, "verdict": v})
     if counts["MALICIOUS"] >= 1:
         overall = "MALICIOUS"
-    elif counts["SUSPICIOUS"] >= 2 or counts["MALICIOUS"]:
+    elif counts["SUSPICIOUS"] >= 1:
+        # Used to be a two-branch ladder (>= 2 OR MALICIOUS, then == 1)
+        # that collapsed to the same result; MALICIOUS was already
+        # short-circuited above so the OR was dead. Single condition
+        # now: any suspicious count beats clean.
         overall = "SUSPICIOUS"
-    elif counts["SUSPICIOUS"] == 1:
-        overall = "SUSPICIOUS"
-    elif counts["CLEAN"] >= 1 and counts["SUSPICIOUS"] == 0:
+    elif counts["CLEAN"] >= 1:
+        # SUSPICIOUS is guaranteed 0 here (the elif above would have
+        # caught any > 0), so the old `and counts["SUSPICIOUS"] == 0`
+        # was a no-op.
         overall = "CLEAN"
     else:
         overall = "UNKNOWN"

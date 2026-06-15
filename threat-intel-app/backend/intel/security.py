@@ -7,8 +7,9 @@ Provides:
     headers to every response, plus a request body size cap (413 on exceed).
   - safe_data_path(path, root): resolves a user-supplied path inside the data
     directory and refuses to escape it (path traversal guard).
-  - audit_log(event, **fields): appends a structured JSON line to
-    backend/data/audit.log.
+  - audit_log(event, **fields): emits a structured record to the
+    application's stdout logger (no disk write — see no-persistence
+    policy; operator log shipping is what makes this durable).
   - encrypt_value / decrypt_value: Fernet-based at-rest encryption for API
     keys when RECON_SECRET env var is set. If RECON_SECRET is missing the
     helpers no-op so existing plaintext configs keep working.

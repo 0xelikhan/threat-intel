@@ -567,7 +567,29 @@ async def test_key():
 
 # ─── HEALTH ───────────────────────────────────────────────────────────────────────
 @app.get("/api/health")
-async def health():
+async def health(request: Request):
+    """Public liveness + (when authenticated) full status snapshot.
+
+    Unauthenticated callers — the Docker HEALTHCHECK, the Azure
+    Container Apps deploy probe — get a minimal {status, version,
+    timestamp} envelope. That's all a probe needs.
+
+    Authenticated callers (the frontend dashboard reading via cookie)
+    get the full breakdown: which API keys are wired up, which
+    webhooks are available, the cache + circuit-breaker + diagnosis
+    rollups. The full payload used to leak to unauth callers — an
+    information disclosure surface (which TI sources are wired, which
+    webhook destinations are configured) for free reconnaissance.
+    """
+    is_authed = bool(current_user(request.session))
+    base = {
+        "status":    "ready" if config.is_configured() else "setup_required",
+        "version":   "3.0.0",
+        "timestamp": _ts(),
+    }
+    if not is_authed:
+        return base
+
     status = config.get_status()
     missing = [k for k, v in status.items() if v["required"] and not v["configured"]]
     # Additive: existing fields untouched, plus a `cache` rollup so the
@@ -592,9 +614,7 @@ async def health():
     except Exception as e:
         diagnosis_block = {"error": _clean_exc(e, prefix="health probe")}
     return {
-        "status":          "ready" if config.is_configured() else "setup_required",
-        "version":         "3.0.0",
-        "timestamp":       _ts(),
+        **base,
         "configured":      config.is_configured(),
         "ai_provider":     config.get_ai_provider(),
         "azure_openai":    config.is_azure_openai(),

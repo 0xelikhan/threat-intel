@@ -102,8 +102,10 @@ async def correlate(analysis: Dict, config) -> Dict:
     # analyzer keeps them on _file_bytes until just before persistence),
     # kick off a fire-and-forget detonation job. The submission +
     # polling runs in the background and writes the final summary to
-    # backend/data/sandbox_results/{sha256}.json, which the UI fetches
-    # via GET /api/sandbox/result/{sha256}.
+    # the in-memory _sandbox_results dict in intel/sandbox.py, which
+    # the UI fetches via GET /api/sandbox/result/{sha256}. Used to
+    # persist to backend/data/sandbox_results/{sha256}.json but the
+    # no-persistence policy moved it in-process only.
     if (sha256 and keys["HYBRID_ANALYSIS_KEY"]
         and not (out.get("hybrid_analysis") and not out["hybrid_analysis"].get("error"))):
         out["sandbox_submission_eligible"] = True
@@ -163,14 +165,18 @@ async def _vt_file(session, sha256, key) -> Optional[Dict]:
             engines.append({"engine": engine, "result": info.get("result"),
                             "version": info.get("engine_version")})
     families = attrs.get("popular_threat_classification") or {}
+    # Pre-compute the totals so total_engines and detection_ratio don't
+    # each walk stats.values() independently.
+    _total_engines = sum(stats.values())
+    _mal           = stats.get("malicious", 0)
     return {
         "found":              True,
-        "malicious":          stats.get("malicious", 0),
+        "malicious":          _mal,
         "suspicious":         stats.get("suspicious", 0),
         "harmless":           stats.get("harmless", 0),
         "undetected":         stats.get("undetected", 0),
-        "total_engines":      sum(stats.values()),
-        "detection_ratio":    f"{stats.get('malicious', 0)}/{sum(stats.values())}",
+        "total_engines":      _total_engines,
+        "detection_ratio":    f"{_mal}/{_total_engines}",
         "malware_family":     families.get("suggested_threat_label"),
         "categories":         [c.get("value") for c in (families.get("popular_threat_category") or [])][:5],
         "names":              (attrs.get("names") or [])[:10],
