@@ -394,9 +394,23 @@ def _decode_hex_candidates(text: str, max_decodes: int = 10) -> List[Tuple[str, 
     return out
 
 
+def _joined_strings(strings_dict: Dict) -> str:
+    """Concatenate every extracted string into one corpus for regex scans.
+    Cached on the dict via a sentinel key so _all_iocs and
+    _suspicious_string_hits don't each pay the join cost — the joined
+    string for a 50 MB sample can be hundreds of KB, doubled when the
+    pipeline calls both consumers in sequence."""
+    cached = strings_dict.get("_joined_cache")
+    if cached is not None:
+        return cached
+    joined = "\n".join(strings_dict.get("ascii", []) + strings_dict.get("unicode", []))
+    strings_dict["_joined_cache"] = joined
+    return joined
+
+
 def _all_iocs(strings_dict: Dict) -> Dict:
     """IOC extraction across raw + b64-decoded + hex-decoded string corpus."""
-    joined = "\n".join(strings_dict.get("ascii", []) + strings_dict.get("unicode", []))
+    joined = _joined_strings(strings_dict)
     iocs = _extract_iocs_from_text(joined)
 
     decoded = _decode_base64_candidates(joined) + _decode_hex_candidates(joined)
@@ -428,7 +442,7 @@ _SUSPICIOUS_PATTERNS = [
 
 
 def _suspicious_string_hits(strings_dict: Dict) -> List[Dict]:
-    joined = "\n".join(strings_dict.get("ascii", []) + strings_dict.get("unicode", []))
+    joined = _joined_strings(strings_dict)
     hits = []
     for name, rex in _SUSPICIOUS_PATTERNS:
         m = rex.search(joined)
