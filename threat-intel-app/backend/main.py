@@ -3436,7 +3436,9 @@ async def email_compose(req: EmailComposeRequest):
 
 
 class EmailComposeAIRequest(BaseModel):
-    log_text: str
+    # Same cap as /api/email/parse so the same paste size that the
+    # parse endpoint accepts can land here, and nothing larger.
+    log_text: str = Field(..., max_length=200_000)
     parsed: Optional[dict] = None
     options: Optional[dict] = None
 
