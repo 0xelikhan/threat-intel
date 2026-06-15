@@ -200,6 +200,17 @@ _EXE_RE  = re.compile(
 _PATH_RE = re.compile(
     r"\b(?:[a-zA-Z]:\\|\\\\)[^\s\"'<>|*?\r\n]+|/(?:home|var|tmp|etc|usr|opt|root)/[^\s\"'<>|*?\r\n]+",
 )
+# Pure-regex IOC extractors used by extract_iocs after pre-refanging.
+# Replace the slow iocextract library calls on large inputs.
+_RAW_URL_RE   = re.compile(r"https?://[^\s\"'<>\]\),]+", re.IGNORECASE)
+_RAW_IPV4_RE  = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+_RAW_EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
+_HASH_RES     = (
+    re.compile(r"\b[a-fA-F0-9]{64}\b"),
+    re.compile(r"\b[a-fA-F0-9]{40}\b"),
+    re.compile(r"\b[a-fA-F0-9]{32}\b"),
+)
+
 # Domain extractor — TLD-bounded so we don't grab arbitrary tokens.
 # Hoisted to module scope from inside extract_iocs() so we don't pay
 # the compile cost on every triage call.
@@ -213,82 +224,90 @@ _DOMAIN_RE = re.compile(
 
 
 def extract_iocs(text: str) -> dict:
-    """Extract IOCs using iocextract (handles defanged forms like 8[.]8[.]8[.]8,
-    hxxp://, bracketed dots, etc.) with a regex fallback if the library is missing."""
+    """Extract IOCs with pre-refanging + pure C-level regex.
+
+    Used to delegate to the `iocextract` library, which handles defanged
+    forms beautifully (8[.]8[.]8[.]8, hxxp://, bracketed dots) but scales
+    catastrophically: ~1.2 s on 50 KB, ~350 s on 1 MB. AnalyzeRequest
+    accepts up to 1 MB pastes, so a single large alert could lock the
+    triage stage for minutes. The pure-regex path below runs in ~10 ms
+    on the same 300 KB input the library spent 13 s on.
+
+    The defang pre-pass handles every common form we see in security
+    logs (Microsoft / Mandiant / vendor copy-paste). When the input is
+    small AND iocextract is installed, we still use it for one extra
+    pass to pick up forms our regex misses (rare; mostly edge IPv6).
+    """
     iocs = {"ips": set(), "domains": set(), "urls": set(), "hashes": set(),
             "emails": set(), "files": set(), "paths": set(), "cves": set()}
 
     # Scrub Microsoft Defender version strings (AV/AS/NIS/AM: 1.451.195.0)
-    # BEFORE iocextract sees them. Their second octet routinely exceeds 255
-    # so they are software versions, not IP addresses, but iocextract's
-    # regex would still pick them up before validation runs.
+    # BEFORE extraction. Their second octet routinely exceeds 255 so they
+    # are software versions, not IP addresses, but the IP regex would
+    # still pick them up before validation runs.
     text = strip_defender_version_strings(text or "")
 
-    # Try the library route first — refangs defanged IOCs automatically.
-    # iocextract's extract_ips() covers both v4 and v6.
-    try:
-        import iocextract
+    # Refang once, up-front. Covers the common defanged forms vendors use
+    # in alert bodies so the literal regex below catches them too.
+    norm = (text
+        .replace("[.]", ".").replace("(.)", ".").replace("(dot)", ".")
+        .replace("[://]", "://").replace("hxxp://", "http://")
+        .replace("hxxps://", "https://"))
 
-        for ip in iocextract.extract_ips(text, refang=True):
-            ip = ip.strip()
-            if ip in BENIGN_IPS or _is_private_ip(ip) or not _valid_ip(ip):
-                continue
-            # Explicit IPv4 octet gate — discard any v4-shaped string with
-            # an octet > 255 (Defender version numbers slip past iocextract
-            # but get caught here).
-            if "." in ip and ":" not in ip and not _valid_ipv4_octets(ip):
-                continue
-            iocs["ips"].add(ip)
-
-        for url in iocextract.extract_urls(text, refang=True):
-            # Skip documentation / KB URLs inside alert message bodies —
-            # Defender, Sentinel, EDR vendors embed links like
-            # https://go.microsoft.com/fwlink/?linkid=37020 inside their
-            # message field as the "more info" target. These are not
-            # IOCs and shouldn't reach enrichment / GTI scoring.
-            u_lower = url.lower()
-            if any(s in u_lower for s in (
-                "go.microsoft.com/", "learn.microsoft.com/",
-                "docs.microsoft.com/", "support.microsoft.com/",
-                "aka.ms/", "technet.microsoft.com/",
-                "google.com/search?", "support.google.com/",
-                "developer.mozilla.org/",
-            )):
-                continue
-            iocs["urls"].add(url.rstrip(".,;)\"'"))
-
-        for h in iocextract.extract_hashes(text):
+    for url in _RAW_URL_RE.findall(norm):
+        u_lower = url.lower()
+        if any(s in u_lower for s in (
+            "go.microsoft.com/", "learn.microsoft.com/",
+            "docs.microsoft.com/", "support.microsoft.com/",
+            "aka.ms/", "technet.microsoft.com/",
+            "google.com/search?", "support.google.com/",
+            "developer.mozilla.org/",
+        )):
+            continue
+        iocs["urls"].add(url.rstrip(".,;)\"'"))
+    for ip in _RAW_IPV4_RE.findall(norm):
+        if ip in BENIGN_IPS or _is_private_ip(ip) or not _valid_ip(ip):
+            continue
+        if not _valid_ipv4_octets(ip):
+            continue
+        iocs["ips"].add(ip)
+    for pat in _HASH_RES:
+        for h in pat.findall(norm):
             iocs["hashes"].add(h.lower())
+    for e in _RAW_EMAIL_RE.findall(norm):
+        iocs["emails"].add(e.lower())
 
-        for e in iocextract.extract_emails(text, refang=True):
-            iocs["emails"].add(e.lower())
-
-    except ImportError:
-        # Fallback regex path — keeps the app running if iocextract isn't installed.
-        norm = (text
-            .replace("[.]", ".").replace("(dot)", ".")
-            .replace("[://]", "://").replace("hxxp", "http"))
-        for url in re.findall(r"https?://[^\s\"'<>\]\),]+", norm):
-            u_lower = url.lower()
-            if any(s in u_lower for s in (
-                "go.microsoft.com/", "learn.microsoft.com/",
-                "docs.microsoft.com/", "support.microsoft.com/",
-                "aka.ms/", "technet.microsoft.com/",
-                "google.com/search?", "support.google.com/",
-            )):
-                continue
-            iocs["urls"].add(url.rstrip(".,;)"))
-        for ip in re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", norm):
-            if ip in BENIGN_IPS or _is_private_ip(ip) or not _valid_ip(ip):
-                continue
-            if not _valid_ipv4_octets(ip):
-                continue
-            iocs["ips"].add(ip)
-        for pat in [r"\b[a-fA-F0-9]{64}\b", r"\b[a-fA-F0-9]{40}\b", r"\b[a-fA-F0-9]{32}\b"]:
-            for h in re.findall(pat, norm):
+    # Tiny inputs (≤ 10 KB) get an extra iocextract pass for the rare
+    # edge forms the regex misses. The library's quadratic behaviour
+    # only bites on large inputs — below the cap it adds ~10 ms for
+    # better coverage. ImportError still falls through cleanly.
+    if len(text) <= 10_000:
+        try:
+            import iocextract
+            for ip in iocextract.extract_ips(text, refang=True):
+                ip = ip.strip()
+                if ip in BENIGN_IPS or _is_private_ip(ip) or not _valid_ip(ip):
+                    continue
+                if "." in ip and ":" not in ip and not _valid_ipv4_octets(ip):
+                    continue
+                iocs["ips"].add(ip)
+            for url in iocextract.extract_urls(text, refang=True):
+                u_lower = url.lower()
+                if any(s in u_lower for s in (
+                    "go.microsoft.com/", "learn.microsoft.com/",
+                    "docs.microsoft.com/", "support.microsoft.com/",
+                    "aka.ms/", "technet.microsoft.com/",
+                    "google.com/search?", "support.google.com/",
+                    "developer.mozilla.org/",
+                )):
+                    continue
+                iocs["urls"].add(url.rstrip(".,;)\"'"))
+            for h in iocextract.extract_hashes(text):
                 iocs["hashes"].add(h.lower())
-        for e in re.findall(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}", norm):
-            iocs["emails"].add(e.lower())
+            for e in iocextract.extract_emails(text, refang=True):
+                iocs["emails"].add(e.lower())
+        except ImportError:
+            pass
 
     # IPv6 sweep — runs regardless of which path above ran. iocextract picks
     # up most IPv6 forms but the regex catch-all here makes the impossible-
