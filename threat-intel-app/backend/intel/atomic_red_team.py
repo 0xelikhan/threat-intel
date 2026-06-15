@@ -3,10 +3,17 @@ Atomic Red Team — for each MITRE technique, a library of small, reproducible
 attack tests with example commands. Used to enrich AI investigation prompts
 with REAL attack examples per technique, not just abstract descriptions.
 """
+import re
 from pathlib import Path
 from functools import lru_cache
 
 VENDOR = Path(__file__).parent.parent.parent / "vendor" / "atomic-red-team" / "atomics"
+
+# MITRE technique IDs are shaped like Txxxx or Txxxx.yyy. Validating against
+# this exact pattern means a malicious caller (or an LLM coerced into emitting
+# "../../etc/passwd" as a technique) can't traverse out of the atomics
+# directory via the f"{tid}.yaml" path interpolation below.
+_TID_RE = re.compile(r"^T\d{4}(?:\.\d{3})?$")
 
 
 @lru_cache(maxsize=512)
@@ -15,6 +22,8 @@ def get_tests(technique_id: str) -> list[dict]:
     if not technique_id:
         return []
     tid = technique_id.strip().split(" ")[0]  # accept "T1059.001 - PowerShell"
+    if not _TID_RE.match(tid):
+        return []
     folder = VENDOR / tid
     if not folder.exists():
         return []
