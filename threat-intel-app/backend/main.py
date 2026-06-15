@@ -2289,36 +2289,49 @@ async def _finish_ai_in_background(sha256: str, file_bytes: bytes):
         except Exception:
             pass
 
-    tasks = {
-        asyncio.ensure_future(generate_yara_for_file(scan, _ai_gen)):  "ai_yara",
-        asyncio.ensure_future(summarize_file(scan, config)):           "ai_summary",
-        asyncio.ensure_future(triage_classify(scan, config)):          "triage",
-        asyncio.ensure_future(analyze_deep(scan, config,
-            comparative_context=comparative, extra_context=extra,
-            on_partial=_deep_partial)):                                "deep",
-    }
-    pending = set(tasks)
-    while pending:
-        done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
-        for t in done:
-            kind = tasks[t]
-            val = _val(t.exception() or t.result())
-            if kind == "ai_yara":
-                scan["ai_yara"] = val
-            elif kind == "ai_summary":
-                if val and not isinstance(val, dict):  # summary is a plain string
-                    scan["ai_summary"] = val
-            elif kind == "triage":
-                scan["ai_analyst"]["triage"] = val
-            elif kind == "deep":
-                scan["ai_analyst"]["deep"] = val
-                if extra and isinstance(val, dict) and "error" not in val:
-                    scan["ai_analyst"]["institutional_knowledge_applied"] = True
-            _persist()   # progressive — each poll picks up whatever has landed
-
-    scan["ai_pending"] = False
-    scan.pop("_file_bytes", None)
-    _persist()
+    # Wrap the four-stream fan-out in try/finally so ai_pending gets
+    # cleared no matter what — an unhandled exception before this point
+    # used to leave the scan stuck pending forever, and the frontend
+    # polled GET /api/scan/by-hash indefinitely waiting for cards that
+    # would never land.
+    try:
+        tasks = {
+            asyncio.ensure_future(generate_yara_for_file(scan, _ai_gen)):  "ai_yara",
+            asyncio.ensure_future(summarize_file(scan, config)):           "ai_summary",
+            asyncio.ensure_future(triage_classify(scan, config)):          "triage",
+            asyncio.ensure_future(analyze_deep(scan, config,
+                comparative_context=comparative, extra_context=extra,
+                on_partial=_deep_partial)):                                "deep",
+        }
+        pending = set(tasks)
+        while pending:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for t in done:
+                kind = tasks[t]
+                val = _val(t.exception() or t.result())
+                if kind == "ai_yara":
+                    scan["ai_yara"] = val
+                elif kind == "ai_summary":
+                    if val and not isinstance(val, dict):  # summary is a plain string
+                        scan["ai_summary"] = val
+                elif kind == "triage":
+                    scan["ai_analyst"]["triage"] = val
+                elif kind == "deep":
+                    scan["ai_analyst"]["deep"] = val
+                    if extra and isinstance(val, dict) and "error" not in val:
+                        scan["ai_analyst"]["institutional_knowledge_applied"] = True
+                _persist()   # progressive — each poll picks up whatever has landed
+    except Exception as _ai_bg_e:
+        _log.exception("AI background fan-out raised for %s", sha256)
+        scan.setdefault("ai_analyst", {})["error"] = _clean_exc(
+            _ai_bg_e, prefix="ai background")
+    finally:
+        scan["ai_pending"] = False
+        scan.pop("_file_bytes", None)
+        try:
+            _persist()
+        except Exception:
+            pass
 
 
 @app.get("/api/scan/by-hash/{sha256}")
