@@ -675,13 +675,20 @@ _LOGIN_USER_MAX_FAILURES = 20
 
 
 def _login_client_ip(request: Request) -> str:
-    # X-Forwarded-For only honoured if a reverse proxy set it (and the
-    # platform is deployed behind one). For local dev it's the direct
-    # client. Don't trust an arbitrary inbound XFF — strip to the
-    # left-most untrusted address only when the header is present.
-    xff = request.headers.get("X-Forwarded-For", "")
-    if xff:
-        return xff.split(",", 1)[0].strip()[:64]
+    # Honour X-Forwarded-For only when the operator opts in via
+    # RECON_TRUST_PROXY=1, matching the audit middleware's
+    # _audit_client_ip behaviour. Without the gate, the throttle would
+    # trust an arbitrary inbound XFF — meaning on a dev box / any
+    # deployment NOT behind a TLS proxy that strips XFF, an attacker
+    # could rotate the "IP" the throttle keys off by spoofing the
+    # header. The per-username throttle (15 min / 20 attempts) covers
+    # this even when the per-IP layer is bypassed, but consistency
+    # with the audit attribution helper means both layers see the same
+    # universe of identifiers.
+    if (os.environ.get("RECON_TRUST_PROXY") or "").lower() in {"1", "true", "yes"}:
+        xff = request.headers.get("X-Forwarded-For", "")
+        if xff:
+            return xff.split(",", 1)[0].strip()[:64]
     return (str(request.client.host) if request.client else "unknown")[:64]
 
 
