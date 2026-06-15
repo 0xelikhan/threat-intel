@@ -354,8 +354,9 @@ async def _catchall_exc_handler(request, exc: Exception):
     # envelope can still carry a correlation id, then prime the
     # contextvar so error_envelope() picks it up.
     import uuid as _uuid
-    from intel.observability import request_id_var
-    rid = request.headers.get("X-Request-ID") or str(_uuid.uuid4())
+    from intel.observability import request_id_var, _RID_RE
+    inbound = request.headers.get("X-Request-ID")
+    rid = inbound if inbound and _RID_RE.match(inbound) else str(_uuid.uuid4())
     request_id_var.set(rid)
     body = error_envelope(
         detail="Internal server error",
