@@ -3780,14 +3780,23 @@ async def email_send_test(req: dict):
 async def ingest_misp(file: UploadFile = File(...)):
     import tempfile, os as _os
     content = await file.read()
-    suffix = ".csv" if file.filename.endswith(".csv") else ".json"
+    if not content:
+        raise HTTPException(400, "empty file")
+    # UploadFile.filename is Optional[str] — without the guard,
+    # file.filename.endswith(...) raises AttributeError for a body
+    # uploaded without a Content-Disposition filename.
+    fname = (file.filename or "").lower()
+    suffix = ".csv" if fname.endswith(".csv") else ".json"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False, mode="wb") as tmp:
         tmp.write(content)
         tmp_path = tmp.name
     try:
         iocs = parse_misp_csv(tmp_path) if suffix == ".csv" else parse_misp_json(tmp_path)
     finally:
-        _os.unlink(tmp_path)
+        try:
+            _os.unlink(tmp_path)
+        except OSError:
+            pass
     by_type = {"ips": [], "domains": [], "urls": [], "hashes": [], "emails": []}
     for ioc in iocs:
         k = {"ip": "ips", "domain": "domains", "url": "urls", "hash": "hashes", "email": "emails"}.get(ioc["type"])
