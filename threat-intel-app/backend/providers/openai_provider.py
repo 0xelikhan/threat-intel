@@ -85,14 +85,14 @@ class OpenAIProvider(LLMProvider):
                 azure_endpoint=base_url.rstrip("/"),
                 api_version=api_version,
                 timeout=60.0,
-                max_retries=1,
+                max_retries=0,
             )
         else:
             client = AsyncOpenAI(
                 api_key=key,
                 base_url=base_url or "https://api.openai.com/v1",
                 timeout=60.0,
-                max_retries=1,
+                max_retries=0,
             )
         self._cached_client = client
         self._cached_key    = cache_key
@@ -106,11 +106,13 @@ class OpenAIProvider(LLMProvider):
         max_tokens:  Optional[int] = None,
         **kwargs,
     ) -> LLMResponse:
-        # The OpenAI SDK is constructed with max_retries=1, so 429 and
-        # 5xx already get one automatic retry with backoff. The extra
-        # work here is producing a clearer message on auth errors so
-        # the analyst sees actionable feedback ("check your API key in
-        # settings") instead of the raw SDK traceback.
+        # The SDK is now constructed with max_retries=0 so the manual
+        # rate-limit retry loop below is the ONLY retry layer. The
+        # previous setup (SDK max_retries=1 + manual for attempt in
+        # (0,1)) compounded to up to 4 attempts on a transient 429 —
+        # each one billing tokens. The manual layer is the spec-faithful
+        # one (deterministic 2s wait + one retry); the SDK's was opaque
+        # and amplified, not parallel.
         import asyncio as _asyncio
         client, model = self._client_and_model(kwargs.get("model"))
         req: dict = {

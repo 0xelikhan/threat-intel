@@ -200,6 +200,35 @@ async def send_generic(url: str, result: dict) -> dict:
 
 # ─── helpers ──────────────────────────────────────────────────────────────────────
 async def _post_json(url: str, payload: dict) -> dict:
+    # The operator configures webhook URLs, but a misconfiguration —
+    # pasting a file:// URI, an https://… URL with trailing whitespace
+    # that breaks parsing, or just a non-URL string from copying out of
+    # a docs page — used to silently raise inside aiohttp with an opaque
+    # error. Validate scheme + non-empty host up-front so the response
+    # carries an actionable message instead of an aiohttp internal.
+    # TheHive / OpenCTI / Sentinel-style internal endpoints are
+    # deliberately allowed (operator may intentionally point at a
+    # private-network instance), but we still reject the obviously-
+    # wrong schemes.
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url or "")
+    except Exception:
+        return {"ok": False, "error": "invalid webhook URL"}
+    if parsed.scheme not in ("http", "https"):
+        return {"ok": False,
+                "error": f"webhook URL scheme must be http(s) (got {parsed.scheme or 'none'})"}
+    if not parsed.hostname:
+        return {"ok": False, "error": "webhook URL has no host"}
+    # Reject the cloud metadata service IPs even though internal /
+    # private-network webhooks are otherwise allowed — a webhook to
+    # 169.254.169.254 is never legitimate and would leak the host's
+    # IAM credentials into the response body we log. Same applies to
+    # GCP's 169.254.169.254 (same range) and Alibaba's 100.100.100.200.
+    _METADATA_HOSTS = {"169.254.169.254", "100.100.100.200",
+                       "metadata.google.internal", "metadata.goog"}
+    if parsed.hostname.lower() in _METADATA_HOSTS:
+        return {"ok": False, "error": "webhook URL targets cloud metadata service"}
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload,
