@@ -8,6 +8,7 @@ Configured via config.json keys:
 """
 import aiohttp
 from datetime import datetime, timezone
+from typing import Optional
 
 LEVEL_EMOJI = {
     "CRITICAL": ":rotating_light:", "HIGH": ":warning:", "MEDIUM": ":yellow_circle:",
@@ -139,6 +140,14 @@ async def send_thehive(base_url: str, token: str, result: dict, run_url: str | N
     """Create a TheHive 5 case + observables."""
     if not (base_url and token):
         return {"ok": False, "error": "TheHive URL/token not configured"}
+    # Same scheme + metadata-service validation as the generic poster, so
+    # a misconfigured THEHIVE_URL pointing at file:// or the cloud
+    # metadata IP fails fast with a readable message instead of producing
+    # an opaque aiohttp internal — and never hands the auth bearer token
+    # to a metadata service.
+    err = _validate_webhook_url(base_url)
+    if err:
+        return err
     s = _short_text(result)
     rs = result.get("response_summary", {}) or {}
     # TheHive 5 severity is 1..4 (1=Low, 2=Medium, 3=High, 4=Critical).
@@ -199,17 +208,25 @@ async def send_generic(url: str, result: dict) -> dict:
 
 
 # ─── helpers ──────────────────────────────────────────────────────────────────────
-async def _post_json(url: str, payload: dict) -> dict:
-    # The operator configures webhook URLs, but a misconfiguration —
-    # pasting a file:// URI, an https://… URL with trailing whitespace
-    # that breaks parsing, or just a non-URL string from copying out of
-    # a docs page — used to silently raise inside aiohttp with an opaque
-    # error. Validate scheme + non-empty host up-front so the response
-    # carries an actionable message instead of an aiohttp internal.
-    # TheHive / OpenCTI / Sentinel-style internal endpoints are
-    # deliberately allowed (operator may intentionally point at a
-    # private-network instance), but we still reject the obviously-
-    # wrong schemes.
+# Cloud metadata service hosts that are NEVER a legitimate webhook target.
+# AWS/Azure/GCP all expose IAM credentials at 169.254.169.254; Alibaba uses
+# 100.100.100.200; GCP also resolves metadata.google.internal. Posting our
+# webhook payload to any of these would leak the host's credentials into the
+# response body we capture.
+_METADATA_HOSTS = {"169.254.169.254", "100.100.100.200",
+                   "metadata.google.internal", "metadata.goog"}
+
+
+def _validate_webhook_url(url: str) -> Optional[dict]:
+    """Return an error dict if `url` is malformed or targets a metadata
+    service. Returns None when the URL passes — caller proceeds with the
+    POST. Same shape as the failure return values the senders use so the
+    caller can short-circuit with `if err: return err`.
+
+    Operator-configured webhook URLs are otherwise trusted (TheHive on a
+    private-LAN address is a legitimate deployment); this only rejects
+    the obviously-wrong cases.
+    """
     try:
         from urllib.parse import urlparse
         parsed = urlparse(url or "")
@@ -220,15 +237,15 @@ async def _post_json(url: str, payload: dict) -> dict:
                 "error": f"webhook URL scheme must be http(s) (got {parsed.scheme or 'none'})"}
     if not parsed.hostname:
         return {"ok": False, "error": "webhook URL has no host"}
-    # Reject the cloud metadata service IPs even though internal /
-    # private-network webhooks are otherwise allowed — a webhook to
-    # 169.254.169.254 is never legitimate and would leak the host's
-    # IAM credentials into the response body we log. Same applies to
-    # GCP's 169.254.169.254 (same range) and Alibaba's 100.100.100.200.
-    _METADATA_HOSTS = {"169.254.169.254", "100.100.100.200",
-                       "metadata.google.internal", "metadata.goog"}
     if parsed.hostname.lower() in _METADATA_HOSTS:
         return {"ok": False, "error": "webhook URL targets cloud metadata service"}
+    return None
+
+
+async def _post_json(url: str, payload: dict) -> dict:
+    err = _validate_webhook_url(url)
+    if err:
+        return err
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload,
