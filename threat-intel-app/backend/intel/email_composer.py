@@ -1724,11 +1724,21 @@ def list_templates() -> List[Dict]:
 
 
 def load_template(alert_id: str) -> str:
+    # save_template ran the alert_id through _safe_name() before writing
+    # the file (alphanumeric + underscore only) AND checked it against
+    # the fixed ALERT_TYPES set. load_template did neither — an attacker
+    # who could reach /api/email/templates/<alert_type> could supply
+    # something like "../intel/redactor" and the f"{alert_id}.txt"
+    # interpolation would resolve to a path outside the templates dir.
+    # Apply the same _safe_name() filter so the read path can't escape.
     _ensure_templates_dir()
-    path = _TEMPLATES_DIR / f"{alert_id}.txt"
+    safe = re.sub(r"[^a-z0-9_]", "_", (alert_id or "").lower())
+    if not safe:
+        return _DEFAULT_TEMPLATES["_generic"]
+    path = _TEMPLATES_DIR / f"{safe}.txt"
     if path.exists():
         return path.read_text(encoding="utf-8")
-    return _DEFAULT_TEMPLATES.get(alert_id, _DEFAULT_TEMPLATES["_generic"])
+    return _DEFAULT_TEMPLATES.get(safe, _DEFAULT_TEMPLATES["_generic"])
 
 
 def save_template(alert_id: str, body: str) -> bool:
