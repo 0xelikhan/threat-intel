@@ -106,6 +106,27 @@ class TTLCache:
         with self._lock:
             total = self._hits + self._misses
             hit_rate = (self._hits / total * 100) if total else 0.0
+            # bytes_estimate was an O(N) `str(v).encode()` over every
+            # cached value on every /api/status hit. For the warninglists
+            # namespace (~30k entries, each ~200 B serialised) that was
+            # a ~6 MB string allocation per status call. A periodic
+            # frontend healthcheck doing 1 req/s would burn measurable
+            # CPU on the estimate alone. Sample the first 50 entries
+            # instead and extrapolate — same signal ("is this growing
+            # unboundedly?") at constant cost.
+            _SAMPLE_N = 50
+            sampled = 0
+            sample_bytes = 0
+            for k, (v, _) in self._store.items():
+                if sampled >= _SAMPLE_N:
+                    break
+                sample_bytes += (len(k.encode("utf-8", errors="ignore"))
+                                 + len(str(v).encode("utf-8", errors="ignore")))
+                sampled += 1
+            if sampled == 0:
+                bytes_estimate = 0
+            else:
+                bytes_estimate = int(sample_bytes / sampled * len(self._store))
             return {
                 "entries":   len(self._store),
                 "hits":      self._hits,
@@ -114,15 +135,9 @@ class TTLCache:
                 "evictions": self._evictions,
                 "hit_rate":  round(hit_rate, 1),
                 "miss_rate": round(100 - hit_rate, 1) if total else 0.0,
-                # Cheap estimate — sum of key+repr-length bytes. Not the
-                # true RSS footprint (Python's object headers dwarf the
-                # payload), but a stable signal for "is this cache growing
-                # unbounded?".
-                "bytes_estimate": sum(
-                    len(k.encode("utf-8", errors="ignore")) +
-                    len(str(v).encode("utf-8", errors="ignore"))
-                    for k, (v, _) in self._store.items()
-                ),
+                # Stable signal for "is this cache growing unbounded?"
+                # — extrapolated from a small sample, not exact.
+                "bytes_estimate": bytes_estimate,
             }
 
 

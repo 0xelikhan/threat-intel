@@ -639,6 +639,20 @@ _LOGIN_FAILURES: dict = _BoundedDict(cap=2000)
 _LOGIN_WINDOW_S    = 60
 _LOGIN_MAX_FAILURES = 5
 
+# Per-username throttle complements the per-IP one. Per-IP alone gets
+# defeated by an attacker rotating across IPs (cloud / Tor / botnet) —
+# each fresh IP starts with a clean 5-attempt budget against the same
+# username. The per-username window is wider (15 min) and higher (20
+# attempts) than the per-IP one: legitimate users almost never hit it,
+# but the cumulative-across-the-internet attempt count does. Eviction
+# at 200 distinct usernames means an attacker who rotates BOTH IPs AND
+# usernames can still degrade tracking, but at that point they're just
+# guessing usernames blind — which doesn't help them against the one
+# username that's actually configured.
+_LOGIN_USER_FAILURES: dict = _BoundedDict(cap=200)
+_LOGIN_USER_WINDOW_S     = 15 * 60
+_LOGIN_USER_MAX_FAILURES = 20
+
 
 def _login_client_ip(request: Request) -> str:
     # X-Forwarded-For only honoured if a reverse proxy set it (and the
@@ -664,6 +678,14 @@ async def auth_login(req: LoginRequest, request: Request):
     _now = time.time()
     _window = _LOGIN_FAILURES.get(_ip) or []
     _window = [t for t in _window if (_now - t) < _LOGIN_WINDOW_S]
+    # Per-username throttle. Same shape but wider window so it captures
+    # IP-rotating brute-force across hours, not just within 60 s. Keyed
+    # by the username the caller is TARGETING — not the configured
+    # one — so an attacker probing different usernames doesn't share a
+    # bucket with the real user.
+    _user_key = (req.username or "").strip().lower()[:64]
+    _user_window = _LOGIN_USER_FAILURES.get(_user_key) or []
+    _user_window = [t for t in _user_window if (_now - t) < _LOGIN_USER_WINDOW_S]
     if len(_window) >= _LOGIN_MAX_FAILURES:
         _retry_after = int(max(1, _LOGIN_WINDOW_S - (_now - _window[0])))
         # Emit an audit event so the brute-force attempt shows up in
@@ -672,17 +694,32 @@ async def auth_login(req: LoginRequest, request: Request):
             from intel.security import audit_log
             audit_log("auth_throttled", client=_ip,
                       window_failures=len(_window),
-                      retry_after_s=_retry_after)
+                      retry_after_s=_retry_after, reason="per_ip")
         except Exception:
             pass
         raise HTTPException(
             429, "too many failed login attempts — wait and retry",
             headers={"Retry-After": str(_retry_after)},
         )
+    if len(_user_window) >= _LOGIN_USER_MAX_FAILURES:
+        _retry_after = int(max(1, _LOGIN_USER_WINDOW_S - (_now - _user_window[0])))
+        try:
+            from intel.security import audit_log
+            audit_log("auth_throttled", client=_ip, username=_user_key,
+                      window_failures=len(_user_window),
+                      retry_after_s=_retry_after, reason="per_username")
+        except Exception:
+            pass
+        raise HTTPException(
+            429, "too many failed login attempts for this user — wait and retry",
+            headers={"Retry-After": str(_retry_after)},
+        )
     if not verify_credentials(req.username, req.password):
-        # Record this failure inside the sliding window.
+        # Record this failure inside both sliding windows.
         _window.append(_now)
         _LOGIN_FAILURES[_ip] = _window
+        _user_window.append(_now)
+        _LOGIN_USER_FAILURES[_user_key] = _user_window
         try:
             from intel.security import audit_log
             audit_log("auth_failure", username=(req.username or "").strip()[:64],
@@ -690,9 +727,10 @@ async def auth_login(req: LoginRequest, request: Request):
         except Exception:
             pass
         raise HTTPException(401, "invalid credentials")
-    # Successful login clears the failure window for this IP so a
-    # legitimate user who mistyped once isn't stuck for 60s.
+    # Successful login clears both failure windows so a legitimate
+    # user who mistyped once isn't stuck for 60s / 15 min.
     _LOGIN_FAILURES[_ip] = []
+    _LOGIN_USER_FAILURES[_user_key] = []
     request.session["auth_user"] = req.username.strip()
     # Log successful logins too — a security audit trail with only
     # failures is incomplete. An attacker who steals a credential and
@@ -1760,7 +1798,18 @@ async def _chat_stream(run_id: str, user_msg: str):
 
     provider = get_provider()
 
-    state = _results[run_id]
+    # _results is a BoundedDict capped at 500. The chat_send handler
+    # checks `run_id in _results` before constructing this generator,
+    # but the generator runs at first iteration of the StreamingResponse
+    # — by which time enough new analyses could have landed to evict
+    # this run. Use .get() and bail with an SSE error event instead of
+    # KeyErroring out of the generator (which would surface as a 500
+    # without the consistent SSE shape the frontend expects).
+    state = _results.get(run_id)
+    if state is None:
+        yield f"data: {json.dumps({'event': 'error', 'error': 'analysis result expired — re-run the analyze'})}\n\n"
+        yield "data: [DONE]\n\n"
+        return
     sys_msg = _build_chat_system_msg(state)
     history = _chats.get(run_id, [])
 
