@@ -119,6 +119,11 @@ def search_existing_sigma(techniques) -> List[dict]:
 def _search_existing_sigma_cached(targets: tuple) -> List[dict]:
     if not targets:
         return []
+    # Pre-lowercase the "attack.<tid>" needles once instead of recomputing
+    # text.lower() per technique per file — for 6 techniques across ~3500
+    # Sigma files that's the difference between 6 and 21,000 .lower()
+    # calls on a cold cache miss.
+    needles = tuple(f"attack.{t.lower()}" for t in targets)
     hits = []
     for f in _SIGMA_DIR.rglob("*.yml"):
         if len(hits) >= 20:
@@ -127,13 +132,14 @@ def _search_existing_sigma_cached(targets: tuple) -> List[dict]:
             text = f.read_text(encoding="utf-8", errors="ignore")
         except Exception:
             continue
+        text_lower = text.lower()
         # Tags appear as "attack.t1059.001" — cheap substring scan first to skip parsing
-        if not any(f"attack.{t}" in text.lower() for t in targets):
+        if not any(n in text_lower for n in needles):
             continue
         title = _scrape_yaml_field(text, "title")
         descr = _scrape_yaml_field(text, "description")
         level = _scrape_yaml_field(text, "level")
-        matched = [t for t in targets if f"attack.{t}" in text.lower()]
+        matched = [t for t, n in zip(targets, needles) if n in text_lower]
         hits.append({
             "path":         str(f.relative_to(_VENDOR)),
             "title":        title or f.stem,
