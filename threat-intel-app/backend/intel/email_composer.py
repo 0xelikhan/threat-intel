@@ -1758,12 +1758,17 @@ def compose(alert_type: str, parsed: Dict, options: Dict, config,
     template = load_template(alert_type)
     options = {**options, "alert_type": alert_type}
     signature_html = _build_signature_html(config)
+    # _signature_plain rebuilds a multi-line block from config on each
+    # call — pre-compute once and reuse, since both the {{Signature}}
+    # placeholder substitution and _inject_closing_text need the same
+    # value. Same shape as the signature_html one-shot just above.
+    signature_text = _signature_plain(config)
     replacements = _build_replacement_map(parsed or {}, options, signature_html, ip1, ip2)
 
     text = template
     for k, v in replacements.items():
         if k == "{{Signature}}":
-            text = text.replace(k, _signature_plain(config))
+            text = text.replace(k, signature_text)
         else:
             text = text.replace(k, v if v is not None else "")
 
@@ -1772,7 +1777,7 @@ def compose(alert_type: str, parsed: Dict, options: Dict, config,
     subject = _render_subject(alert_type, options, parsed or {})
     text = _strip_closing_block(text)
     html = _strip_closing_block_html(html)
-    text = _inject_closing_text(text, _signature_plain(config))
+    text = _inject_closing_text(text, signature_text)
     html = _inject_closing_html(html, signature_html)
     # Last-pass dash strip — catches anything injected after the AI body
     # was first sanitized (closing statement, signature line, future templates).
