@@ -31,6 +31,8 @@ _benign_sha256:   Set[str] = set()
 _benign_urls:     Set[str] = set()
 _list_sources:    dict = {}     # value -> source list name (for "removed because…" reasons)
 _loaded = False
+# Cached count snapshot produced once at load — see load_warninglists().
+_STATS_CACHE: "Optional[dict]" = None
 
 # Search vendor/ first (cloned via setup_vendor.sh), fall back to legacy local copy
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -47,10 +49,20 @@ def _pick_dir() -> Optional[Path]:
 
 
 def load_warninglists() -> dict:
-    """Idempotent loader. Returns a dict of counts per type."""
-    global _loaded
+    """Idempotent loader. Returns a dict of counts per type.
+
+    Short-circuits without recomputing _stats() when already loaded —
+    the per-check entry points (is_benign_ip/domain/hash/url) all call
+    this for the side-effect of "data is loaded" and discard the
+    return value. _stats() walks _list_sources to build a set
+    comprehension over thousands of entries, which used to cost ~48 ms
+    per call: for an alert with 10 IPs the redundant stat work added
+    nearly half a second to triage. _STATS_CACHE preserves the lazy
+    return shape for callers that genuinely want the counts (the
+    /api/status intel_layer rollup)."""
+    global _loaded, _STATS_CACHE
     if _loaded:
-        return _stats()
+        return _STATS_CACHE if _STATS_CACHE is not None else _stats()
 
     base = _pick_dir()
     if not base:
@@ -74,13 +86,13 @@ def load_warninglists() -> dict:
             continue
 
     _loaded = True
-    stats = _stats()
+    _STATS_CACHE = _stats()
     _log.info("loaded: %d IPs, %d CIDR ranges, %d domains, %d+%d+%d hashes, "
               "%d URLs from %d lists",
-              stats['ips'], stats['cidrs'], stats['domains'],
-              stats['md5'], stats['sha1'], stats['sha256'],
-              stats['urls'], stats['lists'])
-    return stats
+              _STATS_CACHE['ips'], _STATS_CACHE['cidrs'], _STATS_CACHE['domains'],
+              _STATS_CACHE['md5'], _STATS_CACHE['sha1'], _STATS_CACHE['sha256'],
+              _STATS_CACHE['urls'], _STATS_CACHE['lists'])
+    return _STATS_CACHE
 
 
 def _stats() -> dict:
@@ -135,11 +147,37 @@ def _ingest(list_type: str, name: str, values):
             _list_sources[v.lower()] = name
 
 
+# Bucket CIDRs by IPv4 first-octet so is_benign_ip only scans the
+# networks that COULD plausibly cover the target. MISP warninglists
+# ship ~100k CIDR entries (anycast / cloud / ISP ranges); without the
+# index every lookup walked all of them and the loop's `addr in net`
+# bit-math dominated triage even when the answer was no-match. IPv6
+# stays on the full list — it's a much smaller subset and the prefix
+# space is too large for a single-byte bucket.
+_benign_cidrs_by_octet: "dict[int, list]" = {}
+_benign_cidrs_v6:       List[ipaddress._BaseNetwork] = []
+
+
 def _add_cidr(value: str, name: str):
     try:
         net = ipaddress.ip_network(value, strict=False)
         _benign_cidrs.append(net)
         _list_sources[str(net)] = name
+        if isinstance(net, ipaddress.IPv4Network):
+            # A /N covers (32 - N) host bits. For prefix lengths >= 8 the
+            # first octet is fully determined; for < 8 the CIDR spans
+            # multiple /8 buckets so we register it in each.
+            if net.prefixlen >= 8:
+                first = (int(net.network_address) >> 24) & 0xFF
+                _benign_cidrs_by_octet.setdefault(first, []).append(net)
+            else:
+                # Rare: huge supernets. Pin to every /8 they cover.
+                start = (int(net.network_address) >> 24) & 0xFF
+                span  = 1 << (8 - net.prefixlen)
+                for o in range(start, start + span):
+                    _benign_cidrs_by_octet.setdefault(o, []).append(net)
+        else:
+            _benign_cidrs_v6.append(net)
     except Exception:
         pass
 
@@ -152,11 +190,19 @@ def is_benign_ip(ip: str) -> Tuple[bool, str]:
         return True, _list_sources.get(ip, "MISP warninglist")
     try:
         addr = ipaddress.ip_address(ip)
-        for net in _benign_cidrs:
+    except Exception:
+        return False, ""
+    if isinstance(addr, ipaddress.IPv4Address):
+        # First-octet bucket: walks only CIDRs whose network shares the
+        # target's /8 prefix. Empty bucket → no-match in O(1).
+        bucket = _benign_cidrs_by_octet.get((int(addr) >> 24) & 0xFF, ())
+        for net in bucket:
             if addr in net:
                 return True, _list_sources.get(str(net), "MISP CIDR")
-    except Exception:
-        pass
+    else:
+        for net in _benign_cidrs_v6:
+            if addr in net:
+                return True, _list_sources.get(str(net), "MISP CIDR")
     return False, ""
 
 
