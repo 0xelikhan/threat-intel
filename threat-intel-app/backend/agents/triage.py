@@ -200,6 +200,16 @@ _EXE_RE  = re.compile(
 _PATH_RE = re.compile(
     r"\b(?:[a-zA-Z]:\\|\\\\)[^\s\"'<>|*?\r\n]+|/(?:home|var|tmp|etc|usr|opt|root)/[^\s\"'<>|*?\r\n]+",
 )
+# Domain extractor — TLD-bounded so we don't grab arbitrary tokens.
+# Hoisted to module scope from inside extract_iocs() so we don't pay
+# the compile cost on every triage call.
+_URL_STRIP_RE = re.compile(r"https?://[^\s\"'<>\]\),]+")
+_DOMAIN_RE = re.compile(
+    r"\b(?:[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?\.)"
+    r"+(?:com|net|org|io|gov|edu|mil|co|uk|ru|cn|de|xyz|top|online|"
+    r"site|app|dev|cloud|tech|store|live|icu|pw|cc|me|tv|ws|mobi)\b",
+    re.IGNORECASE,
+)
 
 
 def extract_iocs(text: str) -> dict:
@@ -319,14 +329,8 @@ def extract_iocs(text: str) -> dict:
     # Domain extraction (TLD-bounded so we don't grab arbitrary words)
     norm = (text.replace("[.]", ".").replace("(dot)", ".")
             .replace("[://]", "://").replace("hxxp", "http"))
-    stripped = re.sub(r"https?://[^\s\"'<>\]\),]+", "", norm)
-    domain_re = re.compile(
-        r"\b(?:[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?\.)"
-        r"+(?:com|net|org|io|gov|edu|mil|co|uk|ru|cn|de|xyz|top|online|"
-        r"site|app|dev|cloud|tech|store|live|icu|pw|cc|me|tv|ws|mobi)\b",
-        re.IGNORECASE,
-    )
-    for d in domain_re.findall(stripped):
+    stripped = _URL_STRIP_RE.sub("", norm)
+    for d in _DOMAIN_RE.findall(stripped):
         d = d.lower()
         if not any(d == b or d.endswith("." + b) for b in BENIGN_DOMAINS):
             iocs["domains"].add(d)
