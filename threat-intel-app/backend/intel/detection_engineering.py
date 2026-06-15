@@ -16,6 +16,7 @@ installed they return empty / a clear error rather than raising.
 
 from __future__ import annotations
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import List, Tuple, Optional
 
@@ -106,6 +107,18 @@ def search_existing_sigma(techniques) -> List[dict]:
     targets = _technique_set(techniques)
     if not targets or not _SIGMA_DIR.exists():
         return []
+    # Cache by the sorted-tuple of target techniques. SigmaHQ ships ~3500
+    # rule files; without the cache, /api/detection re-walks rglob and
+    # reads every YAML on every call (back-to-back analyses on related
+    # alerts hit the same technique sets). Tuple key is hashable. Return
+    # a shallow copy so callers can't mutate the cached list.
+    return list(_search_existing_sigma_cached(tuple(sorted(targets))))
+
+
+@lru_cache(maxsize=64)
+def _search_existing_sigma_cached(targets: tuple) -> List[dict]:
+    if not targets:
+        return []
     hits = []
     for f in _SIGMA_DIR.rglob("*.yml"):
         if len(hits) >= 20:
@@ -137,6 +150,13 @@ def search_existing_elastic(techniques) -> List[dict]:
     Best-effort substring match on technique IDs."""
     targets = _technique_set(techniques)
     if not targets or not _ELASTIC_DIR.exists():
+        return []
+    return list(_search_existing_elastic_cached(tuple(sorted(targets))))
+
+
+@lru_cache(maxsize=64)
+def _search_existing_elastic_cached(targets: tuple) -> List[dict]:
+    if not targets:
         return []
     hits = []
     for f in _ELASTIC_DIR.rglob("*.toml"):
