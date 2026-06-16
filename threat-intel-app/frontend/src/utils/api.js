@@ -75,6 +75,11 @@ export async function apiFetch(url, options = {}) {
     headers: { ...(body && typeof body === 'string' ? { 'Content-Type': 'application/json' } : {}),
                ...headers },
     body,
+    // Always send the auth cookie. Same-origin in production (the frontend
+    // is served from the same FastAPI app) means cookies attach by default,
+    // but any cross-origin deployment (frontend on a CDN / behind a separate
+    // gateway) needs this explicit. Cheap to set, no downside on same-origin.
+    credentials: 'include',
     ...rest,
   };
 

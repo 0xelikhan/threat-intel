@@ -134,38 +134,89 @@ def _build():
 graph = _build()
 
 
-async def run_pipeline(raw_input: str, input_type: str = "log",
-                        analyst_feedback: str = "") -> dict:
-    """End-to-end pipeline driver. Used by /api/analyze/sync and the
-    skill registry — the streaming /api/analyze path builds its own
-    initial state because it interleaves SSE writes between stages.
+def make_initial_state(raw_input: str, input_type: str = "log",
+                        analyst_feedback: str = "") -> SOCState:
+    """Build a fresh SOCState with EVERY key in the type declaration
+    populated with a sensible default.
 
-    analyst_feedback: optional analyst-supplied verdict / context. When
-    non-empty the investigation prompt treats it as authoritative,
-    overriding AI inference when they conflict. Previously sync analyze
-    silently dropped this even though the request schema accepts it.
+    Single source of truth used by /api/analyze (SSE), /api/analyze/sync,
+    /api/analyze/clarify, and the skill registry — previously each call
+    site rolled its own dict and they drifted apart. The SSE builder in
+    main.py omitted ~18 keys that the type declares, so downstream agents
+    relied on `.get(key, default)` instead of indexing. That worked, but
+    the TypedDict became a documentation lie.
+
+    Inputs:
+      * raw_input        — analyst-pasted log / IOC text
+      * input_type       — "log" / "ioc" / "ioc_url" / "file_summary"
+      * analyst_feedback — optional analyst verdict / context block; the
+                           investigation prompt treats this as authoritative
+                           when present.
     """
-    initial: SOCState = {
+    return {
+        # Inputs
         "raw_input":             raw_input,
         "input_type":            input_type,
+        "analyst_feedback":      (analyst_feedback or "").strip(),
+
+        # Triage outputs
         "triage_score":          0.0,
         "iocs":                  {},
+        "suppressed_iocs":       {},
         "should_proceed":        False,
         "triage_reasoning":      "",
+        "behavioral_indicators": {},
+        "cross_refs":            {},
+        "email_analysis":        {},
+        "log_translation":       None,
+        "defender_parse":        None,
+        "multi_log":             {},
+        "log_count":             1,
+
+        # Enrichment outputs
         "enrichments":           {},
+        "confidence_scores":     {},
+        "iteration_count":       0,
+
+        # Investigation outputs
         "investigation_result":  {},
         "mitre_techniques":      [],
         "threat_level":          "INFORMATIONAL",
         "confidence":            0.0,
         "needs_more_enrichment": False,
+        "malware_family":        "",
+        "threat_actor":          {},
+        "campaign":              "",
+        "attack_stage":          "",
+        "geopolitical":          {},
+        "tool_call_log":         [],
+        "log_correlation":       None,
+        "analyst_answers":       {},
+        "clarifying_questions":  [],
+        "context_impact":        "",
+
+        # Response outputs
         "sigma_rule":            "",
         "kql_query":             "",
         "response_summary":      {},
         "stix_bundle":           {},
+        "gti_scores":            {},
+
+        # Cross-stage observability
         "agent_trace":           [],
-        "iteration_count":       0,
-        "cross_refs":            {},
-        "email_analysis":        {},
-        "analyst_feedback":      (analyst_feedback or "").strip(),
     }
-    return await graph.ainvoke(initial)
+
+
+async def run_pipeline(raw_input: str, input_type: str = "log",
+                        analyst_feedback: str = "") -> dict:
+    """End-to-end pipeline driver. Used by /api/analyze/sync and the
+    skill registry — the streaming /api/analyze path uses make_initial_state
+    too but interleaves SSE writes between stages itself.
+
+    analyst_feedback: optional analyst-supplied verdict / context. When
+    non-empty the investigation prompt treats it as authoritative,
+    overriding AI inference when they conflict.
+    """
+    return await graph.ainvoke(
+        make_initial_state(raw_input, input_type, analyst_feedback)
+    )

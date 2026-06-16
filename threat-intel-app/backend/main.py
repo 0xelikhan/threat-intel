@@ -909,33 +909,13 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
     _bg_tasks: list[asyncio.Task] = []
 
     try:
-        # Initial state matches SOCState shape
-        state = {
-            "raw_input":             raw_input,
-            "input_type":            input_type,
-            "triage_score":          0.0,
-            "iocs":                  {},
-            "should_proceed":        False,
-            "triage_reasoning":      "",
-            "enrichments":           {},
-            "investigation_result":  {},
-            "mitre_techniques":      [],
-            "threat_level":          "INFORMATIONAL",
-            "confidence":            0.0,
-            "needs_more_enrichment": False,
-            "sigma_rule":            "",
-            "kql_query":             "",
-            "response_summary":      {},
-            "stix_bundle":           {},
-            "agent_trace":           [],
-            "iteration_count":       0,
-            "cross_refs":            {},
-            "email_analysis":        {},
-            # Analyst-provided verdict / context — when non-empty the
-            # investigation prompt treats it as authoritative, overriding
-            # AI inference when they conflict.
-            "analyst_feedback":      (analyst_feedback or "").strip(),
-        }
+        # Centralised initial-state builder lives in orchestrator.py so the
+        # streaming and sync paths can't drift apart. Includes every key
+        # the SOCState TypedDict declares — including the ones populated
+        # by later stages — so downstream `state[key]` reads see a typed
+        # default instead of falling back to `.get(key, default)`.
+        from agents.orchestrator import make_initial_state
+        state = make_initial_state(raw_input, input_type, analyst_feedback)
 
         # ── Stage 1: TRIAGE ──────────────────────────────────────────────────
         state = await run_triage(state)
@@ -1092,14 +1072,11 @@ async def analyze_sync(req: AnalyzeRequest):
     if not config.is_configured():
         raise HTTPException(503, "Add API keys in Settings first.")
     run_id = str(uuid.uuid4())
-    # Forward analystFeedback to the pipeline; the schema accepts it and
-    # the streaming endpoint already threads it through, but sync had
-    # been silently dropping it (run_pipeline previously didn't accept
-    # the kwarg).
+    # run_pipeline now drives the full triage → enrichment → investigation
+    # → response graph, and run_response computes gti_scores onto state.
+    # No post-hoc mutation here — the agent contract owns its output keys.
     state = await run_pipeline(req.logText, req.inputType,
                                 analyst_feedback=req.analystFeedback or "")
-    gti_scores = compute_gti_scores(state.get("enrichments", {}))
-    state["gti_scores"] = gti_scores
     _results[run_id] = state
     result = {k: v for k, v in state.items() if k != "stix_bundle"}
     result.update({"runId": run_id})
@@ -1114,7 +1091,15 @@ class ClarifyRequest(BaseModel):
 async def analyze_clarify(run_id: str, req: ClarifyRequest):
     """Spec §5 Phase 2: re-run investigation with analyst answers to clarifying
     questions. Re-uses the original triage/enrichment state — only the AI
-    investigation step runs again, with analyst_answers appended to the prompt."""
+    investigation step runs again, with analyst_answers appended to the prompt.
+
+    Consumed by: documented in /api/docs as part of the public REST surface.
+    The frontend wires the analyst-feedback re-run through /api/analyze itself
+    (with `analystFeedback` in the body) instead of through this endpoint —
+    they're equivalent paths to the same outcome, kept distinct so external
+    tooling can re-run just the investigation step without re-paying the
+    enrichment fan-out.
+    """
     if run_id not in _results:
         raise HTTPException(404, f"unknown run_id {run_id}")
     if not req.answers:
@@ -1273,7 +1258,15 @@ async def attribution_hashes(family: str, limit: int = 10):
 # ─── GTI SCORE ───────────────────────────────────────────────────────────────────
 @app.post("/api/gti-score")
 async def gti_score_standalone(req: GTIScoreRequest):
-    """Compute GTI-style threat scores from enrichment data without running the full pipeline."""
+    """Compute GTI-style threat scores from enrichment data without running
+    the full pipeline.
+
+    Consumed by: external tooling — SIEM playbooks / scripts that have
+    already gathered enrichment data and want a deterministic scoring
+    layer on top. The frontend reads `gti_scores` directly off the
+    /api/analyze result instead (run_response now writes them onto
+    state), so it doesn't need this standalone endpoint.
+    """
     scores = compute_gti_scores(req.enrichments)
     highest = get_highest_score(scores)
     return {
@@ -2164,7 +2157,16 @@ async def scan_file(file: UploadFile = File(...)):
     """Hash + YARA-scan a binary. Returns hashes, file metadata, and matched rules.
 
     Spec §9: validates magic bytes (not just extension), enforces 50MB cap,
-    audit-logs every upload."""
+    audit-logs every upload.
+
+    Consumed by: external tooling. The hyphenated path is the legacy
+    spelling kept stable for curl scripts / SIEM playbooks documented
+    against /api/docs. The frontend's File Scanner uses /api/scan/file
+    (slash) instead, which carries the richer source-code-mode / capability
+    / AI-analyst output. Keep both — removing the hyphen form would break
+    every external script that hit this surface before the slash form
+    existed.
+    """
     import hashlib
     data = await file.read()
     if not data:
@@ -3056,7 +3058,14 @@ async def scan_feedback_list(scan_id: Optional[str] = None):
 
 @app.get("/api/sandbox/{sha256}")
 async def sandbox_lookup(sha256: str):
-    """Hash-only lookup against configured cloud sandboxes."""
+    """Hash-only lookup against configured cloud sandboxes.
+
+    Consumed by: external tooling. The frontend's File Scanner polls
+    /api/sandbox/result/{sha256} (in routers/sandbox.py) instead — that's
+    the auto-submission status poll, this is the on-demand "do you already
+    have a report for this hash?" probe used by SIEM playbooks before
+    bothering to upload the sample.
+    """
     if len(sha256) != 64:
         raise HTTPException(400, "Provide a SHA-256 hash (64 hex chars).")
     try:
@@ -3350,7 +3359,13 @@ def _build_report(run_id: str, state: dict) -> dict:
 
 @app.get("/api/report/{run_id}")
 async def report_full(run_id: str):
-    """Spec §10: full structured report for the front-end + export buttons."""
+    """Spec §10: full structured report for export tooling.
+
+    Consumed by: external tooling and the planned ReportView export. The
+    in-app analyst report renders directly from the /api/analyze result —
+    this endpoint exists so scripts / case-management integrations can
+    re-fetch a normalised report shape by run_id.
+    """
     if run_id not in _results:
         raise HTTPException(404, "Run not found")
     return _build_report(run_id, _results[run_id])
@@ -3358,7 +3373,11 @@ async def report_full(run_id: str):
 
 @app.get("/api/report/{run_id}/markdown")
 async def report_markdown(run_id: str):
-    """Spec §10: Markdown report for pasting into Jira / Confluence / Slack."""
+    """Spec §10: Markdown report for pasting into Jira / Confluence / Slack.
+
+    Consumed by: external tooling. Same purpose as /api/report/{run_id} but
+    rendered as markdown so the body is paste-ready.
+    """
     if run_id not in _results:
         raise HTTPException(404, "Run not found")
     r = _build_report(run_id, _results[run_id])
@@ -3416,6 +3435,13 @@ async def report_markdown(run_id: str):
 # in-memory _results store.
 @app.get("/api/history/{run_id}")
 async def get_history_item(run_id: str):
+    """Re-fetch the structured result for a previously analysed run.
+
+    Consumed by: external tooling / case-management integrations that
+    cached a runId and want to refresh the verdict + IOCs without
+    re-running the pipeline. The frontend never lost its in-memory copy
+    of the result so it doesn't need to re-fetch.
+    """
     if run_id not in _results:
         raise HTTPException(404, "Run not found")
     return {k: v for k, v in _results[run_id].items() if k != "stix_bundle"}
