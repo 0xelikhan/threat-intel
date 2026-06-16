@@ -99,11 +99,13 @@ _REGISTRY: Dict[str, Dict[str, str]] = {
 
     # ── Per-source key configuration ──────────────────────────────────────────
     "CENSYS_INCOMPLETE": {
-        "detail":    "Censys requires both an API ID and a secret.",
+        "detail":    "Censys requires a Personal Access Token, or both the legacy ID + Secret.",
         "error_code": "censys_incomplete",
-        "fix_hint":  ("Open Settings and add BOTH the CENSYS_ID and CENSYS_SECRET "
-                      "from your Censys account → API page. One without the other "
-                      "won't authenticate."),
+        "fix_hint":  ("Open Settings and add CENSYS_API_KEY (the v3 Personal "
+                      "Access Token, recommended) from your Censys account → "
+                      "API page. If you're still on the legacy v2 API, set "
+                      "BOTH CENSYS_ID and CENSYS_SECRET — one without the "
+                      "other won't authenticate."),
     },
     "VT_KEY_MISSING": {
         "detail":    "VirusTotal API key is not configured.",

@@ -329,11 +329,16 @@ def _all_keys(config) -> dict:
         "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "IPINFO_TOKEN", "GREYNOISE_KEY",
         "OTX_KEY", "URLSCAN_KEY", "PULSEDIVE_KEY",
         "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY", "HYBRID_ANALYSIS_KEY",
-        "CENSYS_API_ID", "CENSYS_API_SECRET", "CENSYS_PERSONAL_ACCESS_TOKEN",
+        # Censys: PAT-first, legacy v2 ID/Secret pair as the configured
+        # fallback. Both are registered in config.py — the previously-used
+        # CENSYS_API_ID / CENSYS_API_SECRET / CENSYS_PERSONAL_ACCESS_TOKEN
+        # names were not registered anywhere, so the AI tool's Censys
+        # lookups silently never authenticated.
+        "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET",
         "CROWDSEC_KEY", "CRIMINAL_IP_KEY", "PROXYCHECK_KEY",
         "WHOISXML_KEY", "GOOGLE_API_KEY", "FULLHUNT_KEY",
         "MALTIVERSE_KEY", "OPENCTI_URL", "OPENCTI_TOKEN",
-        "PHISHTANK_KEY",
+        "PHISHTANK_KEY", "HONEYPOT_KEY",
     )}
 
 

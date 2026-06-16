@@ -3960,10 +3960,11 @@ async def _gather_email_enrichment(log_text: str, parsed: Dict,
             "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
             "HYBRID_ANALYSIS_KEY",
             "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY",
-            "CENSYS_API_ID", "CENSYS_API_SECRET", "CENSYS_PERSONAL_ACCESS_TOKEN",
+            # Canonical Censys names — PAT first, legacy v2 pair as fallback.
+            "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET",
             "CROWDSEC_KEY", "CRIMINAL_IP_KEY", "PROXYCHECK_KEY",
             "FULLHUNT_KEY", "OPENCTI_URL", "OPENCTI_TOKEN",
-            "PHISHTANK_KEY",
+            "PHISHTANK_KEY", "HONEYPOT_KEY",
         )}
 
         import aiohttp as _aiohttp
