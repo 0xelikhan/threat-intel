@@ -154,6 +154,53 @@ _RULES = [
     ("PDF Launch Action", "T1204.002", "Execution",
      "PDF contains a /Launch action — can execute commands on open.",
      lambda r: bool((r.get("format_specific") or {}).get("pdf", {}).get("launch_actions"))),
+    # ── Source-code shellcode injection ──────────────────────────────────────
+    # Fires on a SOURCE file containing both a RWX VirtualAlloc and a
+    # thread-spawn primitive. The PE-import T1055 rule above can't see
+    # this because there are no imports — we're looking at the source code
+    # that COMPILES to the loader, not the loader binary itself. Treated
+    # as a high-signal technique: paired with anything else it forces the
+    # MALICIOUS verdict via the elevator below.
+    ("Shellcode Injection (Source)", "T1055", "Defense Evasion",
+     "Source allocates RWX memory and spawns a thread pointing at it — "
+     "classic shellcode-loader pattern (red team / commodity-loader build).",
+     lambda r: _has_sus_string(r, "src_virtualalloc_rwx")
+               and _has_sus_string(r, "src_create_thread")),
+    # ── Source-code dropper ──────────────────────────────────────────────────
+    # An HTTP download call paired with ANY in-memory execution primitive.
+    # Catches Nim/C downloaders that grab a stager off an attacker-hosted
+    # URL and inject it; catches Python loaders that subprocess-exec the
+    # b64-decoded payload; catches PowerShell IEX cradles.
+    ("Source Dropper", "T1105", "Command and Control",
+     "Source downloads a remote payload and executes / injects it — "
+     "dropper / stager pattern.",
+     lambda r: _has_sus_string(r, "src_http_download_call") and (
+         _has_sus_string(r, "src_virtualalloc_rwx")
+         or _has_sus_string(r, "src_create_thread")
+         or _has_sus_string(r, "src_py_subprocess")
+         or _has_sus_string(r, "src_ps_iex_download")
+         or _has_sus_string(r, "src_inline_asm")
+     )),
+    # ── PowerShell IEX-download cradle ───────────────────────────────────────
+    ("PowerShell Download Cradle (Source)", "T1059.001", "Execution",
+     "PowerShell source contains an IEX / Invoke-Expression call on a "
+     "DownloadString / DownloadFile result — canonical download-and-execute "
+     "PowerShell loader.",
+     lambda r: _has_sus_string(r, "src_ps_iex_download")),
+    # ── Python encoded subprocess execution ──────────────────────────────────
+    ("Python Encoded Execution (Source)", "T1059.006", "Execution",
+     "Python source combines base64 decoding with subprocess execution — "
+     "matches the standard encoded-payload exec pattern.",
+     lambda r: _has_sus_string(r, "src_py_subprocess")
+               and _has_sus_string(r, "src_py_b64_decode")),
+    # ── Nim winim import ─────────────────────────────────────────────────────
+    # On its own, importing winim is not malicious — but as a tag it tells
+    # the analyst this Nim file is touching Windows internals. Adds the
+    # capability label without claiming a technique by itself.
+    ("Windows Internals (Nim)", "T1106", "Execution",
+     "Nim source imports winim — the Windows API binding. Common in "
+     "Nim-based loaders / red-team tooling.",
+     lambda r: _has_sus_string(r, "src_nim_winim")),
 ]
 
 
@@ -178,9 +225,25 @@ def build_capability_assessment(result: Dict) -> Dict:
     # Plain-English summary
     summary = _build_summary(tags, result)
 
-    # Heuristic verdict from capability count
+    # Heuristic verdict from capability count.
+    #
+    # The default thresholds (>=5 → MALICIOUS, >=2 → SUSPICIOUS) are tuned
+    # for binary samples where individual techniques are noisier (a single
+    # imphash-driven Anti-Debug rule can fire on a benign installer). Source
+    # files behave differently: the rules that fire on them are tight
+    # specific tradecraft (RWX-thread loader, IEX-download cradle), so when
+    # any of those high-signal techniques fire alongside even one other
+    # technique we elevate to MALICIOUS without waiting for five.
+    _HIGH_SIGNAL_TIDS = {
+        "T1055",       # Process / shellcode injection
+        "T1059.001",   # PowerShell IEX-download cradle
+        "T1059.006",   # Python encoded execution
+        "T1486",       # Crypto / ransomware
+        "T1003",       # Credential dumping
+    }
+    has_high_signal = any(t["id"] in _HIGH_SIGNAL_TIDS for t in techniques)
     verdict = "UNKNOWN"
-    if len(techniques) >= 5:
+    if len(techniques) >= 5 or (has_high_signal and len(techniques) >= 2):
         verdict = "MALICIOUS"
     elif len(techniques) >= 2:
         verdict = "SUSPICIOUS"

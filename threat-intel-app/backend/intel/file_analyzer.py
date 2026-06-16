@@ -61,6 +61,60 @@ _EXTENSION_TYPE_HINTS = {
     "py":  "text/x-python",
     "sh":  "text/x-shellscript",
     "eml": "message/rfc822",
+    # Source-code extensions — analysts upload these when triaging
+    # commodity loaders / red-team samples / GitHub-borrowed snippets.
+    # The bytes are plain ASCII with no PE header, so analysis switches
+    # to source-mode patterns instead of PE-import predicates.
+    "nim":  "text/x-nim",
+    "c":    "text/x-csrc",
+    "cpp":  "text/x-c++src",
+    "cc":   "text/x-c++src",
+    "cs":   "text/x-csharp",
+    "go":   "text/x-go",
+    "rs":   "text/x-rust",
+    "asm":  "text/x-asm",
+    "java": "text/x-java",
+    "rb":   "text/x-ruby",
+    "pl":   "text/x-perl",
+    "lua":  "text/x-lua",
+    "psm1": "text/x-powershell",
+    "psd1": "text/x-powershell",
+    "hta":  "application/hta",
+    "wsf":  "text/x-vbs",
+    "jse":  "application/javascript",
+    "vbe":  "text/x-vbs",
+}
+
+
+# Map source-code extension to a human-readable language label. Drives the
+# `file_type` source-code banner the frontend renders so analysts know
+# they're looking at static *code* analysis, not PE byte analysis.
+_SOURCE_LANG_BY_EXT = {
+    "nim":  "Nim",
+    "c":    "C",
+    "cpp":  "C++",
+    "cc":   "C++",
+    "cs":   "C#",
+    "go":   "Go",
+    "rs":   "Rust",
+    "asm":  "Assembly",
+    "java": "Java",
+    "rb":   "Ruby",
+    "pl":   "Perl",
+    "lua":  "Lua",
+    "py":   "Python",
+    "ps1":  "PowerShell",
+    "psm1": "PowerShell",
+    "psd1": "PowerShell",
+    "vbs":  "VBScript",
+    "vbe":  "VBScript",
+    "wsf":  "Windows Script",
+    "js":   "JavaScript",
+    "jse":  "JavaScript",
+    "bat":  "Batch",
+    "cmd":  "Batch",
+    "sh":   "Shell",
+    "hta":  "HTML Application",
 }
 
 
@@ -82,6 +136,7 @@ def _detect_type(file_bytes: bytes, filename: str) -> Dict:
         mime = _fallback_magic(file_bytes)
         desc = ""
     mismatch = bool(claimed != "unknown" and not _types_compatible(mime, claimed))
+    is_source, lang = _detect_source_code(file_bytes, claimed_ext, mime)
     return {
         "detected_mime":   mime,
         "detected_desc":   desc[:240] if desc else None,
@@ -94,7 +149,53 @@ def _detect_type(file_bytes: bytes, filename: str) -> Dict:
             if mismatch else None
         ),
         "category":        _category_from_mime(mime, claimed_ext),
+        "is_source_code":  is_source,
+        "source_language": lang,
     }
+
+
+def _detect_source_code(file_bytes: bytes, claimed_ext: str, mime: str) -> Tuple[bool, str]:
+    """Source-code detection. Two signals, either is sufficient:
+
+      1. Claimed extension is in `_SOURCE_LANG_BY_EXT` — analyst literally
+         told us this is `foo.nim`.
+      2. The bytes start with neither MZ/ELF/PK/PDF/OLE/RAR/7z/gzip nor any
+         other recognised binary magic AND >95% of the head is printable
+         ASCII or common whitespace. Catches `.txt`-renamed or extensionless
+         source dumps.
+
+    Returns (is_source_code, language_label). Language label falls back to
+    "Source Code" when we can detect source-ness without knowing the
+    specific language."""
+    if claimed_ext in _SOURCE_LANG_BY_EXT:
+        return True, _SOURCE_LANG_BY_EXT[claimed_ext]
+    if not file_bytes:
+        return False, ""
+    head = file_bytes[:16]
+    # Any of these magic prefixes → binary file, not source.
+    binary_magics = (b"MZ", b"\x7fELF", b"PK\x03\x04", b"%PDF-",
+                     b"\xD0\xCF\x11\xE0", b"Rar!", b"7z\xBC\xAF\x27\x1C",
+                     b"\x1F\x8B", b"\xFF\xD8\xFF", b"\x89PNG", b"GIF8",
+                     b"BM")
+    if any(head.startswith(m) for m in binary_magics):
+        return False, ""
+    # Score the first 4 KiB on printable-ASCII ratio.
+    sample = file_bytes[:4096]
+    printable = sum(1 for b in sample
+                    if (0x20 <= b <= 0x7E) or b in (0x09, 0x0A, 0x0D))
+    if not sample:
+        return False, ""
+    ratio = printable / len(sample)
+    if ratio >= 0.95:
+        # Mime hints help refine the language when extension is missing.
+        if "powershell" in (mime or ""):
+            return True, "PowerShell"
+        if "python" in (mime or ""):
+            return True, "Python"
+        if (mime or "").startswith("text/x-"):
+            return True, (mime.split("text/x-", 1)[-1].title() or "Source Code")
+        return True, "Source Code"
+    return False, ""
 
 
 _EQUIVALENT_MIMES = [
@@ -441,13 +542,89 @@ _SUSPICIOUS_PATTERNS = [
 ]
 
 
-def _suspicious_string_hits(strings_dict: Dict) -> List[Dict]:
+# ─── source-code suspicious patterns ──────────────────────────────────────────
+# Patterns scanned ONLY when the input was identified as source code by
+# `_detect_source_code()`. Each one names a specific malware-development
+# tradecraft (RWX allocator + thread starter, HTTP loader, PowerShell IEX
+# cradle, Python b64 subprocess exec, …) that string-extraction alone can
+# match because the entire file is text. Used by `file_capability_map`
+# to drive T1055 / T1105 / T1059.001 / T1059.006 mappings without needing
+# PE imports.
+_SOURCE_PATTERNS = [
+    # VirtualAlloc / VirtualAllocEx with PAGE_EXECUTE_READWRITE protection
+    # — the classic RWX shellcode allocator. The DOTALL match lets the
+    # protection constant sit on the next line from the call.
+    ("src_virtualalloc_rwx",   re.compile(
+        r"VirtualAlloc(?:Ex)?\b[^;{}]*PAGE_EXECUTE_READWRITE", re.IGNORECASE | re.DOTALL)),
+    # Thread-spawn primitives. NT-level variants are red-team idioms.
+    ("src_create_thread",      re.compile(
+        r"\b(?:CreateThread|CreateRemoteThread|RtlCreateUserThread|NtCreateThreadEx)\b",
+        re.IGNORECASE)),
+    # WaitForSingleObject paired with thread handles is the standard wait
+    # after dispatching shellcode-as-thread. On its own benign; combined
+    # with create_thread + virtualalloc_rwx it's loader-shaped.
+    ("src_wait_thread",        re.compile(r"\bWaitForSingleObject\b", re.IGNORECASE)),
+    # Generic HTTP file-download call across languages: Nim httpclient
+    # (downloadFile), .NET (DownloadFile / DownloadString), Python
+    # (urllib.request.urlretrieve / requests.get), shell utilities
+    # (curl / wget), Go (http.Get).
+    ("src_http_download_call", re.compile(
+        r"\.downloadFile\b|\.DownloadString\b|WebClient\b|"
+        r"urlretrieve\(|requests\.get\(|http\.Get\(|"
+        r"\bcurl\s+[-a-zA-Z0-9]*\s*['\"]?https?://|\bwget\s+['\"]?https?://",
+        re.IGNORECASE)),
+    # Nim + winim — Nim's Windows API binding pulled into a source file
+    # is a strong "this targets Windows internals" signal. Not malicious
+    # on its own but raises the prior on shellcode patterns.
+    ("src_nim_winim",          re.compile(
+        r"^\s*import\s+winim\b|^\s*import\s+winim/", re.IGNORECASE | re.MULTILINE)),
+    # PowerShell IEX cradle — Invoke-Expression on a DownloadString result
+    # is the canonical `iex (New-Object Net.WebClient).DownloadString(...)`
+    # download-and-execute payload.
+    ("src_ps_iex_download",    re.compile(
+        r"\b(?:iex|Invoke-Expression)\b[^\r\n]{0,200}\bDownload(?:String|File|Data)\b",
+        re.IGNORECASE)),
+    # Python subprocess invocation. Benign in many contexts but a strong
+    # signal when paired with base64 decoding (next pattern).
+    ("src_py_subprocess",      re.compile(
+        r"\bsubprocess\.(?:Popen|run|call|check_output|check_call)\b", re.IGNORECASE)),
+    # Python base64 decode. Same — benign alone, malicious when paired
+    # with subprocess execution of the decoded payload.
+    ("src_py_b64_decode",      re.compile(
+        r"\bbase64\.(?:b64decode|standard_b64decode|urlsafe_b64decode)\b",
+        re.IGNORECASE)),
+    # ctypes-loaded WinAPI + memory-protection constants — Python loader
+    # shape (ctypes.windll.kernel32.VirtualAlloc + RWX).
+    ("src_py_ctypes_winapi",   re.compile(
+        r"ctypes\.windll\.kernel32\.|ctypes\.WINFUNCTYPE\b", re.IGNORECASE)),
+    # C / C++ low-level memory + thread primitives — same loader shape
+    # without language-specific framing.
+    ("src_memcpy_rwx",         re.compile(
+        r"\b(?:memcpy|RtlCopyMemory|copyMem)\b[^;]{0,80}\bPAGE_EXECUTE",
+        re.IGNORECASE | re.DOTALL)),
+    # Inline-assembly markers — strong signal a source file embeds shellcode.
+    ("src_inline_asm",         re.compile(
+        r"\b__asm__\b|\b__asm\b|\basm\s*\(", re.IGNORECASE)),
+]
+
+
+def _suspicious_string_hits(strings_dict: Dict, source_code: bool = False) -> List[Dict]:
     joined = _joined_strings(strings_dict)
     hits = []
     for name, rex in _SUSPICIOUS_PATTERNS:
         m = rex.search(joined)
         if m:
             hits.append({"pattern": name, "match": m.group(0)[:140]})
+    # Source-code patterns run unconditionally on text/source files. They're
+    # specific enough (RWX VirtualAlloc, IEX DownloadString, ctypes.windll,
+    # …) that false positives on real binaries are vanishingly rare — but
+    # we still gate on source_code so we don't pay the regex cost on big
+    # PE blobs.
+    if source_code:
+        for name, rex in _SOURCE_PATTERNS:
+            m = rex.search(joined)
+            if m:
+                hits.append({"pattern": name, "match": m.group(0)[:140]})
     return hits
 
 
@@ -473,13 +650,38 @@ def analyze_file(file_bytes: bytes, filename: str = "uploaded") -> Dict:
     entropy   = _entropy_analysis(file_bytes)
     strings   = _extract_strings(file_bytes)
     iocs      = _all_iocs(strings)
-    sus       = _suspicious_string_hits(strings)
+    is_source = bool(type_info.get("is_source_code"))
+    sus       = _suspicious_string_hits(strings, source_code=is_source)
+
+    # Top-level `file_type` is the discrimination the frontend uses to
+    # render either the PE/binary analysis card or the source-code banner.
+    # When the input is source code, also surface the language as a
+    # human-readable label and a short banner sentence so the UI doesn't
+    # have to know how to phrase it.
+    if is_source:
+        lang = type_info.get("source_language") or "Source Code"
+        file_type = "source_code"
+        file_type_label = f"{lang} source code"
+        file_type_banner = (
+            f"{lang} source code detected — performing static code analysis "
+            f"(string patterns, hardcoded IOCs, dangerous API combinations) "
+            f"rather than PE / ELF byte analysis."
+        )
+    else:
+        file_type = (type_info.get("category") or "binary")
+        file_type_label = (type_info.get("detected_desc")
+                           or type_info.get("detected_mime")
+                           or "binary")
+        file_type_banner = None
 
     result = {
         "filename":           filename,
         "size":               len(file_bytes),
         "analyzed_at":        started.isoformat(),
         "type":               type_info,
+        "file_type":          file_type,
+        "file_type_label":    file_type_label,
+        "file_type_banner":   file_type_banner,
         "hashes":             hashes,
         "entropy":            entropy,
         "strings":            {
@@ -552,9 +754,21 @@ def _synthesize_verdict(result: Dict) -> Tuple[str, int]:
     sus_count = len(result.get("suspicious_strings") or [])
     score += min(25, sus_count * 5)
     cap = (result.get("capabilities") or {}).get("verdict")
-    if cap == "MALICIOUS":   score += 20
-    elif cap == "SUSPICIOUS": score += 10
+    if cap == "MALICIOUS":
+        score += 20
+    elif cap == "SUSPICIOUS":
+        score += 10
     score = min(100, score)
+    # Capability MALICIOUS already encodes the holistic high-signal read
+    # (T1055 / T1003 / T1486 etc. via the file_capability_map elevator).
+    # Trust it directly — the per-signal score above only adds
+    # corroboration; it should not contradict the capability verdict by
+    # downgrading to SUSPICIOUS just because YARA didn't match a known-
+    # malware rule (modern source-code loaders / commodity payloads
+    # routinely have no YARA hit). Keeps the numeric score for the
+    # confidence bar but stamps the final label from the capability map.
+    if cap == "MALICIOUS":
+        return "MALICIOUS", max(score, 80)
     if score >= 75: verdict = "MALICIOUS"
     elif score >= 45: verdict = "SUSPICIOUS"
     elif score >= 15: verdict = "LOW"
