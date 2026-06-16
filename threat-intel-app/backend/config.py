@@ -181,13 +181,61 @@ API_KEY_DEFINITIONS = {
     },
     "CENSYS_API_KEY": {
         "label": "Censys API Key (Personal Access Token)",
-        "description": "Censys v2 Personal Access Token — single token sent "
+        "description": "Censys v3 Personal Access Token — single token sent "
                        "as a Bearer header. Replaces the legacy API ID + "
-                       "Secret pair. Free tier: 250 queries/month. Generate "
-                       "at https://search.censys.io/account/api.",
+                       "Secret pair (the legacy pair is still accepted as a "
+                       "fallback for older deployments). Free tier: 250 "
+                       "queries/month. Generate at "
+                       "https://search.censys.io/account/api.",
         "required": False,
         "url": "https://search.censys.io/account/api",
         "placeholder": "Censys Personal Access Token",
+        "group": "API Keys"
+    },
+    "CENSYS_ID": {
+        "label": "Censys API ID (legacy v2)",
+        "description": "Legacy Censys v2 search.censys.io API ID. Paired "
+                       "with CENSYS_SECRET. Only set this if you have not "
+                       "migrated to the v3 Personal Access Token above. The "
+                       "enrichment code prefers CENSYS_API_KEY when both "
+                       "are present.",
+        "required": False,
+        "url": "https://search.censys.io/account/api",
+        "placeholder": "Censys API ID",
+        "group": "API Keys"
+    },
+    "CENSYS_SECRET": {
+        "label": "Censys API Secret (legacy v2)",
+        "description": "Legacy Censys v2 search.censys.io API Secret. Paired "
+                       "with CENSYS_ID. Only set this if you have not "
+                       "migrated to the v3 Personal Access Token above.",
+        "required": False,
+        "url": "https://search.censys.io/account/api",
+        "placeholder": "Censys API Secret",
+        "group": "API Keys"
+    },
+    "GOOGLE_API_KEY": {
+        "label": "Google Safe Browsing API Key",
+        "description": "Google Cloud API key with the Safe Browsing v4 API "
+                       "enabled. Enriches IPs / domains / URLs with the "
+                       "Google block-page threat-type signal. Free tier "
+                       "covers the typical analyst-volume usage; enable at "
+                       "https://console.cloud.google.com/apis/library/safebrowsing.googleapis.com.",
+        "required": False,
+        "url": "https://console.cloud.google.com/apis/library/safebrowsing.googleapis.com",
+        "placeholder": "AIza...",
+        "group": "API Keys"
+    },
+    "HONEYPOT_KEY": {
+        "label": "Project Honeypot HTTP:BL Key",
+        "description": "Project Honeypot HTTP:BL access key (free with "
+                       "registration). Enriches IPs with Project Honeypot's "
+                       "spamhaus-style verdict (spam source / dictionary "
+                       "attack / harvester). Register at "
+                       "https://www.projecthoneypot.org/httpbl_configure.php.",
+        "required": False,
+        "url": "https://www.projecthoneypot.org/httpbl_configure.php",
+        "placeholder": "Project Honeypot HTTP:BL key",
         "group": "API Keys"
     },
     "HYBRID_ANALYSIS_KEY": {

@@ -3584,9 +3584,10 @@ async def email_compose_ai(req: EmailComposeAIRequest):
         "HYBRID_ANALYSIS_KEY": config.get("HYBRID_ANALYSIS_KEY"),
         "MALWAREBAZAAR_API_KEY": config.get("MALWAREBAZAAR_API_KEY"),
         "ABUSECH_AUTH_KEY":   config.get("ABUSECH_AUTH_KEY"),
-        "CENSYS_API_ID":      config.get("CENSYS_API_ID"),
-        "CENSYS_API_SECRET":  config.get("CENSYS_API_SECRET"),
-        "CENSYS_PERSONAL_ACCESS_TOKEN": config.get("CENSYS_PERSONAL_ACCESS_TOKEN"),
+        # Canonical Censys names — PAT first, legacy v2 pair as fallback.
+        "CENSYS_API_KEY":     config.get("CENSYS_API_KEY"),
+        "CENSYS_ID":          config.get("CENSYS_ID"),
+        "CENSYS_SECRET":      config.get("CENSYS_SECRET"),
         "CROWDSEC_KEY":       config.get("CROWDSEC_KEY"),
         "CRIMINAL_IP_KEY":    config.get("CRIMINAL_IP_KEY"),
         "PROXYCHECK_KEY":     config.get("PROXYCHECK_KEY"),

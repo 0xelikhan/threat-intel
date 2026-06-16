@@ -306,16 +306,6 @@ function CollapsibleSource({
   );
 }
 
-function GroupHeader({ children }) {
-  return (
-    <Typography sx={{
-      fontSize: 10, color: 'text.disabled', fontWeight: 600,
-      textTransform: 'uppercase', letterSpacing: '0.12em',
-      mb: 1.25, mt: 0.5,
-    }}>{children}</Typography>
-  );
-}
-
 function UrlReputationReport({ result }) {
   const url    = result.source_url || '';
   let host = '';

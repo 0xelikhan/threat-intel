@@ -18,9 +18,12 @@ Skip the open-ended exploration and start here.
 ```
 threat-intel-app/
 ├── backend/                 # FastAPI + LangGraph + TI integrations
-│   ├── main.py              # All 40+ REST endpoints, middlewares, auth
+│   ├── main.py              # All 60+ REST endpoints, middlewares, auth
 │   ├── config.py            # API-key store (data/config.json)
-│   ├── mcp_server.py        # MCP exposure for Claude / Cursor
+│   ├── mcp_server.py        # Separate stdio MCP entry point for Claude
+│   │                        #   Desktop / Cursor / Continue / Zed —
+│   │                        #   NOT mounted by main.py; launched by
+│   │                        #   the MCP host (`python mcp_server.py`).
 │   ├── gti_score.py         # Deterministic GTI verdict scorer
 │   ├── constants.py         # Threat levels, verdicts, MITRE tactics, ...
 │   ├── models.py            # Lazy re-export of every Pydantic model
@@ -64,20 +67,31 @@ threat-intel-app/
 │   └── tests/               # pytest, namespace-based grouping
 └── frontend/
     └── src/
-        ├── App.js           # 3.9k-line root — auth, routing, drawer
+        ├── App.js           # ~5.6k-line root — auth, routing, drawer,
+        │                    #   AND ~30 inline analysis sub-components
+        │                    #   (Sidebar, AnalystSummary, ChatWithRecon,
+        │                    #    Detection, ThreatScore, BulkTable, …).
+        │                    #   Sigma/KQL generation, threat score, IOC
+        │                    #   export and the analyst report all live
+        │                    #   here as inline functions, NOT as
+        │                    #   separate files.
         ├── theme.js         # MUI overrides on the OpenCTI palette
-        ├── ui.js            # Shared MUI primitives (Tag, Card, ...)
+        ├── sourceUrls.js    # IOC → public-UI deep-link builders
+        ├── index.js / index.css
+        ├── utils/
+        │   ├── api.js       # apiFetch + retry + onApiError bus
+        │   └── format.js    # smartTruncate, sourceErrorMessage
         └── components/
+            ├── ui.js                # Shared MUI primitives (Tag, Card, …)
             ├── AgentPipeline.jsx    # The analyze SSE stream UI
             ├── FileScannerView.jsx  # Big file-analyst report (lazy)
-            ├── EmailComposerView.jsx
+            ├── EmailComposerView.jsx# Email composer (lazy)
             ├── MapTab.jsx           # Leaflet IP geo (lazy)
             ├── LoginPage.jsx        # (lazy)
-            ├── DetectionTab.jsx     # Sigma/KQL generator
-            ├── HistoryPanel.jsx
-            ├── GTIScorePanel.jsx
-            ├── ReportView.jsx       # Print-friendly markdown
-            └── ExportBar.jsx        # IOC CSV / plaintext download
+            ├── URLScanLive.jsx      # URLScan submit + poll block
+            ├── ErrorBoundary.jsx    # Generic boundary + ChunkLoadError reload
+            ├── Toast.jsx            # Toast surface bound to onApiError
+            └── Skeleton.jsx         # Pulse-animated placeholders
 ```
 
 ---

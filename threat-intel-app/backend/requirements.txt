@@ -16,7 +16,8 @@ aiofiles==23.2.1
 mitreattack-python
 sigma-cli
 eml-parser
-azure-cosmos==4.7.0
+yara-python>=4.3.0
+anthropic>=0.34.0
 mcp
 bcrypt>=4.0.0
 itsdangerous>=2.0.0
