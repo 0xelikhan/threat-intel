@@ -311,6 +311,7 @@ async def _ai_call_json(prompt: str, config, max_tokens: int = 1400) -> dict:
 
 async def run_response(state: dict) -> dict:
     from config import config
+    from gti_score import compute_gti_scores
     import time
     _t_start = time.perf_counter()
 
@@ -319,6 +320,13 @@ async def run_response(state: dict) -> dict:
     threat_level = state.get("threat_level", "MEDIUM")
     mitre = state.get("mitre_techniques", [])
     trace = state.get("agent_trace", [])
+
+    # GTI scores are a function of the enrichment data — compute them once
+    # here so every caller of run_pipeline() (sync analyze, MCP, future
+    # tests) gets the same shape on the returned state. The streaming
+    # /api/analyze path computes a provisional gti_scores after enrichment
+    # for the partial-result event; this is the final authoritative pass.
+    gti_scores = compute_gti_scores(state.get("enrichments", {}))
 
     summary = investigation.get("summary", "")
     # Strip em / en dashes from the AI summary — the analyst-facing Summary
@@ -719,5 +727,6 @@ analyst's UI strips them out, so writing them is wasted tokens."""
         "kql_query":        kql_query,
         "response_summary": response_summary,
         "stix_bundle":      stix_bundle,
+        "gti_scores":       gti_scores,
         "agent_trace":      trace,
     }
