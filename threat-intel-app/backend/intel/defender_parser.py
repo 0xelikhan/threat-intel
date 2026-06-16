@@ -107,6 +107,68 @@ _PATTERNS = {
 }
 
 
+# ─── Inline-Message field extraction ──────────────────────────────────────
+# Some Defender exports (notably the Windows Event-Forwarding pipeline used
+# by Sentinel / M365D) pack the entire field set onto one "Message:" line
+# instead of breaking it one-field-per-line as Event Viewer's text render
+# does. The line-anchored _PATTERNS above only see the multi-line form;
+# this secondary pass handles the inline form by bounding each value with
+# a lookahead to the next known field name or end of body.
+#
+# Inline values OVERRIDE line-anchored ones when both fire, because the
+# Message body is the actual event payload. The top-level "User : SYSTEM"
+# line is the audit subject (the local account that wrote the event), not
+# the affected user — those are different people. The Message-body "User"
+# is the analyst-relevant one.
+_INLINE_FIELD_NAMES = (
+    "Name", "ID", "Severity", "Category", "Path",
+    "Detection Origin", "Detection Type", "Detection Source",
+    "User", "Process Name",
+    "Security intelligence Version", "Engine Version",
+    "Antimalware Client Version", "Action Name", "Action ID",
+    "Execution Name",
+)
+
+
+def _boundary() -> str:
+    # Lookahead: next inline field key OR end of body. Each multi-word key
+    # is re-anchored as \s+ to tolerate any whitespace run in the input.
+    keys = "|".join(
+        re.escape(n).replace(r"\ ", r"\s+") for n in _INLINE_FIELD_NAMES
+    )
+    return r"(?=\s+(?:" + keys + r")\s*:|\s*$)"
+
+
+_INLINE_BOUNDARY = _boundary()
+_INLINE_PATTERNS = {
+    "malware_name":      r"\bName\s*:\s*(.+?)" + _INLINE_BOUNDARY,
+    "threat_id":         r"\bID\s*:\s*(\d+)\b",
+    "severity":          r"\bSeverity\s*:\s*(\S+)",
+    "category":          r"\bCategory\s*:\s*(\S+)",
+    "infected_path":     r"\bPath\s*:\s*(.+?)" + _INLINE_BOUNDARY,
+    "detection_origin":  r"\bDetection\s+Origin\s*:\s*(.+?)" + _INLINE_BOUNDARY,
+    "detection_type":    r"\bDetection\s+Type\s*:\s*(.+?)" + _INLINE_BOUNDARY,
+    "detection_source":  r"\bDetection\s+Source\s*:\s*(.+?)" + _INLINE_BOUNDARY,
+    "affected_user":     r"\bUser\s*:\s*(\S+?)" + _INLINE_BOUNDARY,
+    "process_name":      r"\bProcess\s+Name\s*:\s*(.+?)" + _INLINE_BOUNDARY,
+    "security_intelligence_version":
+        r"\bSecurity\s+intelligence\s+Version\s*:\s*(.+?)" + _INLINE_BOUNDARY,
+    "engine_version":    r"\bEngine\s+Version\s*:\s*(.+?)" + _INLINE_BOUNDARY,
+}
+_INLINE_COMPILED = {k: re.compile(p, re.IGNORECASE)
+                    for k, p in _INLINE_PATTERNS.items()}
+
+# Message body lives between "Message:" and the next top-level field key
+# (Log Name / Level / Date / Action Type / Channel / Provider / Task / …)
+# or end of input. DOTALL so the body can span wrapped physical lines.
+_MESSAGE_BODY_RE = re.compile(
+    r"(?:^|\n)[ \t]*Message\s*[:=]\s*(.+?)"
+    r"(?=\n[ \t]*(?:Log\s+Name|Level|Date|Action\s+Type|Channel|"
+    r"Provider|Task|Keywords|OpCode|Computer)\s*[:=]|\Z)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
 # A few user-visible fields are routinely wrapped in quotes or trailing
 # punctuation in real-world exports. Strip those before storing.
 _TRIM_CHARS = " \t\"'.,;)|"
@@ -140,6 +202,20 @@ def parse_defender_event(text: str) -> Optional[Dict[str, Any]]:
         m = pat.search(text)
         if m:
             out[key] = _clean(m.group(1))
+
+    # Secondary pass — when the export packs the field set inline on a
+    # "Message :" line, the line-anchored patterns above match nothing
+    # (or worse, match the audit-pipeline top-level "User : SYSTEM"). Run
+    # the inline patterns against the extracted Message body and override.
+    msg_match = _MESSAGE_BODY_RE.search(text)
+    msg_body = msg_match.group(1) if msg_match else ""
+    if msg_body:
+        for key, pat in _INLINE_COMPILED.items():
+            m = pat.search(msg_body)
+            if m:
+                val = _clean(m.group(1))
+                if val:
+                    out[key] = val
 
     # Heuristic: when a "Path" hit ALSO carries a "file:" / "file:_" prefix
     # Defender attaches, strip it so the path looks like a normal Windows
