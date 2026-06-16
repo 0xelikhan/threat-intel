@@ -885,6 +885,7 @@ function UrlFileAnalysisExpander({ result, onRefreshScan, autoOpen = false }) {
           borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
           <Stack spacing={2.25}>
             <VerdictBanner result={result}/>
+            <SourceCodeBanner result={result}/>
             <TechnicalAssessment result={result}/>
             <ExecutionNarrative result={result}/>
             <KeyFindings result={result}/>
@@ -902,6 +903,47 @@ function UrlFileAnalysisExpander({ result, onRefreshScan, autoOpen = false }) {
           </Stack>
         </Box>
       )}
+    </MuiPaper>
+  );
+}
+
+
+// ─── Source-code analysis mode notice ─────────────────────────────────────────
+// Renders only when the backend's file_analyzer detected the upload as a
+// source file (extension in the source list, or printable-ASCII heuristic
+// with no PE/ELF/PK magic). Tells the analyst the scanner has switched
+// off PE-byte tradecraft (imphash, sections, imports) and is instead
+// pattern-matching on language-specific source idioms — RWX VirtualAlloc,
+// PowerShell IEX cradles, ctypes loaders, etc.
+function SourceCodeBanner({ result }) {
+  const theme = useTheme();
+  if (result?.file_type !== 'source_code') return null;
+  const banner = result.file_type_banner
+    || `${result.file_type_label || 'Source code'} detected — performing static `
+       + `code analysis (string patterns, hardcoded IOCs, dangerous API combinations) `
+       + `rather than PE / ELF byte analysis.`;
+  const lang = (result.type?.source_language || 'Source Code');
+  const accent = theme.palette.info?.main || '#3DB1E0';
+  return (
+    <MuiPaper elevation={0} sx={{
+      px: 2, py: 1.25,
+      display: 'flex', alignItems: 'flex-start', gap: 1.25,
+      backgroundColor: muiAlpha(accent, 0.08),
+      border: `1px solid ${muiAlpha(accent, 0.4)}`,
+      borderRadius: 1,
+    }}>
+      <FileText size={18} color={accent} style={{ marginTop: 2, flexShrink: 0 }}/>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{
+          fontSize: 11, fontWeight: 600, color: accent,
+          textTransform: 'uppercase', letterSpacing: '0.08em', lineHeight: 1.3,
+        }}>
+          Source code mode &middot; {lang}
+        </Typography>
+        <Typography sx={{ fontSize: 13, color: 'text.primary', mt: 0.4, lineHeight: 1.45 }}>
+          {banner}
+        </Typography>
+      </Box>
     </MuiPaper>
   );
 }
