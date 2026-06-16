@@ -37,6 +37,16 @@ from typing import Any, Dict, List, Optional, Tuple
 import aiohttp
 
 
+# Box-drawing glyphs (┌ │ ─ ✓ ✗) below trip Windows cp1252 stdout. Force
+# UTF-8 so the script runs on a default cmd.exe / PowerShell session without
+# the operator having to set PYTHONIOENCODING themselves.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
+
 # ─── Config loading ─────────────────────────────────────────────────────────
 def _load_keys() -> Dict[str, str]:
     """Mirror the main app's config-loading: data/config.json is the
@@ -226,9 +236,16 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
         f"https://ipinfo.io/{TEST_IP}/json",
         params={"token": KEYS.get("IPINFO_TOKEN", "")},
         key_env="IPINFO_TOKEN", key_url="https://ipinfo.io"))
+    # GreyNoise Community + RIOT both return HTTP 404 with a structured
+    # JSON body ("IP not observed scanning the internet" / "IP not in RIOT
+    # list") when the queried IP simply isn't in their dataset — that's a
+    # CLEAN verdict, not a service failure. Accept 404 as OK; the snippet
+    # text is preserved in the OK row so the operator can still see the
+    # canonical "not observed" message.
     add(_probe(session, "GreyNoise Community", "IP enrichment",
         f"https://api.greynoise.io/v3/community/{TEST_IP}",
         headers={"key": KEYS.get("GREYNOISE_KEY", "")},
+        ok_statuses=(200, 404),
         key_env="GREYNOISE_KEY", key_url="https://greynoise.io"))
     add(_probe(session, "GreyNoise RIOT", "IP enrichment",
         f"https://api.greynoise.io/v3/riot/{TEST_IP}",
