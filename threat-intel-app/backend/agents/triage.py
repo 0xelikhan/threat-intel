@@ -4,9 +4,12 @@ This allows keys entered in the Settings UI to take effect immediately.
 """
 
 import ipaddress
+import logging
 import re
 import json
 from datetime import datetime, timezone
+
+_log = logging.getLogger("recon.triage")
 
 
 BENIGN_IPS = {
@@ -546,13 +549,21 @@ async def run_triage(state: dict) -> dict:
     # MISP warninglist false-positive filter (spec §4).
     # Both `iocs` (filtered) and `suppressed_iocs` (removed-with-reason) flow
     # downstream so the analyst sees what was filtered and why.
+    #
+    # This gate is load-bearing: when it fails, every benign IOC (public DNS
+    # resolvers, microsoft.com / google.com / cloudflare endpoints, MISP-
+    # warninglisted CIDRs) goes to the paid TI fan-out — burning quota and
+    # latency on indicators the platform already knows are CLEAN. Log loudly
+    # so a wedged filter shows up in operator logs instead of just looking
+    # like an unexplained quota spike.
     suppressed_iocs: dict = {}
     try:
         from intel.warninglist_filter import filter_iocs
         filtered, suppressed_iocs = filter_iocs(iocs)
         iocs = filtered
-    except Exception:
-        pass
+    except Exception as _e:
+        _log.warning("MISP warninglist filter failed; benign IOCs will reach "
+                     "enrichment fan-out unfiltered: %s", _e)
 
     # Behavioral / TTP extraction on the raw input (spec §1 — pre-enrichment).
     # Scans for PowerShell encoded cradles, LOLBin abuse, persistence, lateral

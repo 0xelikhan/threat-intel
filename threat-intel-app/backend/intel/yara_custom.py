@@ -191,8 +191,12 @@ def scan_combined(data: bytes, timeout: int = 8) -> List[Dict]:
         for m in scan_bytes(data, timeout=timeout):
             m.setdefault("source", "vendor")
             out.append(m)
-    except Exception:
-        pass
+    except Exception as _e:
+        # A single malformed user rule (or a yara-python compile failure)
+        # used to silently disable the entire vendor ruleset — every
+        # /api/scan/file looked clean of YARA matches with no diagnostic.
+        # Log so the missing-vendor-scan case is visible to operators.
+        _log.warning("vendor YARA scan failed; falling back to custom-only: %s", _e)
     out.extend(scan_with_custom(data, timeout=timeout))
     return out
 

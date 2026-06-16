@@ -177,8 +177,15 @@ def audit_log(event: str, **fields) -> None:
     safe = {k: _redact_audit_value(k, v) for k, v in fields.items()}
     try:
         logger.info("audit %s %s", event, json.dumps(safe, default=str)[:1500])
-    except Exception:
-        pass
+    except Exception as _e:
+        # Audit log gaps are security-relevant — never let them be silent.
+        # Fall back to a degraded form that emits at least the event name
+        # and the failure reason so SIEM tail rules still see the marker.
+        try:
+            logger.warning("audit %s (serialisation failed: %s)", event, _e)
+        except Exception:
+            # Logger itself is wedged; nothing we can do without spamming.
+            pass
 
 
 def _audit_client_ip(request) -> Optional[str]:

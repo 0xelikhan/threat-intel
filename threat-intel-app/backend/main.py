@@ -1127,7 +1127,13 @@ async def analyze_clarify(run_id: str, req: ClarifyRequest):
         raise HTTPException(413,
             f"answers too large ({_answers_size:,} chars; cap is 16,000)")
 
-    state = dict(_results[run_id])
+    # Deep-copy so the re-investigation's mutations to nested lists/dicts
+    # (agent_trace.append, investigation_result writes, …) don't pollute the
+    # cached prior run. The shallow `dict(...)` used to share `agent_trace`
+    # by reference, so a clarify call would append its trace entries onto
+    # the original run's history.
+    import copy as _copy
+    state = _copy.deepcopy(_results[run_id])
     state["analyst_answers"] = req.answers
 
     from agents.investigation import run_investigation

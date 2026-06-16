@@ -1036,8 +1036,11 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
             data = {"known_good_baseline": kg, "_short_circuited": True}
             _cache[ck] = data
             return data
-    except Exception:
-        pass
+    except Exception as _e:
+        # When the short-circuit lookup fails we drop straight into the
+        # paid TI fan-out for every known-good IP (public DNS resolvers,
+        # MS endpoints, …) — surface it so the cost shows up in logs.
+        _log.warning("known_good_baseline IP lookup failed for %s: %s", ip, _e)
 
     tor_nodes = await _tor(session)
 
@@ -1239,8 +1242,11 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
             data = {"known_good_baseline": kg, "_short_circuited": True}
             _cache[ck] = data
             return data
-    except Exception:
-        pass
+    except Exception as _e:
+        # Same cost concern as enrich_ip — surface so a wedged baseline
+        # shows up in operator logs instead of just inflating TI usage.
+        _log.warning("known_good_baseline domain lookup failed for %s: %s",
+                     domain, _e)
 
     # WhoisXML API runs in parallel with the rest when the paid key is set.
     # When it's not, we fall back to the free who-dat.as93.net endpoint at the

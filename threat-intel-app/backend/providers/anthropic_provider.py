@@ -132,6 +132,12 @@ class AnthropicProvider(LLMProvider):
         self._configured_model = (model or cfg_model
                                   or os.environ.get("ANTHROPIC_MODEL")
                                   or _DEFAULT_MODEL)
+        # Mirror the OpenAI provider — initialise the cache fields up
+        # front so any code path that reads them directly (without going
+        # through `getattr(..., None)`) doesn't AttributeError on the
+        # first call.
+        self._cached_client = None
+        self._cached_key:  Optional[str] = None
 
     @property
     def name(self) -> str:
