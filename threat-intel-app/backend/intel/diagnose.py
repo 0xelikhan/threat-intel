@@ -68,10 +68,13 @@ def check_required_packages() -> Dict[str, Any]:
                 "bcrypt", "itsdangerous", "taxii2client",
                 "stix2", "yaml", "mitreattack")
     # 'yara' is yara-python; the YARA rule scanner falls back to a no-op
-    # when it isn't installed (every import is guarded). 'feedparser' was
-    # in the required list historically but nothing in the codebase
-    # imports it — removed entirely.
-    optional = ("yara",)
+    # when it isn't installed (every import is guarded). 'anthropic' is
+    # only imported by the AnthropicProvider's lazy _client() — deploys
+    # running LLM_PROVIDER=openai/azure/ollama don't need it at all, and
+    # ones that do still degrade to a clean LLMResponse.error rather than
+    # crashing. 'feedparser' was in the required list historically but
+    # nothing in the codebase imports it — removed entirely.
+    optional = ("yara", "anthropic")
 
     missing_req = []
     for p in required:

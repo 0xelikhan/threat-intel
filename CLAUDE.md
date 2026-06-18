@@ -135,7 +135,9 @@ Implementations:
 * `openai_provider.py` — Azure OpenAI auto-detected when `OPENAI_BASE_URL`
   contains `openai.azure.com`. Manual retry layer: 429 → wait 2s retry once;
   5xx → retry once; auth errors → clear analyst message, no retry.
-* `anthropic_provider.py` — Claude Sonnet, default `claude-sonnet-4-20250514`.
+* `anthropic_provider.py` — Claude Sonnet, default `claude-sonnet-4-6`
+  (the 4-20250514 snapshot reached EOL on 2026-06-15). Override via
+  `ANTHROPIC_MODEL` env or settings.
 * `ollama_provider.py` — local models, no tool calling.
 
 To swap the backend LLM for the whole platform set
