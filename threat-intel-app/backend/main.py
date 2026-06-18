@@ -2249,16 +2249,18 @@ async def scan_file(file: UploadFile = File(...)):
     try:
         from intel.loldrivers import lookup_hash
         driver_hit = lookup_hash(hashes["sha256"])
-    except Exception:
-        pass
+    except Exception as _e:
+        _log.warning("LOLDrivers BYOVD lookup failed for %s: %s",
+                     hashes["sha256"][:12], _e)
 
     # Cloud sandbox lookup — Hybrid Analysis by SHA-256
     sandbox = {}
     try:
         from intel.sandbox import lookup_all
         sandbox = await lookup_all(hashes["sha256"], config)
-    except Exception:
-        pass
+    except Exception as _e:
+        _log.warning("cloud sandbox lookup failed for %s: %s",
+                     hashes["sha256"][:12], _e)
 
     return {
         "filename":       file.filename,
@@ -2370,8 +2372,16 @@ async def scan_file_v2(file: UploadFile = File(...)):
     try:
         from intel.file_correlation import append_scan_history
         append_scan_history(analysis)
-    except Exception:
-        pass
+    except Exception as _e:
+        # The frontend's File Scanner polls /api/scan/by-hash/<sha> to
+        # progressively fill its cards as the AI background tasks land.
+        # Append_scan_history is what makes the result visible to that
+        # poll. A persistent failure here would leave the analyst staring
+        # at a spinner that never resolves — surface it instead of pass.
+        _log.warning("file_correlation.append_scan_history failed for "
+                     "%s: %s",
+                     ((analysis.get("hashes") or {}).get("sha256") or "?")[:12],
+                     _e)
 
     # Kick off AI workflows in the background — caller doesn't wait for them
     if sha256:
@@ -2916,8 +2926,16 @@ async def scan_url_endpoint(req: ScanUrlRequest):
     try:
         from intel.file_correlation import append_scan_history
         append_scan_history(analysis)
-    except Exception:
-        pass
+    except Exception as _e:
+        # The frontend's File Scanner polls /api/scan/by-hash/<sha> to
+        # progressively fill its cards as the AI background tasks land.
+        # Append_scan_history is what makes the result visible to that
+        # poll. A persistent failure here would leave the analyst staring
+        # at a spinner that never resolves — surface it instead of pass.
+        _log.warning("file_correlation.append_scan_history failed for "
+                     "%s: %s",
+                     ((analysis.get("hashes") or {}).get("sha256") or "?")[:12],
+                     _e)
     sha256 = (analysis.get("hashes") or {}).get("sha256")
     if sha256 and data:
         track_task(asyncio.create_task(_finish_ai_in_background(sha256, data)))
@@ -3935,8 +3953,16 @@ async def email_send(req: EmailSendRequest):
             "sent": bool(out.get("sent")),
             "error": out.get("error") if not out.get("sent") else None,
         })
-    except Exception:
-        pass
+    except Exception as _hist_e:
+        # The send already happened — losing the history entry isn't
+        # catastrophic but it does mean an analyst hitting /api/email/history
+        # wouldn't see this send. Worth surfacing so a persistently
+        # broken append_history (corrupted in-memory store, bug in the
+        # ring-buffer) shows up in operator logs instead of looking like
+        # silent message loss.
+        _log.warning("email history append failed after send "
+                     "to=%s subject=%r: %s",
+                     (req.to or "")[:64], (req.subject or "")[:120], _hist_e)
     return out
 
 
