@@ -43,8 +43,19 @@ _DATA_DIR.mkdir(parents=True, exist_ok=True)
 # were persisted. The platform's no-persistence policy now routes them
 # through the structured logger to stdout, so there is no on-disk
 # audit file — the constant stays only for back-compat references.
-_MAX_BODY = 50 * 1024 * 1024   # 50 MB — matches the File Analyzer drop-zone copy
-_MAX_FILE = 50 * 1024 * 1024
+_MAX_FILE = 50 * 1024 * 1024   # 50 MB — the authoritative file-upload cap
+                                # the scan endpoints enforce after the
+                                # multipart body has been parsed.
+
+# Envelope cap the AuditMiddleware uses to short-circuit oversized requests
+# before they reach the body parser. 1 MiB of headroom above the
+# file-upload cap so a legitimate 50 MiB binary, once wrapped in a
+# multipart/form-data body (boundary markers + Content-Disposition headers
+# add ~250 bytes for a single-file form but more for multi-file), still
+# passes through to the handler's authoritative len(data) > 50 MiB check.
+# The point of THIS cap is to refuse multi-GB DOS bodies, not to
+# microscopically enforce the file limit — that's the handler's job.
+_MAX_BODY = (50 * 1024 * 1024) + (1 * 1024 * 1024)
 
 
 # ─── env helpers ───────────────────────────────────────────────────────────────

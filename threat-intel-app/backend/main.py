@@ -1910,6 +1910,15 @@ async def _chat_stream(run_id: str, user_msg: str):
     tool_calls_made = []
     final_content = ""
     _MAX_ITERATIONS = 4
+    # Tracks whether any assistant turn has been written to history. Used
+    # by the finally below to close the orphan-on-client-disconnect gap:
+    # if CancelledError fires during `provider.complete()` or
+    # `execute_tool()` (which `except Exception` doesn't catch, since
+    # CancelledError is a BaseException), neither the success nor the
+    # except path persists, and the user message at line 1845 sits
+    # orphaned in history. The finally appends a dropped-connection marker
+    # so a refresh doesn't show a hanging question with no AI reply.
+    _assistant_persisted = False
 
     try:
         # Tool-calling loop — non-streamed for tool decisions, streamed for the final answer
@@ -1945,6 +1954,7 @@ async def _chat_stream(run_id: str, user_msg: str):
                         "timestamp": _ts(),
                     })
                     _chats[run_id] = history
+                    _assistant_persisted = True
                 except Exception:
                     pass
                 yield f"data: {json.dumps({'event': 'error', 'error': resp.error})}\n\n"
@@ -2004,6 +2014,7 @@ async def _chat_stream(run_id: str, user_msg: str):
         history.append({"role": "assistant", "content": final_content,
                          "tool_calls": tool_calls_made, "timestamp": _ts()})
         _chats[run_id] = history
+        _assistant_persisted = True
 
         # Stream the final answer word-by-word so the UI fills progressively.
         tokens = final_content.split(" ")
@@ -2030,9 +2041,33 @@ async def _chat_stream(run_id: str, user_msg: str):
                 "timestamp": _ts(),
             })
             _chats[run_id] = history
+            _assistant_persisted = True
         except Exception:
             pass
         yield f"data: {json.dumps({'event': 'error', 'error': _err})}\n\n"
+    finally:
+        # Last-resort orphan check. CancelledError / KeyboardInterrupt /
+        # GeneratorExit bypass `except Exception`, so the success and
+        # error branches above can both be skipped when the client
+        # disconnects mid-stream (during provider.complete, execute_tool,
+        # or the token drip). In that case the user turn at line 1845 sits
+        # orphaned and a later refresh shows their question hanging with
+        # no AI reply. Append a dropped-connection marker so the
+        # conversation history stays internally consistent — the model
+        # never sees two consecutive user turns and the analyst sees the
+        # "connection dropped" framing rather than a void.
+        if not _assistant_persisted:
+            try:
+                history.append({
+                    "role":      "assistant",
+                    "content":   "[chat cancelled — the connection dropped before a reply could be generated.]",
+                    "tool_calls": tool_calls_made,
+                    "cancelled": True,
+                    "timestamp": _ts(),
+                })
+                _chats[run_id] = history
+            except Exception:
+                pass
     yield "data: [DONE]\n\n"
 
 
