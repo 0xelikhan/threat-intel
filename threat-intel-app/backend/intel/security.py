@@ -247,15 +247,26 @@ class AuditMiddleware(BaseHTTPMiddleware):
                     # parser works the same way for the 413 case.
                     try:
                         from intel.observability import error_envelope
+                        # User-facing message names the documented 50 MB
+                        # cap, not the internal _MAX_BODY value (which
+                        # carries 1 MiB of multipart-overhead headroom).
+                        # The operator only needs to know the policy
+                        # number, not the implementation detail.
                         body = error_envelope(
-                            detail=f"Request body exceeds {_MAX_BODY // (1024*1024)} MB cap",
+                            detail="Request body exceeds the 50 MB cap",
                             code="request_too_large",
                             status=413,
                         )
                     except Exception:
-                        body = {"detail": "Request body too large",
-                                "error":  "Request body too large",
-                                "status": 413}
+                        # Fallback envelope if observability is unavailable.
+                        # Keep the field shape consistent with error_envelope
+                        # so the frontend's structured-error reader (which
+                        # also picks off error_code for toast routing) sees
+                        # the same fields as a normal 4xx.
+                        body = {"detail":     "Request body too large",
+                                "error":      "Request body too large",
+                                "error_code": "request_too_large",
+                                "status":     413}
                     return JSONResponse(body, status_code=413)
             except (TypeError, ValueError):
                 # Malformed Content-Length — let the downstream parser
