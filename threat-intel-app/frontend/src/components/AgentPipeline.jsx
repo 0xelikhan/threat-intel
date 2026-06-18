@@ -8,6 +8,7 @@ import {
   Box, Typography, Button,
   alpha,
 } from '@mui/material';
+import { cookieFetch } from '../utils/api';
 import {
   Search, Database, Activity, Shield, Check, RotateCw, AlertCircle,
   Trash2, Wrench, ArrowRight,
@@ -72,7 +73,7 @@ function AgentPipeline({ logText, label, onComplete, onStart, onPartial, onScanU
     try { document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); } catch {}
 
     try {
-      const resp = await fetch('/api/analyze', {
+      const resp = await cookieFetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ logText, inputType: 'log', label: label || '' }),

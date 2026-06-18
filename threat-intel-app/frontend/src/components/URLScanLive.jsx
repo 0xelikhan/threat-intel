@@ -13,6 +13,7 @@
  * would have introduced.
  */
 import React, { useEffect, useMemo, useState } from 'react';
+import { cookieFetch } from '../utils/api';
 import {
   Box, Stack, Typography, Paper as MuiPaper,
   Button as MuiButton, TextField as MuiTextField,
@@ -43,7 +44,7 @@ export default function URLScanLive({ result, bare, urls: urlsProp }) {
     if (!target) return;
     setSubmission({ state: 'submitting', url: target });
     try {
-      const r = await fetch('/api/urlscan/submit', {
+      const r = await cookieFetch('/api/urlscan/submit', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: target, visibility: 'unlisted' }),
       });
@@ -62,7 +63,7 @@ export default function URLScanLive({ result, bare, urls: urlsProp }) {
     const poll = async () => {
       attempts++;
       try {
-        const r = await fetch(`/api/urlscan/result/${submission.uuid}`);
+        const r = await cookieFetch(`/api/urlscan/result/${submission.uuid}`);
         const d = await r.json();
         if (d.ready) {
           setSubmission(s => ({ ...s, state: 'done', report: d }));

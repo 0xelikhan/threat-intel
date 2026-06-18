@@ -2529,13 +2529,52 @@ async def scan_url_endpoint(req: ScanUrlRequest):
     from urllib.parse import urlparse
     import aiohttp
 
+    # Additional address ranges that Python's `ipaddress` module does NOT
+    # classify as private/reserved/link-local but that an SSRF guard must
+    # still refuse:
+    #
+    #   100.64.0.0/10    — RFC 6598 carrier-grade NAT. Catches Alibaba
+    #                       Cloud's metadata endpoint at 100.100.100.200
+    #                       (verified during the SSRF audit: ip_address
+    #                       reports is_private=False for this range on
+    #                       Python 3.11).
+    #   198.18.0.0/15    — RFC 2544 benchmark-test space; should never
+    #                       resolve a real public host.
+    #   192.0.0.0/24     — RFC 5736 IANA IPv4 special purpose.
+    #   192.0.2.0/24     — TEST-NET-1 documentation.
+    #   198.51.100.0/24  — TEST-NET-2 documentation.
+    #   203.0.113.0/24   — TEST-NET-3 documentation.
+    #   fd00:ec2::/64    — AWS IPv6 metadata (the documented EC2-IMDS-v6
+    #                       prefix; not flagged by is_private on its own).
+    #   2001:db8::/32    — IPv6 documentation prefix.
+    #   100::/64         — IPv6 discard prefix.
+    _EXTRA_INTERNAL_NETS = tuple(ipaddress.ip_network(c) for c in (
+        "100.64.0.0/10",
+        "198.18.0.0/15",
+        "192.0.0.0/24",
+        "192.0.2.0/24",
+        "198.51.100.0/24",
+        "203.0.113.0/24",
+        "fd00:ec2::/64",
+        "2001:db8::/32",
+        "100::/64",
+    ))
+
     def _ip_is_internal(ip_str: str) -> bool:
         try:
             ip = ipaddress.ip_address(ip_str)
         except ValueError:
             return True
-        return bool(ip.is_private or ip.is_loopback or ip.is_link_local
-                    or ip.is_multicast or ip.is_reserved or ip.is_unspecified)
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_multicast or ip.is_reserved or ip.is_unspecified):
+            return True
+        for net in _EXTRA_INTERNAL_NETS:
+            try:
+                if ip.version == net.version and ip in net:
+                    return True
+            except (TypeError, ValueError):
+                continue
+        return False
 
     def _resolve_public(host: str) -> list[str]:
         """Resolve `host` and return ONLY public IPs. Empty list means the
@@ -2563,7 +2602,17 @@ async def scan_url_endpoint(req: ScanUrlRequest):
             ips.append(ip)
         return ips
 
-    class _PinnedResolver(aiohttp.AbstractResolver):
+    # aiohttp 3.14 removed the top-level `aiohttp.AbstractResolver` re-export
+    # the previous code subclassed; the canonical location is
+    # `aiohttp.abc.AbstractResolver`. Under the older path every
+    # /api/scan/url POST blew up with AttributeError BEFORE the SSRF guard
+    # even ran (the class definition raised at endpoint-eval time), so the
+    # endpoint had been returning blanket 500s — masking both the guard and
+    # any downstream behaviour. Import explicitly so a future re-export
+    # change can't break us silently.
+    from aiohttp.abc import AbstractResolver as _AiohttpAbstractResolver
+
+    class _PinnedResolver(_AiohttpAbstractResolver):
         """aiohttp resolver that returns ONLY the pre-resolved set of IPs.
         Closes the DNS-rebinding window between the SSRF pre-check and
         aiohttp's connect-time lookup: we resolved once, decided the

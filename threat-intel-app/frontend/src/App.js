@@ -10,6 +10,7 @@ import ToastHost         from './components/Toast';
 import {
   SkeletonLazyFallback, SkeletonAnalyze,
 } from './components/Skeleton';
+import { cookieFetch } from './utils/api';
 
 // MUI-based primitives (adapted from OpenCTI's Tag.tsx + theme) — every chip,
 // card, code-block, copy button now renders through MUI components that inherit
@@ -2706,7 +2707,7 @@ function AttributionChip({ actor }) {
       const fam = (s.name || '').trim();
       if (!fam || mbHashes[fam]) return;
       setMbHashes(m => ({ ...m, [fam]: { loading: true } }));
-      fetch(`/api/attribution/hashes?family=${encodeURIComponent(fam)}&limit=8`)
+      cookieFetch(`/api/attribution/hashes?family=${encodeURIComponent(fam)}&limit=8`)
         .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
         .then(data => {
           if (cancelled) return;
@@ -3185,7 +3186,7 @@ function VerdictOverride({ result, rs }) {
     if (!level || level === aiLevel) return;
     setSub(true); setSaved(null);
     try {
-      const r = await fetch('/api/calibration/override', {
+      const r = await cookieFetch('/api/calibration/override', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3392,7 +3393,7 @@ function FeedbackInline({ result, onStart, onPartial, onComplete }) {
     setSending(true); setError(null);
     onStart?.();
     try {
-      const resp = await fetch('/api/analyze', {
+      const resp = await cookieFetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3549,7 +3550,7 @@ function ChatWithRecon({ result, bare,
     setError(null);
     onFeedbackStart?.();
     try {
-      const resp = await fetch('/api/analyze', {
+      const resp = await cookieFetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3608,7 +3609,7 @@ function ChatWithRecon({ result, bare,
   useEffect(() => {
     if (!runId) return;
     let alive = true;
-    fetch(`/api/chat/${runId}`)
+    cookieFetch(`/api/chat/${runId}`)
       .then(r => r.ok ? r.json() : { messages: [] })
       .then(d => { if (alive) setMessages(d.messages || []); })
       .catch(() => { if (alive) setMessages([]); });
@@ -3694,7 +3695,7 @@ function ChatWithRecon({ result, bare,
     ]);
 
     try {
-      const resp = await fetch(`/api/chat/${runId}`, {
+      const resp = await cookieFetch(`/api/chat/${runId}`, {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ message: backendText }),
       });
@@ -4398,7 +4399,7 @@ function Detection({ result }) {
         malwareFamily:   rs.malware_family || result?.malware_family,
       };
       const base = { iocs: result?.iocs || {}, analysis };
-      const post = (action) => fetch('/api/detection', {
+      const post = (action) => cookieFetch('/api/detection', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...base, action }),
       }).then(r => r.json()).catch(() => ({ result: '', error: 'request failed' }));
@@ -5087,7 +5088,7 @@ function SendToWebhook({ result, available }) {
   const send = async (target) => {
     setStatus({ target, state: 'sending' });
     try {
-      const r = await fetch(`/api/webhook/${target}/${result.runId}`, { method: 'POST' });
+      const r = await cookieFetch(`/api/webhook/${target}/${result.runId}`, { method: 'POST' });
       const data = await r.json();
       setStatus({ target, state: r.ok && data.ok !== false ? 'ok' : 'err', detail: data });
       setTimeout(() => setStatus(null), 3000);
@@ -5155,7 +5156,7 @@ export default function App() {
 
   useEffect(() => {
     let alive = true;
-    fetch('/api/auth/me', { credentials: 'include' })
+    cookieFetch('/api/auth/me')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (!alive) return;
@@ -5290,7 +5291,7 @@ function AppMain({ authUser, setAuthState }) {
           tries += 1;
           if (tries > 60) return;   // ~3 min cap (60 × 3s) — bail rather than spin forever
           try {
-            const r = await fetch(`/api/scan/by-hash/${sha}`);
+            const r = await cookieFetch(`/api/scan/by-hash/${sha}`);
             if (r.ok) {
               const fresh = await r.json();
               setScanState(s => ({ ...s, result: fresh }));
@@ -5312,12 +5313,12 @@ function AppMain({ authUser, setAuthState }) {
     if (!uploaded) return;
     const form = new FormData();
     form.append('file', uploaded);
-    return _runScan(() => fetch('/api/scan/file', { method: 'POST', body: form }));
+    return _runScan(() => cookieFetch('/api/scan/file', { method: 'POST', body: form }));
   }, [_runScan]);
 
   const scanHash = useCallback((hash) => {
     if (!hash) return;
-    return _runScan(() => fetch('/api/scan/hash', {
+    return _runScan(() => cookieFetch('/api/scan/hash', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ hash: hash.trim() }),
     }));
@@ -5325,7 +5326,7 @@ function AppMain({ authUser, setAuthState }) {
 
   const scanUrl = useCallback((url) => {
     if (!url) return;
-    return _runScan(() => fetch('/api/scan/url', {
+    return _runScan(() => cookieFetch('/api/scan/url', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: url.trim() }),
     }));
@@ -5341,7 +5342,7 @@ function AppMain({ authUser, setAuthState }) {
   // Fetch which webhook destinations are configured on the backend
   useEffect(() => {
     let alive = true;
-    fetch('/api/health')
+    cookieFetch('/api/health')
       .then(r => r.json())
       .then(d => { if (alive) setWebhooks(d.webhooks || {}); })
       .catch(() => {});
@@ -5407,7 +5408,7 @@ function AppMain({ authUser, setAuthState }) {
         authUser={authUser}
         onLogout={async () => {
           try {
-            await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+            await cookieFetch('/api/auth/logout', { method: 'POST' });
           } catch { /* logout is best-effort — even if the request fails, we drop client-side */ }
           setAuthState('out');
         }}

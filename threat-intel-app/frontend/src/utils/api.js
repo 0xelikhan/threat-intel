@@ -169,3 +169,20 @@ export const apiPost = (url, data, opts = {}) => apiFetch(url, {
   body: typeof data === 'string' || data instanceof FormData ? data : JSON.stringify(data || {}),
   ...opts,
 });
+
+
+/**
+ * Drop-in replacement for `fetch(...)` that always carries the auth cookie.
+ *
+ * Same shape as native fetch — returns a Response, throws nothing extra,
+ * preserves the caller's existing error handling. The ONLY difference is
+ * `credentials: 'include'` is merged into the init dict so cross-origin
+ * deployments don't strip the session cookie.
+ *
+ * Use this for any call to `/api/*` that doesn't want the apiFetch
+ * retry/throw/toast policy. The 27 raw `fetch('/api/...')` sites
+ * across App.js + components/ migrated to this in commit (this one).
+ */
+export function cookieFetch(url, init = {}) {
+  return fetch(url, { credentials: 'include', ...init });
+}
