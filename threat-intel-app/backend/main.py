@@ -1929,6 +1929,24 @@ async def _chat_stream(run_id: str, user_msg: str):
                 max_tokens=1200,
             )
             if resp.error:
+                # Mirror the except-handler persist path below: the user
+                # turn was written at line 1845, the assistant never
+                # produced a reply, and without a marker turn here a
+                # refresh shows the user message hanging without context.
+                # Without this the next chat turn the analyst sends
+                # would have two consecutive user turns in the model's
+                # view and confuse the downstream reasoning.
+                try:
+                    history.append({
+                        "role": "assistant",
+                        "content": "[chat error — the AI failed to respond. Try again.]",
+                        "tool_calls": tool_calls_made,
+                        "error": resp.error,
+                        "timestamp": _ts(),
+                    })
+                    _chats[run_id] = history
+                except Exception:
+                    pass
                 yield f"data: {json.dumps({'event': 'error', 'error': resp.error})}\n\n"
                 yield "data: [DONE]\n\n"
                 return
@@ -2370,8 +2388,15 @@ async def _finish_ai_in_background(sha256: str, file_bytes: bytes):
             existing.update(snap or {})
             scan.setdefault("ai_analyst", {})["deep"] = existing
             _persist()
-        except Exception:
-            pass
+        except Exception as _persist_e:
+            # The main fan-out's final _persist() at the end of the loop
+            # will still try — so a one-off transient failure here doesn't
+            # block the final snapshot from landing. A persistent failure
+            # would mean the frontend polls forever waiting for partial
+            # snapshots that never appear; surface it so operators see
+            # the cause in logs instead of staring at a stuck UI.
+            _log.warning("deep AI partial-persist failed for %s: %s",
+                         sha256, _persist_e)
 
     # Wrap the four-stream fan-out in try/finally so ai_pending gets
     # cleared no matter what — an unhandled exception before this point
