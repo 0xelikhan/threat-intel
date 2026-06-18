@@ -418,7 +418,11 @@ def security_self_check(config) -> dict:
         {"name": "Audit log via stdout",   "pass": True,
          "detail": "Audit events emit through the structured logger (no on-disk audit.log)."},
         {"name": "Request body size cap",  "pass": True,
-         "detail": f"Enforced by SecurityHeadersMiddleware at {_MAX_BODY // (1024*1024)}MB"},
+         "detail": (f"Enforced by AuditMiddleware at {_MAX_FILE // (1024*1024)}MB "
+                    f"(with {((_MAX_BODY - _MAX_FILE) // (1024*1024))}MB of "
+                    f"multipart-envelope headroom so file-scan uploads at the "
+                    f"documented cap pass through to the handler's "
+                    f"authoritative len(data) check)")},
     ]
     return {
         "items": items,
