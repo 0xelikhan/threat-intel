@@ -359,37 +359,51 @@ def _extract_iocs_from_text(text: str) -> List[Dict]:
 # ─── Background scheduler (started by main.py) ─────────────────────────────────
 async def run_polling_loop(get_config):
     """asyncio task: poll TAXII every 6h, FreshRSS every 30min. get_config is a
-    callable returning the current config dict so key rotations are picked up."""
+    callable returning the current config dict so key rotations are picked up.
+
+    Wrapped in an outer try/except so any unexpected failure in get_config or
+    timestamp arithmetic does NOT terminate the daemon. The track_task
+    machinery removes the task from _BG_TASKS on completion — and an
+    untrapped exception that kills this loop would silently stop TAXII /
+    FreshRSS ingestion for the rest of the container's lifetime with no
+    visible signal. Log and sleep through it instead.
+    """
     while True:
-        cfg = get_config() or {}
-        last_t = _cache_state.get("last_taxii_poll")
-        last_r = _cache_state.get("last_freshrss_poll")
-        now    = datetime.now(timezone.utc)
+        try:
+            cfg = get_config() or {}
+            last_t = _cache_state.get("last_taxii_poll")
+            last_r = _cache_state.get("last_freshrss_poll")
+            now    = datetime.now(timezone.utc)
 
-        def _hours_since(ts):
-            if not ts:
-                return float("inf")
-            try:
-                return (now - datetime.fromisoformat(ts.replace("Z", "+00:00"))).total_seconds() / 3600
-            except Exception:
-                return float("inf")
-
-        if _hours_since(last_t) >= 6:
-            try:
-                r = await poll_taxii()
-                logger.info("[feeds] TAXII poll: %s", r)
-            except Exception as e:
-                logger.warning("TAXII poll error: %s", e)
-
-        if _hours_since(last_r) * 60 >= 30:
-            url = cfg.get("FRESHRSS_URL", "")
-            key = cfg.get("FRESHRSS_API_KEY", "")
-            if url and key:
+            def _hours_since(ts):
+                if not ts:
+                    return float("inf")
                 try:
-                    r = await poll_freshrss(url, key)
-                    logger.info("[feeds] FreshRSS poll: %s", r)
+                    return (now - datetime.fromisoformat(ts.replace("Z", "+00:00"))).total_seconds() / 3600
+                except Exception:
+                    return float("inf")
+
+            if _hours_since(last_t) >= 6:
+                try:
+                    r = await poll_taxii()
+                    logger.info("[feeds] TAXII poll: %s", r)
                 except Exception as e:
-                    logger.warning("FreshRSS poll error: %s", e)
+                    logger.warning("TAXII poll error: %s", e)
+
+            if _hours_since(last_r) * 60 >= 30:
+                url = cfg.get("FRESHRSS_URL", "")
+                key = cfg.get("FRESHRSS_API_KEY", "")
+                if url and key:
+                    try:
+                        r = await poll_freshrss(url, key)
+                        logger.info("[feeds] FreshRSS poll: %s", r)
+                    except Exception as e:
+                        logger.warning("FreshRSS poll error: %s", e)
+        except asyncio.CancelledError:
+            # Lifespan shutdown — propagate so the task actually exits.
+            raise
+        except Exception as e:
+            logger.warning("feed scheduler tick failed; will retry next cycle: %s", e)
 
         # Sleep 5 minutes between scheduler checks
         await asyncio.sleep(300)

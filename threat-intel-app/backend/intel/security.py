@@ -207,6 +207,50 @@ def _audit_client_ip(request) -> Optional[str]:
 
 class AuditMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
+        # Body-size cap. CLAUDE.md documents AuditMiddleware as enforcing
+        # a 50 MB cap; the previous implementation never did, leaving every
+        # JSON endpoint exposed to a `req: dict` POST with a multi-GB body
+        # that FastAPI would parse into memory before the handler's
+        # field-level checks could reject it. Enforce here, BEFORE
+        # call_next, so a single envelope check protects every route.
+        #
+        # Limitation: relies on the Content-Length header. A client that
+        # uses HTTP/1.1 chunked transfer encoding sends no Content-Length
+        # and can stream past this cap. Real browsers don't chunk request
+        # bodies, so this guards against accidental fat-finger and
+        # automated DOS clients; a determined attacker writing a custom
+        # HTTP client would need a per-chunk read+abort path at the ASGI
+        # layer to block, which we don't have. The file-scan endpoints
+        # that take genuinely large bodies do their OWN size check during
+        # the upload stream — those stay correct even on chunked uploads.
+        cl = request.headers.get("content-length")
+        if cl is not None:
+            try:
+                if int(cl) > _MAX_BODY:
+                    audit_log("request_body_oversize",
+                              path=str(request.url.path), method=request.method,
+                              content_length=int(cl), max_body=_MAX_BODY,
+                              client=_audit_client_ip(request))
+                    # Surface the same error-envelope shape every other
+                    # handler uses so the frontend's err.detail / err.error
+                    # parser works the same way for the 413 case.
+                    try:
+                        from intel.observability import error_envelope
+                        body = error_envelope(
+                            detail=f"Request body exceeds {_MAX_BODY // (1024*1024)} MB cap",
+                            code="request_too_large",
+                            status=413,
+                        )
+                    except Exception:
+                        body = {"detail": "Request body too large",
+                                "error":  "Request body too large",
+                                "status": 413}
+                    return JSONResponse(body, status_code=413)
+            except (TypeError, ValueError):
+                # Malformed Content-Length — let the downstream parser
+                # reject the request rather than guessing at intent.
+                pass
+
         try:
             response = await call_next(request)
         except Exception as e:
