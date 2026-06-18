@@ -359,7 +359,17 @@ def _extract_strings(b: bytes, min_len: int = 6) -> Dict:
 # ─── IOC extraction from strings (with base64/hex decode recursion) ────────────
 _RE_IP     = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 _RE_DOMAIN = re.compile(r"\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,24}\b")
-_RE_URL    = re.compile(r"\bhttps?://[^\s'\"<>]{4,500}", re.IGNORECASE)
+# URL regex: scheme + RFC 3986 unreserved + sub-delims + reserved character
+# set. The earlier `[^\s'\"<>]` was too permissive — on a PE binary it
+# extracted URLs like `http://ocsp.digicert.com0A` / `0C` / `0X` because the
+# DER-encoded ASN.1 length+tag bytes immediately following the OCSP URL
+# happen to be printable ASCII characters that pass `[^\s'\"<>]`. Restrict
+# to characters that RFC 3986 actually allows in URIs (still post-validated
+# by _is_valid_url_netloc to drop trailing junk that slipped through).
+_RE_URL    = re.compile(
+    r"\bhttps?://[a-zA-Z0-9._~:/?#\[\]@!$&()*+,;=%-]{4,500}",
+    re.IGNORECASE,
+)
 _RE_HASH64 = re.compile(r"\b[a-fA-F0-9]{64}\b")
 _RE_HASH40 = re.compile(r"\b[a-fA-F0-9]{40}\b")
 _RE_HASH32 = re.compile(r"\b[a-fA-F0-9]{32}\b")
@@ -398,11 +408,84 @@ def _is_noise_domain(d: str) -> bool:
     return False
 
 
+def _is_version_shaped_ip(ip: str) -> bool:
+    """True for dotted-quads that look like Windows / .NET version strings
+    rather than IPs. PE binaries are loaded with these — `6.0.0.0`,
+    `10.0.19041.0`, `5.1.2600.0`, `4.0.30319.0`, `1.0.0.0` — and the
+    existing prefix filter (`0.`, `127.`, `169.254.`) doesn't catch them.
+
+    Two heuristics:
+      1. Trailing `.0` AND middle `.0.` — `X.0.Y.0` is overwhelmingly a
+         build-number, not a host. Catches 6.0.0.0, 5.0.0.0, 1.0.0.0.
+      2. Any octet > 255 — guaranteed not an IPv4 address. Catches the
+         four-part Defender signature versions like 1.451.195.0 that
+         iocextract / iocextract-style scans pick up. Same protection
+         the triage agent's _valid_ipv4_octets already enforces.
+    """
+    parts = ip.split(".")
+    if len(parts) != 4:
+        return False
+    try:
+        octets = [int(p) for p in parts]
+    except ValueError:
+        return True
+    if any(o > 255 for o in octets):
+        return True
+    # X.0.Y.0 pattern — overwhelmingly version-shaped on PE binaries
+    if octets[1] == 0 and octets[3] == 0:
+        return True
+    return False
+
+
+def _is_valid_url_netloc(url: str) -> bool:
+    """Strip trailing junk that slipped past the (now tighter) URL regex.
+
+    PE binaries embed OCSP URLs immediately followed by DER ASN.1 length
+    + tag bytes that often spell printable ASCII — extracting
+    `http://ocsp.digicert.com0A` from a binary where the next bytes are
+    `0x30 0x0A` for example. Even with the regex tightened, URLs ending
+    in junk-suffix that doesn't fit URL grammar are almost certainly
+    that pattern.
+
+    Two valid netloc shapes:
+      * FQDN with alphabetic TLD (2-24 chars). Catches the DER junk
+        because the trailing `0A` / `0C` / `0X` makes the TLD non-alpha.
+      * Raw IP address (v4 or v6). Common for lab / pentest / C2 URLs;
+        the Nim shellcode loader fixture in the source-code-analysis
+        test uses `http://192.168.174.128:4443/...` and must pass.
+    """
+    try:
+        from urllib.parse import urlparse
+        import ipaddress
+        p = urlparse(url)
+        host = (p.hostname or "")
+        if not host:
+            return False
+        # IP-host case: parse via stdlib; raises on garbage.
+        try:
+            ipaddress.ip_address(host)
+            return True
+        except ValueError:
+            pass
+        # FQDN case: TLD must be alphabetic + sane length.
+        labels = host.split(".")
+        if len(labels) < 2:
+            return False
+        tld = labels[-1]
+        if not tld.isalpha() or not (2 <= len(tld) <= 24):
+            return False
+        return True
+    except Exception:
+        return False
+
+
 def _extract_iocs_from_text(text: str) -> Dict[str, List[str]]:
     return {
-        "ips":     sorted({m for m in _RE_IP.findall(text) if not m.startswith(("0.", "127.", "169.254."))}),
+        "ips":     sorted({m for m in _RE_IP.findall(text)
+                            if not m.startswith(("0.", "127.", "169.254."))
+                            and not _is_version_shaped_ip(m)}),
         "domains": sorted({m for m in _RE_DOMAIN.findall(text) if not _is_noise_domain(m)}),
-        "urls":    sorted({m for m in _RE_URL.findall(text)}),
+        "urls":    sorted({m for m in _RE_URL.findall(text) if _is_valid_url_netloc(m)}),
         "hashes":  sorted({*(m.lower() for m in _RE_HASH64.findall(text)),
                            *(m.lower() for m in _RE_HASH40.findall(text)),
                            *(m.lower() for m in _RE_HASH32.findall(text))}),
@@ -769,6 +852,23 @@ def _synthesize_verdict(result: Dict) -> Tuple[str, int]:
     # confidence bar but stamps the final label from the capability map.
     if cap == "MALICIOUS":
         return "MALICIOUS", max(score, 80)
+
+    # Authenticode-signed binaries that didn't trip the capability map's
+    # MALICIOUS elevator are very rarely real malware. The previous code
+    # path could land at MALICIOUS purely from raw YARA match count — a
+    # legitimate signed `python.exe` matched 17 generic PE-characteristic
+    # rules (`IsPE64`, `HasOverlay`, `HasRichSignature`, `anti_dbg`, ...)
+    # which alone contributed 70 points and forced MALICIOUS at the >= 75
+    # threshold. None of those rules are malicious indicators on their
+    # own; an Authenticode signature is much stronger counter-evidence.
+    # Cap signed-and-not-cap-MALICIOUS at SUSPICIOUS so the analyst sees
+    # the YARA matches and capability hits in context without the
+    # verdict overstating them.
+    pe = (result.get("format_specific") or {}).get("pe") or {}
+    has_authenticode = bool((pe.get("signature") or {}).get("present"))
+    if has_authenticode and score >= 75:
+        score = min(score, 60)   # cap into SUSPICIOUS tier
+
     if score >= 75: verdict = "MALICIOUS"
     elif score >= 45: verdict = "SUSPICIOUS"
     elif score >= 15: verdict = "LOW"
