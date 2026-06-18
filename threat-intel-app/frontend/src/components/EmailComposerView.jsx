@@ -21,6 +21,7 @@ import {
 import { alpha as muiAlpha } from '@mui/material/styles';
 import { Mail, Copy, Check, Eye, RefreshCcw, AlertCircle, Sparkles, Zap, Wand2, ChevronRight } from 'lucide-react';
 import DOMPurify from 'dompurify';
+import { cookieFetch } from '../utils/api';
 
 const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
 
@@ -380,7 +381,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
     if (!rawLog.trim()) { setRemError('Paste the alert log first'); return; }
     setRemLoading(true); setRemError(null);
     try {
-      const r = await fetch('/api/email/remediate', {
+      const r = await cookieFetch('/api/email/remediate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           parsed:           parsedFields || {},
@@ -429,13 +430,13 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
     setComposing(true); setComposeError(null);
     try {
       // Parse silently so the AI gets structured fields alongside the raw log
-      const pr = await fetch('/api/email/parse', {
+      const pr = await cookieFetch('/api/email/parse', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ log_text: rawLog }),
       });
       const parsed = pr.ok ? await pr.json() : (initialParsed || {});
 
-      const r = await fetch('/api/email/compose-ai', {
+      const r = await cookieFetch('/api/email/compose-ai', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           log_text: rawLog,
@@ -476,7 +477,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
     }
     parseTimer.current = setTimeout(async () => {
       try {
-        const r = await fetch('/api/email/parse', {
+        const r = await cookieFetch('/api/email/parse', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ log_text: rawLog }),
         });

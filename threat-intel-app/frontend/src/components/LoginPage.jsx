@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import { alpha as muiAlpha } from '@mui/material/styles';
 import { AlertCircle, Lock } from 'lucide-react';
+import { cookieFetch } from '../utils/api';
 
 export default function LoginPage({ onAuthed }) {
   const [username, setUsername]     = useState('');
@@ -33,9 +34,8 @@ export default function LoginPage({ onAuthed }) {
     }
     setSubmitting(true); setError(null);
     try {
-      const r = await fetch('/api/auth/login', {
+      const r = await cookieFetch('/api/auth/login', {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: username.trim(), password }),
       });

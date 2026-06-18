@@ -20,6 +20,7 @@ import { alpha as muiAlpha, useTheme } from '@mui/material/styles';
 import { Skeleton, SkeletonFileScanner } from './Skeleton';
 import URLScanLive from './URLScanLive';
 import { sourceUrl } from '../sourceUrls';
+import { cookieFetch } from '../utils/api';
 import {
   FileSearch, Copy, Check, Search, Download,
   ArrowUpRight, AlertTriangle, Shield, Play, Plus,
@@ -1260,7 +1261,7 @@ function ThreatIntelSection({ result }) {
                                'SUBMIT_FAILED']);
     async function poll() {
       try {
-        const r = await fetch(`/api/sandbox/result/${sha256}`);
+        const r = await cookieFetch(`/api/sandbox/result/${sha256}`);
         if (!alive) return;
         const j = await r.json();
         setSbState(j);
@@ -1683,7 +1684,7 @@ function YaraSection({ result }) {
               startIcon={<Plus size={12}/>}
               onClick={async () => {
                 try {
-                  const r = await fetch('/api/scan/rules', {
+                  const r = await cookieFetch('/api/scan/rules', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       name: `recon_${(result.hashes?.sha256 || 'sample').slice(0, 12)}`,
@@ -2146,7 +2147,7 @@ function NotesAndRefinement({ result, onRefreshScan }) {
     if (Object.keys(filled).length === 0) { setRefineErr('Answer at least one question'); return; }
     setSubmitting(true); setRefineErr(null);
     try {
-      const r = await fetch('/api/scan/clarify', {
+      const r = await cookieFetch('/api/scan/clarify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scan_id: sha, answers: filled }),
       });
@@ -2431,7 +2432,7 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
     try {
       const form = new FormData();
       form.append('file', file);
-      const r = await fetch('/api/scan/file', { method: 'POST', body: form });
+      const r = await cookieFetch('/api/scan/file', { method: 'POST', body: form });
       const d = await r.json();
       if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
       setLocalResult(d);
