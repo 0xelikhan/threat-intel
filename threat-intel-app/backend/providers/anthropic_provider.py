@@ -24,7 +24,13 @@ _log = logging.getLogger("recon.providers.anthropic")
 from .base import LLMProvider, LLMResponse, LLMChunk, Message, Tool
 
 
-_DEFAULT_MODEL = "claude-sonnet-4-20250514"
+# Claude Sonnet 4.6 — the current Sonnet release.  The previous default
+# (claude-sonnet-4-20250514) reached end-of-life on 2026-06-15; deploys
+# that hadn't overridden ANTHROPIC_MODAL via Settings would have started
+# getting model-deprecated errors from the API on the 16th.  This file's
+# unit tests now trip the same deprecation warning loudly so the next
+# rollover is caught locally instead of in production.
+_DEFAULT_MODEL = "claude-sonnet-4-6"
 
 
 def _clean_sdk_err(e: BaseException) -> str:
