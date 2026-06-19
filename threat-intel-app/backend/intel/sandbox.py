@@ -14,7 +14,13 @@ import aiohttp
 
 
 async def hybrid_analysis_lookup(sha256: str, api_key: str) -> dict | None:
-    """Search Hybrid Analysis for an existing report on this hash."""
+    """Search Hybrid Analysis for an existing report on this hash.
+
+    The hash MUST be a query-string parameter. HA's v2 /search/hash rejects
+    the older `data=hash=<sha256>` body form with HTTP 400 (live audit
+    2026-06-19). The response is now `{"sha256s": [...], "reports": [...]}`
+    instead of a bare list — prefer the most recent SUCCESS over any state.
+    """
     if not (sha256 and api_key):
         return None
     url = "https://www.hybrid-analysis.com/api/v2/search/hash"
@@ -25,17 +31,19 @@ async def hybrid_analysis_lookup(sha256: str, api_key: str) -> dict | None:
     }
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, data={"hash": sha256},
+            async with session.post(url, headers=headers, params={"hash": sha256},
                                     timeout=aiohttp.ClientTimeout(total=15)) as r:
                 if r.status != 200:
                     return None
                 data = await r.json()
     except Exception:
         return None
-    if not data or not isinstance(data, list):
+    if not data:
         return None
-    # Latest report wins
-    latest = data[0]
+    reports = data.get("reports") if isinstance(data, dict) else (data if isinstance(data, list) else None)
+    if not reports:
+        return None
+    latest = next((r for r in reports if (r or {}).get("state") == "SUCCESS"), None) or reports[0]
     return {
         "source":        "Hybrid Analysis",
         "verdict":       latest.get("verdict", "unknown"),

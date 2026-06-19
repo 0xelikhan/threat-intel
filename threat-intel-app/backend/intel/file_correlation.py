@@ -233,11 +233,21 @@ async def _malwarebazaar(session, sha256, auth_key: str = "") -> Optional[Dict]:
 async def _hybrid_analysis(session, sha256, key) -> Optional[Dict]:
     if not key:
         return {"error": "no HYBRID_ANALYSIS_KEY configured"}
-    headers = {"api-key": key, "user-agent": "Falcon Sandbox"}
+    # The hash MUST go in the query string. Live audit 2026-06-19 confirmed
+    # HA's v2 /search/hash now rejects body-form `hash=<sha256>` with a
+    # "value should not be blank" 400 — every body-encoding variant
+    # (dict, FormData, hand-encoded urlencoded, JSON) fails identically.
+    # Only `?hash=<sha256>` is accepted. The free-tier key is auth_level=1
+    # restricted and the validation is endpoint-side, not auth-side.
+    headers = {
+        "api-key":    key,
+        "user-agent": "Falcon Sandbox",
+        "accept":     "application/json",
+    }
     try:
         async with session.post(
             "https://www.hybrid-analysis.com/api/v2/search/hash",
-            data={"hash": sha256}, headers=headers,
+            params={"hash": sha256}, headers=headers,
         ) as r:
             if r.status != 200:
                 return {"error": f"HTTP {r.status}"}
@@ -246,9 +256,16 @@ async def _hybrid_analysis(session, sha256, key) -> Optional[Dict]:
         return {"error": str(e)}
     if not d:
         return {"found": False}
-    top = d[0] if isinstance(d, list) and d else None
-    if not top:
+    # HA v2 response shape: {"sha256s": [...], "reports": [...]}.
+    # Used to be a bare list of reports — the live audit confirmed they
+    # wrapped it in an object some time before 2026-06-19. Each report
+    # may be in state ERROR (e.g. sandbox couldn't detonate the file —
+    # common for tiny inputs like EICAR) or SUCCESS (real verdict).
+    # Prefer the most recent SUCCESS over the most recent of any state.
+    reports = d.get("reports") if isinstance(d, dict) else (d if isinstance(d, list) else None)
+    if not reports:
         return {"found": False}
+    top = next((r for r in reports if (r or {}).get("state") == "SUCCESS"), None) or reports[0]
     return {
         "found":          True,
         "verdict":        top.get("verdict"),
