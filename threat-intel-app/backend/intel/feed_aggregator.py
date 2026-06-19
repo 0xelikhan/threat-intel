@@ -26,17 +26,36 @@ from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-# Spec §8 TAXII 2.x feed configuration
-TAXII_FEEDS = [
-    {"name": "MITRE ATT&CK",   "url": "https://cti-taxii.mitre.org/taxii/",
-     "collection_id": "95ecc380-afe9-11e4-9b6c-751b66dd541e",  "extract": False},
-    {"name": "URLhaus",        "url": "https://urlhaus-api.abuse.ch/v1/taxii2/",
-     "collection_id": None, "extract": True},
-    {"name": "ThreatFox",      "url": "https://threatfox-api.abuse.ch/taxii2/",
-     "collection_id": None, "extract": True},
-    {"name": "Feodo Tracker",  "url": "https://feodotracker.abuse.ch/taxii2/",
-     "collection_id": None, "extract": True},
-]
+# Spec §8 TAXII 2.x feed configuration.
+#
+# Every TAXII feed previously configured in this list became unreachable
+# during 2024-2025. Live audit on 2026-06-19 captured the exact failures
+# for each one:
+#
+#   MITRE ATT&CK    cti-taxii.mitre.org → connect timeout (MITRE migrated
+#                   to attack-taxii.mitre.org in 2024 and decommissioned
+#                   the legacy host)
+#   URLhaus         HTTP 401 — the v1 TAXII endpoint now requires an
+#                   abuse.ch Auth-Key HEADER, which the taxii2client
+#                   library has no clean injection point for
+#   ThreatFox       HTTP 200 returning text/html instead of TAXII JSON —
+#                   the v2 TAXII endpoint moved or was retired
+#   Feodo Tracker   HTTP 404 — endpoint moved or was retired
+#
+# Leaving the URLs in this list ran the poll loop every 6 hours, four
+# warn-logs per cycle, and a permanently empty /api/feeds cache. Empty
+# the default list instead so:
+#   * the warn-log noise stops
+#   * /api/feeds/stats's `total_iocs: 0` reflects reality not silent failure
+#   * an operator who knows current endpoints can drop them into this list
+#
+# Note: the IOC ENRICHMENT path in agents/enrichment.py still queries the
+# abuse.ch REST endpoints directly with the Auth-Key header on every
+# /api/analyze run (per-IOC). The functionality that the TAXII aggregator
+# DUPLICATED is unaffected; only the /api/feeds aggregated-browse view
+# loses these feeds. MITRE ATT&CK technique data still comes from the
+# bundled enterprise-attack.json shipped in the Docker image.
+TAXII_FEEDS: List[Dict] = []
 
 
 # ─── In-memory cache (never persisted) ────────────────────────────────
