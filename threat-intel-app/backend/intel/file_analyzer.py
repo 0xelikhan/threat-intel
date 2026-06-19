@@ -169,6 +169,18 @@ def _detect_source_code(file_bytes: bytes, claimed_ext: str, mime: str) -> Tuple
     specific language."""
     if claimed_ext in _SOURCE_LANG_BY_EXT:
         return True, _SOURCE_LANG_BY_EXT[claimed_ext]
+
+    # Negative path: an extension recognised as a NON-source type (eml /
+    # pdf / docx / exe / zip / ...) should never fall through to the
+    # printable-ASCII heuristic. EML files in particular are plain ASCII
+    # (RFC822 headers + body) so the ratio check trivially classifies them
+    # as "Source Code" and they then bypass the format-specific path that
+    # would have parsed SPF / DKIM / DMARC, sender chain, attachments, etc.
+    # Found live: a phishing-shaped .eml that scored SUSPICIOUS but lost
+    # all the email format_specific analysis because of this.
+    if claimed_ext and claimed_ext in _EXTENSION_TYPE_HINTS:
+        return False, ""
+
     if not file_bytes:
         return False, ""
     head = file_bytes[:16]
@@ -179,6 +191,31 @@ def _detect_source_code(file_bytes: bytes, claimed_ext: str, mime: str) -> Tuple
                      b"BM")
     if any(head.startswith(m) for m in binary_magics):
         return False, ""
+
+    # Email-header sniff for extensionless inputs. RFC822 messages start
+    # with one or more `Header-Name: value` lines — if the first 200
+    # bytes look like that AND contain at least one canonical email header
+    # (From / Subject / To / Date / Received / Return-Path), this is mail,
+    # not source. Same downstream concern as the EML-extension path above.
+    head200 = file_bytes[:200]
+    try:
+        h_text = head200.decode("ascii", errors="ignore")
+        first_lines = h_text.splitlines()[:5]
+        looks_like_headers = bool(first_lines and all(
+            ":" in line and not line.startswith(" ")
+            for line in first_lines if line.strip()
+        ))
+        if looks_like_headers and any(
+            line.split(":", 1)[0].strip().lower() in (
+                "from", "to", "subject", "date", "received", "return-path",
+                "message-id", "authentication-results", "delivered-to",
+            )
+            for line in first_lines if line.strip()
+        ):
+            return False, ""
+    except Exception:
+        pass
+
     # Score the first 4 KiB on printable-ASCII ratio.
     sample = file_bytes[:4096]
     printable = sum(1 for b in sample
@@ -253,6 +290,16 @@ def _category_from_mime(mime: str, ext: str) -> str:
     if "pdf" in mime: return "pdf"
     if "zip" in mime or "x-7z" in mime or "x-rar" in mime or "jar" in mime: return "archive"
     if "x-iso" in mime or ext in {"iso", "img", "vhd"}: return "disk_image"
+    # RFC822 email: detected by either the MIME (`message/rfc822` is what
+    # python-magic returns for a real EML) or the `.eml` extension. The
+    # file_analyzer_formats dispatcher doesn't have an EML branch yet, so
+    # for the moment this just stops the EML from being misrouted as
+    # `binary` (which produced empty format_specific) or — after my
+    # fall-through ASCII heuristic — as `source_code` (which double-
+    # labelled and bypassed the IOC-extraction-on-headers path). Once a
+    # dedicated EML analyzer lands it'll hook on `email`.
+    if "rfc822" in mime or ext == "eml":
+        return "email"
     if mime.startswith("text/") or ext in {"ps1","vbs","js","bat","cmd","py","sh"}: return "script_or_text"
     return "binary"
 
@@ -744,12 +791,22 @@ def analyze_file(file_bytes: bytes, filename: str = "uploaded") -> Dict:
     if is_source:
         lang = type_info.get("source_language") or "Source Code"
         file_type = "source_code"
-        file_type_label = f"{lang} source code"
-        file_type_banner = (
-            f"{lang} source code detected — performing static code analysis "
-            f"(string patterns, hardcoded IOCs, dangerous API combinations) "
-            f"rather than PE / ELF byte analysis."
-        )
+        # Avoid the "Source Code source code" double-wording when the
+        # language detector fell back to the generic label.
+        if lang == "Source Code":
+            file_type_label = "source code"
+            file_type_banner = (
+                "Source code detected — performing static code analysis "
+                "(string patterns, hardcoded IOCs, dangerous API "
+                "combinations) rather than PE / ELF byte analysis."
+            )
+        else:
+            file_type_label = f"{lang} source code"
+            file_type_banner = (
+                f"{lang} source code detected — performing static code "
+                f"analysis (string patterns, hardcoded IOCs, dangerous API "
+                f"combinations) rather than PE / ELF byte analysis."
+            )
     else:
         file_type = (type_info.get("category") or "binary")
         file_type_label = (type_info.get("detected_desc")
