@@ -99,6 +99,29 @@ def test_eml_end_to_end_through_analyze_file():
     assert "attacker@evil.example" in (iocs.get("emails") or [])
 
 
+# ─── Edge cases the live audit caught ──────────────────────────────────
+def test_tiny_file_not_classified_as_source_code():
+    """A 1-byte file like `a` is 100% printable ASCII and would otherwise
+    fall into the generic Source Code branch — but real source files
+    aren't that small. Minimum-size gate must reject sub-32-byte inputs."""
+    from intel.file_analyzer import _detect_source_code
+    for body in (b"a", b"abc", b"hello world\n",
+                 b"1234567890123456789012345678901"):  # 31 bytes
+        is_source, lang = _detect_source_code(body, "", "text/plain")
+        assert not is_source, (
+            f"{len(body)}-byte input wrongly classified as source code "
+            f"(lang={lang!r}); the min-size gate must reject < 32 bytes."
+        )
+
+    # Boundary: 32 bytes exactly should pass (it's `< 32` that rejects).
+    body_32 = b"x" * 32
+    is_source, lang = _detect_source_code(body_32, "", "text/plain")
+    assert is_source, (
+        "32 bytes exact should NOT trigger the min-size gate "
+        f"(got is_source={is_source!r} / lang={lang!r})."
+    )
+
+
 # ─── Source-code label dedup ────────────────────────────────────────────
 def test_generic_source_code_label_does_not_double():
     """When the source-code language detector falls back to the generic
