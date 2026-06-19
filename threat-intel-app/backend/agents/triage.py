@@ -99,6 +99,24 @@ def _valid_ipv4_octets(ip: str) -> bool:
 _valid_octets = _valid_ip
 
 
+# Reject `http(s)://<dotted-quad>...` URLs whose host has any octet > 255.
+# iocextract's refang of "1[.]453[.]161[.]0" produces "http://1.453.161.0"
+# — a syntactically-shaped URL whose host isn't a valid IP. Without this
+# gate the fabricated URL reaches enrichment, where VT/AbuseIPDB return
+# `bad request` and the bogus IOC pollutes the analyst report.
+_URL_DOTTED_QUAD_HOST_RE = re.compile(
+    r"^https?://(\d{1,5}(?:\.\d{1,5}){3})(?:[:/?#]|$)",
+    re.IGNORECASE,
+)
+
+
+def _url_host_is_invalid_quad(url: str) -> bool:
+    m = _URL_DOTTED_QUAD_HOST_RE.match(url or "")
+    if not m:
+        return False
+    return not _valid_ipv4_octets(m.group(1))
+
+
 # Microsoft Defender Event ID 1116/1117 emits Security Intelligence and
 # Engine version strings in the form "AV: 1.451.195.0", "AS: 1.451.195.0",
 # "NIS: 1.451.195.0", "AM: 1.1.24090.11". Their second octet routinely
@@ -177,6 +195,56 @@ _SOFTWARE_VERSION_RE = re.compile(
     r"\b[A-Za-z][A-Za-z0-9_\-]*\/\d{1,5}(?:\.\d{1,5}){1,}\b"
 )
 
+# Labeled IP fields with an obviously-not-an-IP value. A user's SIEM
+# auto-populates "Source IP: <first dotted-quad we found>", which for
+# Defender 1116 events ends up being the AV/AS/NIS Security Intelligence
+# Version (1.453.161.0 — octet > 255). The value lands in:
+#   * the raw alert body the LLM reads, where the model dutifully repeats
+#     "the source IP for this event is 1.453.161.0"
+#   * iocextract's URL extractor, which refangs 1[.]453[.]161[.]0 to
+#     http://1.453.161.0 and ships it as a URL IOC
+# We blank only the *value* (not the label) so the alert structure remains
+# grep-able for any downstream parser, but the LLM and IOC extractors no
+# longer see a dotted-quad to latch onto. Catches the common label
+# variants emitted by Defender, Sentinel, Splunk, QRadar, and Carbon Black.
+_LABELED_IP_FIELD_RE = re.compile(
+    r"""(?ix)
+    \b
+    (?:
+       source\s*ip(?:\s*address)?
+      |src(?:[-_]?ip)?
+      |client[-_]?ip(?:\s*address)?
+      |remote[-_]?ip(?:\s*address)?
+      |destination[-_]?ip(?:\s*address)?
+      |dest[-_]?ip
+      |dst[-_]?ip
+      |peer[-_]?ip
+      |actor[-_]?ip(?:\s*address)?
+      |sourceip\w*
+      |ipaddr(?:ess)?
+    )
+    \s* [:=] \s*
+    (\d{1,5}(?:\.\d{1,5}){3})
+    \b
+    """,
+)
+
+
+def _scrub_invalid_labeled_ip(match: "re.Match[str]") -> str:
+    """Replace the value of a labeled IP field with the literal string
+    `<invalid>` ONLY when the value isn't a valid IPv4 (any octet > 255).
+    Leaves real source IPs untouched so impossible-travel and brute-force
+    alerts still surface their attacker IPs."""
+    full = match.group(0)
+    ip   = match.group(1)
+    parts = ip.split(".")
+    if len(parts) == 4 and all(p.isdigit() and int(p) <= 255 for p in parts):
+        return full
+    # Cut off the dotted-quad at the end and replace with a sentinel that
+    # is obviously not extractable (no dots → no IP regex match, no URL
+    # construction by iocextract).
+    return full[: -len(ip)] + "<invalid>"
+
 
 def strip_defender_version_strings(text: str) -> str:
     """Remove Microsoft Defender Security Intelligence / Engine version
@@ -193,7 +261,43 @@ def strip_defender_version_strings(text: str) -> str:
     text = _OID_RE.sub(" ", text)
     text = _X509_DIR_ATTR_OID_RE.sub(" ", text)
     text = _SOFTWARE_VERSION_RE.sub(" ", text)
+    text = _LABELED_IP_FIELD_RE.sub(_scrub_invalid_labeled_ip, text)
     return text
+
+
+def _refang(text: str) -> str:
+    """Canonicalise the common analyst-/vendor-defang forms in one pass.
+
+    Anything that survives this also reaches the regex extractors and the
+    LLM prompts in canonical dotted form, so downstream patterns don't
+    need to know about [.] / (dot) / hxxp variants.
+    """
+    if not text:
+        return text
+    return (text
+        .replace("[.]", ".").replace("(.)", ".").replace("(dot)", ".")
+        .replace("[://]", "://")
+        .replace("hxxp://", "http://").replace("hxxps://", "https://"))
+
+
+def clean_for_analysis(text: str) -> str:
+    """Refang + strip noise. The combined pipeline IOC extraction and
+    every triage LLM prompt should run on, so vendor noise (Defender
+    Security Intelligence Version strings, SIEM `Source IP:` fields
+    populated with an invalid quad like 1.453.161.0) never reaches:
+
+      * the IOC regex / iocextract fallback, where it would surface as a
+        fake `http://1.453.161.0` URL,
+      * the triage / investigation / response LLM prompts, where the
+        model would dutifully parrot "the source IP for this event is
+        1.453.161.0" into the analyst-facing narrative.
+
+    Order matters: refang FIRST so the strip regexes see canonical dots.
+    The legacy `strip_defender_version_strings` is still exported for
+    the email composer and any external caller that needs the strip-
+    only behaviour.
+    """
+    return strip_defender_version_strings(_refang(text or ""))
 
 
 _EXE_RE  = re.compile(
@@ -244,18 +348,12 @@ def extract_iocs(text: str) -> dict:
     iocs = {"ips": set(), "domains": set(), "urls": set(), "hashes": set(),
             "emails": set(), "files": set(), "paths": set(), "cves": set()}
 
-    # Scrub Microsoft Defender version strings (AV/AS/NIS/AM: 1.451.195.0)
-    # BEFORE extraction. Their second octet routinely exceeds 255 so they
-    # are software versions, not IP addresses, but the IP regex would
-    # still pick them up before validation runs.
-    text = strip_defender_version_strings(text or "")
-
-    # Refang once, up-front. Covers the common defanged forms vendors use
-    # in alert bodies so the literal regex below catches them too.
-    norm = (text
-        .replace("[.]", ".").replace("(.)", ".").replace("(dot)", ".")
-        .replace("[://]", "://").replace("hxxp://", "http://")
-        .replace("hxxps://", "https://"))
+    # Refang + scrub in one step. Order is load-bearing: refang runs
+    # FIRST so the strip patterns (AV/AS/NIS Defender versions, "Source
+    # IP: <invalid quad>" labeled fields) see canonical dotted form.
+    # Defanged Defender version strings previously slipped through every
+    # pattern because they all assumed literal dots.
+    norm = clean_for_analysis(text or "")
 
     for url in _RAW_URL_RE.findall(norm):
         u_lower = url.lower()
@@ -266,6 +364,8 @@ def extract_iocs(text: str) -> dict:
             "google.com/search?", "support.google.com/",
             "developer.mozilla.org/",
         )):
+            continue
+        if _url_host_is_invalid_quad(url):
             continue
         iocs["urls"].add(url.rstrip(".,;)\"'"))
     for ip in _RAW_IPV4_RE.findall(norm):
@@ -284,17 +384,17 @@ def extract_iocs(text: str) -> dict:
     # edge forms the regex misses. The library's quadratic behaviour
     # only bites on large inputs — below the cap it adds ~10 ms for
     # better coverage. ImportError still falls through cleanly.
-    if len(text) <= 10_000:
+    if len(norm) <= 10_000:
         try:
             import iocextract
-            for ip in iocextract.extract_ips(text, refang=True):
+            for ip in iocextract.extract_ips(norm, refang=True):
                 ip = ip.strip()
                 if ip in BENIGN_IPS or _is_private_ip(ip) or not _valid_ip(ip):
                     continue
                 if "." in ip and ":" not in ip and not _valid_ipv4_octets(ip):
                     continue
                 iocs["ips"].add(ip)
-            for url in iocextract.extract_urls(text, refang=True):
+            for url in iocextract.extract_urls(norm, refang=True):
                 u_lower = url.lower()
                 if any(s in u_lower for s in (
                     "go.microsoft.com/", "learn.microsoft.com/",
@@ -304,10 +404,16 @@ def extract_iocs(text: str) -> dict:
                     "developer.mozilla.org/",
                 )):
                     continue
+                if _url_host_is_invalid_quad(url):
+                    # iocextract refangs defanged "1[.]453[.]161[.]0"
+                    # into "http://1.453.161.0" — drop these so SIEM
+                    # mis-labelled version strings don't get shipped as
+                    # URL IOCs to enrichment.
+                    continue
                 iocs["urls"].add(url.rstrip(".,;)\"'"))
-            for h in iocextract.extract_hashes(text):
+            for h in iocextract.extract_hashes(norm):
                 iocs["hashes"].add(h.lower())
-            for e in iocextract.extract_emails(text, refang=True):
+            for e in iocextract.extract_emails(norm, refang=True):
                 iocs["emails"].add(e.lower())
         except ImportError:
             pass
@@ -513,6 +619,16 @@ async def run_triage(state: dict) -> dict:
     multi_log = {"log_count": 1, "is_multi": False,
                   "segments": [raw], "anchors": []}
 
+    # Stash a scrubbed-for-LLM copy on state. EML / Defender / multi-log
+    # parsers ran above on the ORIGINAL raw because they need to see
+    # `Security intelligence Version: AV: 1.453.161.0` etc. as-is for
+    # field extraction. From this point on, every LLM call (log
+    # translation, triage routing, deep investigation, response summary)
+    # reads `raw_input_clean` instead so the model never sees the SIEM-
+    # mislabelled "Source IP: 1.453.161.0" line that it would otherwise
+    # parrot back as "the source IP for this event is …".
+    state["raw_input_clean"] = clean_for_analysis(raw)
+
     # AI log translation (spec §4) — runs before IOC extraction and behavioral
     # analysis so they operate on structured fields rather than just raw text.
     # Fails open: if no API key or the call errors out, translation is None and
@@ -521,13 +637,18 @@ async def run_triage(state: dict) -> dict:
     try:
         from intel.log_translator import translate_log, fields_as_text
         from config import config as _cfg
-        log_translation = await translate_log(raw, _cfg)
+        # Use the scrubbed snippet so the translator LLM also doesn't see
+        # the mislabelled "Source IP: <invalid quad>".
+        log_translation = await translate_log(state["raw_input_clean"], _cfg)
         if log_translation:
             extracted = fields_as_text(log_translation)
             if extracted:
                 # Append normalized fields to the text we feed downstream — this
                 # ensures behavior_extractor + extract_iocs see both raw + parsed
                 raw = raw + "\n\n# AI-extracted fields\n" + extracted
+                # And keep raw_input_clean in sync so downstream LLM stages
+                # also see the translator's structured fields.
+                state["raw_input_clean"] = state["raw_input_clean"] + "\n\n# AI-extracted fields\n" + extracted
     except Exception:
         log_translation = None
 
@@ -674,12 +795,19 @@ async def run_triage(state: dict) -> dict:
         try:
             from providers import get_provider
             provider = get_provider()
+            # Use the scrubbed snippet — Defender version strings + SIEM-
+            # mislabelled "Source IP: 1.453.161.0" are wiped on state by
+            # `raw_input_clean`. Without this the model parrots the invalid
+            # quad back into the analyst narrative as "the source IP for
+            # this event is …" (bug reported 2026-06-19 against a
+            # PUABundler:FileZilla Defender alert).
+            scrubbed_snippet = (state.get("raw_input_clean") or raw)[:600]
             resp = await provider.complete(
                 # Triage is a fast routing decision (the real reasoning is the
                 # investigation step) → fast model tier.
                 model=config.get_model(fast=True),
                 messages=[{"role": "user", "content": TRIAGE_PROMPT.format(
-                    log_snippet=raw[:600], ioc_summary=ioc_summary,
+                    log_snippet=scrubbed_snippet, ioc_summary=ioc_summary,
                 )}],
                 max_tokens=220,
                 temperature=0.0,

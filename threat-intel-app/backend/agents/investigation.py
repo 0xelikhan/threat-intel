@@ -1444,7 +1444,7 @@ Tool-budget tips:
 {type_focus}"""
                 user_msg = f"""{feedback_block}{no_hallucinate_block}
 ## Alert content (first 1500 chars — may include analyst commentary mixed with the raw log)
-{(state.get("raw_input") or "")[:1500]}
+{(state.get("raw_input_clean") or state.get("raw_input") or "")[:1500]}
 
 ## ENRICHMENT SUMMARY (server-side empirical baseline — quote in your summary)
 {enrichment_summary_line}
@@ -1850,7 +1850,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                 tool_call_log.append({"tool": "_fallback", "summary": f"tool-calling failed: {str(e)[:120]}"})
                 # Prepend the Defender field-parse block to the raw input so the
                 # single-shot prompt sees the authoritative labels too.
-                _raw_for_fallback = (state.get("raw_input") or "")[:2000]
+                _raw_for_fallback = (state.get("raw_input_clean") or state.get("raw_input") or "")[:2000]
                 if defender_block:
                     _raw_for_fallback = defender_block + "\n\n" + _raw_for_fallback
                 resp = await provider.complete(

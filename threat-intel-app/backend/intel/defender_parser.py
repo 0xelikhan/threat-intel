@@ -279,13 +279,17 @@ def to_prompt_block(parsed: Dict[str, Any]) -> str:
         "  * affected_user       — the user whose session encountered the threat (the victim).",
         "",
     ]
+    # security_intelligence_version / engine_version / antimalware_platform_version
+    # are excluded — they're dotted-quad version numbers (AV: 1.453.161.0) that
+    # add zero analyst value and risk being misread as IP addresses by the LLM
+    # (which is what triggered the 2026-06-19 PUABundler:FileZilla bug where
+    # the narrative described "1.453.161.0" as the source IP).
     field_order = [
         "malware_name", "threat_id", "severity", "category",
         "infected_path", "detection_origin", "detection_type", "detection_source",
         "affected_user", "process_name",
         "action_name", "action_id", "execution_name",
-        "security_intelligence_version", "engine_version",
-        "antimalware_platform_version", "event_id",
+        "event_id",
     ]
     for key in field_order:
         val = parsed.get(key, "")
