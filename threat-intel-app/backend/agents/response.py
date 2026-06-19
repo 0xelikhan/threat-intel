@@ -361,7 +361,7 @@ async def run_response(state: dict) -> dict:
     # The analyze textarea now accepts logs + analyst notes interleaved; we
     # heuristically separate the operator's prose from the log payload by
     # looking for natural-language framing markers at the top of the input.
-    _raw_full = (state.get("raw_input") or "").strip()
+    _raw_full = (state.get("raw_input_clean") or state.get("raw_input") or "").strip()
     _operator_note = ""
     # Markers analysts commonly use to introduce commentary in the textbox.
     _marker = None
@@ -406,7 +406,7 @@ async def run_response(state: dict) -> dict:
     _enr_line    = (_enr_sum.get("line") or "").strip()
 
     evidence_pack = {
-        "alert_text_first_300": (state.get("raw_input") or "")[:300],
+        "alert_text_first_300": (state.get("raw_input_clean") or state.get("raw_input") or "")[:300],
         # Analyst commentary the operator typed in the analyze textbox
         # (mixed inline with the log). Authoritative — the AI must respect
         # this when picking disposition.
