@@ -216,6 +216,14 @@ def _detect_source_code(file_bytes: bytes, claimed_ext: str, mime: str) -> Tuple
     except Exception:
         pass
 
+    # Minimum size gate. A 1-byte file `a` technically scores 100%
+    # printable and would otherwise fall into the generic "Source Code"
+    # branch — but the smallest real source file (a Bash shebang +
+    # one-liner) is still tens of bytes. Anything smaller is either
+    # an unusual test file or noise; don't tag it as source.
+    if len(file_bytes) < 32:
+        return False, ""
+
     # Score the first 4 KiB on printable-ASCII ratio.
     sample = file_bytes[:4096]
     printable = sum(1 for b in sample
