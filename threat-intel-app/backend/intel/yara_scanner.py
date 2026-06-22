@@ -28,6 +28,20 @@ RULE_SOURCES = [
     # normal scan, but the bucket-aware skill in skills/classify_capabilities
     # also walks this tree for the structured capability assessment.
     ("chainguard malcontent",           VENDOR / "malcontent" / "rules"),
+    # awesome-yara deep-walk additions (13 net-new corpora):
+    ("ditekshen detection",             VENDOR / "ditekshen-detection"),
+    ("delivr-to detections",            VENDOR / "delivrto-detections"),
+    ("filescan.io fsYara",              VENDOR / "filescanio-fsyara"),
+    ("Google Chronicle GCTI",           VENDOR / "chronicle-gcti"),
+    ("ConventionEngine PDB",            VENDOR / "conventionengine"),
+    ("InQuest yara-rules",              VENDOR / "inquest-yara-rules"),
+    ("jeFF0Falltrades RAT",             VENDOR / "jeff0falltrades-yara"),
+    ("Intezer Labs",                    VENDOR / "intezer-yara-rules"),
+    ("Rapid7 Labs",                     VENDOR / "rapid7-labs"),
+    ("securitymagic",                   VENDOR / "securitymagic-yara"),
+    ("f0wl ransomware/ESXi",            VENDOR / "f0wl-yara"),
+    ("CyStack stealer-fingerprints",    VENDOR / "cystack-stealer-fingerprints"),
+    ("Operation Epic Fury",             VENDOR / "operation-epic-fury"),
 ]
 
 
