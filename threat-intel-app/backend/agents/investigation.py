@@ -2172,6 +2172,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
     # NIST SP 800-53 control families mapped to each ATT&CK technique.
     # Compliance-flavoured "deploy AU-6 + SI-3 + IR-4" context.
     nist_controls: dict = {}
+    cisa_cpg_controls: dict = {}
     try:
         from intel.nist_800_53 import controls_for_attacks
         tids: list = []
@@ -2182,8 +2183,19 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
                     tids.append(tid)
         if tids:
             nist_controls = controls_for_attacks(tids)
+        # CISA Cybersecurity Performance Goals — same tids, different
+        # priority-tier lens. Pairs well with NIST 800-53 for analyst
+        # reports that need to surface both "what controls cover this"
+        # AND "which ones are essential vs nice-to-have".
+        try:
+            from intel.cisa_cpg import cpgs_for_attacks
+            if tids:
+                cisa_cpg_controls = cpgs_for_attacks(tids)
+        except Exception:
+            cisa_cpg_controls = {}
     except Exception:
         nist_controls = {}
+        cisa_cpg_controls = {}
 
     # ETW providers — Windows telemetry sources needed to capture each
     # ATT&CK technique. Lets the KQL generator suggest "subscribe to
@@ -2253,6 +2265,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
         "d3fend_countermeasures": d3fend_countermeasures,
         "capec_patterns":         capec_patterns,
         "nist_controls":          nist_controls,
+        "cisa_cpg":               cisa_cpg_controls,
         "etw_providers":          etw_providers,
         "threat_level":           result.get("threat_level", "MEDIUM"),
         "confidence":             _conf,

@@ -212,6 +212,32 @@ async def _lifespan(app):
             await asyncio.sleep(24 * 3600)
     track_task(asyncio.create_task(_vendor_advisories_periodic()))
 
+    # DataPlane.org honeypot feeds — 12h refresh.
+    async def _dataplane_periodic():
+        import aiohttp
+        from intel.dataplane import ensure_loaded as _dp_ensure
+        while True:
+            try:
+                async with aiohttp.ClientSession() as s:
+                    await _dp_ensure(s)
+            except Exception as e:
+                _log.debug("dataplane refresh failed: %s", e)
+            await asyncio.sleep(12 * 3600)
+    track_task(asyncio.create_task(_dataplane_periodic()))
+
+    # Spamhaus DROP/EDROP — daily refresh.
+    async def _spamhaus_periodic():
+        import aiohttp
+        from intel.spamhaus_drop import ensure_loaded as _sh_ensure
+        while True:
+            try:
+                async with aiohttp.ClientSession() as s:
+                    await _sh_ensure(s)
+            except Exception as e:
+                _log.debug("spamhaus_drop refresh failed: %s", e)
+            await asyncio.sleep(24 * 3600)
+    track_task(asyncio.create_task(_spamhaus_periodic()))
+
     _log.info("startup: pre-warm scheduled in background, accepting requests now")
 
     # Self-diagnosis: once at startup, then every 15 min for /api/health.
