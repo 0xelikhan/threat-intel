@@ -57,6 +57,15 @@ logger = logging.getLogger(__name__)
 # bundled enterprise-attack.json shipped in the Docker image.
 TAXII_FEEDS: List[Dict] = []
 
+# Auto-populate from the canonical catalog when RECON_TAXII_FEEDS env
+# var is set. The operator picks slugs (cisa_ais, hailataxii, ...) and
+# per-feed credentials via env; the catalog supplies the rest.
+try:
+    from intel.taxii_feeds_catalog import get_enabled_feeds as _enabled_feeds
+    TAXII_FEEDS.extend(_enabled_feeds())
+except Exception:
+    pass
+
 
 # ─── In-memory cache (never persisted) ────────────────────────────────
 # IOC dict has to be bounded — URLhaus alone publishes ~30k indicators,

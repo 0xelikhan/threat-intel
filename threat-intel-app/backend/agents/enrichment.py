@@ -1261,6 +1261,49 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     except Exception:
         pass
 
+    # Cloud provider IP ranges — AWS/Azure/GCP/Cloudflare/Fastly/GitHub.
+    # Strong trust signal: an IP belonging to AWS CloudFront is almost
+    # certainly NOT the attacker, just the CDN edge. Synchronous lookup
+    # against the in-memory CIDR list warmed by the lifespan handler.
+    try:
+        from intel.cloud_ip_ranges import lookup as _cloud_lookup
+        cl = _cloud_lookup(ip)
+        if cl:
+            data["cloud_provider"] = {
+                "source":   "cloud-provider IP ranges",
+                "provider": cl.get("provider"),
+                "region":   cl.get("region"),
+                "service":  cl.get("service"),
+                "cidr":     cl.get("cidr"),
+                "verdict":  "CLEAN_INFRA",
+                "summary":  (f"{ip} belongs to {cl.get('provider')}"
+                              + (f" ({cl.get('service')})" if cl.get("service") else "")
+                              + (f" in {cl.get('region')}" if cl.get("region") else "")
+                              + " — likely CDN/cloud infra, not attacker-controlled."),
+            }
+    except Exception:
+        pass
+
+    # FireHOL — 400+ curated IP blocklists. Synchronous in-memory lookup
+    # over the vendored blocklist-ipsets repo. Each hit reports which
+    # named blocklist matched (firehol_level1, blocklist_de_ssh, ...).
+    try:
+        from intel.firehol import lookup as _firehol_lookup
+        fh_hits = _firehol_lookup(ip)
+        if fh_hits:
+            data["firehol"] = {
+                "source":     "FireHOL blocklist-ipsets",
+                "blocklists": fh_hits,
+                "list_count": len(fh_hits),
+                "verdict":    "MALICIOUS" if len(fh_hits) >= 3 else "SUSPICIOUS",
+                "summary":    (f"{ip} is on {len(fh_hits)} FireHOL blocklist"
+                                f"{'s' if len(fh_hits) != 1 else ''}: "
+                                f"{', '.join(fh_hits[:4])}"
+                                f"{'…' if len(fh_hits) > 4 else ''}"),
+            }
+    except Exception:
+        pass
+
     # ── Secondary lookups — all independent, so fire them concurrently instead
     #    of one await after another (BGP, Safe Browsing, deception, Maltiverse,
     #    OpenCTI). Each helper already fails soft; return_exceptions keeps one
@@ -1810,16 +1853,19 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
         return {**_cache[ck], "cached": True}
 
     try:
-        from intel.cve_enrichment import nvd_cve, epss, cisa_kev_check, osv, rhsa
+        from intel.cve_enrichment import (
+            nvd_cve, epss, cisa_kev_check, osv, rhsa, msrc,
+        )
     except Exception as e:
         return {"error": f"cve_enrichment unavailable: {e}"}
 
-    nvd_r, epss_r, kev_r, osv_r, rhsa_r = await asyncio.gather(
+    nvd_r, epss_r, kev_r, osv_r, rhsa_r, msrc_r = await asyncio.gather(
         nvd_cve(session, cve_id),
         epss(session, cve_id),
         cisa_kev_check(session, cve_id),
         osv(session, cve_id),
         rhsa(session, cve_id),
+        msrc(session, cve_id),
         return_exceptions=True,
     )
 
@@ -1839,6 +1885,9 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
     rh = _ok_dict(rhsa_r)
     if rh:
         data["rhsa"] = rh
+    ms = _ok_dict(msrc_r)
+    if ms:
+        data["msrc"] = ms
 
     # ProjectDiscovery nuclei-templates: how many public detection
     # templates target this CVE. "X templates exist" is a more concrete
@@ -1881,6 +1930,26 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
     except Exception:
         pass
 
+    # Vendor advisory RSS — Apple / Adobe / Oracle. Daily-refreshed
+    # via lifespan task. Cross-references against the in-memory CVE
+    # index to surface advisory titles + links.
+    try:
+        from intel.vendor_advisories import lookup_cve as _va_lookup
+        va = _va_lookup(cve_id, max_results=6)
+        if va:
+            vendors_hit = sorted({r.get("vendor_name") for r in va
+                                   if r.get("vendor_name")})
+            data["vendor_advisories"] = {
+                "source":     "Apple/Adobe/Oracle RSS",
+                "advisories": va,
+                "vendors":    vendors_hit,
+                "summary":    (f"{len(va)} vendor advisor"
+                                f"{'ies' if len(va) != 1 else 'y'} "
+                                f"({', '.join(vendors_hit[:3])})."),
+            }
+    except Exception:
+        pass
+
     # CSAF — vendor-specific advisories (Cisco, Red Hat, Siemens, SAP,
     # Schneider, Bosch). Synchronous in-memory lookup over the bundled
     # CSAF JSON tree at vendor/csaf/<vendor>/*.json.
@@ -1902,6 +1971,24 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
     except Exception:
         pass
 
+    # Emerging Threats Open + Snort Community IDS rules. Synchronous
+    # in-memory lookup over the bundled .rules trees at
+    # vendor/emerging-threats-open / vendor/snort-community.
+    try:
+        from intel.ids_rules import match_by_cve as _ids_lookup
+        ids_rows = _ids_lookup(cve_id, max_results=8)
+        if ids_rows:
+            data["ids_rules"] = {
+                "source":     "ET Open + Snort Community",
+                "rules":      ids_rows,
+                "rule_count": len(ids_rows),
+                "summary":    (f"{len(ids_rows)} IDS rule"
+                                f"{'s' if len(ids_rows) != 1 else ''} "
+                                f"target this CVE (Suricata/Snort)."),
+            }
+    except Exception:
+        pass
+
     # trickest/cve PoC catalog — public proof-of-concept exploit links
     # mined from GitHub / gist / exploit-db. "5 PoCs exist" is a sharper
     # weaponisation signal than EPSS-probability alone.
@@ -1919,6 +2006,16 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
                                 f"{'s' if len(pocs) != 1 else ''} "
                                 f"({len(github_pocs)} on GitHub)."),
             }
+    except Exception:
+        pass
+
+    # SSVC — Stakeholder-Specific Vulnerability Categorization. Synthesises
+    # the assembled CVE data into a decision-tree action (Act / Attend /
+    # Track* / Track). Sits at the bottom of the gather so every upstream
+    # signal (KEV / nuclei / PoCs / NVD) has populated by the time it runs.
+    try:
+        from intel.ssvc import assess as _ssvc_assess
+        data["ssvc"] = _ssvc_assess(data)
     except Exception:
         pass
 

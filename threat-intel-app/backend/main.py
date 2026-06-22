@@ -185,6 +185,33 @@ async def _lifespan(app):
             await asyncio.sleep(24 * 3600)
     track_task(asyncio.create_task(_tranco_periodic()))
 
+    # Cloud provider IP ranges — AWS/Azure/GCP/Cloudflare/Fastly/GitHub.
+    # Daily refresh; in-memory CIDR list serves all IP enrichments.
+    async def _cloud_ip_periodic():
+        import aiohttp
+        from intel.cloud_ip_ranges import ensure_loaded as _cl_ensure
+        while True:
+            try:
+                async with aiohttp.ClientSession() as s:
+                    await _cl_ensure(s)
+            except Exception as e:
+                _log.debug("cloud_ip_ranges refresh failed: %s", e)
+            await asyncio.sleep(24 * 3600)
+    track_task(asyncio.create_task(_cloud_ip_periodic()))
+
+    # Vendor advisory RSS — Apple / Adobe / Oracle. Daily.
+    async def _vendor_advisories_periodic():
+        import aiohttp
+        from intel.vendor_advisories import ensure_loaded as _va_ensure
+        while True:
+            try:
+                async with aiohttp.ClientSession() as s:
+                    await _va_ensure(s)
+            except Exception as e:
+                _log.debug("vendor_advisories refresh failed: %s", e)
+            await asyncio.sleep(24 * 3600)
+    track_task(asyncio.create_task(_vendor_advisories_periodic()))
+
     _log.info("startup: pre-warm scheduled in background, accepting requests now")
 
     # Self-diagnosis: once at startup, then every 15 min for /api/health.

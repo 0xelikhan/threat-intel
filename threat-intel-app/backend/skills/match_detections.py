@@ -56,6 +56,7 @@ class MatchDetectionsSkill(Skill):
             "olafhartong":      "list[dict]",
             "falco":            "list[dict]",
             "stratus":          "list[dict]",
+            "ids_rules":        "list[dict]",
             "total":            "int",
             "corpus_stats":     "dict[str, dict]",
         }
@@ -82,6 +83,7 @@ class MatchDetectionsSkill(Skill):
         olafhartong:  List[Dict[str, Any]] = []
         falco:        List[Dict[str, Any]] = []
         stratus:      List[Dict[str, Any]] = []
+        ids_rules:    List[Dict[str, Any]] = []
         corpus_stats: Dict[str, Any] = {}
 
         # Each lookup is purely in-memory after first call; failures are
@@ -166,6 +168,14 @@ class MatchDetectionsSkill(Skill):
         except Exception as e:
             corpus_stats["stratus"] = {"error": str(e)[:120]}
 
+        try:
+            from intel.ids_rules import match_by_techniques as _ids
+            from intel.ids_rules import stats as _ids_stats
+            ids_rules = _ids(techniques, max_results=per_max)
+            corpus_stats["ids_rules"] = _ids_stats()
+        except Exception as e:
+            corpus_stats["ids_rules"] = {"error": str(e)[:120]}
+
         return {
             "sigma":           sigma,
             "panther":         panther,
@@ -177,9 +187,10 @@ class MatchDetectionsSkill(Skill):
             "olafhartong":     olafhartong,
             "falco":           falco,
             "stratus":         stratus,
+            "ids_rules":       ids_rules,
             "total":           sum(len(x) for x in
                                    (sigma, panther, splunk, car, playbook,
                                     sublime, chronicle, olafhartong,
-                                    falco, stratus)),
+                                    falco, stratus, ids_rules)),
             "corpus_stats":    corpus_stats,
         }
