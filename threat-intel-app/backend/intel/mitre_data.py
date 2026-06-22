@@ -7,8 +7,13 @@ import re
 from pathlib import Path
 from functools import lru_cache
 
-STIX_FILE     = Path(__file__).parent / "mitre" / "enterprise-attack.json"
-STIX_FILE_ICS = Path(__file__).parent / "mitre" / "ics-attack.json"
+STIX_FILE            = Path(__file__).parent / "mitre" / "enterprise-attack.json"
+STIX_FILE_ICS        = Path(__file__).parent / "mitre" / "ics-attack.json"
+STIX_FILE_MOBILE     = Path(__file__).parent / "mitre" / "mobile-attack.json"
+# ATT&CK for Cloud + Containers ship inside the Enterprise STIX bundle
+# as separate `x-mitre-matrix` objects — we don't load them as separate
+# files; the keyword routers below decide when to filter Enterprise
+# results to the cloud/containers slice.
 
 
 @lru_cache(maxsize=1)
@@ -84,6 +89,103 @@ def looks_like_ics_alert(text: str) -> bool:
         return False
     t = text.lower()
     return any(k in t for k in _ICS_KEYWORDS)
+
+
+# ─── ATT&CK for Mobile ───────────────────────────────────────────────────────
+@lru_cache(maxsize=1)
+def _mitre_mobile():
+    try:
+        from mitreattack.stix20 import MitreAttackData
+        if STIX_FILE_MOBILE.exists():
+            return MitreAttackData(str(STIX_FILE_MOBILE))
+    except ImportError:
+        pass
+    return None
+
+
+def get_all_techniques_mobile() -> list[dict]:
+    """Same shape as get_all_techniques() but for the Mobile matrix."""
+    m = _mitre_mobile()
+    if not m:
+        return []
+    results = []
+    for t in m.get_techniques(remove_revoked_deprecated=True):
+        tid = next((r["external_id"] for r in t.get("external_references", [])
+                    if r.get("source_name") == "mitre-mobile-attack"), None)
+        if not tid:
+            continue
+        tactics = [p["phase_name"].replace("-", " ").title()
+                   for p in t.get("kill_chain_phases", [])
+                   if p.get("kill_chain_name") == "mitre-mobile-attack"]
+        results.append({
+            "id":          tid,
+            "name":        t.get("name", ""),
+            "tactic":      tactics[0] if tactics else "Unknown",
+            "tactics":     tactics,
+            "description": (t.get("description") or "")[:300],
+            "url": f"https://attack.mitre.org/techniques/{tid.replace('.', '/')}/",
+            "matrix":      "mobile-attack",
+        })
+    return sorted(results, key=lambda x: x["id"])
+
+
+# Mobile-attack keyword router. Tokens picked for high specificity.
+_MOBILE_KEYWORDS = (
+    "android", "ios ", "ios.", " ios:", "iphone", "ipad", "apk",
+    "google play", "app store", "mobile device manage", "mdm",
+    "intune mobile", "samsung knox", "android root", "jailbreak",
+    "pegasus", "predator nso", "stalkerware", "mobile spyware",
+    "google authenticator backup", "android device admin",
+    "com.android", "com.apple", "ios payload",
+)
+
+
+def looks_like_mobile_alert(text: str) -> bool:
+    if not isinstance(text, str) or not text:
+        return False
+    t = text.lower()
+    return any(k in t for k in _MOBILE_KEYWORDS)
+
+
+# ─── ATT&CK for Cloud + Containers (filters over Enterprise) ─────────────────
+# ATT&CK no longer publishes Cloud/Containers as separate STIX bundles;
+# they live inside enterprise-attack.json as `x-mitre-platform` tags on
+# individual techniques. We filter via tactic/platform metadata when
+# present in the loaded technique objects.
+_CLOUD_KEYWORDS = (
+    "aws ", "amazon web services", "ec2", "s3 bucket", "cloudtrail",
+    "guardduty", "iam role", "iam user", "iam policy", "kms key",
+    "azure ", "entra id", "azure ad", "microsoft 365", "m365",
+    "office 365", "intune", "sharepoint", "exchange online",
+    "gcp ", "google cloud", "google workspace", "gws",
+    "oauth token", "service account key", "instance metadata",
+    "imds ", "169.254.169.254", "kubernetes secret",
+    "okta", "auth0", "ping identity", "onelogin",
+    "saml assertion", "scim",
+)
+
+_CONTAINER_KEYWORDS = (
+    "kubernetes", "k8s ", "kubeadm", "kubectl", "kubelet", "kube-",
+    "docker ", "containerd", "cri-o", "runc",
+    "ecs task", "fargate", "gke ", "aks ", "eks ",
+    "openshift", "rancher", "harbor",
+    "container escape", "pod escape", "privileged container",
+    "container runtime", "container image", "image pull secret",
+)
+
+
+def looks_like_cloud_alert(text: str) -> bool:
+    if not isinstance(text, str) or not text:
+        return False
+    t = text.lower()
+    return any(k in t for k in _CLOUD_KEYWORDS)
+
+
+def looks_like_container_alert(text: str) -> bool:
+    if not isinstance(text, str) or not text:
+        return False
+    t = text.lower()
+    return any(k in t for k in _CONTAINER_KEYWORDS)
 
 
 def get_all_techniques() -> list[dict]:

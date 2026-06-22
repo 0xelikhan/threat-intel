@@ -334,6 +334,74 @@ def _parse_rhsa(r: Any, cve_id: str) -> Dict[str, Any]:
     }
 
 
+# ─── Microsoft Security Response Center (MSRC) API ───────────────────────────
+#
+# Free Microsoft advisory feed (no key). MSRC publishes a CSAF JSON
+# document per month containing every CVE Microsoft patched that month;
+# we query per-CVE via the MSRC API's `Updates` endpoint, which returns
+# the metadata for any update containing the CVE.
+async def msrc(session, cve_id: str) -> Dict[str, Any]:
+    """Look up Microsoft Security Update Guide entries for a CVE."""
+    from agents.enrichment import _get
+    # The MSRC API expects the CVE in the format `CVE-YYYY-NNNN` and
+    # filters monthly Updates documents to those containing it.
+    url = (f"https://api.msrc.microsoft.com/cvrf/v2.0/Updates"
+           f"('{cve_id}')")
+    r = await _get(
+        session, url,
+        headers={"User-Agent": "RECON-ThreatIntel/1.0",
+                 "Accept": "application/json"},
+    )
+    return _parse_msrc(r, cve_id)
+
+
+def _parse_msrc(r: Any, cve_id: str) -> Dict[str, Any]:
+    if isinstance(r, dict) and "error" in r:
+        msg = (r.get("error") or "").lower()
+        if "404" in msg or "no record" in msg or "not_found" in msg:
+            return {"source": "msrc", "cve_id": cve_id, "found": False,
+                    "summary": f"Microsoft has no advisory record for {cve_id}."}
+        return {"source": "msrc", "cve_id": cve_id, "error": r.get("error"),
+                "error_type": r.get("error_type", "unreachable")}
+    if not isinstance(r, dict) or not r:
+        return {"source": "msrc", "cve_id": cve_id, "error": "unexpected shape"}
+
+    # Top-level shape from MSRC: {"@odata.context": "...", "value": [{...},...]}
+    updates = r.get("value") or []
+    if not isinstance(updates, list) or not updates:
+        return {"source": "msrc", "cve_id": cve_id, "found": False,
+                "summary": f"Microsoft has no Update record for {cve_id}."}
+
+    kb_articles: List[str] = []
+    products:    List[str] = []
+    titles:      List[str] = []
+    for upd in updates[:6]:
+        if not isinstance(upd, dict):
+            continue
+        title = (upd.get("DocumentTitle", {}) or {}).get("Value") or ""
+        if title:
+            titles.append(title[:120])
+        # Each Update document has a CvrfUrl we could fetch for full
+        # detail; we just keep the ID + title to stay lightweight.
+        for kb in (upd.get("AffectedProducts") or [])[:6]:
+            if isinstance(kb, dict):
+                p = kb.get("Value") or kb.get("Name") or ""
+                if p:
+                    products.append(p[:120])
+
+    return {
+        "source":         "msrc",
+        "cve_id":         cve_id,
+        "found":          True,
+        "update_titles":  list(dict.fromkeys(titles))[:6],
+        "products":       list(dict.fromkeys(products))[:8],
+        "details_url":    f"https://msrc.microsoft.com/update-guide/vulnerability/{cve_id}",
+        "summary":        (f"Microsoft tracks {cve_id} in "
+                            f"{len(updates)} Update document"
+                            f"{'s' if len(updates) != 1 else ''}."),
+    }
+
+
 # ─── CISA KEV (live, per-investigation cache) ────────────────────────────────
 #
 # The KEV catalog is small (< 1 MB) and only changes when CISA publishes a

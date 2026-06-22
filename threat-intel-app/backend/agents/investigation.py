@@ -2169,6 +2169,42 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
     except Exception:
         capec_patterns = {}
 
+    # NIST SP 800-53 control families mapped to each ATT&CK technique.
+    # Compliance-flavoured "deploy AU-6 + SI-3 + IR-4" context.
+    nist_controls: dict = {}
+    try:
+        from intel.nist_800_53 import controls_for_attacks
+        tids: list = []
+        for t in (result.get("mitre_techniques") or []):
+            if isinstance(t, str):
+                tid = t.split(" ", 1)[0].strip()
+                if tid.upper().startswith("T"):
+                    tids.append(tid)
+        if tids:
+            nist_controls = controls_for_attacks(tids)
+    except Exception:
+        nist_controls = {}
+
+    # ETW providers — Windows telemetry sources needed to capture each
+    # ATT&CK technique. Lets the KQL generator suggest "subscribe to
+    # provider GUID X to capture this".
+    etw_providers: dict = {}
+    try:
+        from intel.etw_providers import providers_for_attack
+        tids2: list = []
+        for t in (result.get("mitre_techniques") or []):
+            if isinstance(t, str):
+                tid = t.split(" ", 1)[0].strip()
+                if tid.upper().startswith("T"):
+                    tids2.append(tid)
+        if tids2:
+            for tid in tids2:
+                provs = providers_for_attack(tid)
+                if provs:
+                    etw_providers[tid] = provs
+    except Exception:
+        etw_providers = {}
+
     # MITRE D3FEND — defensive countermeasures mapped to each ATT&CK
     # technique. Lets the analyst report answer "what should I deploy
     # to detect/contain this" instead of just listing the technique.
@@ -2216,6 +2252,8 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
         "emulation_plan":         emulation_plan,
         "d3fend_countermeasures": d3fend_countermeasures,
         "capec_patterns":         capec_patterns,
+        "nist_controls":          nist_controls,
+        "etw_providers":          etw_providers,
         "threat_level":           result.get("threat_level", "MEDIUM"),
         "confidence":             _conf,
         "needs_more_enrichment":  result.get("needs_more_enrichment", False),
