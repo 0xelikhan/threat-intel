@@ -2152,6 +2152,23 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
     except Exception:
         forensic_targets = []
 
+    # MITRE CAPEC — attack patterns mapped to each ATT&CK technique.
+    # Richer context than ATT&CK alone: CAPEC carries prerequisites +
+    # mitigations + parent patterns the analyst can pivot through.
+    capec_patterns: dict = {}
+    try:
+        from intel.capec import patterns_for_attacks
+        tids: list = []
+        for t in (result.get("mitre_techniques") or []):
+            if isinstance(t, str):
+                tid = t.split(" ", 1)[0].strip()
+                if tid.upper().startswith("T"):
+                    tids.append(tid)
+        if tids:
+            capec_patterns = patterns_for_attacks(tids)
+    except Exception:
+        capec_patterns = {}
+
     # MITRE D3FEND — defensive countermeasures mapped to each ATT&CK
     # technique. Lets the analyst report answer "what should I deploy
     # to detect/contain this" instead of just listing the technique.
@@ -2198,6 +2215,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
         "forensic_targets":       forensic_targets,
         "emulation_plan":         emulation_plan,
         "d3fend_countermeasures": d3fend_countermeasures,
+        "capec_patterns":         capec_patterns,
         "threat_level":           result.get("threat_level", "MEDIUM"),
         "confidence":             _conf,
         "needs_more_enrichment":  result.get("needs_more_enrichment", False),

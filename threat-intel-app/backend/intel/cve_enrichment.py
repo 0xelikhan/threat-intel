@@ -258,6 +258,82 @@ def _parse_osv(r: Any, cve_id: str) -> Dict[str, Any]:
     }
 
 
+# ─── Red Hat Security Data API ───────────────────────────────────────────────
+#
+# Free Red Hat advisory feed (no key). Endpoint:
+#   https://access.redhat.com/hydra/rest/securitydata/cve/<CVE>.json
+# Returns: RHSA/RHEA/RHBA advisory IDs, affected RHEL packages with
+# fixed versions, public_date, CVSS, threat severity, bugzilla refs.
+# Strong context for Linux-server CVE triage that NVD doesn't surface.
+async def rhsa(session, cve_id: str) -> Dict[str, Any]:
+    """Look up Red Hat security advisories tied to a CVE."""
+    from agents.enrichment import _get
+    url = f"https://access.redhat.com/hydra/rest/securitydata/cve/{cve_id}.json"
+    r = await _get(
+        session, url,
+        headers={"User-Agent": "RECON-ThreatIntel/1.0",
+                 "Accept": "application/json"},
+    )
+    return _parse_rhsa(r, cve_id)
+
+
+def _parse_rhsa(r: Any, cve_id: str) -> Dict[str, Any]:
+    if isinstance(r, dict) and "error" in r:
+        msg = (r.get("error") or "").lower()
+        # Red Hat returns 404 for CVEs they don't track; treat as not-found.
+        if "404" in msg or "not_found" in msg or "no record" in msg:
+            return {"source": "rhsa", "cve_id": cve_id, "found": False,
+                    "summary": f"Red Hat has no advisory record for {cve_id}."}
+        return {"source": "rhsa", "cve_id": cve_id, "error": r.get("error"),
+                "error_type": r.get("error_type", "unreachable")}
+    if not isinstance(r, dict) or not r:
+        return {"source": "rhsa", "cve_id": cve_id, "error": "unexpected shape"}
+
+    advisories = []
+    for a in (r.get("affected_release") or [])[:12]:
+        if not isinstance(a, dict):
+            continue
+        advisories.append({
+            "advisory":     a.get("advisory") or "",
+            "product_name": (a.get("product_name") or "")[:120],
+            "package":      (a.get("package") or "")[:120],
+            "release_date": a.get("release_date") or "",
+        })
+
+    threat_severity = (r.get("threat_severity") or "").strip()
+    cvss_v3         = r.get("cvss3") or {}
+    cvss_score      = cvss_v3.get("cvss3_base_score") if isinstance(cvss_v3, dict) else None
+    package_state   = []
+    for ps in (r.get("package_state") or [])[:12]:
+        if isinstance(ps, dict):
+            package_state.append({
+                "product":     (ps.get("product_name") or "")[:120],
+                "package":     (ps.get("package_name") or "")[:120],
+                "fix_state":   (ps.get("fix_state") or "")[:40],
+            })
+
+    bugzilla = r.get("bugzilla") or {}
+    bz_id    = bugzilla.get("id") if isinstance(bugzilla, dict) else None
+
+    return {
+        "source":            "rhsa",
+        "cve_id":            cve_id,
+        "found":             True,
+        "threat_severity":   threat_severity,
+        "cvss_v3_score":     cvss_score,
+        "advisory_count":    len(advisories),
+        "advisories":        advisories,
+        "package_state":     package_state,
+        "bugzilla_id":       bz_id,
+        "details_url":       f"https://access.redhat.com/security/cve/{cve_id}",
+        "summary":           (f"Red Hat: {len(advisories)} advisory"
+                              f"{'ies' if len(advisories) != 1 else 'y'}"
+                              f" tracked"
+                              + (f" (severity: {threat_severity})"
+                                 if threat_severity else "")),
+    }
+
+
 # ─── CISA KEV (live, per-investigation cache) ────────────────────────────────
 #
 # The KEV catalog is small (< 1 MB) and only changes when CISA publishes a
