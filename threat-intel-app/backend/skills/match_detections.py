@@ -51,6 +51,9 @@ class MatchDetectionsSkill(Skill):
             "splunk":           "list[dict]",
             "mitre_car":        "list[dict]",
             "hunter_playbook":  "list[dict]",
+            "sublime":          "list[dict]",
+            "chronicle":        "list[dict]",
+            "olafhartong":      "list[dict]",
             "total":            "int",
             "corpus_stats":     "dict[str, dict]",
         }
@@ -67,11 +70,14 @@ class MatchDetectionsSkill(Skill):
         techniques = list((inputs or {}).get("mitre_techniques") or [])
         per_max    = int((inputs or {}).get("per_source_max") or 8)
 
-        sigma:    List[Dict[str, Any]] = []
-        panther:  List[Dict[str, Any]] = []
-        splunk:   List[Dict[str, Any]] = []
-        car:      List[Dict[str, Any]] = []
-        playbook: List[Dict[str, Any]] = []
+        sigma:        List[Dict[str, Any]] = []
+        panther:      List[Dict[str, Any]] = []
+        splunk:       List[Dict[str, Any]] = []
+        car:          List[Dict[str, Any]] = []
+        playbook:     List[Dict[str, Any]] = []
+        sublime:      List[Dict[str, Any]] = []
+        chronicle:    List[Dict[str, Any]] = []
+        olafhartong:  List[Dict[str, Any]] = []
         corpus_stats: Dict[str, Any] = {}
 
         # Each lookup is purely in-memory after first call; failures are
@@ -116,13 +122,41 @@ class MatchDetectionsSkill(Skill):
         except Exception as e:
             corpus_stats["hunter_playbook"] = {"error": str(e)[:120]}
 
+        try:
+            from intel.sublime_rules import match_by_techniques as _sub
+            from intel.sublime_rules import stats as _subs
+            sublime = _sub(techniques, max_results=per_max)
+            corpus_stats["sublime"] = _subs()
+        except Exception as e:
+            corpus_stats["sublime"] = {"error": str(e)[:120]}
+
+        try:
+            from intel.chronicle_rules import match_by_techniques as _cr
+            from intel.chronicle_rules import stats as _crs
+            chronicle = _cr(techniques, max_results=per_max)
+            corpus_stats["chronicle"] = _crs()
+        except Exception as e:
+            corpus_stats["chronicle"] = {"error": str(e)[:120]}
+
+        try:
+            from intel.olafhartong_th import match_by_techniques as _oh
+            from intel.olafhartong_th import stats as _ohs
+            olafhartong = _oh(techniques, max_results=per_max)
+            corpus_stats["olafhartong"] = _ohs()
+        except Exception as e:
+            corpus_stats["olafhartong"] = {"error": str(e)[:120]}
+
         return {
             "sigma":           sigma,
             "panther":         panther,
             "splunk":          splunk,
             "mitre_car":       car,
             "hunter_playbook": playbook,
+            "sublime":         sublime,
+            "chronicle":       chronicle,
+            "olafhartong":     olafhartong,
             "total":           sum(len(x) for x in
-                                   (sigma, panther, splunk, car, playbook)),
+                                   (sigma, panther, splunk, car, playbook,
+                                    sublime, chronicle, olafhartong)),
             "corpus_stats":    corpus_stats,
         }
