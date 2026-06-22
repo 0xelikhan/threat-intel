@@ -1284,6 +1284,56 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     except Exception:
         pass
 
+    # DataPlane.org honeypot feeds — daily-refreshed CSV from a global
+    # mesh of volunteer sensors. Hits here indicate the IP has been
+    # caught actively brute-forcing or scanning a specific service.
+    try:
+        from intel.dataplane import lookup as _dp_lookup
+        dp_hits = _dp_lookup(ip)
+        if dp_hits:
+            feeds = sorted({h["feed"] for h in dp_hits})
+            data["dataplane"] = {
+                "source":     "DataPlane.org",
+                "feeds":      feeds,
+                "hit_count":  len(dp_hits),
+                "last_seen":  max((h["last_seen"] for h in dp_hits
+                                    if h.get("last_seen")), default=""),
+                "verdict":    "MALICIOUS" if len(feeds) >= 2 else "SUSPICIOUS",
+                "summary":    (f"{ip} active on {len(feeds)} DataPlane honeypot "
+                                f"feed{'s' if len(feeds) != 1 else ''}: {', '.join(feeds[:4])}"
+                                f"{'…' if len(feeds) > 4 else ''}."),
+            }
+    except Exception:
+        pass
+
+    # SANS DShield — volunteer-firewall sensor network. Live API, no key.
+    try:
+        from intel.dshield import lookup as _dshield_lookup
+        ds = await _dshield_lookup(session, ip)
+        if ds and ds.get("found"):
+            data["dshield"] = ds
+    except Exception:
+        pass
+
+    # Spamhaus DROP/EDROP — canonical hijacked-netblock list.
+    try:
+        from intel.spamhaus_drop import lookup as _shaus_lookup
+        sh = _shaus_lookup(ip)
+        if sh:
+            data["spamhaus_drop"] = {
+                "source":  "Spamhaus DROP/EDROP",
+                "feed":    sh["feed"],
+                "sbl":     sh.get("sbl"),
+                "cidr":    sh["cidr"],
+                "verdict": "MALICIOUS",
+                "summary": (f"{ip} is on the Spamhaus {sh['feed']} list "
+                              f"(netblock {sh['cidr']}"
+                              + (f", SBL {sh['sbl']}" if sh.get("sbl") else "")
+                              + ") - hijacked or criminal infrastructure."),
+            }
+    except Exception:
+        pass
+
     # FireHOL — 400+ curated IP blocklists. Synchronous in-memory lookup
     # over the vendored blocklist-ipsets repo. Each hit reports which
     # named blocklist matched (firehol_level1, blocklist_de_ssh, ...).
