@@ -7,7 +7,8 @@ import re
 from pathlib import Path
 from functools import lru_cache
 
-STIX_FILE = Path(__file__).parent / "mitre" / "enterprise-attack.json"
+STIX_FILE     = Path(__file__).parent / "mitre" / "enterprise-attack.json"
+STIX_FILE_ICS = Path(__file__).parent / "mitre" / "ics-attack.json"
 
 
 @lru_cache(maxsize=1)
@@ -19,6 +20,70 @@ def _mitre():
     except ImportError:
         pass
     return None
+
+
+@lru_cache(maxsize=1)
+def _mitre_ics():
+    """Lazy-load the ATT&CK for ICS matrix. The ICS matrix uses
+    the same STIX 2.0 shape as Enterprise, so the same mitreattack-
+    python helper handles it. File ships separately so the operator
+    can opt in to ICS coverage by dropping it next to enterprise-attack."""
+    try:
+        from mitreattack.stix20 import MitreAttackData
+        if STIX_FILE_ICS.exists():
+            return MitreAttackData(str(STIX_FILE_ICS))
+    except ImportError:
+        pass
+    return None
+
+
+def get_all_techniques_ics() -> list[dict]:
+    """Same shape as get_all_techniques() but for the ICS matrix."""
+    m = _mitre_ics()
+    if not m:
+        return []
+    results = []
+    for t in m.get_techniques(remove_revoked_deprecated=True):
+        tid = next((r["external_id"] for r in t.get("external_references", [])
+                    if r.get("source_name") == "mitre-ics-attack"), None)
+        if not tid:
+            continue
+        tactics = [p["phase_name"].replace("-", " ").title()
+                   for p in t.get("kill_chain_phases", [])
+                   if p.get("kill_chain_name") == "mitre-ics-attack"]
+        results.append({
+            "id":          tid,
+            "name":        t.get("name", ""),
+            "tactic":      tactics[0] if tactics else "Unknown",
+            "tactics":     tactics,
+            "description": (t.get("description") or "")[:300],
+            "url": f"https://attack.mitre.org/techniques/{tid.replace('.', '/')}/",
+            "matrix":      "ics-attack",
+        })
+    return sorted(results, key=lambda x: x["id"])
+
+
+# Keyword router — when an analyst alert mentions any of these tokens,
+# the investigation agent will consult the ICS matrix in addition to
+# Enterprise. Tokens chosen to be high-specificity (no generic IT terms).
+_ICS_KEYWORDS = (
+    "modbus", "dnp3", "iec 61850", "iec 60870", "iec-60870", "iec-104",
+    "iec 104", "s7comm", "siemens s7", "ethernet/ip", "ethernet-ip",
+    "profinet", "profibus", "opc-ua", "opc ua", "bacnet", "iccp",
+    "scada", " plc ", "rtu", "hmi", "dcs distributed control",
+    "purdue model", "wonderware", "factorytalk", "iconics", "ge ifix",
+    "rockwell logix", "schneider modicon", "abb 800xa", "yokogawa centum",
+    "honeywell experion", "iec 62443",
+)
+
+
+def looks_like_ics_alert(text: str) -> bool:
+    """Return True when the alert text references ICS / OT protocols
+    or vendor stacks. Used to gate ICS-matrix lookups."""
+    if not isinstance(text, str) or not text:
+        return False
+    t = text.lower()
+    return any(k in t for k in _ICS_KEYWORDS)
 
 
 def get_all_techniques() -> list[dict]:

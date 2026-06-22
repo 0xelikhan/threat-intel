@@ -539,6 +539,22 @@ def score_cve(data: dict, label: str = "cve") -> GTIScore:
             score += 4
             factors.append(f"nuclei: {n} public detection template{'s' if n > 1 else ''}")
 
+    # trickest/cve: public PoC count. GitHub PoCs are the highest-signal
+    # weaponisation indicator after KEV — they mean an attacker can clone +
+    # run the exploit in minutes.
+    pocs = data.get("public_pocs") or {}
+    if pocs and pocs.get("poc_count"):
+        gh = int(pocs.get("github_count") or 0)
+        total = int(pocs.get("poc_count") or 0)
+        if gh >= 3:
+            score += 12
+            if verdict == "UNKNOWN":
+                verdict = "SUSPICIOUS"
+            factors.append(f"public PoCs: {gh} on GitHub ({total} total)")
+        elif total >= 1:
+            score += 6
+            factors.append(f"public PoCs: {total} reference{'s' if total > 1 else ''}")
+
     if not factors:
         factors.append("No CVE intelligence data available.")
         verdict = "UNKNOWN"

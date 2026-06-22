@@ -574,6 +574,79 @@ def _p_vt_url(r):
     return out
 
 
+async def _shodan_internetdb(session, ip: str) -> dict:
+    """Shodan's free InternetDB endpoint (no key required).
+    Endpoint: https://internetdb.shodan.io/<ip>  -> JSON of:
+      ip, ports[], cpes[], hostnames[], tags[], vulns[]
+    Empty 404 means no observed data — return {found:False}."""
+    try:
+        r = await _get(
+            session, f"https://internetdb.shodan.io/{ip}",
+            headers={"User-Agent": "RECON-ThreatIntel/1.0",
+                     "Accept": "application/json"},
+            timeout=6,
+        )
+    except Exception as e:
+        return {"source": "shodan_internetdb", "error": str(e)[:120],
+                "error_type": "unreachable"}
+    if not isinstance(r, dict):
+        return {"source": "shodan_internetdb", "error": "unexpected shape",
+                "error_type": "unreachable"}
+    if "error" in r:
+        # Shodan returns {"detail": "No information available"} for
+        # unknown IPs — treat as not-found rather than an error.
+        msg = (r.get("error") or "").lower()
+        if "no information" in msg or "404" in msg or "not_found" in msg:
+            return {"source": "shodan_internetdb", "found": False,
+                    "summary": f"Shodan has no observed services on {ip}."}
+        return {"source": "shodan_internetdb", "error": r.get("error"),
+                "error_type": r.get("error_type", "unreachable")}
+    if "ip" not in r and "ports" not in r and "vulns" not in r:
+        return {"source": "shodan_internetdb", "found": False,
+                "summary": f"Shodan has no observed services on {ip}."}
+
+    ports     = list(r.get("ports") or [])[:30]
+    hostnames = [str(h)[:120] for h in (r.get("hostnames") or [])][:8]
+    cpes      = [str(c)[:160] for c in (r.get("cpes") or [])][:12]
+    tags      = [str(t)[:40] for t in (r.get("tags") or [])][:10]
+    vulns     = [str(v)[:24] for v in (r.get("vulns") or [])][:25]
+
+    risky_tags = {"vpn", "tor", "cdn", "anonymous", "proxy",
+                   "compromised", "honeypot", "malware"}
+    risky_present = [t for t in tags if t.lower() in risky_tags]
+
+    summary_bits = []
+    if ports:
+        summary_bits.append(f"{len(ports)} exposed port"
+                            f"{'s' if len(ports) != 1 else ''}")
+    if vulns:
+        summary_bits.append(f"{len(vulns)} known CVE"
+                            f"{'s' if len(vulns) != 1 else ''}")
+    if risky_present:
+        summary_bits.append(f"tags: {', '.join(risky_present)}")
+    summary = "Shodan InternetDB: " + (", ".join(summary_bits) if summary_bits
+                                       else "host visible to Shodan with no notable signals.")
+
+    verdict = "UNKNOWN"
+    if vulns and len(vulns) >= 3:
+        verdict = "SUSPICIOUS"
+    if risky_present:
+        verdict = "SUSPICIOUS"
+
+    return {
+        "source":     "shodan_internetdb",
+        "found":      True,
+        "ports":      ports,
+        "hostnames":  hostnames,
+        "cpes":       cpes,
+        "tags":       tags,
+        "vulns":      vulns,
+        "vuln_count": len(vulns),
+        "verdict":    verdict,
+        "summary":    summary,
+    }
+
+
 async def _malware_bazaar(session, hash_val: str) -> dict:
     """abuse.ch MalwareBazaar hash lookup. POST form-encoded query=get_info
     + hash. Returns named-family + tags + first-seen + YARA rule names.
@@ -1177,6 +1250,17 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     if feodo:
         data["feodo_tracker"] = feodo
 
+    # Shodan InternetDB — free, no-key IP service inventory. Returns
+    # observed ports, CPEs, hostnames, tags, and CVEs. Strong context
+    # for inbound IP IOCs because it tells the analyst what the host
+    # EXPOSES, not just whether it's been scanning.
+    try:
+        idb = await _shodan_internetdb(session, ip)
+        if idb and not idb.get("error"):
+            data["shodan_internetdb"] = idb
+    except Exception:
+        pass
+
     # ── Secondary lookups — all independent, so fire them concurrently instead
     #    of one await after another (BGP, Safe Browsing, deception, Maltiverse,
     #    OpenCTI). Each helper already fails soft; return_exceptions keeps one
@@ -1357,6 +1441,22 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
                 "hit":     True,
                 "summary": (f"{domain} is on the active phishing-domains "
                             "feed (validated by PyFunceble)."),
+            }
+    except Exception:
+        pass
+
+    # MVT mobile-spyware IOCs — domain hits (Pegasus, Predator, etc.).
+    try:
+        from intel.mvt_iocs import lookup_domain as _mvt_domain
+        mvt = _mvt_domain(domain)
+        if mvt:
+            data["mvt_mobile"] = {
+                "source":  "MVT (Mobile Verification Toolkit)",
+                "family":  mvt.get("family"),
+                "ref":     mvt.get("ref"),
+                "verdict": "MALICIOUS",
+                "summary": (f"MVT spyware hit: {mvt.get('family')}"
+                            " — mobile-targeted infrastructure."),
             }
     except Exception:
         pass
@@ -1590,6 +1690,38 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
     except Exception:
         pass
 
+    # HIBP Pwned Passwords — k-anonymity API for SHA-1 input. We never
+    # send the password / full hash; only the first 5 chars of the SHA-1
+    # prefix leave the box. RECON's hash IOC extractor surfaces SHA-1s
+    # too, and analysts often paste a leaked credential's SHA-1 — when
+    # they do, HIBP can confirm "this hash is in 4M breaches."
+    if len(hash_val) == 40:
+        try:
+            from intel.hibp import check_sha1 as _hibp_check
+            hp = await _hibp_check(session, hash_val)
+            if hp and hp.get("found"):
+                data["hibp_passwords"] = hp
+        except Exception:
+            pass
+
+    # MVT mobile-spyware IOCs — Pegasus / Predator / RCS Lab / BadBazaar.
+    # Synchronous in-memory lookup. Hits here are extremely high-signal:
+    # MVT only ships IOCs after the threat is named and confirmed.
+    try:
+        from intel.mvt_iocs import lookup_hash as _mvt_hash
+        mvt = _mvt_hash(hash_val)
+        if mvt:
+            data["mvt_mobile"] = {
+                "source":  "MVT (Mobile Verification Toolkit)",
+                "family":  mvt.get("family"),
+                "ref":     mvt.get("ref"),
+                "verdict": "MALICIOUS",
+                "summary": (f"MVT spyware hit: {mvt.get('family')}"
+                            " — mobile-targeted threat."),
+            }
+    except Exception:
+        pass
+
     # MISP feeds — flat hashes.csv dump from CIRCL OSINT / DigitalSide /
     # Botvrij. Free, no key, refreshed every 6h. Hits here are strong
     # corroborating evidence (community-curated event with a UUID + a
@@ -1678,15 +1810,16 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
         return {**_cache[ck], "cached": True}
 
     try:
-        from intel.cve_enrichment import nvd_cve, epss, cisa_kev_check, osv
+        from intel.cve_enrichment import nvd_cve, epss, cisa_kev_check, osv, rhsa
     except Exception as e:
         return {"error": f"cve_enrichment unavailable: {e}"}
 
-    nvd_r, epss_r, kev_r, osv_r = await asyncio.gather(
+    nvd_r, epss_r, kev_r, osv_r, rhsa_r = await asyncio.gather(
         nvd_cve(session, cve_id),
         epss(session, cve_id),
         cisa_kev_check(session, cve_id),
         osv(session, cve_id),
+        rhsa(session, cve_id),
         return_exceptions=True,
     )
 
@@ -1703,6 +1836,9 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
     osv_d = _ok_dict(osv_r)
     if osv_d:
         data["osv"] = osv_d
+    rh = _ok_dict(rhsa_r)
+    if rh:
+        data["rhsa"] = rh
 
     # ProjectDiscovery nuclei-templates: how many public detection
     # templates target this CVE. "X templates exist" is a more concrete
@@ -1741,6 +1877,47 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
                 "summary":     (f"{len(ghsa_rows)} GitHub Security Advisor"
                                 f"{'ies' if len(ghsa_rows) != 1 else 'y'} "
                                 f"reference this CVE."),
+            }
+    except Exception:
+        pass
+
+    # CSAF — vendor-specific advisories (Cisco, Red Hat, Siemens, SAP,
+    # Schneider, Bosch). Synchronous in-memory lookup over the bundled
+    # CSAF JSON tree at vendor/csaf/<vendor>/*.json.
+    try:
+        from intel.csaf import lookup_cve as _csaf_lookup
+        csaf_rows = _csaf_lookup(cve_id, max_results=6)
+        if csaf_rows:
+            vendors_hit = sorted({r.get("vendor") for r in csaf_rows
+                                   if r.get("vendor")})
+            data["csaf"] = {
+                "source":   "OASIS CSAF",
+                "advisories": csaf_rows,
+                "vendors":  vendors_hit,
+                "summary":  (f"{len(csaf_rows)} vendor advisor"
+                              f"{'ies' if len(csaf_rows) != 1 else 'y'}"
+                              f" via CSAF ({', '.join(vendors_hit[:4])}"
+                              f"{'…' if len(vendors_hit) > 4 else ''})."),
+            }
+    except Exception:
+        pass
+
+    # trickest/cve PoC catalog — public proof-of-concept exploit links
+    # mined from GitHub / gist / exploit-db. "5 PoCs exist" is a sharper
+    # weaponisation signal than EPSS-probability alone.
+    try:
+        from intel.cve_pocs import lookup as _poc_lookup
+        pocs = _poc_lookup(cve_id, max_results=10)
+        if pocs:
+            github_pocs = [p for p in pocs if p["source"] == "github"]
+            data["public_pocs"] = {
+                "source":      "trickest/cve",
+                "pocs":        pocs,
+                "poc_count":   len(pocs),
+                "github_count": len(github_pocs),
+                "summary":     (f"{len(pocs)} public PoC reference"
+                                f"{'s' if len(pocs) != 1 else ''} "
+                                f"({len(github_pocs)} on GitHub)."),
             }
     except Exception:
         pass
