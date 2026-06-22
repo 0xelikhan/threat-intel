@@ -767,6 +767,30 @@ def _suspicious_string_hits(strings_dict: Dict, source_code: bool = False) -> Li
 
 
 # ─── public entry point ────────────────────────────────────────────────────────
+def _capa_eligible(type_info: Dict, size: int) -> bool:
+    """capa supports PE (incl. .NET), ELF, and raw shellcode. Skip
+    everything else (PDF, Office, scripts, archives, source code) — capa
+    will just print 'unsupported' and waste ~500ms on subprocess spawn.
+    Also gate on a minimum size so capa isn't invoked on truncated stubs."""
+    if size < 1024:
+        return False
+    if type_info.get("is_source_code"):
+        return False
+    mime = (type_info.get("detected_mime") or "").lower()
+    cat  = (type_info.get("category") or "").lower()
+    desc = (type_info.get("detected_desc") or "").lower()
+    # Positive matches first — anything that smells like PE / ELF / .NET.
+    if any(s in mime for s in ("x-executable", "x-dosexec", "x-msdownload",
+                               "x-pe", "x-elf", "x-sharedlib", "x-mach-binary")):
+        return True
+    if any(s in desc for s in ("pe32", "pe64", " elf ", "executable",
+                               ".net", "dll", "exe ", "shared object")):
+        return True
+    if cat in {"binary", "executable", "library"}:
+        return True
+    return False
+
+
 def analyze_file(file_bytes: bytes, filename: str = "uploaded") -> Dict:
     """Synchronous static analysis — TI correlation runs separately (needs aiohttp).
 
@@ -874,6 +898,31 @@ def analyze_file(file_bytes: bytes, filename: str = "uploaded") -> Dict:
         result["capabilities"] = build_capability_assessment(result)
     except Exception as e:
         result["capabilities"] = {"error": str(e)}
+
+    # FLARE capa — only invoke on supported formats (PE/.NET/ELF). capa
+    # spends 5-30s on real binaries so we gate it tightly; on a 2KB shell
+    # script the cost would dwarf the rest of the scan with no benefit.
+    if _capa_eligible(type_info, len(file_bytes)):
+        try:
+            from intel.capa_runner import run_capa_sync
+            capa_out = run_capa_sync(file_bytes, filename=filename)
+            result["capa"] = capa_out
+            # Fold capa's MITRE techniques into the existing capability
+            # assessment so the analyst report shows one merged list.
+            if (isinstance(result.get("capabilities"), dict)
+                    and not result["capabilities"].get("error")):
+                existing = set(result["capabilities"].get("mitre_techniques") or [])
+                for t in (capa_out.get("mitre_techniques") or []):
+                    if t and t not in existing:
+                        existing.add(t)
+                result["capabilities"]["mitre_techniques"] = sorted(existing)
+                if capa_out.get("rule_count"):
+                    result["tags"].append(f"capa:{capa_out['rule_count']}-capability"
+                                          f"{'ies' if capa_out['rule_count'] != 1 else 'y'}")
+        except Exception as e:
+            result["capa"] = {"available": True, "error": str(e),
+                              "capabilities": [], "mitre_techniques": [],
+                              "namespaces": [], "rule_count": 0}
 
     # Detection content generation
     try:

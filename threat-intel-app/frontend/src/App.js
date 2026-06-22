@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect, lazy, Suspense } from 'react';
 import {
   ArrowUpRight, AlertCircle, ChevronRight, X, FileSearch, Mail, Activity,
 } from 'lucide-react';
@@ -4501,6 +4501,289 @@ function Detection({ result }) {
   );
 }
 
+/* ─── DomainPermutationsView — dnstwist lookalike enumeration ──────────────────
+   Pick a domain from the IOC set and surface live-registered typo-squats /
+   homoglyphs / TLD-swaps. The Cisco-AS-of-which research found dnstwist;
+   wraps the new /api/hunt/permutations endpoint. */
+function DomainPermutationsView({ result }) {
+  const domains = useMemo(() => {
+    const out = new Set();
+    for (const d of (result?.iocs?.domains || [])) out.add(d);
+    // High-signal source: any per-IOC analysis pulled in domains via investigation.
+    return Array.from(out).slice(0, 25);
+  }, [result]);
+
+  const [picked, setPicked] = useState(domains[0] || '');
+  const [data, setData]     = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    // Keep selection stable when a new result loads but the previous domain
+    // is gone.
+    if (!picked && domains[0]) setPicked(domains[0]);
+    if (picked && !domains.includes(picked)) setPicked(domains[0] || '');
+  }, [domains, picked]);
+
+  if (!domains.length) return null;
+
+  const run = async () => {
+    if (!picked) return;
+    setLoading(true); setErr(null); setData(null);
+    try {
+      const resp = await cookieFetch('/api/hunt/permutations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: picked, max_results: 35, resolve: true, high_signal_only: false,
+        }),
+      });
+      const j = await resp.json();
+      if (!resp.ok) throw new Error(j.detail || j.error || `HTTP ${resp.status}`);
+      setData(j);
+    } catch (e) {
+      setErr(e.message || 'Permutation lookup failed');
+    } finally { setLoading(false); }
+  };
+
+  const registered = data?.registered || [];
+  const total      = data?.total || 0;
+
+  return (
+    <Card title="Lookalike domains · dnstwist" accent="#E6700F"
+      badge={data ? `${registered.length} live / ${total} variants` : undefined}>
+      <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
+        Pick a domain to enumerate typo-squat, homoglyph, TLD-swap, and bitsquat
+        permutations via dnstwist. Each variant is DNS-resolved; live registrations
+        are flagged in red as candidate phishing infrastructure.
+      </Typography>
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', mb: 1.5 }}>
+        <select
+          value={picked}
+          onChange={e => { setPicked(e.target.value); setData(null); setErr(null); }}
+          style={{
+            background: '#0C1524', color: '#e6f1ff', fontSize: 12,
+            padding: '6px 10px', borderRadius: 4,
+            border: `1px solid rgba(255,255,255,0.12)`,
+            fontFamily: '"IBM Plex Mono", monospace',
+          }}>
+          {domains.map(d => <option key={d} value={d}>{d}</option>)}
+        </select>
+        <MuiButton variant="contained" onClick={run} disabled={loading || !picked}
+          sx={{ textTransform: 'none' }}>
+          {loading ? 'Resolving…' : 'Find live lookalikes'}
+        </MuiButton>
+      </Box>
+      {err && (
+        <Typography sx={{ fontSize: 12, color: 'error.main', mt: 1 }}>{err}</Typography>
+      )}
+      {data && registered.length === 0 && (
+        <Typography sx={{ fontSize: 12, color: 'text.tertiary', mt: 1 }}>
+          {total === 0 ? 'No permutations generated.'
+            : `${total} permutations generated, none currently resolve. ` +
+              'No active typo-squat infrastructure detected.'}
+        </Typography>
+      )}
+      {data && registered.length > 0 && (
+        <MuiTableContainer component={MuiPaper} elevation={0} sx={{
+          backgroundColor: '#0C1524',
+          border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+          borderRadius: '4px', overflow: 'hidden', mt: 1,
+        }}>
+          <MuiTable size="small" sx={{ fontSize: 12 }}>
+            <MuiTableHead>
+              <MuiTableRow sx={{ backgroundColor: '#070d19' }}>
+                {['Variant', 'Permutation type', 'Resolved IP'].map(h => (
+                  <MuiTableCell key={h} sx={{
+                    fontSize: 11, color: 'text.tertiary', textTransform: 'uppercase',
+                    letterSpacing: 0.5, borderColor: muiAlpha('#ffffff', 0.08),
+                  }}>{h}</MuiTableCell>
+                ))}
+              </MuiTableRow>
+            </MuiTableHead>
+            <MuiTableBody>
+              {registered.map((r, i) => (
+                <MuiTableRow key={i}>
+                  <MuiTableCell sx={{
+                    fontSize: 12, color: '#ff6b6b',
+                    fontFamily: '"IBM Plex Mono", monospace',
+                    borderColor: muiAlpha('#ffffff', 0.06),
+                  }}>{r.variant}</MuiTableCell>
+                  <MuiTableCell sx={{
+                    fontSize: 12, color: 'text.secondary',
+                    borderColor: muiAlpha('#ffffff', 0.06),
+                  }}>{r.fuzzer}</MuiTableCell>
+                  <MuiTableCell sx={{
+                    fontSize: 12, color: 'text.primary',
+                    fontFamily: '"IBM Plex Mono", monospace',
+                    borderColor: muiAlpha('#ffffff', 0.06),
+                  }}>{r.dns_a || '—'}</MuiTableCell>
+                </MuiTableRow>
+              ))}
+            </MuiTableBody>
+          </MuiTable>
+        </MuiTableContainer>
+      )}
+    </Card>
+  );
+}
+
+/* ─── HuntPlanView — PEAK-style hypothesis + ABLE + hunt plan ──────────────────
+   Shifts left from triage into proactive hunting. Click "Generate hunt plan"
+   to call /api/hunt/plan, which runs three skills against the current /api/analyze
+   result: generate_hypothesis → generate_able_table → generate_hunt_plan.
+   Adapted from Cisco Talos PEAK-Assistant's analyst workflow. */
+function HuntPlanView({ result }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState(null);
+  const [overrideHyp, setOverrideHyp] = useState('');
+  const [showOverride, setShowOverride] = useState(false);
+
+  const rs    = result?.response_summary || {};
+  const ready = !!rs.threat_level;
+
+  const generate = async () => {
+    setLoading(true); setErr(null);
+    try {
+      const analysis = {
+        threat_level:     rs.threat_level,
+        summary:          rs.summary,
+        mitre_techniques: rs.mitre_techniques || [],
+        malware_family:   rs.malware_family || result?.malware_family,
+        behavioral_indicators: result?.behavioral_indicators || {},
+      };
+      const body = {
+        analysis,
+        iocs: result?.iocs || {},
+        hypothesis: overrideHyp.trim() || null,
+      };
+      const resp = await cookieFetch('/api/hunt/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body),
+      });
+      const j = await resp.json();
+      if (!resp.ok) throw new Error(j.detail || j.error || `HTTP ${resp.status}`);
+      setData(j);
+    } catch (e) {
+      setErr(e.message || 'Hunt plan generation failed');
+    } finally { setLoading(false); }
+  };
+
+  if (!ready) return null;
+
+  if (!data) {
+    return (
+      <Card title="Threat hunt plan · PEAK framework" accent="#B286FF">
+        <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
+          Take this verdict from reactive triage into a proactive hunt. Generates
+          hunt hypotheses, a PEAK ABLE (Actor, Behavior, Location, Evidence)
+          table, and a step-by-step hunt plan with KQL queries.
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+          <MuiButton variant="contained" onClick={generate} disabled={loading}
+            sx={{ textTransform: 'none' }}>
+            {loading ? 'Generating…' : 'Generate hunt plan'}
+          </MuiButton>
+          <MuiButton variant="text" onClick={() => setShowOverride(v => !v)}
+            sx={{ textTransform: 'none', fontSize: 12 }}>
+            {showOverride ? 'Use auto-generated hypothesis' : 'Provide my own hypothesis'}
+          </MuiButton>
+        </Box>
+        {showOverride && (
+          <Box sx={{ mt: 1.5 }}>
+            <textarea
+              value={overrideHyp}
+              onChange={e => setOverrideHyp(e.target.value)}
+              placeholder="e.g. Threat actors may be using PowerShell EncodedCommand to stage Cobalt Strike beacons on Windows endpoints"
+              rows={3}
+              style={{
+                width: '100%', boxSizing: 'border-box', padding: '8px 10px',
+                fontSize: 12, fontFamily: 'inherit', color: '#e6f1ff',
+                background: '#0C1524',
+                border: `1px solid rgba(255,255,255,0.12)`, borderRadius: 4,
+                resize: 'vertical',
+              }}
+            />
+          </Box>
+        )}
+        {err && (
+          <Typography sx={{ fontSize: 12, color: 'error.main', mt: 1 }}>{err}</Typography>
+        )}
+      </Card>
+    );
+  }
+
+  const hypotheses = data.hypotheses || [];
+  const primary    = data.primary    || '';
+  const able       = data.able_markdown || '';
+  const plan       = data.hunt_plan      || '';
+  const approvedBadge = data.plan_approved
+    ? 'critic-approved'
+    : (data.plan_iterations > 1 ? 'best-effort' : '');
+
+  return (
+    <Card title="Threat hunt plan · PEAK framework" accent="#B286FF"
+      badge={approvedBadge || undefined}>
+      {hypotheses.length > 0 && (
+        <Box sx={{ mb: 2 }}>
+          <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 600, mb: 1 }}>
+            Hunt hypotheses
+          </Typography>
+          <Box component="ul" sx={{ pl: 2.5, m: 0 }}>
+            {hypotheses.map((h, i) => (
+              <Box component="li" key={i} sx={{
+                fontSize: 12, lineHeight: 1.6, mb: 0.5,
+                fontWeight: h === primary ? 600 : 400,
+                color:      h === primary ? 'text.primary' : 'text.secondary',
+              }}>{h}</Box>
+            ))}
+          </Box>
+          {primary && (
+            <Typography sx={{ fontSize: 11, color: 'text.tertiary', mt: 1 }}>
+              Bold hypothesis was used to drive ABLE + hunt plan.
+            </Typography>
+          )}
+        </Box>
+      )}
+
+      {able && (
+        <Box sx={{ mb: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between',
+            alignItems: 'center', mb: 1 }}>
+            <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 600 }}>
+              PEAK ABLE table
+            </Typography>
+            <CopyBtn text={able}/>
+          </Box>
+          <MuiCodeBlock>{able}</MuiCodeBlock>
+        </Box>
+      )}
+
+      {plan && (
+        <Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between',
+            alignItems: 'center', mb: 1 }}>
+            <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 600 }}>
+              Hunt plan {data.plan_approved ? '· critic-approved' : ''}
+            </Typography>
+            <CopyBtn text={plan}/>
+          </Box>
+          <MuiCodeBlock>{plan}</MuiCodeBlock>
+        </Box>
+      )}
+
+      <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
+        <MuiButton variant="text" onClick={() => { setData(null); setErr(null); }}
+          sx={{ textTransform: 'none', fontSize: 12 }}>
+          Regenerate
+        </MuiButton>
+      </Box>
+    </Card>
+  );
+}
+
 /* ─── JA3/JA4 network detection ──────────────────────────────────────────────── */
 function NetworkDetection({ result, bare }) {
   const fps = result?.response_summary?.ja_fingerprints || [];
@@ -5592,6 +5875,12 @@ function AppMain({ authUser, setAuthState }) {
               </Card>
             )}
             <Detection result={result}/>
+            <ErrorBoundary label="Lookalike domains">
+              <DomainPermutationsView result={result}/>
+            </ErrorBoundary>
+            <ErrorBoundary label="Hunt plan">
+              <HuntPlanView result={result}/>
+            </ErrorBoundary>
             </CardDefaultOpenContext.Provider>
           </>
         )}
