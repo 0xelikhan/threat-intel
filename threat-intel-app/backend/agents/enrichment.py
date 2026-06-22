@@ -1504,6 +1504,45 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     except Exception:
         pass
 
+    # OFAC SDN — sanctioned domain. Legally material.
+    try:
+        from intel.ofac_sdn import lookup_domain as _ofac_domain
+        ofac = _ofac_domain(domain)
+        if ofac:
+            data["ofac_sdn"] = {
+                "source":   "US Treasury OFAC SDN",
+                "entity":   ofac.get("entity"),
+                "programs": ofac.get("programs") or [],
+                "verdict":  "MALICIOUS",
+                "summary":  (f"{domain} is OFAC SDN-sanctioned "
+                              f"(entity: {ofac.get('entity')}, programs: "
+                              f"{', '.join(ofac.get('programs') or [])})."),
+            }
+    except Exception:
+        pass
+
+    # Chrome HSTS preload — major org's hardcoded must-be-HTTPS domain.
+    try:
+        from intel.hsts_preload import is_preloaded
+        if is_preloaded(domain):
+            data["hsts_preload"] = {
+                "source":    "Chrome HSTS preload",
+                "preloaded": True,
+                "summary":   (f"{domain} is on the Chromium HSTS preload "
+                                "list — major org with hardcoded HTTPS-only enforcement."),
+            }
+    except Exception:
+        pass
+
+    # Mozilla Observatory — web-security posture grade.
+    try:
+        from intel.mozilla_observatory import scan as _obs_scan
+        obs = await _obs_scan(session, domain)
+        if obs and obs.get("found"):
+            data["mozilla_observatory"] = obs
+    except Exception:
+        pass
+
     # Tranco top-1M ranking — strong "this is a legitimate brand, not the
     # attacker" signal. We surface the rank verbatim and a tier bucket so
     # the analyst can see the popularity context at a glance.
