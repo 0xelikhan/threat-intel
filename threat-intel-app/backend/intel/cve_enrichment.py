@@ -185,6 +185,79 @@ def _parse_epss(r: Any, cve_id: str) -> Dict[str, Any]:
     }
 
 
+# ─── OSV.dev (Google Open Source Vulnerabilities) ────────────────────────────
+#
+# NVD covers CVEs broadly but misses ecosystem-specific advisories (npm,
+# PyPI, RubyGems, Go modules, Cargo, Composer, NuGet, etc.). OSV.dev
+# aggregates GitHub Security Advisories + RustSec + GSD + Linux distro
+# advisories and serves them via a simple POST endpoint.
+async def osv(session, cve_id: str) -> Dict[str, Any]:
+    """Look up a CVE in OSV.dev. Free API, no key. POST to v1/vulns."""
+    from agents.enrichment import _get
+    # OSV's /v1/query endpoint actually takes POST with a JSON body, but
+    # they also expose /v1/vulns/<id> for direct GET by ID (CVE or GHSA).
+    url = f"https://api.osv.dev/v1/vulns/{cve_id}"
+    r = await _get(
+        session, url,
+        headers={"User-Agent": "RECON-ThreatIntel/1.0",
+                 "Accept": "application/json"},
+    )
+    return _parse_osv(r, cve_id)
+
+
+def _parse_osv(r: Any, cve_id: str) -> Dict[str, Any]:
+    if isinstance(r, dict) and "error" in r:
+        return {"source": "osv", "cve_id": cve_id, "error": r.get("error"),
+                "error_type": r.get("error_type", "unreachable")}
+    if not isinstance(r, dict):
+        return {"source": "osv", "cve_id": cve_id, "error": "unexpected shape"}
+    if "id" not in r and "vulnerabilities" not in r:
+        return {"source": "osv", "cve_id": cve_id, "found": False,
+                "summary": f"OSV has no record for {cve_id}."}
+
+    affected = r.get("affected") or []
+    ecosystems: List[str] = []
+    packages:   List[str] = []
+    for a in affected[:20]:
+        if not isinstance(a, dict):
+            continue
+        pkg = a.get("package") or {}
+        if isinstance(pkg, dict):
+            eco  = (pkg.get("ecosystem") or "").strip()
+            name = (pkg.get("name") or "").strip()
+            if eco:
+                ecosystems.append(eco)
+            if name:
+                packages.append(f"{eco}:{name}" if eco else name)
+
+    # Dedupe preserving order
+    ecosystems = list(dict.fromkeys(ecosystems))[:8]
+    packages   = list(dict.fromkeys(packages))[:12]
+    references = []
+    for ref in (r.get("references") or [])[:6]:
+        if isinstance(ref, dict) and ref.get("url"):
+            references.append({"type": ref.get("type", "WEB"),
+                                "url":  ref["url"][:200]})
+
+    summary = (r.get("summary") or r.get("details") or "")[:300]
+    aliases = r.get("aliases") or []
+    if isinstance(aliases, list):
+        aliases = [a for a in aliases if isinstance(a, str)][:6]
+
+    return {
+        "source":     "osv",
+        "cve_id":     cve_id,
+        "found":      True,
+        "id":         r.get("id") or cve_id,
+        "ecosystems": ecosystems,
+        "packages":   packages,
+        "aliases":    aliases,
+        "references": references,
+        "summary":    (summary or f"OSV record: {len(packages)} affected packages"
+                                  f" across {len(ecosystems)} ecosystem(s)."),
+    }
+
+
 # ─── CISA KEV (live, per-investigation cache) ────────────────────────────────
 #
 # The KEV catalog is small (< 1 MB) and only changes when CISA publishes a

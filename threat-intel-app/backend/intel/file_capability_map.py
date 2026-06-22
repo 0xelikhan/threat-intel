@@ -250,12 +250,30 @@ def build_capability_assessment(result: Dict) -> Dict:
     elif techniques:
         verdict = "LOW"
 
+    # MalAPI.io enrichment — group every PE import API by its malapi.io
+    # malicious-use category and surface the inferred MITRE techniques
+    # alongside the rules-based ones above. Additive: rules-based output
+    # is preserved unchanged.
+    malapi_summary: Dict = {}
+    try:
+        pe = (result.get("format_specific") or {}).get("pe") or {}
+        api_names = []
+        for v in (pe.get("imports") or {}).values():
+            if isinstance(v, list):
+                api_names.extend(v)
+        if api_names:
+            from intel.malapi import classify_apis
+            malapi_summary = classify_apis(api_names)
+    except Exception:
+        malapi_summary = {}
+
     return {
         "tags":                 sorted(set(tags)),
         "mitre_techniques":     techniques,
         "technique_count":      len(techniques),
         "plain_english_summary": summary,
         "verdict":              verdict,
+        "malapi":               malapi_summary,
     }
 
 

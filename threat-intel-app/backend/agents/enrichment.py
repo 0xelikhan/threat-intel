@@ -574,6 +574,60 @@ def _p_vt_url(r):
     return out
 
 
+async def _malware_bazaar(session, hash_val: str) -> dict:
+    """abuse.ch MalwareBazaar hash lookup. POST form-encoded query=get_info
+    + hash. Returns named-family + tags + first-seen + YARA rule names.
+    Free + unauthenticated; same operator as Feodo / ThreatFox / URLhaus."""
+    if not hash_val or len(hash_val) not in (32, 40, 64):
+        return {"source": "malware_bazaar", "error": "invalid hash length",
+                "error_type": "skipped"}
+    try:
+        r = await _post(
+            session,
+            "https://mb-api.abuse.ch/api/v1/",
+            data={"query": "get_info", "hash": hash_val},
+            headers={"User-Agent": "RECON-ThreatIntel/1.0"},
+            timeout=10,
+        )
+    except Exception as e:
+        return {"source": "malware_bazaar", "error": str(e)[:120],
+                "error_type": "unreachable"}
+    if not isinstance(r, dict):
+        return {"source": "malware_bazaar", "error": "unexpected shape",
+                "error_type": "unreachable"}
+    status = (r.get("query_status") or "").lower()
+    if status in ("hash_not_found", "no_results", "no_hash"):
+        return {"source": "malware_bazaar", "found": False,
+                "summary": f"MalwareBazaar has no record for {hash_val}."}
+    if status != "ok":
+        return {"source": "malware_bazaar", "found": False,
+                "error_type": "not_found", "summary": status or "no data"}
+    rows = r.get("data") or []
+    if not isinstance(rows, list) or not rows:
+        return {"source": "malware_bazaar", "found": False,
+                "summary": "MalwareBazaar returned no data rows."}
+    row = rows[0] if isinstance(rows[0], dict) else {}
+    family   = row.get("signature") or ""
+    tags     = row.get("tags") or []
+    yara     = row.get("yara_rules") or []
+    yara_names = [(y.get("rule_name") or "")[:80]
+                   for y in yara if isinstance(y, dict)]
+    return {
+        "source":          "malware_bazaar",
+        "found":           True,
+        "family":          family,
+        "file_name":       (row.get("file_name") or "")[:160],
+        "file_type":       (row.get("file_type") or "")[:40],
+        "first_seen":      row.get("first_seen"),
+        "last_seen":       row.get("last_seen"),
+        "tags":            [str(t)[:40] for t in tags][:12],
+        "yara_rule_names": yara_names[:8],
+        "verdict":         "MALICIOUS" if family else "SUSPICIOUS",
+        "summary":         (f"MalwareBazaar: {family}" if family
+                            else "MalwareBazaar: sample present without family attribution"),
+    }
+
+
 def _p_otx(r):
     """Pulses + tags + adversaries + linked hashes from related malware samples."""
     if _is_fail(r):
@@ -1306,6 +1360,30 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
             }
     except Exception:
         pass
+
+    # Tranco top-1M ranking — strong "this is a legitimate brand, not the
+    # attacker" signal. We surface the rank verbatim and a tier bucket so
+    # the analyst can see the popularity context at a glance.
+    try:
+        from intel.tranco import rank as _tr_rank
+        tr = _tr_rank(domain)
+        if tr is not None:
+            tier = ("top-100" if tr <= 100
+                    else "top-1k" if tr <= 1000
+                    else "top-10k" if tr <= 10000
+                    else "top-100k" if tr <= 100000
+                    else "top-1M")
+            data["tranco"] = {
+                "source":  "Tranco-list",
+                "rank":    tr,
+                "tier":    tier,
+                "summary": (f"{domain} is ranked #{tr} on the Tranco top-1M "
+                            f"({tier}); a popular brand or service. Treat as "
+                            f"impersonation target rather than attacker infra "
+                            f"unless other signals contradict."),
+            }
+    except Exception:
+        pass
     # Domain heuristics: NRD age, DGA score, IDN/homoglyph — all offline
     try:
         from intel.domain_analysis import analyze_domain
@@ -1501,6 +1579,17 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         if "error" not in ha:
             data["hybrid_analysis"] = ha
 
+    # MalwareBazaar (abuse.ch) — free hash-to-family lookup. Same
+    # operator (abuse.ch) as Feodo/ThreatFox/URLhaus, so the access
+    # pattern + reliability are the same. Returns named family, tags,
+    # YARA rule names, first/last seen.
+    try:
+        mb = await _malware_bazaar(session, hash_val)
+        if mb and not mb.get("error"):
+            data["malware_bazaar"] = mb
+    except Exception:
+        pass
+
     # MISP feeds — flat hashes.csv dump from CIRCL OSINT / DigitalSide /
     # Botvrij. Free, no key, refreshed every 6h. Hits here are strong
     # corroborating evidence (community-curated event with a UUID + a
@@ -1589,14 +1678,15 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
         return {**_cache[ck], "cached": True}
 
     try:
-        from intel.cve_enrichment import nvd_cve, epss, cisa_kev_check
+        from intel.cve_enrichment import nvd_cve, epss, cisa_kev_check, osv
     except Exception as e:
         return {"error": f"cve_enrichment unavailable: {e}"}
 
-    nvd_r, epss_r, kev_r = await asyncio.gather(
+    nvd_r, epss_r, kev_r, osv_r = await asyncio.gather(
         nvd_cve(session, cve_id),
         epss(session, cve_id),
         cisa_kev_check(session, cve_id),
+        osv(session, cve_id),
         return_exceptions=True,
     )
 
@@ -1610,6 +1700,9 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
     kev = _ok_dict(kev_r)
     if kev:
         data["cisa_kev"] = kev
+    osv_d = _ok_dict(osv_r)
+    if osv_d:
+        data["osv"] = osv_d
 
     # ProjectDiscovery nuclei-templates: how many public detection
     # templates target this CVE. "X templates exist" is a more concrete
@@ -1629,6 +1722,27 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
             }
     except Exception:
         # Nuclei lookup is additive — never break CVE enrichment.
+        pass
+
+    # GitHub Security Advisories — editorial-curated package-ecosystem
+    # advisories. Same upstream as OSV.dev but with cleaner summaries +
+    # per-ecosystem context.
+    try:
+        from intel.ghsa import lookup_cve as _ghsa_lookup
+        ghsa_rows = _ghsa_lookup(cve_id, max_results=6)
+        if ghsa_rows:
+            ecosystems: list = []
+            for g in ghsa_rows:
+                ecosystems.extend(g.get("ecosystems") or [])
+            data["ghsa"] = {
+                "source":      "GitHub Security Advisories",
+                "advisories":  ghsa_rows,
+                "ecosystems":  list(dict.fromkeys(ecosystems))[:6],
+                "summary":     (f"{len(ghsa_rows)} GitHub Security Advisor"
+                                f"{'ies' if len(ghsa_rows) != 1 else 'y'} "
+                                f"reference this CVE."),
+            }
+    except Exception:
         pass
 
     _cache[ck] = data
