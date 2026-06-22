@@ -21,3 +21,12 @@ anthropic>=0.34.0
 mcp
 bcrypt>=4.0.0
 itsdangerous>=2.0.0
+# dnstwist powers the domain_permutations skill (typosquat / homoglyph
+# enumeration for URL-input alerts). MIT-licensed, pure Python.
+dnstwist>=20240819
+# flare-capa is OPTIONAL — opt-in via RECON_ENABLE_CAPA=1. Pulls ~150 MB
+# of transitive deps (vivisect, viv-utils, etc.) and spends 5-30s per
+# real PE. The rules-based intel/file_capability_map.py still produces
+# a MITRE technique list from PE imports without it. Comment out if
+# disk / install time is constrained.
+flare-capa>=8.0.0

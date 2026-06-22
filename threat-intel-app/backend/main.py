@@ -2082,6 +2082,20 @@ async def push_to_misp(req: MispPushRequest):
         req.threat_level_id or 3,
         req.analysis or 1,
     )
+    # Audit-log every outbound push regardless of outcome. This is data
+    # leaving RECON's boundary — exactly what the audit middleware was
+    # built for.
+    from intel.security import audit_log
+    audit_log(
+        "integration_misp_push",
+        run_id=req.run_id[:48],
+        ok=bool(out.get("ok")),
+        event_id=str(out.get("event_id", "") or "")[:24],
+        attribute_count=int(out.get("attribute_count") or 0),
+        error_code=(out.get("error_code") or "")[:48],
+        distribution=int(req.distribution or 0),
+        threat_level_id=int(req.threat_level_id or 3),
+    )
     if not out.get("ok") and out.get("error_code") == "not_configured":
         body = error_envelope(
             detail="MISP not configured. Set MISP_URL + MISP_KEY in Settings.",
@@ -2110,6 +2124,17 @@ async def push_to_thehive(req: TheHivePushRequest):
         },
         state.get("response_summary"),
         raw_input=(state.get("raw_input") or "")[:200],
+    )
+    from intel.security import audit_log
+    audit_log(
+        "integration_thehive_push",
+        run_id=req.run_id[:48],
+        ok=bool(out.get("ok")),
+        case_id=str(out.get("case_id", "") or "")[:48],
+        case_number=str(out.get("case_number", "") or "")[:24],
+        observable_count=int(out.get("observable_count") or 0),
+        verdict=str(out.get("verdict", "") or "")[:24],
+        error_code=(out.get("error_code") or "")[:48],
     )
     if not out.get("ok") and out.get("error_code") == "not_configured":
         body = error_envelope(
@@ -2158,6 +2183,16 @@ async def stix_shifter_translate(req: StixShifterRequest):
         return _JSONResponse(body, status_code=400)
 
     result["stix_shifter_lib_available"] = is_stix_shifter_available()
+    from intel.security import audit_log
+    audit_log(
+        "integration_stix_shifter_translate",
+        target=req.target[:24],
+        ok=bool(result.get("ok")),
+        run_id=(req.run_id or "")[:48],
+        match_count=int(result.get("match_count") or 0),
+        pattern_count=int(result.get("pattern_count") or 0),
+        error_code=(result.get("error_code") or "")[:48],
+    )
     return result
 
 

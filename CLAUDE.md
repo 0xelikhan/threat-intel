@@ -382,3 +382,107 @@ observability. Anthropic / Ollama provider tests skip without creds.
 * `478322c` — agent/provider silent-failure logging + tool result truncation cap
 * `781eecb` — dropped 4 dead React components + MCP inventory error surfacing
 * `8ad5f34` — EmailComposer "+N more" expandable + triage/investigate hardening
+
+## June 2026 expansion (rounds 1-11)
+
+A multi-session expansion took RECON from ~40 OSS sources to ~90. The
+architecture is unchanged — same LangGraph pipeline, same skill
+registry, same providers/ abstraction. What changed is what flows
+through it.
+
+### New intel modules (~70 added)
+
+**TI / IOC sources:** Shodan InternetDB, FireHOL blocklists (~400),
+cloud provider IP ranges (AWS / Azure / GCP / Cloudflare / Fastly /
+GitHub), DataPlane.org honeypot feeds, SANS DShield, Spamhaus DROP/
+EDROP, MalwareBazaar (abuse.ch), HIBP Pwned Passwords (k-anonymity),
+ESET malware-ioc, MVT mobile spyware (Pegasus / Predator / RCS Lab),
+OFAC SDN list (sanctioned crypto + emails + domains), Phishing.Database
++ OpenPhish merged feed, Tranco top-1M, Chromium HSTS preload list,
+Mozilla Observatory web-grader, Ransomwhe.re, EPSS, OSV.dev, GHSA,
+Red Hat Security Data, MSRC, OASIS CSAF, ProjectDiscovery nuclei-
+templates, trickest/cve PoC index, Apple/Adobe/Oracle vendor RSS,
+endoflife.date.
+
+**Detection corpora (11 sources unified in `match_detections` skill):**
+SigmaHQ (~2,700), panther-analysis (~1,500 cloud), Splunk security_
+content, MITRE CAR, OTRF ThreatHunter-Playbook, Sublime email rules,
+Chronicle YARA-L, olafhartong KQL/Sentinel, falco-rules (containers),
+Stratus Red Team (cloud TTPs), ET Open + Snort Community IDS rules.
+
+**YARA corpora (23 sources):** Florian Roth signature-base, Yara-Rules
+community, Mandiant RTC, ReversingLabs, Volexity, ESET, Trellix ATR,
+bartblaze, mthcht-strict, Chainguard malcontent (capability-bucketed),
+ditekshen, delivr-to, filescan.io, Google Chronicle GCTI,
+ConventionEngine, InQuest, jeFF0Falltrades, Intezer, Rapid7 Labs,
+securitymagic, f0wl, CyStack, Operation Epic Fury.
+
+**Analyst frameworks:** PEAK threat-hunting (Cisco Talos) — `skills/
+generate_hypothesis` + `generate_able_table` + `generate_hunt_plan`
+with `providers/critic_loop.py` (gen→critic re-prompt without
+AutoGen). CTID Attack Flow STIX 2.1 extension in
+`agents/response.py::_build_stix`. Palantir ADS Framework injected
+into the analyst-summary prompt. MITRE D3FEND, CAPEC, NIST 800-53,
+CISA CPG, SSVC decision tree, ETW provider catalog, ForensicArtifacts
+evidence registry — all surface in `state["d3fend_countermeasures"]`,
+`capec_patterns`, `nist_controls`, `cisa_cpg`, `etw_providers`,
+`forensic_targets`, `emulation_plan` from the investigation node.
+ATT&CK Mobile / ICS matrices loaded alongside Enterprise via
+`intel/mitre_data.py`; `looks_like_{ics,mobile,cloud,container}_alert`
+keyword routers gate the matrix-specific lookups.
+
+**File scanner additions:** FLARE capa (opt-in, slow), Chainguard
+malcontent capability bucket grouping, MalAPI.io Windows API → MITRE
+mapping. `_capa_eligible` gates the subprocess to PE / .NET / ELF
+inputs over 1 KB.
+
+### New skills (17 total)
+
+`generate_hypothesis`, `generate_able_table`, `generate_hunt_plan`,
+`domain_permutations`, `analyze_capabilities`, `match_sigma_rules`,
+`classify_capabilities`, `match_detections`.
+
+### Output formats + outbound integrations
+
+- **STIX 2.1** bundle export — `/api/export/stix/{run_id}` (always existed)
+- **Attack Flow** overlay (CTID STIX extension) — appended inside the bundle
+- **SARIF 2.1.0** — `/api/export/sarif/{run_id}` for GitHub Code Scanning
+- **OASIS CACAO 2.0** — `/api/export/cacao/{run_id}` for SOAR playbooks
+- **MISP push** — `/api/integrations/misp/push` (operator sets `MISP_URL` + `MISP_KEY`)
+- **TheHive push** — `/api/integrations/thehive/push` (operator sets `THEHIVE_URL` + `THEHIVE_KEY`)
+- **STIX-Shifter translate** — `/api/integrations/stix-shifter/translate` (Splunk / KQL / QRadar / Elastic / CrowdStrike). Built-in fallback translator; upstream stix-shifter library auto-picks up if installed.
+
+Every outbound push hits `audit_log()` so an analyst can grep the
+audit stream for what left the system.
+
+### Speed / opt-in env flags (consult Settings via `config.get()`)
+
+- `RECON_ENABLE_MSRC` (default 0) — Microsoft Security Update Guide CVE lookup; slow
+- `RECON_ENABLE_MOZILLA_OBSERVATORY` (default 0) — per-domain web grade; slow
+- `RECON_ENABLE_CAPA` (default 0) — FLARE capa subprocess per PE
+- `RECON_ENABLE_OSV` (default 1)
+- `RECON_ENABLE_RHSA` (default 1)
+- `RECON_ENABLE_SHODAN_INTERNETDB` (default 1)
+- `RECON_TAXII_FEEDS` — comma-separated slugs from `intel/taxii_feeds_catalog.py`
+
+### Frontend cards added
+
+`DetectionCitationsView` (11-corpus citations), `DefenseContextView`
+(D3FEND + CAPEC + NIST 800-53 + CISA CPG + ETW + forensic_targets +
+emulation_plan). `DomainPermutationsView` now lives inside the Triage
+card's URL-detonation Section (renders only when input has URLs).
+`HuntPlanView` + `ExportButtons` were added in round-2/10 and then
+removed in round-11 per product decision (UI bloat).
+
+### Defensive coercion
+
+`agents/response.py` final pass coerces 17 LLM-emitted list fields
+(recommended_actions, probing_questions, analysis_assessment, etc.)
+to arrays so the React UI's `.filter()` calls never see a string /
+dict. Frontend has a matching `asArray()` helper as defence-in-depth.
+
+### Operator fetcher scripts
+
+9 shell scripts under `scripts/fetch_*.sh` clone the heavyweight rule
+corpora into `vendor/`. The platform is fully functional out-of-the-
+box via built-in fallbacks; fetchers add depth.

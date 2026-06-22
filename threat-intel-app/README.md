@@ -312,6 +312,58 @@ need it just don't run.
   (SameSite=Strict, 12h max age). `AuthGateMiddleware` walls off every
   `/api/*` route except auth + health + docs.
 
+### Operator fetcher scripts
+
+The platform ships ~90 OSS sources. The heavyweight rule corpora are
+NOT vendored in the git repo (size + license attribution); operators
+populate them once per deployment via the scripts under
+`threat-intel-app/scripts/`:
+
+| Script | What it pulls |
+|---|---|
+| `fetch_yara_corpora.sh` | 7 round-2/3 YARA corpora (signature-base, ReversingLabs, Volexity, ESET, Trellix-ATR, bartblaze, mthcht strict + malcontent) |
+| `fetch_detection_corpora.sh` | Sublime, Chronicle YARA-L, olafhartong KQL, sentinel-attack, splunk attack_data |
+| `fetch_nuclei_templates.sh` | ProjectDiscovery nuclei-templates (CVE→template index) |
+| `fetch_round5_corpora.sh` | Stratus Red Team, falco-rules, OWASP CRS, MalAPI.io, GHSA, CodeQL (sparse) |
+| `fetch_round6_corpora.sh` | trickest/cve, MVT, ETDA cyberMonitor, PayloadsAllTheThings + ATT&CK ICS + CAPEC + PSL |
+| `fetch_round7_corpora.sh` | ET Open + Snort + FireHOL + ATT&CK Mobile + ETDA |
+| `fetch_round8_corpora.sh` | OFAC SDN, HSTS preload, WADComs, OWASP Cheat Sheets |
+
+Without the fetcher run, every loader falls back gracefully — most ship
+with a built-in subset (D3FEND, MalAPI, CodeQL, CAPEC, NIST 800-53,
+CISA CPG, ETW providers, HSTS preload all carry compact fallback maps),
+so the platform is functional out-of-the-box. The fetchers add depth.
+
+### Speed / opt-in toggles
+
+Some enrichers add real latency. Defaults are tuned for snappy demos;
+the operator can flip on the heavy ones via Settings (or env) when
+they want depth:
+
+| Setting | Default | What it adds |
+|---|---|---|
+| `RECON_ENABLE_MSRC` | off | Microsoft Security Update Guide CVE lookup (3-5 s) |
+| `RECON_ENABLE_MOZILLA_OBSERVATORY` | off | per-domain web-security grade (3+ s) |
+| `RECON_ENABLE_CAPA` | off | FLARE capa subprocess on every PE (5-30 s) |
+| `RECON_ENABLE_OSV` | on | OSV.dev ecosystem advisories |
+| `RECON_ENABLE_RHSA` | on | Red Hat Security Data |
+| `RECON_ENABLE_SHODAN_INTERNETDB` | on | Shodan InternetDB IP inventory |
+
+### Outbound integrations
+
+RECON can push its findings into downstream tools:
+
+- **MISP**: set `MISP_URL` + `MISP_KEY`; POST `/api/integrations/misp/push` with `{run_id}` to ship every extracted IOC as an Event tagged with the detected MITRE techniques.
+- **TheHive**: set `THEHIVE_URL` + `THEHIVE_KEY` (+ optional `THEHIVE_ORG` / `THEHIVE_TLP`); POST `/api/integrations/thehive/push` to create a Case + attach Observables.
+- **STIX-Shifter**: POST `/api/integrations/stix-shifter/translate` with `{target, pattern?, run_id?}` to translate STIX patterns into native SIEM queries (Splunk SPL / Sentinel KQL / QRadar AQL / Elastic ECS / CrowdStrike FQL). Built-in fallback translator covers the common cases; the upstream stix-shifter library auto-picks up when installed.
+- **Exports**: `GET /api/export/{stix,sarif,cacao}/{run_id}` returns the run as STIX 2.1, SARIF 2.1.0 (GitHub Code Scanning), or OASIS CACAO 2.0 (SOAR playbook).
+
+Every outbound push is audit-logged through the existing audit
+middleware — analysts can grep the audit stream for
+`integration_misp_push` / `integration_thehive_push` /
+`integration_stix_shifter_translate` to see exactly what left the
+system.
+
 ---
 
 ## What's intentionally NOT in scope
@@ -324,11 +376,15 @@ A few things omitted deliberately that you might expect:
   pattern matching ("similar files by ssdeep") sounded valuable in
   theory but in practice produced misleading "this looks like a past
   case" prose that biased the analyst. Removed deliberately.
-- **Email breach lookups (HIBP / Dehashed).** Paid sources I don't
-  have keys for. The code paths were removed entirely rather than
-  shipping perpetually-failing source cards.
-- **Shodan host lookups.** Free plan returns 403 on `/shodan/host/`
-  every time. Code path removed; the Shodan link in the UI is gone.
+- **Paid / gated TI feeds.** Mandiant, Recorded Future, IBM X-Force,
+  RiskIQ, Censys / Shodan paid tier, Bambenek, VulnDB. RECON sticks
+  to OSS / free tiers. Shodan's free `/shodan/host/` endpoint was a
+  dead source; Shodan's free **InternetDB** endpoint (no key) is
+  integrated.
+- **HackTricks, GTFOBins, CIS Controls.** All hit non-commercial or
+  share-alike license clauses that RECON's policy rejects.
+- **Volatility / MemProcFS memory forensics.** Runtime tools, not
+  static corpora; out of scope for a reactive-triage platform.
 
 ---
 

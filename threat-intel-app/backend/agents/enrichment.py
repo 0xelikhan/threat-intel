@@ -1252,10 +1252,10 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
 
     # Shodan InternetDB — free, no-key IP service inventory. Returns
     # observed ports, CPEs, hostnames, tags, and CVEs. ON by default
-    # (free + reasonably fast), but operator can disable via env when
+    # (free + reasonably fast); operator can disable in Settings when
     # processing very large IP batches.
-    import os as _os_sdb
-    if _os_sdb.environ.get("RECON_ENABLE_SHODAN_INTERNETDB", "1") not in ("0","false","False"):
+    from config import config as _cfg_sdb
+    if (_cfg_sdb.get("RECON_ENABLE_SHODAN_INTERNETDB", "1") or "1") not in ("0","false","False"):
         try:
             idb = await _shodan_internetdb(session, ip)
             if idb and not idb.get("error"):
@@ -1588,10 +1588,10 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
 
     # Mozilla Observatory — web-security posture grade. Opt-in because
     # the v2 API can take 3+ seconds per domain to respond — slows
-    # every multi-domain analyze. RECON_ENABLE_MOZILLA_OBSERVATORY=1
-    # turns it back on for deep-dive analysis.
-    import os as _os
-    if _os.environ.get("RECON_ENABLE_MOZILLA_OBSERVATORY", "0") not in ("0","false","False"):
+    # every multi-domain analyze. Set RECON_ENABLE_MOZILLA_OBSERVATORY=1
+    # in Settings for deep-dive analysis.
+    from config import config as _cfg_obs
+    if (_cfg_obs.get("RECON_ENABLE_MOZILLA_OBSERVATORY", "0") or "0") not in ("0","false","False"):
         try:
             from intel.mozilla_observatory import scan as _obs_scan
             obs = await _obs_scan(session, domain)
@@ -1955,16 +1955,16 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
     except Exception as e:
         return {"error": f"cve_enrichment unavailable: {e}"}
 
-    # Speed gate — slow/heavy CVE sources are opt-in via env. NVD + EPSS
-    # + KEV are ALWAYS ON because they're the verdict-driving signals
-    # the analyst report cites by default. OSV / RHSA stay on by
+    # Speed gate — slow/heavy CVE sources are opt-in via Settings.
+    # NVD + EPSS + KEV are ALWAYS ON because they're the verdict-driving
+    # signals the analyst report cites by default. OSV / RHSA stay on by
     # default (~0.5-1s each). MSRC is OFF by default because the
     # Microsoft Security Update Guide endpoint regularly takes 3-5s
     # per CVE and most analysts don't need it on every analyze.
-    import os as _os
-    enable_osv  = _os.environ.get("RECON_ENABLE_OSV",  "1") not in ("0","false","False")
-    enable_rhsa = _os.environ.get("RECON_ENABLE_RHSA", "1") not in ("0","false","False")
-    enable_msrc = _os.environ.get("RECON_ENABLE_MSRC", "0") not in ("0","false","False")
+    from config import config as _cfg
+    enable_osv  = (_cfg.get("RECON_ENABLE_OSV", "1") or "1") not in ("0","false","False")
+    enable_rhsa = (_cfg.get("RECON_ENABLE_RHSA", "1") or "1") not in ("0","false","False")
+    enable_msrc = (_cfg.get("RECON_ENABLE_MSRC", "0") or "0") not in ("0","false","False")
     _tasks = [
         nvd_cve(session, cve_id),
         epss(session, cve_id),
