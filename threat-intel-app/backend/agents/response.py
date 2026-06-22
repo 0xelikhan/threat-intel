@@ -745,6 +745,34 @@ analyst's UI strips them out, so writing them is wasted tokens."""
         "analyst_feedback":    state.get("analyst_feedback") or "",
     }
 
+    # Defensive coercion — every field below is LLM-emitted into the
+    # `investigation` dict and the model occasionally ships them as a
+    # string or dict instead of an array. The frontend's AnalystSummary
+    # card does `.filter` on these and crashes when the shape is wrong.
+    # `.get(..., [])` only protects against `None`; a returned string is
+    # truthy and slips through. Force-coerce here so the SSE-streamed
+    # payload always carries the expected shape.
+    _ARRAY_FIELDS = (
+        "key_findings", "ioc_assessments", "mitre_techniques",
+        "attack_patterns", "recommended_actions", "geo_highlights",
+        "chain_of_thought", "pyramid_of_pain", "evidence_ratings",
+        "probing_questions", "assessment_basis", "confirmed_facts",
+        "analysis_assessment", "matched_actors", "atomic_examples",
+        "mitre_evidence",
+    )
+    for _k in _ARRAY_FIELDS:
+        _v = response_summary.get(_k)
+        if isinstance(_v, list):
+            continue
+        if isinstance(_v, str):
+            _trimmed = _v.strip()
+            response_summary[_k] = [_trimmed] if _trimmed else []
+        elif _v is None:
+            response_summary[_k] = []
+        else:
+            # Dict / int / bool — drop to empty rather than crash the UI
+            response_summary[_k] = []
+
     trace.append({
         "agent": "response",
         "status": "complete",

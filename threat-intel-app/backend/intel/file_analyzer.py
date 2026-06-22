@@ -899,10 +899,15 @@ def analyze_file(file_bytes: bytes, filename: str = "uploaded") -> Dict:
     except Exception as e:
         result["capabilities"] = {"error": str(e)}
 
-    # FLARE capa — only invoke on supported formats (PE/.NET/ELF). capa
-    # spends 5-30s on real binaries so we gate it tightly; on a 2KB shell
-    # script the cost would dwarf the rest of the scan with no benefit.
-    if _capa_eligible(type_info, len(file_bytes)):
+    # FLARE capa — 5-30s subprocess per PE. Off by default for speed;
+    # operator flips RECON_ENABLE_CAPA=1 for deep static analysis when
+    # they want capability tagging on every uploaded binary. The
+    # rules-based file_capability_map already produces a MITRE
+    # technique list from PE imports + suspicious strings without
+    # capa.
+    import os as _os_capa
+    enable_capa = _os_capa.environ.get("RECON_ENABLE_CAPA", "0") not in ("0","false","False")
+    if enable_capa and _capa_eligible(type_info, len(file_bytes)):
         try:
             from intel.capa_runner import run_capa_sync
             capa_out = run_capa_sync(file_bytes, filename=filename)

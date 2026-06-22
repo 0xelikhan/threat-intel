@@ -1251,15 +1251,17 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         data["feodo_tracker"] = feodo
 
     # Shodan InternetDB — free, no-key IP service inventory. Returns
-    # observed ports, CPEs, hostnames, tags, and CVEs. Strong context
-    # for inbound IP IOCs because it tells the analyst what the host
-    # EXPOSES, not just whether it's been scanning.
-    try:
-        idb = await _shodan_internetdb(session, ip)
-        if idb and not idb.get("error"):
-            data["shodan_internetdb"] = idb
-    except Exception:
-        pass
+    # observed ports, CPEs, hostnames, tags, and CVEs. ON by default
+    # (free + reasonably fast), but operator can disable via env when
+    # processing very large IP batches.
+    import os as _os_sdb
+    if _os_sdb.environ.get("RECON_ENABLE_SHODAN_INTERNETDB", "1") not in ("0","false","False"):
+        try:
+            idb = await _shodan_internetdb(session, ip)
+            if idb and not idb.get("error"):
+                data["shodan_internetdb"] = idb
+        except Exception:
+            pass
 
     # Cloud provider IP ranges — AWS/Azure/GCP/Cloudflare/Fastly/GitHub.
     # Strong trust signal: an IP belonging to AWS CloudFront is almost
@@ -1584,14 +1586,19 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     except Exception:
         pass
 
-    # Mozilla Observatory — web-security posture grade.
-    try:
-        from intel.mozilla_observatory import scan as _obs_scan
-        obs = await _obs_scan(session, domain)
-        if obs and obs.get("found"):
-            data["mozilla_observatory"] = obs
-    except Exception:
-        pass
+    # Mozilla Observatory — web-security posture grade. Opt-in because
+    # the v2 API can take 3+ seconds per domain to respond — slows
+    # every multi-domain analyze. RECON_ENABLE_MOZILLA_OBSERVATORY=1
+    # turns it back on for deep-dive analysis.
+    import os as _os
+    if _os.environ.get("RECON_ENABLE_MOZILLA_OBSERVATORY", "0") not in ("0","false","False"):
+        try:
+            from intel.mozilla_observatory import scan as _obs_scan
+            obs = await _obs_scan(session, domain)
+            if obs and obs.get("found"):
+                data["mozilla_observatory"] = obs
+        except Exception:
+            pass
 
     # Tranco top-1M ranking — strong "this is a legitimate brand, not the
     # attacker" signal. We surface the rank verbatim and a tier bucket so
@@ -1948,15 +1955,33 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
     except Exception as e:
         return {"error": f"cve_enrichment unavailable: {e}"}
 
-    nvd_r, epss_r, kev_r, osv_r, rhsa_r, msrc_r = await asyncio.gather(
+    # Speed gate — slow/heavy CVE sources are opt-in via env. NVD + EPSS
+    # + KEV are ALWAYS ON because they're the verdict-driving signals
+    # the analyst report cites by default. OSV / RHSA stay on by
+    # default (~0.5-1s each). MSRC is OFF by default because the
+    # Microsoft Security Update Guide endpoint regularly takes 3-5s
+    # per CVE and most analysts don't need it on every analyze.
+    import os as _os
+    enable_osv  = _os.environ.get("RECON_ENABLE_OSV",  "1") not in ("0","false","False")
+    enable_rhsa = _os.environ.get("RECON_ENABLE_RHSA", "1") not in ("0","false","False")
+    enable_msrc = _os.environ.get("RECON_ENABLE_MSRC", "0") not in ("0","false","False")
+    _tasks = [
         nvd_cve(session, cve_id),
         epss(session, cve_id),
         cisa_kev_check(session, cve_id),
-        osv(session, cve_id),
-        rhsa(session, cve_id),
-        msrc(session, cve_id),
-        return_exceptions=True,
-    )
+    ]
+    _keys = ["nvd", "epss", "kev"]
+    if enable_osv:  _tasks.append(osv(session, cve_id));  _keys.append("osv")
+    if enable_rhsa: _tasks.append(rhsa(session, cve_id)); _keys.append("rhsa")
+    if enable_msrc: _tasks.append(msrc(session, cve_id)); _keys.append("msrc")
+    _r = await asyncio.gather(*_tasks, return_exceptions=True)
+    _by_key = dict(zip(_keys, _r))
+    nvd_r  = _by_key.get("nvd")
+    epss_r = _by_key.get("epss")
+    kev_r  = _by_key.get("kev")
+    osv_r  = _by_key.get("osv")
+    rhsa_r = _by_key.get("rhsa")
+    msrc_r = _by_key.get("msrc")
 
     data: dict = {}
     nvd = _ok_dict(nvd_r)
