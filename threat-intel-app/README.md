@@ -2,11 +2,73 @@
 
 A multi-agent threat-intel platform. Paste a security alert, a log line,
 or a file, and the backend runs a LangGraph pipeline (triage → enrichment
-→ investigation → response) plus 40+ TI sources to produce a calibrated
-verdict, IOC enrichment, MITRE ATT&CK mapping, and detection content.
+→ investigation → response) over **90+ open-source threat-intel sources**
+to produce a calibrated verdict, IOC enrichment, MITRE ATT&CK mapping,
+detection content, and downstream-tool exports.
 
 **Live demo:** [https://0xrecon.com](https://0xrecon.com)
 *(login required — credentials on request)*
+
+## Capabilities at a glance
+
+**Ingest:** alert text, log lines, IOCs (IP / domain / URL / hash /
+email / CVE), files (PE / .NET / ELF / Office / PDF / EML), full
+LangGraph pipeline streamed via SSE.
+
+**Enrichment:** 18 IP sources (VT + AbuseIPDB + GreyNoise + OTX + CIRCL
+PDNS + Robtex + hackertarget + Censys + CrowdSec + Feodo + Shodan
+InternetDB + FireHOL + cloud-provider-IP-ranges + DataPlane + DShield
++ Spamhaus DROP + Maltiverse + OpenCTI), 8 hash sources (VT + Hybrid
+Analysis + CIRCL hashlookup + MISP + MalwareBazaar + HIBP Pwned
+Passwords + MVT mobile + file capability), 21 domain sources (VT +
+URLScan + OTX + crt.sh + WHOIS + Pulsedive + Wayback + typosquat +
+Spamhaus DBL + Maltiverse + OpenCTI + Phishing.DB + OpenPhish + Tranco
+top-1M + MVT + OFAC SDN + HSTS preload + Mozilla Observatory), 14 CVE
+sources (NVD + EPSS + CISA KEV + OSV.dev + Red Hat RHSA + Microsoft
+MSRC live + nuclei-templates + GitHub Security Advisories + OASIS CSAF
++ ET Open/Snort IDS rules + trickest/cve PoCs + Apple/Adobe/Oracle
+RSS + SSVC synth + endoflife.date).
+
+**Detection generation:** Sigma + KQL/Sentinel + Splunk SPL + Elastic
+EQL + Snort/Suricata + Chronicle YARA-L + CrowdStrike FQL + YARA, each
+validated through the upstream compiler when available.
+
+**11 detection-rule corpora** indexed by MITRE technique for citation
+matching: SigmaHQ + panther-analysis + Splunk security_content + MITRE
+CAR + OTRF ThreatHunter-Playbook + Sublime email + Chronicle YARA-L +
+olafhartong KQL + falco-rules + Stratus Red Team + ET Open/Snort.
+
+**23 YARA corpora** in the file scanner: Florian Roth signature-base +
+Mandiant RTC + ReversingLabs + Volexity + ESET + Trellix-ATR + bartblaze
++ mthcht + Chainguard malcontent + ditekshen + delivr-to + filescan.io
++ Google Chronicle GCTI + ConventionEngine + InQuest + jeFF0Falltrades
++ Intezer + Rapid7-Labs + securitymagic + f0wl + CyStack + Operation
+Epic Fury + (legacy Yara-Rules community).
+
+**File analysis:** FLARE capa capability detection mapped to MITRE,
+Chainguard malcontent capability buckets, PE-import → MITRE technique
+mapping (intel/file_capability_map.py + MalAPI.io), 20+ YARA corpora,
+Hybrid Analysis sandbox, custom CyberChef-Magic-style deobfuscator.
+
+**Analyst frameworks:** PEAK threat-hunting (Cisco Talos) — hypothesis
++ ABLE table + hunt plan generator. CTID Attack Flow STIX 2.1 overlay.
+Palantir ADS Framework structures the analyst summary. MITRE D3FEND
+maps offensive techniques to defensive countermeasures. MITRE CAPEC
+provides attack-pattern lineage. NIST SP 800-53 + CISA CPG controls
+mapped per technique. SSVC decision tree synthesises CVE signals to
+Act/Attend/Track\*/Track. ETW provider GUID catalogue for Windows
+telemetry capture suggestions. ForensicArtifacts evidence-collection
+targets for DFIR.
+
+**Output formats:** STIX 2.1 + CTID Attack Flow extension + SARIF
+2.1.0 (GitHub Code Scanning / Azure DevOps Advanced Security) + OASIS
+CACAO 2.0 (Splunk SOAR / Tines / Torq).
+
+**Outbound integrations:** push extracted IOCs to MISP as a single
+event, create a TheHive 5 case with observables, translate the STIX
+bundle to native SIEM queries (Splunk SPL / Sentinel KQL / QRadar AQL
+/ Elastic ECS / CrowdStrike FQL) via a built-in fallback translator
+or the upstream stix-shifter library when installed.
 
 ---
 

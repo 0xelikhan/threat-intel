@@ -2204,6 +2204,37 @@ def _strip_list_markers(body: str) -> str:
 # top), then opener strips, then in-body team-reference rewrites, then closing
 # strips, then whitespace cleanup.
 _FILLER_SUBS = [
+    # ── Grammar/logic fix — imperative + "and no <X> is/are present"
+    # The AI keeps producing "review the affected file and no further
+    # malicious activity is present" which conjoins an instruction with
+    # a passive statement using "and" (logically wrong, reads as
+    # nonsense). Rewrite to "review the affected file to confirm no
+    # further malicious activity is present". Pattern matches review/
+    # check/inspect/verify/audit + optional target noun + "and no" +
+    # noun phrase + is/are present.
+    (re.compile(
+        r"\b(review|check|inspect|verify|audit|examine|monitor)\s+"
+        r"(the\s+(?:affected\s+)?[\w\-]+(?:\s+[\w\-]+){0,3})\s+"
+        r"and\s+no\s+(further\s+|additional\s+|other\s+)?"
+        r"([\w\s\-]{3,40}?)\s+(is|are)\s+present",
+        re.IGNORECASE),
+     lambda m: (f"{m.group(1)} {m.group(2)} to confirm no "
+                f"{(m.group(3) or '').strip()} {m.group(4).strip()} "
+                f"{m.group(5)} present").replace("  ", " ").strip()),
+    # Same pattern but with "is recommended to <verb>" preface — the
+    # AI alternates between bare-imperative and "it is recommended"
+    # phrasings.
+    (re.compile(
+        r"(it\s+is\s+recommended\s+to\s+)"
+        r"(review|check|inspect|verify|audit|examine)\s+"
+        r"(the\s+(?:affected\s+)?[\w\-]+(?:\s+[\w\-]+){0,3})\s+"
+        r"and\s+no\s+(further\s+|additional\s+|other\s+)?"
+        r"([\w\s\-]{3,40}?)\s+(is|are)\s+present",
+        re.IGNORECASE),
+     lambda m: (f"{m.group(1)}{m.group(2)} {m.group(3)} to confirm no "
+                f"{(m.group(4) or '').strip()} {m.group(5).strip()} "
+                f"{m.group(6)} present").replace("  ", " ").strip()),
+
     # ── Greetings — strip ANY salutation at the very top of the body ─────
     # Matches: "Hi team,", "Hello,", "Hi,", "Greetings,", "Dear team,",
     # "Good morning,", "Hi <Name>,", with optional trailing newlines.

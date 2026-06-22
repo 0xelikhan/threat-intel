@@ -58,6 +58,24 @@ const EmailComposerView = lazy(() => import('./components/EmailComposerView'));
 const MapTab            = lazy(() => import('./components/MapTab'));
 const LoginPage         = lazy(() => import('./components/LoginPage'));
 
+/* ─── asArray — defensive shape coerce for LLM-emitted list fields ──────────
+   Multiple analyst-summary fields (analysis_assessment, probing_questions,
+   confirmed_facts, recommended_actions, …) are LLM-emitted. The model
+   occasionally ships them as a string or dict instead of an array; the
+   classic `(x || []).filter(…)` pattern then crashes because non-empty
+   strings/objects are truthy and `.filter` doesn't exist on them.
+   asArray() guarantees an array, accepts strings (split into one-element)
+   so we don't silently drop a single-bullet response, and treats anything
+   else as empty. */
+const asArray = (v) => {
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string') {
+    const t = v.trim();
+    return t ? [t] : [];
+  }
+  return [];
+};
+
 /* ─── design tokens — exact values from OpenCTI ThemeDark.ts ────────────────
  * Adapted from OpenCTI (AGPL-3.0). Every legacy inline-styled element now
  * inherits the precise OpenCTI palette by referencing this token object.
@@ -1158,7 +1176,7 @@ const _AI_FALLBACK_ACTIONS = new Set([
   'Configure OpenAI API key for AI analysis.',
 ]);
 function RecommendedActions({ rs, bare }) {
-  const items = (rs?.recommended_actions || [])
+  const items = asArray(rs?.recommended_actions)
     .filter(a => typeof a === 'string' && a.trim() && !_AI_FALLBACK_ACTIONS.has(a.trim()));
   if (!items.length) return null;
   const body = (
@@ -1217,7 +1235,7 @@ function Triage({ result, rs }) {
   const hasBehavior = !!((bi.total || 0) || (bi.decoded_payloads || []).length);
   const cr = rs?.cross_refs || {};
   const hasCross = !!((cr.kev || []).length || (cr.lolbas || []).length ||
-    (rs?.atomic_examples || []).length || (cr.phishing_kits || []).length ||
+    asArray(rs?.atomic_examples).length || (cr.phishing_kits || []).length ||
     (cr.loldrivers || []).length || (cr.rmm_abuse || []).length ||
     (cr.suspicious_paths || []).length);
   // URL detonation gets its own top-of-Triage section whenever the
@@ -1227,7 +1245,7 @@ function Triage({ result, rs }) {
   const hasSandbox = Object.values(result?.enrichments?.hashes || {})
     .some(p => p?.sandbox_deep && p.sandbox_deep.process_tree);
 
-  const recActions = (rs?.recommended_actions || [])
+  const recActions = asArray(rs?.recommended_actions)
     .filter(a => typeof a === 'string' && a.trim() && !_AI_FALLBACK_ACTIONS.has(a.trim()));
   const hasRec = recActions.length > 0;
   const hasNotes = !!(rs?.analyst_notes || '').trim();
@@ -1268,6 +1286,8 @@ function Triage({ result, rs }) {
           before anything else. Hidden if no URLs were extracted. */}
       <Section show={hasUrlscan}  label="Live URL detonation · URLScan.io">
         <URLScanLive result={result} bare/></Section>
+      <Section show={hasUrlscan}  label="Lookalike domains · dnstwist">
+        <DomainPermutationsView result={result} bare/></Section>
       <Section show={hasLogs}     label="Log normalization">
         <LogTranslation result={result} bare/></Section>
       <Section show={hasCross}    label="Threat-intel cross-references">
@@ -2999,7 +3019,7 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
   // before we suggest an actor name. Analyst context that pushes overlap
   // above the threshold (via re-analyze with feedback) is honoured
   // automatically because matched_actors re-runs each investigation.
-  const topActor = (rs?.matched_actors || []).find(
+  const topActor = asArray(rs?.matched_actors).find(
     a => typeof a?.score === 'number'
       && a.score >= 75
       && (a.matchedTechniques?.length || 0) >= 5
@@ -3148,8 +3168,8 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
           (e.g. "the deletion of X by user Y is not suspicious" vs
           "user Y deleted X, not malicious"). */}
       {(() => {
-        const confirmed = rs?.confirmed_facts || [];
-        const analysis_ = (rs?.analysis_assessment || []).filter(s => {
+        const confirmed = asArray(rs?.confirmed_facts);
+        const analysis_ = asArray(rs?.analysis_assessment).filter(s => {
           if (!s) return false;
           // Drop assessment sentences whose tokens overlap any of the
           // already-rendered prose (combined paragraph + dispReason +
@@ -3530,7 +3550,7 @@ function ChatWithRecon({ result, bare,
   // below already hides those chips when they're missing. We keep zero
   // hardcoded fallbacks here so the analyst only ever sees questions specific
   // to whatever they uploaded.
-  const questions = (rs.probing_questions || []).filter(q => q && q.question);
+  const questions = asArray(rs?.probing_questions).filter(q => q && q.question);
 
   // ─── Feedback mode (folded into the chat input as a selectable toggle) ──
   // When feedbackMode is on, the same Send button submits the chat input as
@@ -4159,7 +4179,7 @@ function EmailAnalysis({ result }) {
 /* ─── intel cross-references (KEV / LOLBAS / Atomic) ──────────────────────────── */
 function CrossRefs({ rs, bare }) {
   const cr = rs?.cross_refs || {};
-  const atomic = rs?.atomic_examples || [];
+  const atomic = asArray(rs?.atomic_examples);
   const kev = cr.kev || [];
   const lolbas = cr.lolbas || [];
   const kits = cr.phishing_kits || [];
@@ -4362,7 +4382,7 @@ function CrossRefs({ rs, bare }) {
 /* ─── detection rules (multi-SIEM) — MUI Tabs + CodeBlock ─────────────────── */
 function Detection({ result }) {
   const rs    = result?.response_summary || {};
-  const mitre = rs.mitre_techniques || [];
+  const mitre = asArray(rs?.mitre_techniques);
   // On-demand generation state — detection content is generated from the
   // Detection card via /api/detection rather than auto-generated every run.
   // Now fans out to every supported platform (Sigma, KQL, Splunk SPL,
@@ -4814,7 +4834,7 @@ function ExportButtons({ result }) {
    Pick a domain from the IOC set and surface live-registered typo-squats /
    homoglyphs / TLD-swaps. The Cisco-AS-of-which research found dnstwist;
    wraps the new /api/hunt/permutations endpoint. */
-function DomainPermutationsView({ result }) {
+function DomainPermutationsView({ result, bare = false }) {
   const domains = useMemo(() => {
     const out = new Set();
     for (const d of (result?.iocs?.domains || [])) out.add(d);
@@ -4858,9 +4878,8 @@ function DomainPermutationsView({ result }) {
   const registered = data?.registered || [];
   const total      = data?.total || 0;
 
-  return (
-    <Card title="Lookalike domains · dnstwist" accent="#E6700F"
-      badge={data ? `${registered.length} live / ${total} variants` : undefined}>
+  const body = (
+    <>
       <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
         Pick a domain to enumerate typo-squat, homoglyph, TLD-swap, and bitsquat
         permutations via dnstwist. Each variant is DNS-resolved; live registrations
@@ -4933,6 +4952,14 @@ function DomainPermutationsView({ result }) {
           </MuiTable>
         </MuiTableContainer>
       )}
+    </>
+  );
+
+  if (bare) return body;
+  return (
+    <Card title="Lookalike domains · dnstwist" accent="#E6700F"
+      badge={data ? `${registered.length} live / ${total} variants` : undefined}>
+      {body}
     </Card>
   );
 }
@@ -4958,7 +4985,7 @@ function HuntPlanView({ result }) {
       const analysis = {
         threat_level:     rs.threat_level,
         summary:          rs.summary,
-        mitre_techniques: rs.mitre_techniques || [],
+        mitre_techniques: asArray(rs?.mitre_techniques),
         malware_family:   rs.malware_family || result?.malware_family,
         behavioral_indicators: result?.behavioral_indicators || {},
       };
@@ -6190,15 +6217,10 @@ function AppMain({ authUser, setAuthState }) {
             <ErrorBoundary label="Defense and hunt context">
               <DefenseContextView result={result}/>
             </ErrorBoundary>
-            <ErrorBoundary label="Lookalike domains">
-              <DomainPermutationsView result={result}/>
-            </ErrorBoundary>
-            <ErrorBoundary label="Hunt plan">
-              <HuntPlanView result={result}/>
-            </ErrorBoundary>
-            <ErrorBoundary label="Exports">
-              <ExportButtons result={result}/>
-            </ErrorBoundary>
+            {/* DomainPermutationsView is now gated to URL-scan inputs only —
+                see the Triage card's "Live URL detonation" section. The
+                HuntPlanView + ExportButtons cards were removed from the
+                analyst-results layout per Elias's product call. */}
             </CardDefaultOpenContext.Provider>
           </>
         )}
