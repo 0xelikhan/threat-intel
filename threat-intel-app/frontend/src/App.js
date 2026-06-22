@@ -4501,6 +4501,315 @@ function Detection({ result }) {
   );
 }
 
+/* ─── DefenseContextView — D3FEND + CAPEC + NIST 800-53 + CISA CPG + ETW + forensics
+   Surfaces every per-technique defensive-context layer the round-2..9
+   investigation pipeline produces. One collapsible card per layer.
+*/
+function DefenseContextView({ result }) {
+  if (!result) return null;
+  const inv = result?.investigation_result || result || {};
+  const cms       = inv.d3fend_countermeasures || result?.d3fend_countermeasures || {};
+  const capec     = inv.capec_patterns         || result?.capec_patterns         || {};
+  const nist      = inv.nist_controls          || result?.nist_controls          || {};
+  const cisa      = inv.cisa_cpg               || result?.cisa_cpg               || {};
+  const etw       = inv.etw_providers          || result?.etw_providers          || {};
+  const forensics = inv.forensic_targets       || result?.forensic_targets       || [];
+  const emul      = inv.emulation_plan         || result?.emulation_plan         || {};
+
+  const hasAny = (
+    Object.keys(cms).length > 0 ||
+    Object.keys(capec).length > 0 ||
+    Object.keys(nist).length > 0 ||
+    Object.keys(cisa).length > 0 ||
+    Object.keys(etw).length > 0 ||
+    (Array.isArray(forensics) && forensics.length > 0) ||
+    (emul && emul.actor)
+  );
+  if (!hasAny) return null;
+
+  const tierColor = (tier) => {
+    const t = (tier || '').toLowerCase();
+    if (t === 'essential') return '#ff6b6b';
+    if (t === 'baseline')  return '#0fbcff';
+    if (t === 'enhanced')  return '#B286FF';
+    return '#848592';
+  };
+
+  return (
+    <Card title="Defense & hunt context"
+      accent="#0fbcff"
+      badge={[
+        Object.keys(cms).length    && `${Object.keys(cms).length} D3FEND`,
+        Object.keys(capec).length  && `${Object.keys(capec).length} CAPEC`,
+        Object.keys(nist).length   && `${Object.keys(nist).length} NIST`,
+        Object.keys(cisa).length   && `${Object.keys(cisa).length} CPG`,
+        forensics.length           && `${forensics.length} artefact${forensics.length>1?'s':''}`,
+        emul?.actor                && `actor: ${emul.actor}`,
+      ].filter(Boolean).join(' · ')}>
+      <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
+        Per-technique defensive context derived from the investigation's MITRE coverage.
+        Maps each ATT&amp;CK technique to MITRE D3FEND countermeasures, CAPEC parent
+        attack patterns, NIST SP 800-53 controls, CISA Cybersecurity Performance
+        Goals (tier-prioritised), ETW provider GUIDs for Windows telemetry capture,
+        and ForensicArtifacts collection targets. The "actor playbook" block (when
+        attribution is confident) cites the CTID Adversary Emulation Library's
+        sequence of TTPs for that actor.
+      </Typography>
+
+      {emul?.actor && (
+        <Box sx={{ mb: 2, p: 1.5, borderRadius: 1,
+            border: `1px solid ${muiAlpha('#B286FF', 0.3)}`,
+            backgroundColor: muiAlpha('#B286FF', 0.06) }}>
+          <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 600, mb: 1 }}>
+            Adversary emulation plan — {emul.actor}
+          </Typography>
+          <Typography sx={{ fontSize: 11, color: 'text.tertiary', mb: 1 }}>
+            Source: CTID Adversary Emulation Library
+            {emul.attack_types?.length ? ` · ${emul.attack_types.slice(0,4).join(', ')}` : ''}
+          </Typography>
+          <Box component="ol" sx={{ pl: 2.5, m: 0 }}>
+            {(emul.steps || []).slice(0, 8).map((step, i) => (
+              <Box component="li" key={i} sx={{ fontSize: 12, mb: 0.5,
+                  color: 'text.secondary', lineHeight: 1.5 }}>
+                <b style={{ color: '#e6f1ff' }}>{step.procedure}</b>
+                {step.technique_id && <MuiTag label={step.technique_id} color="#B286FF"
+                    sx={{ ml: 1, fontFamily: '"IBM Plex Mono", monospace' }}/>}
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      )}
+
+      {Object.keys(cms).length > 0 && (
+        <Box sx={{ mb: 2 }}>
+          <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 600, mb: 1 }}>
+            MITRE D3FEND defensive countermeasures
+          </Typography>
+          {Object.entries(cms).slice(0, 8).map(([tid, defenses]) => (
+            <Box key={tid} sx={{ mb: 0.75, display: 'flex', gap: 1, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <MuiTag label={tid} color="#0fbcff" sx={{ fontFamily: '"IBM Plex Mono", monospace' }}/>
+              {(defenses || []).slice(0, 6).map((d, i) => (
+                <MuiTag key={i} label={`${d.d3_id} ${d.name}`} color="#16AD34"
+                    sx={{ fontFamily: '"IBM Plex Mono", monospace', fontSize: 10 }}/>
+              ))}
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      {Object.keys(cisa).length > 0 && (
+        <Box sx={{ mb: 2 }}>
+          <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 600, mb: 1 }}>
+            CISA Cybersecurity Performance Goals
+          </Typography>
+          {Object.entries(cisa).slice(0, 6).map(([tid, cpgs]) => (
+            <Box key={tid} sx={{ mb: 1 }}>
+              <MuiTag label={tid} color="#0fbcff" sx={{ fontFamily: '"IBM Plex Mono", monospace', mr: 1 }}/>
+              {(cpgs || []).slice(0, 6).map((c, i) => (
+                <MuiTag key={i}
+                    label={`${c.cpg_id} ${c.tier} · ${c.name}`}
+                    color={tierColor(c.tier)}
+                    sx={{ mr: 0.5, mb: 0.5 }}/>
+              ))}
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      {Object.keys(nist).length > 0 && (
+        <Box sx={{ mb: 2 }}>
+          <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 600, mb: 1 }}>
+            NIST SP 800-53 control families
+          </Typography>
+          {Object.entries(nist).slice(0, 6).map(([tid, controls]) => (
+            <Box key={tid} sx={{ mb: 0.5, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <MuiTag label={tid} color="#0fbcff" sx={{ fontFamily: '"IBM Plex Mono", monospace' }}/>
+              {(controls || []).slice(0, 6).map((c, i) => (
+                <MuiTag key={i} label={`${c.control_id} ${c.title}`} color="#848592"/>
+              ))}
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      {Object.keys(capec).length > 0 && (
+        <Box sx={{ mb: 2 }}>
+          <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 600, mb: 1 }}>
+            MITRE CAPEC attack patterns
+          </Typography>
+          {Object.entries(capec).slice(0, 6).map(([tid, patterns]) => (
+            <Box key={tid} sx={{ mb: 0.5, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <MuiTag label={tid} color="#0fbcff" sx={{ fontFamily: '"IBM Plex Mono", monospace' }}/>
+              {(patterns || []).slice(0, 6).map((p, i) => (
+                <MuiTag key={i} label={`${p.capec_id} ${p.name}`} color="#E6700F"/>
+              ))}
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      {forensics.length > 0 && (
+        <Box sx={{ mb: 2 }}>
+          <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 600, mb: 1 }}>
+            Evidence to collect (DFIR)
+          </Typography>
+          <Typography sx={{ fontSize: 11, color: 'text.tertiary', mb: 1 }}>
+            Source: ForensicArtifacts/artifacts (Plaso/Velociraptor/GRR registry)
+          </Typography>
+          {forensics.slice(0, 8).map((f, i) => (
+            <Box key={i} sx={{ mb: 0.75 }}>
+              <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 500 }}>
+                {f.name}
+                {(f.labels || []).map((l, j) => (
+                  <MuiTag key={j} label={l} color="#848592"
+                      sx={{ ml: 1, fontSize: 10 }}/>
+                ))}
+              </Typography>
+              <Typography sx={{ fontSize: 11, color: 'text.tertiary', mb: 0.5 }}>
+                {f.doc}
+              </Typography>
+              {(f.targets || []).slice(0, 4).map((t, j) => (
+                <Typography key={j} sx={{ fontSize: 10, color: 'text.secondary',
+                    fontFamily: '"IBM Plex Mono", monospace', ml: 1.5 }}>
+                  [{t.type}] {t.target}
+                </Typography>
+              ))}
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      {Object.keys(etw).length > 0 && (
+        <Box>
+          <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 600, mb: 1 }}>
+            Windows ETW providers for telemetry capture
+          </Typography>
+          {Object.entries(etw).slice(0, 6).map(([tid, provs]) => (
+            <Box key={tid} sx={{ mb: 0.5, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <MuiTag label={tid} color="#0fbcff" sx={{ fontFamily: '"IBM Plex Mono", monospace' }}/>
+              {(provs || []).slice(0, 4).map((p, i) => (
+                <MuiTag key={i} label={p.name} color="#16AD34"
+                    sx={{ fontSize: 10 }}/>
+              ))}
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Card>
+  );
+}
+
+
+/* ─── DetectionCitationsView — round-2..7 detection-corpora citations ─────────
+   Surfaces matches from SigmaHQ + Panther + Splunk + MITRE-CAR + OTRF +
+   Sublime + Chronicle + olafhartong + falco + Stratus + ET-Open/Snort.
+*/
+function DetectionCitationsView({ result }) {
+  if (!result) return null;
+  const dc = result?.investigation_result?.detection_corpora ||
+              result?.detection_corpora || null;
+  if (!dc) return null;
+  const sources = [
+    { key: 'sigma',           label: 'SigmaHQ',                  color: '#0fbcff' },
+    { key: 'panther',         label: 'Panther Labs (cloud)',      color: '#E6700F' },
+    { key: 'splunk',          label: 'Splunk security_content',   color: '#16AD34' },
+    { key: 'mitre_car',       label: 'MITRE CAR',                 color: '#B286FF' },
+    { key: 'hunter_playbook', label: 'OTRF ThreatHunter-Playbook',color: '#0fbcff' },
+    { key: 'sublime',         label: 'Sublime (email)',           color: '#E6700F' },
+    { key: 'chronicle',       label: 'Google Chronicle YARA-L',   color: '#16AD34' },
+    { key: 'olafhartong',     label: 'olafhartong KQL/Sentinel',  color: '#0fbcff' },
+    { key: 'falco',           label: 'falco-rules (container)',   color: '#E6700F' },
+    { key: 'stratus',         label: 'Stratus Red Team',          color: '#B286FF' },
+    { key: 'ids_rules',       label: 'ET Open + Snort Community', color: '#16AD34' },
+  ];
+  const totalHits = sources.reduce((sum, s) => sum + ((dc[s.key] || []).length), 0);
+  if (totalHits === 0) return null;
+
+  return (
+    <Card title="Public detection citations · 11 corpora" accent="#16AD34"
+      badge={`${totalHits} matches across ${sources.filter(s => (dc[s.key]||[]).length).length} sources`}>
+      <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
+        Vetted public detections that overlap the techniques this investigation
+        surfaced. Each match preserves upstream attribution. Use these as
+        starting points before adapting to your own environment.
+      </Typography>
+      {sources.map(s => {
+        const hits = dc[s.key] || [];
+        if (!hits.length) return null;
+        return (
+          <Box key={s.key} sx={{ mb: 1.5 }}>
+            <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 600, mb: 0.75 }}>
+              {s.label}
+              <Typography component="span" sx={{ color: 'text.tertiary', fontSize: 11, ml: 1 }}>
+                ({hits.length} match{hits.length>1?'es':''})
+              </Typography>
+            </Typography>
+            {hits.slice(0, 4).map((h, i) => (
+              <Box key={i} sx={{ mb: 0.5, ml: 1.5 }}>
+                <Typography sx={{ fontSize: 12, color: 'text.primary' }}>
+                  • {h.title || h.name || h.rule || h.id || '(unnamed)'}
+                  {h.level && <MuiTag label={h.level} color={s.color}
+                      sx={{ ml: 1, fontSize: 10 }}/>}
+                  {h.severity && <MuiTag label={h.severity} color={s.color}
+                      sx={{ ml: 1, fontSize: 10 }}/>}
+                </Typography>
+                {h.description && (
+                  <Typography sx={{ fontSize: 11, color: 'text.tertiary', ml: 1.5 }}>
+                    {h.description.length > 200 ? h.description.slice(0,200)+'…' : h.description}
+                  </Typography>
+                )}
+              </Box>
+            ))}
+          </Box>
+        );
+      })}
+    </Card>
+  );
+}
+
+
+/* ─── ExportButtons — STIX / SARIF / CACAO download buttons ────────────────── */
+function ExportButtons({ result }) {
+  if (!result?.runId) return null;
+  const dl = (path, name) => () => {
+    cookieFetch(path).then(async r => {
+      if (!r.ok) return;
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
+  };
+  return (
+    <Card title="Export this investigation" accent="#0fbcff">
+      <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
+        Download the investigation result in three OASIS-standard formats so it
+        flows directly into the analyst's downstream tools.
+      </Typography>
+      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+        <MuiButton variant="outlined" size="small" sx={{ textTransform: 'none' }}
+          onClick={dl(`/api/export/stix/${result.runId}`, `recon-${result.runId}.stix.json`)}>
+          STIX 2.1 bundle
+        </MuiButton>
+        <MuiButton variant="outlined" size="small" sx={{ textTransform: 'none' }}
+          onClick={dl(`/api/export/sarif/${result.runId}`, `recon-${result.runId}.sarif`)}>
+          SARIF 2.1 (Code Scanning)
+        </MuiButton>
+        <MuiButton variant="outlined" size="small" sx={{ textTransform: 'none' }}
+          onClick={dl(`/api/export/cacao/${result.runId}`, `recon-${result.runId}.cacao.json`)}>
+          CACAO 2.0 (SOAR playbook)
+        </MuiButton>
+      </Stack>
+    </Card>
+  );
+}
+
+
 /* ─── DomainPermutationsView — dnstwist lookalike enumeration ──────────────────
    Pick a domain from the IOC set and surface live-registered typo-squats /
    homoglyphs / TLD-swaps. The Cisco-AS-of-which research found dnstwist;
@@ -5875,11 +6184,20 @@ function AppMain({ authUser, setAuthState }) {
               </Card>
             )}
             <Detection result={result}/>
+            <ErrorBoundary label="Public detection citations">
+              <DetectionCitationsView result={result}/>
+            </ErrorBoundary>
+            <ErrorBoundary label="Defense and hunt context">
+              <DefenseContextView result={result}/>
+            </ErrorBoundary>
             <ErrorBoundary label="Lookalike domains">
               <DomainPermutationsView result={result}/>
             </ErrorBoundary>
             <ErrorBoundary label="Hunt plan">
               <HuntPlanView result={result}/>
+            </ErrorBoundary>
+            <ErrorBoundary label="Exports">
+              <ExportButtons result={result}/>
             </ErrorBoundary>
             </CardDefaultOpenContext.Provider>
           </>
