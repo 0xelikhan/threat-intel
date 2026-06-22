@@ -2152,6 +2152,23 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
     except Exception:
         forensic_targets = []
 
+    # MITRE D3FEND — defensive countermeasures mapped to each ATT&CK
+    # technique. Lets the analyst report answer "what should I deploy
+    # to detect/contain this" instead of just listing the technique.
+    d3fend_countermeasures: dict = {}
+    try:
+        from intel.d3fend import countermeasures_for_many
+        tids = []
+        for t in (result.get("mitre_techniques") or []):
+            if isinstance(t, str):
+                tid = t.split(" ", 1)[0].strip()
+                if tid.upper().startswith("T"):
+                    tids.append(tid)
+        if tids:
+            d3fend_countermeasures = countermeasures_for_many(tids)
+    except Exception:
+        d3fend_countermeasures = {}
+
     # CTID Adversary Emulation Library — if RECON attributed the
     # incident to a specific actor cluster, surface that actor's
     # vetted emulation plan as a "what they do next" block.
@@ -2180,6 +2197,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
         "detection_corpora":      detection_corpora,
         "forensic_targets":       forensic_targets,
         "emulation_plan":         emulation_plan,
+        "d3fend_countermeasures": d3fend_countermeasures,
         "threat_level":           result.get("threat_level", "MEDIUM"),
         "confidence":             _conf,
         "needs_more_enrichment":  result.get("needs_more_enrichment", False),

@@ -170,6 +170,21 @@ async def _lifespan(app):
             await asyncio.sleep(3600)
     track_task(asyncio.create_task(_phishing_db_periodic()))
 
+    # Tranco top-1M ranked domains — once-a-day refresh. Domain triage
+    # uses is_top_n() to avoid flagging Microsoft/Google/etc. when they
+    # appear in an alert.
+    async def _tranco_periodic():
+        import aiohttp
+        from intel.tranco import ensure_loaded as _tr_ensure
+        while True:
+            try:
+                async with aiohttp.ClientSession() as s:
+                    await _tr_ensure(s)
+            except Exception as e:
+                _log.debug("tranco refresh failed: %s", e)
+            await asyncio.sleep(24 * 3600)
+    track_task(asyncio.create_task(_tranco_periodic()))
+
     _log.info("startup: pre-warm scheduled in background, accepting requests now")
 
     # Self-diagnosis: once at startup, then every 15 min for /api/health.

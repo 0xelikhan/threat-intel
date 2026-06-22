@@ -54,6 +54,8 @@ class MatchDetectionsSkill(Skill):
             "sublime":          "list[dict]",
             "chronicle":        "list[dict]",
             "olafhartong":      "list[dict]",
+            "falco":            "list[dict]",
+            "stratus":          "list[dict]",
             "total":            "int",
             "corpus_stats":     "dict[str, dict]",
         }
@@ -78,6 +80,8 @@ class MatchDetectionsSkill(Skill):
         sublime:      List[Dict[str, Any]] = []
         chronicle:    List[Dict[str, Any]] = []
         olafhartong:  List[Dict[str, Any]] = []
+        falco:        List[Dict[str, Any]] = []
+        stratus:      List[Dict[str, Any]] = []
         corpus_stats: Dict[str, Any] = {}
 
         # Each lookup is purely in-memory after first call; failures are
@@ -146,6 +150,22 @@ class MatchDetectionsSkill(Skill):
         except Exception as e:
             corpus_stats["olafhartong"] = {"error": str(e)[:120]}
 
+        try:
+            from intel.falco_rules import match_by_techniques as _fr
+            from intel.falco_rules import stats as _frs
+            falco = _fr(techniques, max_results=per_max)
+            corpus_stats["falco"] = _frs()
+        except Exception as e:
+            corpus_stats["falco"] = {"error": str(e)[:120]}
+
+        try:
+            from intel.stratus_techniques import match_by_techniques as _st
+            from intel.stratus_techniques import stats as _sts
+            stratus = _st(techniques, max_results=per_max)
+            corpus_stats["stratus"] = _sts()
+        except Exception as e:
+            corpus_stats["stratus"] = {"error": str(e)[:120]}
+
         return {
             "sigma":           sigma,
             "panther":         panther,
@@ -155,8 +175,11 @@ class MatchDetectionsSkill(Skill):
             "sublime":         sublime,
             "chronicle":       chronicle,
             "olafhartong":     olafhartong,
+            "falco":           falco,
+            "stratus":         stratus,
             "total":           sum(len(x) for x in
                                    (sigma, panther, splunk, car, playbook,
-                                    sublime, chronicle, olafhartong)),
+                                    sublime, chronicle, olafhartong,
+                                    falco, stratus)),
             "corpus_stats":    corpus_stats,
         }
