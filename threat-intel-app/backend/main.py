@@ -621,6 +621,30 @@ class DomainPermutationsRequest(BaseModel):
     high_signal_only: Optional[bool] = Field(default=False)
 
 
+class MispPushRequest(BaseModel):
+    """Body for /api/integrations/misp/push. run_id resolves to the
+    stored investigation; the operator's MISP_URL / MISP_KEY config
+    settings determine the destination."""
+    run_id:          str = Field(..., max_length=64)
+    distribution:    Optional[int] = Field(default=0)   # 0=org-only
+    threat_level_id: Optional[int] = Field(default=3)   # 3=low default
+    analysis:        Optional[int] = Field(default=1)   # 1=ongoing
+
+
+class TheHivePushRequest(BaseModel):
+    """Body for /api/integrations/thehive/push."""
+    run_id: str = Field(..., max_length=64)
+
+
+class StixShifterRequest(BaseModel):
+    """Body for /api/integrations/stix-shifter/translate. Either pattern
+    OR run_id must be supplied (run_id resolves to that run's STIX
+    bundle, then every indicator pattern is translated)."""
+    target:  str  = Field(default="splunk", max_length=32)
+    pattern: Optional[str] = Field(default=None, max_length=4000)
+    run_id:  Optional[str] = Field(default=None, max_length=64)
+
+
 class HuntPlanRequest(BaseModel):
     """Body for /api/hunt/plan. Re-uses the verdict + IOCs + MITRE coverage
     produced by /api/analyze to derive 3-5 hypotheses, an ABLE table, and a
@@ -1973,6 +1997,168 @@ async def export_stix(run_id: str):
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     return JSONResponse(content=bundle,
                         headers={"Content-Disposition": f'attachment; filename="threat-intel-{ts}.stix.json"'})
+
+
+# ─── SARIF + CACAO downstream exports ────────────────────────────────────────
+@app.get("/api/export/sarif/{run_id}")
+async def export_sarif(run_id: str):
+    """Emit the file-scanner findings (or, when no file scan was run,
+    the investigation result's IOC + technique findings) as a SARIF
+    2.1.0 document for GitHub Code Scanning / Azure DevOps."""
+    if run_id not in _results:
+        raise HTTPException(404, "Run not found")
+    state = _results[run_id]
+    from intel.sarif_output import to_sarif
+    # Prefer the file-scanner result when present; fall back to the
+    # investigation result so the SARIF download is always meaningful.
+    payload = state.get("file_scan_result") or {
+        "filename":          (state.get("raw_input") or "")[:200] or "alert.txt",
+        "verdict":           state.get("threat_level") or "UNKNOWN",
+        "yara_matches":      [],
+        "capa":              {},
+        "capabilities":      {
+            "mitre_techniques": [
+                {"id": (t.split(" ", 1)[0] if isinstance(t, str) else ""),
+                 "name": (t.split(" - ", 1)[1] if isinstance(t, str)
+                           and " - " in t else t),
+                 "attack_url": (f"https://attack.mitre.org/techniques/"
+                                f"{(t.split(' ', 1)[0] if isinstance(t, str) else '').replace('.', '/')}/"),
+                 "evidence":  ""}
+                for t in (state.get("mitre_techniques") or [])[:30]
+            ],
+        },
+        "suspicious_strings": [],
+        "hashes":             {},
+    }
+    sarif = to_sarif(payload)
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return JSONResponse(content=sarif,
+                        headers={"Content-Disposition":
+                                  f'attachment; filename="recon-{ts}.sarif"'})
+
+
+@app.get("/api/export/cacao/{run_id}")
+async def export_cacao(run_id: str):
+    """Emit the investigation's recommended_actions + MITRE coverage as
+    a CACAO 2.0 incident-response playbook JSON. SOAR platforms
+    (Splunk SOAR / Tines / Torq) ingest CACAO directly."""
+    if run_id not in _results:
+        raise HTTPException(404, "Run not found")
+    state = _results[run_id]
+    from intel.cacao_output import to_cacao
+    rs = state.get("response_summary") or {}
+    inv = {
+        "mitre_techniques": state.get("mitre_techniques") or [],
+        "threat_actor":     state.get("threat_actor"),
+        "verdict":          state.get("threat_level"),
+    }
+    pb = to_cacao(rs, inv)
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return JSONResponse(content=pb,
+                        headers={"Content-Disposition":
+                                  f'attachment; filename="recon-playbook-{ts}.cacao.json"'})
+
+
+# ─── Outbound integrations: MISP / TheHive / STIX-Shifter ────────────────────
+@app.post("/api/integrations/misp/push")
+async def push_to_misp(req: MispPushRequest):
+    """Push the run's extracted IOCs as a single MISP Event. The
+    operator's MISP_URL / MISP_KEY settings (or env vars) determine the
+    destination; we never persist them in analyst data."""
+    if req.run_id not in _results:
+        raise HTTPException(404, "Run not found")
+    state = _results[req.run_id]
+    from intel.misp_push import push_event
+    out = await asyncio.to_thread(
+        push_event,
+        state.get("iocs") or {},
+        {
+            "mitre_techniques": state.get("mitre_techniques") or [],
+            "threat_actor":     state.get("threat_actor"),
+            "verdict":          state.get("threat_level"),
+        },
+        state.get("response_summary"),
+        req.distribution or 0,
+        req.threat_level_id or 3,
+        req.analysis or 1,
+    )
+    if not out.get("ok") and out.get("error_code") == "not_configured":
+        body = error_envelope(
+            detail="MISP not configured. Set MISP_URL + MISP_KEY in Settings.",
+            code="misp_not_configured",
+            status=503,
+        )
+        return _JSONResponse(body, status_code=503)
+    return out
+
+
+@app.post("/api/integrations/thehive/push")
+async def push_to_thehive(req: TheHivePushRequest):
+    """Create a TheHive 5 case from the run + attach every extracted IOC
+    as an Observable. THEHIVE_URL + THEHIVE_KEY (+ optional THEHIVE_ORG /
+    THEHIVE_TLP) must be set in Settings."""
+    if req.run_id not in _results:
+        raise HTTPException(404, "Run not found")
+    state = _results[req.run_id]
+    from intel.thehive_push import push_case
+    out = await push_case(
+        state.get("iocs") or {},
+        {
+            "mitre_techniques": state.get("mitre_techniques") or [],
+            "threat_actor":     state.get("threat_actor"),
+            "verdict":          state.get("threat_level"),
+        },
+        state.get("response_summary"),
+        raw_input=(state.get("raw_input") or "")[:200],
+    )
+    if not out.get("ok") and out.get("error_code") == "not_configured":
+        body = error_envelope(
+            detail="TheHive not configured. Set THEHIVE_URL + THEHIVE_KEY in Settings.",
+            code="thehive_not_configured",
+            status=503,
+        )
+        return _JSONResponse(body, status_code=503)
+    return out
+
+
+@app.post("/api/integrations/stix-shifter/translate")
+async def stix_shifter_translate(req: StixShifterRequest):
+    """Translate a STIX pattern (or every indicator in a run's bundle)
+    into a native SIEM query. Targets: splunk, kql, qradar, elastic_ecs,
+    crowdstrike. Uses the built-in fallback translator when the heavy
+    stix-shifter library isn't installed."""
+    from intel.stix_shifter_adapter import (
+        translate_pattern, translate_bundle, SUPPORTED_TARGETS,
+        is_stix_shifter_available,
+    )
+    if req.target.lower() not in SUPPORTED_TARGETS:
+        body = error_envelope(
+            detail=(f"unknown target '{req.target}'; supported: "
+                     f"{', '.join(sorted(SUPPORTED_TARGETS.keys()))}"),
+            code="unknown_target",
+            status=400,
+        )
+        return _JSONResponse(body, status_code=400)
+
+    if req.pattern:
+        result = translate_pattern(req.pattern, target=req.target)
+    elif req.run_id:
+        if req.run_id not in _results:
+            raise HTTPException(404, "Run not found")
+        bundle = _results[req.run_id].get("stix_bundle")
+        if not bundle:
+            raise HTTPException(404, "Run has no STIX bundle yet")
+        result = translate_bundle(bundle, target=req.target)
+    else:
+        body = error_envelope(
+            detail="provide either `pattern` or `run_id`",
+            code="missing_input",
+            status=400,
+        )
+        return _JSONResponse(body, status_code=400)
+
+    result["stix_shifter_lib_available"] = is_stix_shifter_available()
+    return result
 
 
 # ─── CHAT (conversational follow-up on an investigation) ─────────────────────────
