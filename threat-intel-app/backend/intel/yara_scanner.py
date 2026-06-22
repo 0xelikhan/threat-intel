@@ -10,11 +10,24 @@ from functools import lru_cache
 
 VENDOR = Path(__file__).parent.parent.parent / "vendor"
 
-# Rule sources, in priority order — early hits get cited first
+# Rule sources, in priority order — early hits get cited first. Each
+# source ships at least Apache-2.0 / MIT / BSD-2-Clause / DRUL-1.0
+# (DRL-style permissive). Operator fetches via scripts/fetch_yara_corpora.sh.
 RULE_SOURCES = [
-    ("Florian Roth signature-base", VENDOR / "signature-base" / "yara"),
-    ("Yara-Rules community",        VENDOR / "yara-rules"),
-    ("Mandiant RTC",                VENDOR / "mandiant-rtc"),
+    ("Florian Roth signature-base",     VENDOR / "signature-base" / "yara"),
+    ("Yara-Rules community",            VENDOR / "yara-rules"),
+    ("Mandiant RTC",                    VENDOR / "mandiant-rtc"),
+    ("ReversingLabs",                   VENDOR / "reversinglabs-yara-rules" / "yara"),
+    ("Volexity threat-intel",           VENDOR / "volexity-threat-intel"),
+    ("ESET malware-ioc",                VENDOR / "eset-malware-ioc"),
+    ("Trellix ATR",                     VENDOR / "trellix-atr-yara"),
+    ("bartblaze",                       VENDOR / "bartblaze-yara" / "rules"),
+    ("mthcht TH-Keywords",              VENDOR / "threathunting-keywords-yara" / "yara_rules_binaries_strict"),
+    # chainguard-dev/malcontent ships ~14k YARA grouped by capability bucket;
+    # we surface them here so the file scanner gets them as part of the
+    # normal scan, but the bucket-aware skill in skills/classify_capabilities
+    # also walks this tree for the structured capability assessment.
+    ("chainguard malcontent",           VENDOR / "malcontent" / "rules"),
 ]
 
 

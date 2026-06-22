@@ -2099,10 +2099,87 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
     _ta = result.get("threat_actor")
     if isinstance(_ta, dict) and "confidence" in _ta:
         _ta = {**_ta, "confidence": _coerce_conf(_ta.get("confidence"), default=0.5)}
+    # Detection-corpora cross-reference — fan out across every bundled
+    # corpus (SigmaHQ, panther-analysis, Splunk security_content, MITRE
+    # CAR, OTRF ThreatHunter-Playbook) so the analyst sees vetted public
+    # detections that overlap the techniques surfaced by the LLM. All
+    # purely in-memory after first call; failures are silent because
+    # `corpus_stats` reports missing corpora.
+    sigma_matches: list = []
+    detection_corpora: dict = {}
+    try:
+        tech_ids = []
+        for t in (result.get("mitre_techniques") or []):
+            if isinstance(t, str):
+                tid = t.split(" ", 1)[0].strip()
+                if tid.upper().startswith("T"):
+                    tech_ids.append(tid)
+        if tech_ids:
+            from skills import run_skill as _rs
+            detection_corpora = await _rs("match_detections", {
+                "mitre_techniques": tech_ids,
+                "per_source_max":   8,
+            })
+            # Preserve the legacy `sigma_matches` field so older
+            # frontend code paths keep rendering SigmaHQ citations.
+            sigma_matches = detection_corpora.get("sigma") or []
+    except Exception:
+        sigma_matches = []
+        detection_corpora = {}
+
+    # ForensicArtifacts — evidence-collection targets keyed off the
+    # behavioural labels the LLM emitted (e.g. "Persistence",
+    # "Credential Access"). The analyst report renders these as
+    # "Evidence to collect" so an IR analyst has concrete paths to
+    # check on the host.
+    forensic_targets: list = []
+    try:
+        from intel.forensic_artifacts import evidence_for_techniques
+        labels: list = []
+        for t in (result.get("mitre_techniques") or []):
+            if isinstance(t, str) and " - " in t:
+                # "T1059.001 - PowerShell" — the right half is the label
+                labels.append(t.split(" - ", 1)[1].strip())
+        # Also try tactic-style labels coming directly from the LLM
+        for k in ("attack_stage", "tactic"):
+            v = result.get(k)
+            if isinstance(v, str) and v:
+                labels.append(v)
+        forensic_targets = evidence_for_techniques(labels,
+            host_os=state.get("host_os") or result.get("host_os"),
+            max_results=10,
+        )
+    except Exception:
+        forensic_targets = []
+
+    # CTID Adversary Emulation Library — if RECON attributed the
+    # incident to a specific actor cluster, surface that actor's
+    # vetted emulation plan as a "what they do next" block.
+    emulation_plan: dict = {}
+    try:
+        from intel.emulation_plans import lookup_actor
+        actor_blob = result.get("threat_actor")
+        actor_name = ""
+        if isinstance(actor_blob, dict):
+            actor_name = (actor_blob.get("name") or
+                          actor_blob.get("group") or "")
+        elif isinstance(actor_blob, str):
+            actor_name = actor_blob
+        if actor_name:
+            ep = lookup_actor(actor_name)
+            if ep:
+                emulation_plan = ep
+    except Exception:
+        emulation_plan = {}
+
     return {
         **state,
         "investigation_result":   result,
         "mitre_techniques":       result.get("mitre_techniques", []),
+        "sigma_matches":          sigma_matches,
+        "detection_corpora":      detection_corpora,
+        "forensic_targets":       forensic_targets,
+        "emulation_plan":         emulation_plan,
         "threat_level":           result.get("threat_level", "MEDIUM"),
         "confidence":             _conf,
         "needs_more_enrichment":  result.get("needs_more_enrichment", False),

@@ -153,6 +153,23 @@ async def _lifespan(app):
                 _log.debug("feodo periodic refresh failed: %s", e)
     track_task(asyncio.create_task(_feodo_periodic()))
 
+    # Phishing.Database (mitchellkrogza) — hourly active phishing-domain
+    # feed. Warmed on startup, then refreshed every hour. Domain triage
+    # consults the in-memory set synchronously, so the feed needs to be
+    # populated *before* the first analyze fires; if it isn't (network
+    # outage), the lookup returns False and the rest of triage proceeds.
+    async def _phishing_db_periodic():
+        import aiohttp
+        from intel.phishing_db import ensure_loaded
+        while True:
+            try:
+                async with aiohttp.ClientSession() as s:
+                    await ensure_loaded(s)
+            except Exception as e:
+                _log.debug("phishing_db refresh failed: %s", e)
+            await asyncio.sleep(3600)
+    track_task(asyncio.create_task(_phishing_db_periodic()))
+
     _log.info("startup: pre-warm scheduled in background, accepting requests now")
 
     # Self-diagnosis: once at startup, then every 15 min for /api/health.
@@ -525,6 +542,25 @@ class DetectionRequest(BaseModel):
 
 class GTIScoreRequest(BaseModel):
     enrichments: dict
+
+class DomainPermutationsRequest(BaseModel):
+    """Body for /api/hunt/permutations. Triggers dnstwist-based lookalike
+    enumeration for a single domain, optionally with DNS resolution per variant
+    so the analyst sees which permutations are real registered domains."""
+    domain:           str  = Field(..., max_length=253)
+    max_results:      Optional[int]  = Field(default=25)
+    resolve:          Optional[bool] = Field(default=True)
+    high_signal_only: Optional[bool] = Field(default=False)
+
+
+class HuntPlanRequest(BaseModel):
+    """Body for /api/hunt/plan. Re-uses the verdict + IOCs + MITRE coverage
+    produced by /api/analyze to derive 3-5 hypotheses, an ABLE table, and a
+    structured hunt plan. `hypothesis` is optional — when blank the first
+    auto-generated hypothesis is used to drive ABLE + plan."""
+    iocs:       Optional[dict] = None
+    analysis:   Optional[dict] = None
+    hypothesis: Optional[str]  = Field(default=None, max_length=2000)
 
 
 # ─── Self-contained route groups extracted to backend/routers/ ───────────
@@ -1276,6 +1312,106 @@ async def gti_score_standalone(req: GTIScoreRequest):
         "critical_count": sum(1 for s in scores.values() if s.get("score", 0) >= 85),
         "high_count":     sum(1 for s in scores.values() if 65 <= s.get("score", 0) < 85),
         "elevated_count": sum(1 for s in scores.values() if 45 <= s.get("score", 0) < 65),
+    }
+
+
+# ─── DOMAIN PERMUTATIONS (dnstwist) ──────────────────────────────────────────────
+@app.post("/api/hunt/permutations")
+async def hunt_permutations(req: DomainPermutationsRequest):
+    """Generate typo-squat / homoglyph / TLD-swap permutations for a domain via
+    dnstwist and resolve each to surface live registered lookalikes. On-demand
+    (not part of auto-enrichment) because DNS-resolving 200+ permutations per
+    analyze is too expensive."""
+    from skills import run_skill
+    try:
+        out = await run_skill("domain_permutations", {
+            "domain":           req.domain,
+            "max_results":      req.max_results,
+            "resolve":          req.resolve,
+            "high_signal_only": req.high_signal_only,
+        })
+        return out
+    except Exception as e:
+        _log.warning("domain_permutations skill failed: %s", e)
+        body = error_envelope(
+            detail=f"Permutation generation failed: {e}",
+            code="permutation_failed",
+            status=500,
+        )
+        return _JSONResponse(body, status_code=500)
+
+
+# ─── HUNT PLANNING (PEAK-style) ──────────────────────────────────────────────────
+@app.post("/api/hunt/plan")
+async def hunt_plan(req: HuntPlanRequest):
+    """Generate a PEAK-style hunt artifact set (hypotheses + ABLE + plan) from
+    an existing RECON analysis. Reactive triage → proactive hunt; the analysis
+    must be supplied by the caller (the frontend passes the current /api/analyze
+    result). Skills run sequentially because each consumes the previous output.
+
+    Returns a single payload with all three artifacts so the UI can render
+    them progressively without three separate round trips.
+    """
+    if not _llm_key_configured():
+        body = error_envelope(
+            detail="LLM provider not configured. Add an API key in Settings.",
+            code="llm_not_configured",
+            status=503,
+        )
+        return _JSONResponse(body, status_code=503)
+
+    analysis = req.analysis or {}
+    iocs     = req.iocs or {}
+
+    from skills import run_skill
+
+    hypotheses: list[str] = []
+    if req.hypothesis and req.hypothesis.strip():
+        hypotheses = [req.hypothesis.strip()]
+    else:
+        try:
+            h_out = await run_skill("generate_hypothesis",
+                                    {"analysis": analysis, "iocs": iocs})
+            hypotheses = list(h_out.get("hypotheses") or [])
+        except Exception as e:
+            _log.warning("generate_hypothesis failed: %s", e)
+            hypotheses = []
+
+    primary = hypotheses[0] if hypotheses else ""
+    able_md = ""
+    plan_md = ""
+    plan_iterations = 0
+    plan_approved   = False
+
+    if primary:
+        try:
+            a_out = await run_skill("generate_able_table", {
+                "hypothesis": primary, "analysis": analysis, "iocs": iocs,
+            })
+            able_md = a_out.get("able_markdown") or ""
+        except Exception as e:
+            _log.warning("generate_able_table failed: %s", e)
+
+        try:
+            p_out = await run_skill("generate_hunt_plan", {
+                "hypothesis":    primary,
+                "able_markdown": able_md,
+                "analysis":      analysis,
+                "iocs":          iocs,
+            })
+            plan_md         = p_out.get("hunt_plan_markdown") or ""
+            plan_iterations = int(p_out.get("iterations") or 0)
+            plan_approved   = bool(p_out.get("critic_approved"))
+        except Exception as e:
+            _log.warning("generate_hunt_plan failed: %s", e)
+
+    return {
+        "hypotheses":      hypotheses,
+        "primary":         primary,
+        "able_markdown":   able_md,
+        "hunt_plan":       plan_md,
+        "plan_iterations": plan_iterations,
+        "plan_approved":   plan_approved,
     }
 
 

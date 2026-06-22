@@ -236,15 +236,39 @@ def _build_stix(iocs: dict, investigation: dict) -> dict:
                         "pattern": f"[file:{field} = '{h}']", "pattern_type": "stix",
                         "valid_from": now})
 
-    for t in investigation.get("mitre_techniques", []):
+    # Map of "T1059.001" -> "attack-pattern--<uuid>" so the Attack Flow
+    # overlay below can link to the same attack-pattern objects instead
+    # of duplicating them.
+    attack_pattern_index: dict[str, str] = {}
+    technique_labels = investigation.get("mitre_techniques", []) or []
+    for t in technique_labels:
         parts = t.split(" - ")
-        tid = f"attack-pattern--{uuid.uuid4()}"
-        objects.append({"type": "attack-pattern", "spec_version": "2.1", "id": tid,
+        ap_id = f"attack-pattern--{uuid.uuid4()}"
+        objects.append({"type": "attack-pattern", "spec_version": "2.1", "id": ap_id,
                         "created": now, "modified": now,
                         "name": parts[1] if len(parts) > 1 else t,
                         "external_references": [{"source_name": "mitre-attack",
                                                  "external_id": parts[0],
                                                  "url": f"https://attack.mitre.org/techniques/{parts[0].replace('.', '/')}/"}]})
+        attack_pattern_index[parts[0]] = ap_id
+
+    # Attack Flow overlay (CTID STIX 2.1 extension) — sequenced view of the
+    # techniques, openable directly in the CTID Attack Flow Builder.
+    if technique_labels:
+        try:
+            from intel.attack_flow import build_attack_flow_objects
+            objects.extend(build_attack_flow_objects(
+                identity_id=identity_id,
+                technique_labels=technique_labels,
+                attack_pattern_index=attack_pattern_index,
+                investigation=investigation,
+            ))
+        except Exception as e:
+            # The Attack Flow overlay is additive — never block the base
+            # STIX export when the builder hiccups.
+            import logging as _logging
+            _logging.getLogger("recon.response").warning(
+                "Attack Flow overlay skipped: %s", e)
 
     return {"type": "bundle", "id": f"bundle--{uuid.uuid4()}", "objects": objects}
 
@@ -463,10 +487,20 @@ async def run_response(state: dict) -> dict:
         f"     because 'context is unclear' — the analyst already gave it.\n"
         if _operator_note else ""
     )
+    # Palantir Alerting and Detection Strategy (ADS) section outline —
+    # injected as guardrails so the prose follows a recognisable industry
+    # structure rather than ad-hoc paragraphs.
+    try:
+        from intel.ads_framework import ads_section_outline as _ads_outline
+        _ads_block = "\n" + _ads_outline() + "\n"
+    except Exception:
+        _ads_block = ""
+
     analyst_prompt = f"""You are a senior MDR analyst (5+ years, T2/T3 escalation lead) writing the
 final INTERNAL DISPOSITION for a SOC investigation (for the next-tier analyst / shift
 lead). Be CONCISE throughout. Tight sentences, no padding; keep each list to its
 most important 2-3 items.
+{_ads_block}
 
 You must base every claim on SPECIFIC evidence from the investigation. Do not
 invent. Do not be vague. "Suspicious activity detected" is FORBIDDEN. Say what

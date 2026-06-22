@@ -21,26 +21,42 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Type
 
-from .base               import Skill
-from .extract_iocs       import ExtractIOCsSkill
-from .enrich_ioc         import EnrichIOCSkill
-from .triage_alert       import TriageAlertSkill
-from .investigate        import InvestigateSkill
-from .generate_sigma     import GenerateSigmaSkill
-from .generate_kql       import GenerateKQLSkill
-from .map_mitre          import MapMITRESkill
-from .correlate_signals  import CorrelateSignalsSkill
+from .base                  import Skill
+from .extract_iocs           import ExtractIOCsSkill
+from .enrich_ioc             import EnrichIOCSkill
+from .triage_alert           import TriageAlertSkill
+from .investigate            import InvestigateSkill
+from .generate_sigma         import GenerateSigmaSkill
+from .generate_kql           import GenerateKQLSkill
+from .map_mitre              import MapMITRESkill
+from .correlate_signals      import CorrelateSignalsSkill
+from .generate_hypothesis    import GenerateHypothesisSkill
+from .generate_able_table    import GenerateAbleTableSkill
+from .generate_hunt_plan     import GenerateHuntPlanSkill
+from .domain_permutations    import DomainPermutationsSkill
+from .analyze_capabilities   import AnalyzeCapabilitiesSkill
+from .match_sigma_rules      import MatchSigmaRulesSkill
+from .classify_capabilities  import ClassifyCapabilitiesSkill
+from .match_detections       import MatchDetectionsSkill
 
 
 SKILL_REGISTRY: Dict[str, Type[Skill]] = {
-    "extract_iocs":      ExtractIOCsSkill,
-    "enrich_ioc":        EnrichIOCSkill,
-    "triage_alert":      TriageAlertSkill,
-    "investigate":       InvestigateSkill,
-    "generate_sigma":    GenerateSigmaSkill,
-    "generate_kql":      GenerateKQLSkill,
-    "map_mitre":         MapMITRESkill,
-    "correlate_signals": CorrelateSignalsSkill,
+    "extract_iocs":         ExtractIOCsSkill,
+    "enrich_ioc":           EnrichIOCSkill,
+    "triage_alert":         TriageAlertSkill,
+    "investigate":          InvestigateSkill,
+    "generate_sigma":       GenerateSigmaSkill,
+    "generate_kql":         GenerateKQLSkill,
+    "map_mitre":            MapMITRESkill,
+    "correlate_signals":    CorrelateSignalsSkill,
+    "generate_hypothesis":  GenerateHypothesisSkill,
+    "generate_able_table":  GenerateAbleTableSkill,
+    "generate_hunt_plan":   GenerateHuntPlanSkill,
+    "domain_permutations":  DomainPermutationsSkill,
+    "analyze_capabilities":   AnalyzeCapabilitiesSkill,
+    "match_sigma_rules":      MatchSigmaRulesSkill,
+    "classify_capabilities":  ClassifyCapabilitiesSkill,
+    "match_detections":       MatchDetectionsSkill,
 }
 
 

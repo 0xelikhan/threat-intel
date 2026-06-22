@@ -524,6 +524,21 @@ def score_cve(data: dict, label: str = "cve") -> GTIScore:
             score += 5
             factors.append(f"EPSS: {round(prob * 100, 1)}% exploit probability")
 
+    # nuclei-templates: number of public detection templates targeting this
+    # CVE. Cuts through KEV's binary signal — "5+ templates" implies a
+    # weaponised, broadly-detected vulnerability worth treating as exploited.
+    nuc = data.get("nuclei") or {}
+    if nuc and nuc.get("template_count"):
+        n = int(nuc["template_count"])
+        if n >= 5:
+            score += 10
+            if verdict == "UNKNOWN":
+                verdict = "SUSPICIOUS"
+            factors.append(f"nuclei: {n} public detection templates")
+        elif n >= 1:
+            score += 4
+            factors.append(f"nuclei: {n} public detection template{'s' if n > 1 else ''}")
+
     if not factors:
         factors.append("No CVE intelligence data available.")
         verdict = "UNKNOWN"

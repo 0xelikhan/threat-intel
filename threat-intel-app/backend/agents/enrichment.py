@@ -1292,6 +1292,20 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         "local_feeds":     _local_domain_check(domain),
         "typosquat":       _typosquat_check(domain),
     }
+    # Phishing.Database — synchronous in-memory lookup against the hourly
+    # active feed warmed by the lifespan handler. Adds {"hit": True, ...}
+    # when the domain is on the active phishing list.
+    try:
+        from intel.phishing_db import is_known_phish
+        if is_known_phish(domain):
+            data["phishing_db"] = {
+                "source":  "mitchellkrogza/Phishing.Database",
+                "hit":     True,
+                "summary": (f"{domain} is on the active phishing-domains "
+                            "feed (validated by PyFunceble)."),
+            }
+    except Exception:
+        pass
     # Domain heuristics: NRD age, DGA score, IDN/homoglyph — all offline
     try:
         from intel.domain_analysis import analyze_domain
@@ -1596,6 +1610,26 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
     kev = _ok_dict(kev_r)
     if kev:
         data["cisa_kev"] = kev
+
+    # ProjectDiscovery nuclei-templates: how many public detection
+    # templates target this CVE. "X templates exist" is a more concrete
+    # exploitation-tooling signal than CVSS alone — closes the gap
+    # between EPSS (probability) and KEV (in-the-wild) with active
+    # community detection coverage.
+    try:
+        from intel.nuclei_index import lookup as _nuclei_lookup
+        templates = _nuclei_lookup(cve_id, max_results=8)
+        if templates:
+            data["nuclei"] = {
+                "source":         "nuclei-templates",
+                "template_count": len(templates),
+                "templates":      templates,
+                "summary":        (f"{len(templates)} public nuclei detection "
+                                   "templates target this CVE."),
+            }
+    except Exception:
+        # Nuclei lookup is additive — never break CVE enrichment.
+        pass
 
     _cache[ck] = data
     return data
