@@ -115,8 +115,30 @@ async def _lifespan(app):
             ("Feodo Tracker",  "intel.feeds_loader",        "refresh_feodo_now", None),
             ("Warning lists",  "intel.warninglist_filter",  "load_warninglists", None),
             ("YARA rules",     "intel.yara_scanner",        "_ruleset",        None),
+            # Round-14 ML — sklearn LogisticRegression / GradientBoosting.
+            # ~50 ms / ~100 ms train cost shifted off the first request.
+            ("DGA classifier",  "intel.dga_classifier",          "_build_model", None),
+            ("Phishing URL ML", "intel.phishing_url_classifier", "_build_model", None),
+            # Detection corpora — sigma + 10 others. Each is multi-second
+            # YAML walk on first call, ~12 s total when serialised. Run
+            # in parallel here so the analyst never waits for them mid-
+            # investigation. semantic_search.stats() depends on all 11
+            # being loaded, so it's scheduled last after the gather.
+            ("Sigma corpus",    "intel.sigma_corpus",        "stats",           None),
+            ("Panther rules",   "intel.panther_rules",       "stats",           None),
+            ("Splunk content",  "intel.splunk_content",      "stats",           None),
+            ("MITRE CAR",       "intel.mitre_car",           "stats",           None),
+            ("OTRF Playbook",   "intel.hunter_playbook",     "stats",           None),
+            ("Sublime rules",   "intel.sublime_rules",       "stats",           None),
+            ("Chronicle YARA-L","intel.chronicle_rules",     "stats",           None),
+            ("olafhartong",     "intel.olafhartong_th",      "stats",           None),
+            ("falco rules",     "intel.falco_rules",         "stats",           None),
+            ("Stratus Red Team","intel.stratus_techniques",  "stats",           None),
+            ("IDS rules",       "intel.ids_rules",           "stats",           None),
         ]
         await asyncio.gather(*[_warm_one(*m) for m in light + heavy])
+        # Semantic search index — depends on all 11 corpora being warm.
+        await _warm_one("Semantic search", "intel.semantic_search", "stats", None)
         # Register static-dataset namespaces in the TTL cache so they
         # appear in /api/status. A long-TTL marker entry keeps the
         # namespace non-empty for hit-rate accounting.
