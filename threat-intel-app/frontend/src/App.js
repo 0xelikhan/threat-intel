@@ -4526,37 +4526,185 @@ function Detection({ result }) {
 /* ─── DetectionCitationsView — round-2..7 detection-corpora citations ─────────
    Surfaces matches from SigmaHQ + Panther + Splunk + MITRE-CAR + OTRF +
    Sublime + Chronicle + olafhartong + falco + Stratus + ET-Open/Snort.
+   Round-14: also hosts the natural-language search bar that hits
+   /api/detection/search (semantic_search_detections skill).
 */
+const _DETECTION_SOURCES = [
+  { key: 'sigma',           label: 'SigmaHQ',                  color: '#0fbcff' },
+  { key: 'panther',         label: 'Panther Labs (cloud)',      color: '#E6700F' },
+  { key: 'splunk',          label: 'Splunk security_content',   color: '#16AD34' },
+  { key: 'mitre_car',       label: 'MITRE CAR',                 color: '#B286FF' },
+  { key: 'hunter_playbook', label: 'OTRF ThreatHunter-Playbook',color: '#0fbcff' },
+  { key: 'sublime',         label: 'Sublime (email)',           color: '#E6700F' },
+  { key: 'chronicle',       label: 'Google Chronicle YARA-L',   color: '#16AD34' },
+  { key: 'olafhartong',     label: 'olafhartong KQL/Sentinel',  color: '#0fbcff' },
+  { key: 'falco',           label: 'falco-rules (container)',   color: '#E6700F' },
+  { key: 'stratus',         label: 'Stratus Red Team',          color: '#B286FF' },
+  { key: 'ids_rules',       label: 'ET Open + Snort Community', color: '#16AD34' },
+];
+const _SOURCE_COLOR = Object.fromEntries(
+  _DETECTION_SOURCES.map(s => [s.key, s.color])
+);
+const _SOURCE_LABEL = Object.fromEntries(
+  _DETECTION_SOURCES.map(s => [s.key, s.label])
+);
+
 function DetectionCitationsView({ result }) {
+  const [query,       setQuery]       = useState('');
+  const [searchData,  setSearchData]  = useState(null);
+  const [searching,   setSearching]   = useState(false);
+  const [searchErr,   setSearchErr]   = useState(null);
+
   if (!result) return null;
   const dc = result?.investigation_result?.detection_corpora ||
               result?.detection_corpora || null;
+  // Surface the card once an investigation has produced ANY detection
+  // payload — even an empty one. The semantic-search bar still has
+  // value when there are zero exact technique matches.
   if (!dc) return null;
-  const sources = [
-    { key: 'sigma',           label: 'SigmaHQ',                  color: '#0fbcff' },
-    { key: 'panther',         label: 'Panther Labs (cloud)',      color: '#E6700F' },
-    { key: 'splunk',          label: 'Splunk security_content',   color: '#16AD34' },
-    { key: 'mitre_car',       label: 'MITRE CAR',                 color: '#B286FF' },
-    { key: 'hunter_playbook', label: 'OTRF ThreatHunter-Playbook',color: '#0fbcff' },
-    { key: 'sublime',         label: 'Sublime (email)',           color: '#E6700F' },
-    { key: 'chronicle',       label: 'Google Chronicle YARA-L',   color: '#16AD34' },
-    { key: 'olafhartong',     label: 'olafhartong KQL/Sentinel',  color: '#0fbcff' },
-    { key: 'falco',           label: 'falco-rules (container)',   color: '#E6700F' },
-    { key: 'stratus',         label: 'Stratus Red Team',          color: '#B286FF' },
-    { key: 'ids_rules',       label: 'ET Open + Snort Community', color: '#16AD34' },
-  ];
-  const totalHits = sources.reduce((sum, s) => sum + ((dc[s.key] || []).length), 0);
-  if (totalHits === 0) return null;
+  const totalHits = _DETECTION_SOURCES.reduce(
+    (sum, s) => sum + ((dc[s.key] || []).length), 0,
+  );
+
+  const runSearch = async (e) => {
+    if (e?.preventDefault) e.preventDefault();
+    const q = (query || '').trim();
+    if (!q) return;
+    setSearching(true); setSearchErr(null);
+    try {
+      const params = new URLSearchParams({ q, top_k: '12' });
+      const resp = await cookieFetch(`/api/detection/search?${params}`);
+      const j = await resp.json();
+      if (!resp.ok) throw new Error(j.detail || j.error || `HTTP ${resp.status}`);
+      setSearchData(j);
+    } catch (err) {
+      setSearchErr(err.message || 'Search failed');
+      setSearchData(null);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const clearSearch = () => { setQuery(''); setSearchData(null); setSearchErr(null); };
+
+  const sourcesWithHits = _DETECTION_SOURCES
+    .filter(s => (dc[s.key] || []).length).length;
+  const badge = totalHits
+    ? `${totalHits} matches across ${sourcesWithHits} sources`
+    : 'natural-language search · 11 corpora';
 
   return (
     <Card title="Public detection citations · 11 corpora" accent="#16AD34"
-      badge={`${totalHits} matches across ${sources.filter(s => (dc[s.key]||[]).length).length} sources`}>
+      badge={badge}>
       <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
         Vetted public detections that overlap the techniques this investigation
         surfaced. Each match preserves upstream attribution. Use these as
         starting points before adapting to your own environment.
       </Typography>
-      {sources.map(s => {
+
+      {/* Round-14 semantic-search bar — fuzzy lookup by analyst description
+          instead of MITRE technique ID. */}
+      <Box component="form" onSubmit={runSearch}
+        sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2,
+              flexWrap: 'wrap' }}>
+        <MuiTextField
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder='e.g. "powershell encoded command from office macro"'
+          size="small"
+          fullWidth
+          sx={{ flex: 1, minWidth: 240,
+                '& .MuiOutlinedInput-root': { fontSize: 12 } }}
+        />
+        <MuiButton type="submit" variant="contained" size="small"
+          disabled={searching || !query.trim()}
+          sx={{ textTransform: 'none', fontSize: 12 }}>
+          {searching ? 'Searching…' : 'Search'}
+        </MuiButton>
+        {(searchData || searchErr) && (
+          <MuiButton variant="text" size="small" onClick={clearSearch}
+            sx={{ textTransform: 'none', fontSize: 12 }}>
+            Clear
+          </MuiButton>
+        )}
+      </Box>
+
+      {searchErr && (
+        <Typography sx={{ fontSize: 12, color: 'error.main', mb: 2 }}>
+          {searchErr}
+        </Typography>
+      )}
+
+      {searchData && (
+        <Box sx={{ mb: 2, p: 1.5, borderRadius: 1,
+            border: `1px solid ${muiAlpha('#16AD34', 0.25)}`,
+            backgroundColor: muiAlpha('#16AD34', 0.05) }}>
+          <Typography sx={{ fontSize: 12, color: 'text.primary',
+              fontWeight: 600, mb: 0.75 }}>
+            Search results — {searchData.total} match{searchData.total === 1 ? '' : 'es'}
+            <Typography component="span" sx={{ color: 'text.tertiary',
+                fontSize: 11, ml: 1 }}>
+              ({searchData.backend === 'sentence_transformers'
+                ? 'embedding-based'
+                : 'TF-IDF fallback'})
+            </Typography>
+          </Typography>
+          {(searchData.results || []).length === 0 && (
+            <Typography sx={{ fontSize: 12, color: 'text.tertiary' }}>
+              No rules matched. Try different phrasing or a more specific
+              behavior description.
+            </Typography>
+          )}
+          {(searchData.results || []).map((r, i) => (
+            <Box key={i} sx={{ mb: 1, pb: 1,
+                borderBottom: i === searchData.results.length - 1 ? 'none'
+                  : `1px dashed ${muiAlpha('#ffffff', 0.06)}` }}>
+              <Box sx={{ display: 'flex', alignItems: 'center',
+                  gap: 1, flexWrap: 'wrap', mb: 0.25 }}>
+                <MuiTag label={_SOURCE_LABEL[r.source] || r.source}
+                    color={_SOURCE_COLOR[r.source] || '#848592'}
+                    sx={{ fontSize: 10 }}/>
+                <Typography sx={{ fontSize: 12, color: 'text.primary',
+                    fontWeight: 500, flex: 1 }}>
+                  {r.title}
+                </Typography>
+                <Typography sx={{ fontSize: 10, color: 'text.tertiary',
+                    fontFamily: '"IBM Plex Mono", monospace' }}>
+                  score {(r.score ?? 0).toFixed(3)}
+                </Typography>
+              </Box>
+              {r.description && (
+                <Typography sx={{ fontSize: 11, color: 'text.tertiary',
+                    ml: 0.5, lineHeight: 1.5 }}>
+                  {r.description.length > 240
+                    ? r.description.slice(0, 240) + '…'
+                    : r.description}
+                </Typography>
+              )}
+              {(r.techniques || []).length > 0 && (
+                <Box sx={{ mt: 0.5, ml: 0.5, display: 'flex',
+                    gap: 0.5, flexWrap: 'wrap' }}>
+                  {(r.techniques || []).slice(0, 6).map((t, j) => (
+                    <MuiTag key={j} label={t} color="#848592"
+                        sx={{ fontSize: 9,
+                              fontFamily: '"IBM Plex Mono", monospace' }}/>
+                  ))}
+                </Box>
+              )}
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      {totalHits === 0 && !searchData && !searching && (
+        <Typography sx={{ fontSize: 12, color: 'text.tertiary',
+            fontStyle: 'italic' }}>
+          No exact MITRE technique matches in the corpora. Search above by
+          natural language to look for related rules.
+        </Typography>
+      )}
+
+      {_DETECTION_SOURCES.map(s => {
         const hits = dc[s.key] || [];
         if (!hits.length) return null;
         return (
