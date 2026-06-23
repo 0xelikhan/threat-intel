@@ -1592,6 +1592,14 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         "local_feeds":     _local_domain_check(domain),
         "typosquat":       _typosquat_check(domain),
     }
+    # DGA classifier (sklearn LogisticRegression over char-bigram TF-IDF
+    # + structural features). Synchronous, ~1 ms post-train. Falls back
+    # to the heuristic when sklearn isn't installed.
+    try:
+        from intel.dga_classifier import classify as _dga_classify
+        data["dga_classifier"] = _dga_classify(domain)
+    except Exception:
+        pass
     # Phishing.Database — synchronous in-memory lookup against the hourly
     # active feed warmed by the lifespan handler. Adds {"hit": True, ...}
     # when the domain is on the active phishing list.
@@ -2308,6 +2316,14 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
                                      if results_arr.get("verified")
                                      else "PhishTank has this URL flagged (pending verification)"),
             }
+
+    # Phishing URL classifier (sklearn GradientBoosting over URL-structural
+    # features). Purely local — string analysis, no network I/O.
+    try:
+        from intel.phishing_url_classifier import classify as _phish_classify
+        data["phishing_classifier"] = _phish_classify(url)
+    except Exception:
+        pass
 
     _cache[ck] = data
     return data
