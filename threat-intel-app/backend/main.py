@@ -1918,6 +1918,40 @@ async def detection_existing(techniques: str = ""):
     }
 
 
+# Natural-language search across the 11 detection corpora. Calls the
+# semantic_search_detections skill so the same code path serves the API
+# endpoint, the test harness, and the future Teams bot.
+@app.get("/api/detection/search")
+async def detection_search(
+    q:         str   = "",
+    top_k:     int   = 10,
+    sources:   str   = "",
+    min_score: float = 0.0,
+):
+    """Embedding-similarity search over SigmaHQ, panther-analysis, Splunk
+    security_content, MITRE CAR, OTRF ThreatHunter-Playbook, Sublime,
+    Chronicle YARA-L, olafhartong, falco-rules, Stratus Red Team, and
+    ET Open + Snort. Uses sentence-transformers when installed, otherwise
+    a sklearn TF-IDF char-ngram fallback."""
+    from skills import run_skill
+    src_list = [s.strip() for s in sources.split(",") if s.strip()] if sources else None
+    return await run_skill("semantic_search_detections", {
+        "query":     q,
+        "top_k":     top_k,
+        "sources":   src_list,
+        "min_score": min_score,
+    })
+
+
+@app.get("/api/detection/search/stats")
+async def detection_search_stats():
+    """Index size + active embedder backend. Useful for the operator
+    to see whether sentence-transformers is in play or the TF-IDF
+    fallback is being used."""
+    from intel.semantic_search import stats
+    return stats()
+
+
 # ─── UNIFIED FEED INTEL (spec §8 — TAXII + FreshRSS) ────────────────────────────
 @app.get("/api/feeds")
 async def feeds_list(source: Optional[str] = None, type: Optional[str] = None,

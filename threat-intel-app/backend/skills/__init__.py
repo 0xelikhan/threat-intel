@@ -38,6 +38,7 @@ from .analyze_capabilities   import AnalyzeCapabilitiesSkill
 from .match_sigma_rules      import MatchSigmaRulesSkill
 from .classify_capabilities  import ClassifyCapabilitiesSkill
 from .match_detections       import MatchDetectionsSkill
+from .semantic_search_detections import SemanticSearchDetectionsSkill
 
 
 SKILL_REGISTRY: Dict[str, Type[Skill]] = {
@@ -57,6 +58,7 @@ SKILL_REGISTRY: Dict[str, Type[Skill]] = {
     "match_sigma_rules":      MatchSigmaRulesSkill,
     "classify_capabilities":  ClassifyCapabilitiesSkill,
     "match_detections":       MatchDetectionsSkill,
+    "semantic_search_detections": SemanticSearchDetectionsSkill,
 }
 
 

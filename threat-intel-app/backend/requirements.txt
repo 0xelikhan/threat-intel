@@ -30,3 +30,13 @@ dnstwist>=20240819
 # a MITRE technique list from PE imports without it. Comment out if
 # disk / install time is constrained.
 flare-capa>=8.0.0
+# scikit-learn powers the round-14 ML enhancements:
+#   intel/dga_classifier.py          — LogisticRegression over char-ngrams
+#   intel/phishing_url_classifier.py — GradientBoosting over URL features
+#   intel/semantic_search.py         — TF-IDF fallback embedder
+# Trained at first call on bundled in-tree datasets (no disk persistence).
+scikit-learn>=1.4.0
+# sentence-transformers is OPTIONAL — when installed, semantic_search.py
+# embeds with all-MiniLM-L6-v2 (~80MB) instead of the TF-IDF fallback.
+# Comment out if disk / install time is constrained.
+# sentence-transformers>=2.7.0
