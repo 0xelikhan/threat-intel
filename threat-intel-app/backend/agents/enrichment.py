@@ -97,8 +97,13 @@ def _timeouts_for(host: str | None) -> "tuple[aiohttp.ClientTimeout, float]":
     """Return (aiohttp transport timeout, outer wait_for cap) for a host."""
     return _SLOW_HOSTS.get(host or "", (_TIMEOUT, _PER_SOURCE_TIMEOUT))
 # Cap on in-flight HTTP fan-out — protects downstream rate limits and
-# our own event loop from a thousand simultaneous sockets.
-_SEMAPHORE = asyncio.Semaphore(int(os.getenv("ENRICH_CONCURRENCY", "10")))
+# our own event loop from a thousand simultaneous sockets. Bumped from
+# 10 → 16 (round-14 perf pass): the per-host cap in _get_connector
+# (ENRICH_POOL_PER_HOST=10) independently bounds traffic to any single
+# TI source, so this only adds cross-host parallelism. With 18 IP +
+# 21 domain sources fanning out concurrently per IOC, raising the
+# global cap meaningfully reduces tail latency on the enrichment node.
+_SEMAPHORE = asyncio.Semaphore(int(os.getenv("ENRICH_CONCURRENCY", "16")))
 # Backwards-compat alias — older code in this module imports TIMEOUT.
 TIMEOUT = _TIMEOUT
 
