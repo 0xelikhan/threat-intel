@@ -4462,7 +4462,10 @@ function Detection({ result }) {
     finally { setLoading(false); }
   };
 
-  // Nothing generated yet → show the on-demand generate button.
+  // Nothing generated yet → show the on-demand generate button. The
+  // public-detection citations + semantic search bar still render
+  // below so analysts can pivot to existing public rules before
+  // generating their own.
   if (!tabs.length) {
     return (
       <Card title="Detection Rules" accent="#0fbcff">
@@ -4473,6 +4476,16 @@ function Detection({ result }) {
         {err && (
           <Typography sx={{ fontSize: 12, color: 'error.main', mt: 1 }}>{err}</Typography>
         )}
+        <Box sx={{ mt: 2.5, pt: 2.5,
+            borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
+          <Typography sx={{ fontSize: 11, fontWeight: 600, color: 'text.tertiary',
+              textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.25 }}>
+            Public detection citations &middot; 11 corpora
+          </Typography>
+          <ErrorBoundary label="Public detection citations">
+            <DetectionCitationsView result={result} bare/>
+          </ErrorBoundary>
+        </Box>
       </Card>
     );
   }
@@ -4519,6 +4532,20 @@ function Detection({ result }) {
           <NetworkDetection result={result} bare/>
         </Box>
       )}
+      {/* Public detection citations + natural-language search across the
+          11 corpora. Lives inside the Detection Rules card so every
+          detection-content surface (generated rules, JA fingerprints,
+          existing public rules) is in one collapsible. */}
+      <Box sx={{ mt: 2.5, pt: 2.5,
+          borderTop: `1px solid ${muiAlpha('#ffffff', 0.08)}` }}>
+        <Typography sx={{ fontSize: 11, fontWeight: 600, color: 'text.tertiary',
+            textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.25 }}>
+          Public detection citations &middot; 11 corpora
+        </Typography>
+        <ErrorBoundary label="Public detection citations">
+          <DetectionCitationsView result={result} bare/>
+        </ErrorBoundary>
+      </Box>
     </Card>
   );
 }
@@ -4549,7 +4576,7 @@ const _SOURCE_LABEL = Object.fromEntries(
   _DETECTION_SOURCES.map(s => [s.key, s.label])
 );
 
-function DetectionCitationsView({ result }) {
+function DetectionCitationsView({ result, bare = false }) {
   const [query,       setQuery]       = useState('');
   const [searchData,  setSearchData]  = useState(null);
   const [searching,   setSearching]   = useState(false);
@@ -4560,10 +4587,12 @@ function DetectionCitationsView({ result }) {
               result?.detection_corpora || null;
   // Surface the card once an investigation has produced ANY detection
   // payload — even an empty one. The semantic-search bar still has
-  // value when there are zero exact technique matches.
-  if (!dc) return null;
+  // value when there are zero exact technique matches. In `bare` mode
+  // (nested inside the Detection card) we'll render even without dc so
+  // the search bar is always reachable next to the generated rules.
+  if (!dc && !bare) return null;
   const totalHits = _DETECTION_SOURCES.reduce(
-    (sum, s) => sum + ((dc[s.key] || []).length), 0,
+    (sum, s) => sum + (((dc || {})[s.key] || []).length), 0,
   );
 
   const runSearch = async (e) => {
@@ -4593,14 +4622,15 @@ function DetectionCitationsView({ result }) {
     ? `${totalHits} matches across ${sourcesWithHits} sources`
     : 'natural-language search · 11 corpora';
 
-  return (
-    <Card title="Public detection citations · 11 corpora" accent="#16AD34"
-      badge={badge}>
-      <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
-        Vetted public detections that overlap the techniques this investigation
-        surfaced. Each match preserves upstream attribution. Use these as
-        starting points before adapting to your own environment.
-      </Typography>
+  const body = (
+    <>
+      {!bare && (
+        <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
+          Vetted public detections that overlap the techniques this investigation
+          surfaced. Each match preserves upstream attribution. Use these as
+          starting points before adapting to your own environment.
+        </Typography>
+      )}
 
       {/* Round-14 semantic-search bar — fuzzy lookup by analyst description
           instead of MITRE technique ID. */}
@@ -4705,7 +4735,7 @@ function DetectionCitationsView({ result }) {
       )}
 
       {_DETECTION_SOURCES.map(s => {
-        const hits = dc[s.key] || [];
+        const hits = (dc || {})[s.key] || [];
         if (!hits.length) return null;
         return (
           <Box key={s.key} sx={{ mb: 1.5 }}>
@@ -4734,6 +4764,13 @@ function DetectionCitationsView({ result }) {
           </Box>
         );
       })}
+    </>
+  );
+  if (bare) return body;
+  return (
+    <Card title="Public detection citations · 11 corpora" accent="#16AD34"
+      badge={badge}>
+      {body}
     </Card>
   );
 }
@@ -6055,13 +6092,11 @@ function AppMain({ authUser, setAuthState }) {
               </Card>
             )}
             <Detection result={result}/>
-            <ErrorBoundary label="Public detection citations">
-              <DetectionCitationsView result={result}/>
-            </ErrorBoundary>
-            {/* DomainPermutationsView is now gated to URL-scan inputs only —
-                see the Triage card's "Live URL detonation" section.
-                DefenseContextView + HuntPlanView + ExportButtons were
-                removed from the analyst-results layout per Elias's
+            {/* Public detection citations + semantic search are now
+                nested inside the Detection card. DomainPermutationsView
+                is gated to URL-scan inputs (in Triage's URL detonation
+                section). DefenseContextView + HuntPlanView + ExportButtons
+                were removed from the analyst-results layout per Elias's
                 product call. */}
             </CardDefaultOpenContext.Provider>
           </>
