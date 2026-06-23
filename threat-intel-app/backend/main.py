@@ -3792,7 +3792,28 @@ async def status_check():
     free_results = await asyncio.gather(*[probe(name, url, ok_codes=(200, 404)) for name, url in free_probes])
     for (name, _), r in zip(free_probes, free_results):
         out["sources"][name] = r
+    # Per-host network timing histogram — surfaces which TI hosts run
+    # slow or error-prone under the operator's actual workload. Builds
+    # up across every analyze; reset via /api/status/timings/reset.
+    try:
+        from agents.enrichment import network_timings_snapshot
+        out["network_timings"] = network_timings_snapshot(top=25)
+    except Exception as e:
+        out["network_timings"] = [{"error": str(e)[:120]}]
     return out
+
+
+@app.post("/api/status/timings/reset")
+async def reset_status_timings():
+    """Clear the per-host network-timing histogram. Use before scoping
+    a measurement to a single analyze run."""
+    try:
+        from agents.enrichment import reset_network_timings
+        reset_network_timings()
+        return {"ok": True}
+    except Exception as e:
+        body = error_envelope(detail=str(e)[:240], code="reset_failed", status=500)
+        return _JSONResponse(body, status_code=500)
 
 
 # ─── SECURITY SELF-CHECK (spec §9) ────────────────────────────────────────────
