@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect, lazy, Suspense } from 'react';
 import {
   ArrowUpRight, AlertCircle, ChevronRight, X, FileSearch, Mail, Activity,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 
 import AgentPipeline     from './components/AgentPipeline';
@@ -57,6 +58,7 @@ const FileScannerView   = lazy(() => import('./components/FileScannerView'));
 const EmailComposerView = lazy(() => import('./components/EmailComposerView'));
 const MapTab            = lazy(() => import('./components/MapTab'));
 const LoginPage         = lazy(() => import('./components/LoginPage'));
+const SettingsView      = lazy(() => import('./components/SettingsView'));
 
 /* ─── asArray — defensive shape coerce for LLM-emitted list fields ──────────
    Multiple analyst-summary fields (analysis_assessment, probing_questions,
@@ -5203,7 +5205,7 @@ function NetworkDetection({ result, bare }) {
  * Uses MUI Drawer with the OpenCTI nav width/styling, hosting the input area
  * (drop zone + textarea + AgentPipeline) and the extracted-IOCs panel.
  */
-function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScanFile, onScanHash, onScanUrl, scanState, onHome, onOpenEmail, emailActive, onOpenAnalyze, analyzeAvailable, analyzeActive, authUser, onLogout }) {
+function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScanFile, onScanHash, onScanUrl, scanState, onHome, onOpenEmail, emailActive, onOpenAnalyze, analyzeAvailable, analyzeActive, onOpenSettings, settingsActive, authUser, onLogout }) {
   const [logText, setLogText] = useState('');
   const [dragOver, setDragOver] = useState(false);
 
@@ -5402,6 +5404,33 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
             fontSize: 12, fontWeight: 500, flex: 1, minWidth: 0,
           }}>
             Email
+          </Typography>
+        </Box>
+
+        {/* Settings entry point */}
+        <Box
+          onClick={() => onOpenSettings?.()}
+          sx={{
+            display: 'flex', alignItems: 'center', gap: 1.25,
+            p: '12px 14px',
+            backgroundColor: settingsActive ? muiAlpha('#0fbcff', 0.1) : 'background.secondary',
+            border: `1px solid ${settingsActive ? muiAlpha('#0fbcff', 0.5) : muiAlpha('#ffffff', 0.12)}`,
+            borderRadius: '4px',
+            cursor: 'pointer',
+            mb: 1.25,
+            transition: 'all .15s',
+            '&:hover': {
+              borderColor: muiAlpha('#0fbcff', 0.5),
+              backgroundColor: muiAlpha('#0fbcff', 0.06),
+            },
+          }}
+        >
+          <SettingsIcon size={16} color="#0fbcff" style={{ flexShrink: 0 }}/>
+          <Typography sx={{
+            color: settingsActive ? '#0fbcff' : 'text.primary',
+            fontSize: 12, fontWeight: 500, flex: 1, minWidth: 0,
+          }}>
+            Settings
           </Typography>
         </Box>
 
@@ -5861,6 +5890,10 @@ function AppMain({ authUser, setAuthState }) {
   // Holds optional { log, parsed } seed so the analyze/scanner pipelines
   // can pre-populate the composer with the current investigation context.
   const [emailState, setEmailState] = useState(null);
+  // Settings view toggle — single bool because the page is its own
+  // overlay; opening it dismisses email + scanner like the analyze
+  // view does.
+  const [showSettings, setShowSettings] = useState(false);
   // Show scanner whenever there's scan activity in flight or a result on hand
   const showScanner = scanState.scanning || scanState.result || scanState.error;
   const clearScan = useCallback(() => {
@@ -5997,7 +6030,7 @@ function AppMain({ authUser, setAuthState }) {
         onScanHash={scanHash}
         onScanUrl={scanUrl}
         scanState={scanState}
-        onHome={() => { clearScan(); setEmailState(null); setResult(null); setHomeNonce(n => n + 1); }}
+        onHome={() => { clearScan(); setEmailState(null); setResult(null); setShowSettings(false); setHomeNonce(n => n + 1); }}
         onOpenEmail={() => {
           // Open the email composer with a blank slate. The analyze
           // result is intentionally PRESERVED so the analyst can come
@@ -6006,22 +6039,31 @@ function AppMain({ authUser, setAuthState }) {
           // onStart hook). The scanner gets dismissed because it doesn't
           // share state with anything else.
           clearScan();
+          setShowSettings(false);
           setEmailState({ log: '', parsed: null });
         }}
         emailActive={!!emailState}
+        onOpenSettings={() => {
+          // Settings overlay — dismisses scanner / email like Analyze does.
+          clearScan();
+          setEmailState(null);
+          setShowSettings(true);
+        }}
+        settingsActive={showSettings}
         // "Analysis" sidebar pill: available whenever there's an analyze
         // result OR an analyze run is in flight (we still want the click
         // to land you on the live progress). Active means the main view is
         // currently rendering analysis (not email and not scanner), so the
         // pill hides itself to avoid a no-op click.
         analyzeAvailable={!!result}
-        analyzeActive={!emailState && !showScanner}
+        analyzeActive={!emailState && !showScanner && !showSettings}
         onOpenAnalyze={() => {
-          // Dismiss the email composer and the file scanner so the analyze
-          // view owns the main area again. The analysis result itself is
-          // preserved (it lives in `result`) so we just need to clear the
-          // overlays.
+          // Dismiss the email composer / scanner / settings so the
+          // analyze view owns the main area again. The analysis result
+          // itself is preserved (it lives in `result`) so we just need
+          // to clear the overlays.
           setEmailState(null);
+          setShowSettings(false);
           clearScan();
         }}
         authUser={authUser}
@@ -6033,8 +6075,17 @@ function AppMain({ authUser, setAuthState }) {
         }}
       />
 
-      {/* Main view priority: email composer > file scanner > analysis */}
-      {emailState && (
+      {/* Main view priority: settings > email composer > file scanner > analysis */}
+      {showSettings && (
+        <Box component="main" sx={{ flex: 1, p: '24px 28px 48px', overflowY: 'auto', minWidth: 0 }}>
+          <ErrorBoundary label="Settings">
+            <Suspense fallback={<LazyFallback/>}>
+              <SettingsView/>
+            </Suspense>
+          </ErrorBoundary>
+        </Box>
+      )}
+      {!showSettings && emailState && (
         <ErrorBoundary label="Email Composer">
           <Suspense fallback={<LazyFallback/>}>
             <EmailComposerView
@@ -6045,7 +6096,7 @@ function AppMain({ authUser, setAuthState }) {
           </Suspense>
         </ErrorBoundary>
       )}
-      {!emailState && showScanner && (
+      {!showSettings && !emailState && showScanner && (
         <Box sx={{ flex: 1, minWidth: 0, position: 'relative' }}>
           {/* Close button to dismiss scanner and return to the analysis view */}
           <MuiIconButton onClick={clearScan}
@@ -6068,7 +6119,7 @@ function AppMain({ authUser, setAuthState }) {
           </ErrorBoundary>
         </Box>
       )}
-      {!emailState && !showScanner && (
+      {!showSettings && !emailState && !showScanner && (
 
       <Box component="main" sx={{
         flex: 1, p: '24px 28px 48px', overflowY: 'auto', minWidth: 0,

@@ -23,7 +23,9 @@ import asyncio
 import hashlib
 import logging
 import os
+import time
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 import aiohttp
 
@@ -143,6 +145,64 @@ def _ck(ioc_type: str, value: str) -> str:
     return f"{ioc_type}:{hashlib.md5(value.encode()).hexdigest()}"
 
 
+# ─── Per-host network timing histogram ──────────────────────────────────────
+# Lightweight bookkeeping so the operator can spot slow / failing TI
+# sources via /api/status without reaching for a profiler. The dict is
+# bounded (max ~100 hosts) — anything beyond that gets a "..." bucket.
+# Reset on demand via reset_network_timings() so an analyst can scope
+# a measurement to a single analyze run.
+_TIMING_MAX_HOSTS = 100
+_network_timings: Dict[str, Dict[str, float]] = {}
+
+
+def _record_timing(host: Optional[str], elapsed_ms: float, *,
+                   ok: bool, status: int = 0) -> None:
+    """Record one HTTP call. Cheap — single dict lookup, no locks."""
+    h = host or "?unknown"
+    bucket = _network_timings.get(h)
+    if bucket is None:
+        if len(_network_timings) >= _TIMING_MAX_HOSTS:
+            h = "?overflow"
+            bucket = _network_timings.get(h)
+        if bucket is None:
+            bucket = {"count": 0, "ok_count": 0, "err_count": 0,
+                      "total_ms": 0.0, "max_ms": 0.0, "last_status": 0}
+            _network_timings[h] = bucket
+    bucket["count"]     += 1
+    bucket["total_ms"]  += elapsed_ms
+    bucket["max_ms"]    = max(bucket["max_ms"], elapsed_ms)
+    bucket["last_status"] = status or bucket.get("last_status", 0)
+    if ok:
+        bucket["ok_count"] += 1
+    else:
+        bucket["err_count"] += 1
+
+
+def network_timings_snapshot(top: int = 25) -> List[Dict[str, Any]]:
+    """Return a top-N-by-mean-ms snapshot for /api/status. Includes
+    ok/error counts so the operator can see whether a slow source is
+    actually serving traffic or just timing out."""
+    rows: List[Dict[str, Any]] = []
+    for host, b in _network_timings.items():
+        count = max(1, int(b.get("count") or 1))
+        rows.append({
+            "host":       host,
+            "count":      count,
+            "ok":         int(b.get("ok_count")  or 0),
+            "errors":     int(b.get("err_count") or 0),
+            "mean_ms":    round(float(b.get("total_ms") or 0.0) / count, 1),
+            "max_ms":     round(float(b.get("max_ms") or 0.0), 1),
+            "last_status": int(b.get("last_status") or 0),
+        })
+    rows.sort(key=lambda r: -r["mean_ms"])
+    return rows[:top]
+
+
+def reset_network_timings() -> None:
+    """Clear the histogram — used by /api/status?reset=1 or tests."""
+    _network_timings.clear()
+
+
 async def _get(session, url, **kw):
     """Issue one GET inside the global semaphore, bounded by the per-source
     safety timeout, gated by the per-host circuit breaker. Never raises —
@@ -165,9 +225,12 @@ async def _get(session, url, **kw):
             status = r.status
             payload = await r.json() if "json" in r.content_type else {"raw": await r.text()}
             return status, payload
+    _t0 = time.perf_counter()
     try:
         async with _SEMAPHORE:
             status, payload = await asyncio.wait_for(_do(), timeout=safety)
+        _record_timing(host, (time.perf_counter() - _t0) * 1000.0,
+                        ok=True, status=status)
         # Tag categorical failures so the frontend can render them
         # consistently (auth → "check your key", rate-limit → "wait n s").
         if status in (401, 403):
@@ -188,10 +251,14 @@ async def _get(session, url, **kw):
         return payload
     except asyncio.TimeoutError:
         if host: breaker.record_failure(host)
+        _record_timing(host, (time.perf_counter() - _t0) * 1000.0,
+                        ok=False, status=0)
         return {"error": f"source timed out after {safety:.0f}s",
                 "error_type": "timed_out"}
     except Exception as e:
         if host: breaker.record_failure(host)
+        _record_timing(host, (time.perf_counter() - _t0) * 1000.0,
+                        ok=False, status=0)
         return {"error": _humanise_exc(e), "error_type": "unreachable"}
 
 
