@@ -56,7 +56,6 @@ cd threat-intel-app/backend
 .\venv\Scripts\python.exe -m pytest tests/ -v
 ```
 
-585 passing. Anthropic / Ollama provider tests skip without creds.
 
 ## Auth
 
@@ -94,8 +93,7 @@ bcrypt.hashpw(b"your-password", bcrypt.gensalt()).decode()
 | `RECON_ENABLE_MSRC`          | `0`        | Microsoft Security Update Guide |
 | `RECON_ENABLE_MOZILLA_OBSERVATORY` | `0`  | Per-domain web grade |
 
-API keys for TI sources live in `data/config.json` (operator only;
-analyst data never persists). Edit via the Settings UI or directly.
+API keys for TI sources live in `data/config.json` 
 
 ## Optional dependencies
 
@@ -104,6 +102,4 @@ analyst data never persists). Edit via the Settings UI or directly.
 | `flare-capa`                | PE capability extraction          |
 | `sentence-transformers`     | Embedding backend for `/api/detection/search` (falls back to sklearn TF-IDF) |
 
-## License
 
-Personal portfolio project. No license granted.
