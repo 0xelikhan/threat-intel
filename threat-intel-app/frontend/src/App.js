@@ -4834,48 +4834,6 @@ function DetectionCitationsView({ result, bare = false }) {
 }
 
 
-/* ─── ExportButtons — STIX / SARIF / CACAO download buttons ────────────────── */
-function ExportButtons({ result }) {
-  if (!result?.runId) return null;
-  const dl = (path, name) => () => {
-    cookieFetch(path).then(async r => {
-      if (!r.ok) return;
-      const blob = await r.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    });
-  };
-  return (
-    <Card title="Export this investigation" accent="#0fbcff">
-      <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
-        Download the investigation result in three OASIS-standard formats so it
-        flows directly into the analyst's downstream tools.
-      </Typography>
-      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
-        <MuiButton variant="outlined" size="small" sx={{ textTransform: 'none' }}
-          onClick={dl(`/api/export/stix/${result.runId}`, `recon-${result.runId}.stix.json`)}>
-          STIX 2.1 bundle
-        </MuiButton>
-        <MuiButton variant="outlined" size="small" sx={{ textTransform: 'none' }}
-          onClick={dl(`/api/export/sarif/${result.runId}`, `recon-${result.runId}.sarif`)}>
-          SARIF 2.1 (Code Scanning)
-        </MuiButton>
-        <MuiButton variant="outlined" size="small" sx={{ textTransform: 'none' }}
-          onClick={dl(`/api/export/cacao/${result.runId}`, `recon-${result.runId}.cacao.json`)}>
-          CACAO 2.0 (SOAR playbook)
-        </MuiButton>
-      </Stack>
-    </Card>
-  );
-}
-
-
 /* ─── DomainPermutationsView — dnstwist lookalike enumeration ──────────────────
    Pick a domain from the IOC set and surface live-registered typo-squats /
    homoglyphs / TLD-swaps. The Cisco-AS-of-which research found dnstwist;
