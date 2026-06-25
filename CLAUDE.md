@@ -43,7 +43,7 @@ threat-intel-app/
 │   ├── skills/              # Granular, individually-runnable units
 │   │   ├── base.py          # Skill ABC
 │   │   ├── __init__.py      # SKILL_REGISTRY + get_skill + run_skill
-│   │   └── (8 skills)
+│   │   └── (17 skills — round-14 added semantic_search_detections)
 │   ├── intel/               # TI data layer + everything not an agent
 │   │   ├── auth.py          # bcrypt verify_credentials
 │   │   ├── cache.py         # TTLCache + namespace registry (Section 3)
@@ -67,7 +67,7 @@ threat-intel-app/
 │   └── tests/               # pytest, namespace-based grouping
 └── frontend/
     └── src/
-        ├── App.js           # ~5.6k-line root — auth, routing, drawer,
+        ├── App.js           # ~6.1k-line root — auth, routing, drawer,
         │                    #   AND ~30 inline analysis sub-components
         │                    #   (Sidebar, AnalystSummary, ChatWithRecon,
         │                    #    Detection, ThreatScore, BulkTable, …).
@@ -86,6 +86,7 @@ threat-intel-app/
             ├── AgentPipeline.jsx    # The analyze SSE stream UI
             ├── FileScannerView.jsx  # Big file-analyst report (lazy)
             ├── EmailComposerView.jsx# Email composer (lazy)
+            ├── SettingsView.jsx     # API-key + integration config (lazy)
             ├── MapTab.jsx           # Leaflet IP geo (lazy)
             ├── LoginPage.jsx        # (lazy)
             ├── URLScanLive.jsx      # URLScan submit + poll block
@@ -112,7 +113,7 @@ threat-intel-app/
    * `enrichment.run_enrichment` — opens an `aiohttp.ClientSession` with a
      **shared process-wide TCPConnector** (Section 2), fans out per IOC
      type concurrently via `asyncio.gather`. Each `_get`/`_post` is wrapped
-     in a global `asyncio.Semaphore(10)` + an `asyncio.wait_for(12s)` safety
+     in a global `asyncio.Semaphore(16)` + an `asyncio.wait_for(12s)` safety
      timeout + the per-host circuit breaker (Section 5). Partial snapshots
      stream back to the UI via `on_partial` whenever a category finishes.
    * `investigation.run_investigation` — tool-calling loop against the
@@ -154,8 +155,16 @@ programmatic entry point used by tests and any future per-step caller
 
 ```
 SKILL_REGISTRY = {
+  # Core analyst-pipeline skills (rounds 1-2)
   "extract_iocs", "enrich_ioc", "triage_alert", "investigate",
   "generate_sigma", "generate_kql", "map_mitre", "correlate_signals",
+  # PEAK threat-hunt skills (round 2)
+  "generate_hypothesis", "generate_able_table", "generate_hunt_plan",
+  # Round 3+
+  "domain_permutations", "analyze_capabilities",
+  "match_sigma_rules", "classify_capabilities", "match_detections",
+  # Round 14 — natural-language search across the 11 detection corpora
+  "semantic_search_detections",
 }
 ```
 
@@ -283,7 +292,7 @@ observability. Anthropic / Ollama provider tests skip without creds.
 | `LLM_PROVIDER`               | `openai`      | Swap LLM backend (openai/azure/anthropic/ollama) |
 | `OPENAI_BASE_URL`            | OpenAI public | Set to `…openai.azure.com` for Azure detection |
 | `LOG_LEVEL`                  | `INFO`        | Root logger level |
-| `ENRICH_CONCURRENCY`         | `10`          | asyncio.Semaphore cap on TI fan-out |
+| `ENRICH_CONCURRENCY`         | `16`          | asyncio.Semaphore cap on TI fan-out (per-host independently capped at ENRICH_POOL_PER_HOST) |
 | `ENRICH_SOURCE_TIMEOUT_S`    | `12`          | asyncio.wait_for cap per source |
 | `ENRICH_POOL_LIMIT`          | `100`         | TCPConnector total connection cap |
 | `ENRICH_POOL_PER_HOST`       | `10`          | TCPConnector per-host cap |
@@ -436,11 +445,12 @@ malcontent capability bucket grouping, MalAPI.io Windows API → MITRE
 mapping. `_capa_eligible` gates the subprocess to PE / .NET / ELF
 inputs over 1 KB.
 
-### New skills (17 total)
+### New skills
 
 `generate_hypothesis`, `generate_able_table`, `generate_hunt_plan`,
 `domain_permutations`, `analyze_capabilities`, `match_sigma_rules`,
-`classify_capabilities`, `match_detections`.
+`classify_capabilities`, `match_detections`, and (round 14)
+`semantic_search_detections` — 17 skills total.
 
 ### Output formats + outbound integrations
 
@@ -465,14 +475,45 @@ audit stream for what left the system.
 - `RECON_ENABLE_SHODAN_INTERNETDB` (default 1)
 - `RECON_TAXII_FEEDS` — comma-separated slugs from `intel/taxii_feeds_catalog.py`
 
-### Frontend cards added
+### Frontend cards — current detail-view stack (round-14 consolidation)
 
-`DetectionCitationsView` (11-corpus citations), `DefenseContextView`
-(D3FEND + CAPEC + NIST 800-53 + CISA CPG + ETW + forensic_targets +
-emulation_plan). `DomainPermutationsView` now lives inside the Triage
-card's URL-detonation Section (renders only when input has URLs).
-`HuntPlanView` + `ExportButtons` were added in round-2/10 and then
-removed in round-11 per product decision (UI bloat).
+The analyst-results detail view is intentionally **6 cards**, in order:
+
+1. **Summary** (`AnalystSummary`) — verdict + threat score + inline
+   feedback form.
+2. **Ask RECON** (`ChatWithRecon`) — conversational follow-up.
+3. **Triage** — rolls up 9 sub-sections via the `bare` prop pattern:
+   URL detonation (URLScanLive), lookalike domains
+   (DomainPermutationsView), log normalisation (LogTranslation),
+   threat-intel cross-references (CrossRefs — KEV/LOLBAS/LOLDrivers/
+   RMM/phishing kits), sandbox process tree (SandboxBehavioral),
+   OSINT (InfrastructureIntel), MISP suppressed IOCs, recommended
+   actions, analyst notes.
+4. **Email analysis** (`EmailAnalysis`) — only when an EML is parsed.
+5. **Geolocation** — Leaflet map + `GeopoliticalContext bare` (country
+   + ASN breakdown + attribution hints). Only when IPs are present.
+6. **Detection Rules** (`Detection`) — generated SIEM rules (Sigma /
+   KQL / SPL / EQL / Suricata / YARA-L / FQL / YARA tabs) + JA3/JA4
+   TLS fingerprints (when present) + **public detection citations +
+   semantic-search bar** (`DetectionCitationsView bare`, round-14).
+
+Cards that no longer appear in the analyst-results layout:
+
+* `DefenseContextView` — removed; the backend still emits
+  `d3fend_countermeasures` / `capec_patterns` / `nist_controls` /
+  `cisa_cpg` / `etw_providers` / `forensic_targets` / `emulation_plan`
+  on state, so operators can hit them via the API.
+* `HuntPlanView` — removed (round 11, UI bloat). PEAK skills +
+  `/api/hunt/plan` endpoint still work.
+* `ExportButtons` — removed; STIX / SARIF / CACAO endpoints still
+  live at `/api/export/{stix,sarif,cacao}/{run_id}`.
+
+Conventions:
+
+* The `bare` prop pattern (used by URLScanLive, DomainPermutationsView,
+  SuppressedIOCs, CrossRefs, etc.) strips the outer Card wrapper so a
+  component can render as a Section inside a parent Card. Use this
+  rather than duplicating the body across "card" and "section" forms.
 
 ### Defensive coercion
 
@@ -486,3 +527,69 @@ dict. Frontend has a matching `asArray()` helper as defence-in-depth.
 9 shell scripts under `scripts/fetch_*.sh` clone the heavyweight rule
 corpora into `vendor/`. The platform is fully functional out-of-the-
 box via built-in fallbacks; fetchers add depth.
+
+## Rounds 12-14 (post-expansion polish)
+
+### Round 12-13 — Settings UI + perf profiling
+
+* `frontend/src/components/SettingsView.jsx` — operator config UI
+  rendering everything in `backend/config.py::API_KEY_DEFINITIONS`
+  (API Keys / Outbound Integrations / Enricher Toggles). Masked
+  display + reveal/edit/revert/save without shell-editing
+  `data/config.json`.
+* `agents/enrichment.py::_record_timing` / `network_timings_snapshot`
+  — per-host timing histogram surfaced at `/api/status` under
+  `network_timings` (mean / max / ok / errors). `POST
+  /api/status/timings/reset` clears for scoped measurement.
+* Defender 1116/1117 email grammar fixes in
+  `intel/email_composer.py::_FILLER_SUBS`.
+* Summary card production crash fixed via 17-array-field force-coerce
+  in `agents/response.py` (see "Defensive coercion" above) + frontend
+  `asArray()` defence in depth.
+
+### Round 14 — Trained ML augmentations
+
+Three sklearn-backed enhancements over the existing heuristic /
+keyword-match paths, all trained at first call on bundled in-tree
+data (no disk persistence; pre-warmed in the lifespan handler so the
+first request doesn't pay the train cost):
+
+* `intel/dga_classifier.py` — LogisticRegression over char-bigram
+  TF-IDF + 7 structural features (entropy, vowel/digit ratio, longest
+  consonant run). Wired into `agents/enrichment.enrich_domain`
+  alongside `_typosquat_check`. Augments training with the loaded
+  Tranco corpus when present. Output: `{is_dga, probability,
+  confidence, verdict, label, summary, source}`. Surfaces in the
+  per-IOC source list as "DGA classifier" with a probability
+  percentage.
+* `intel/phishing_url_classifier.py` — GradientBoosting over 22
+  URL-structural features (length, special-char ratios, IP-in-URL,
+  abused-TLD list, brand-Levenshtein distance vs ~60 impersonation
+  targets, brand-in-subdomain, brand-in-path). Wired into
+  `agents/enrichment.enrich_url`. Output adds a `features` dict so
+  the analyst report can show WHICH drivers fired. Surfaces as
+  "Phishing URL classifier" with the top 3 drivers in the row label.
+* `intel/semantic_search.py` + `skills/semantic_search_detections.py`
+  + `GET /api/detection/search` — natural-language search across the
+  11 detection corpora. Uses `sentence-transformers` (all-MiniLM-L6-v2,
+  ~80 MB) when installed, otherwise a sklearn TF-IDF char-ngram
+  fallback. Index built lazily, in-memory only. Frontend search bar
+  lives at the top of the Detection Rules card's "Public detection
+  citations" section — it's the only user-visible surface for the
+  endpoint.
+
+All three modules return a structured shape with verdict tier +
+confidence + summary, and degrade gracefully to a heuristic when
+sklearn is unavailable. `requirements.txt` lists `scikit-learn>=1.4.0`
+as baseline; `sentence-transformers` is operator-opt-in
+(commented out).
+
+### Perf wins in this band
+
+* `ENRICH_CONCURRENCY` default bumped `10 → 16`. Per-host
+  TCPConnector cap (`ENRICH_POOL_PER_HOST=10`) independently rate-
+  limits any one TI source, so this only adds cross-host parallelism.
+* Lifespan `_warm_all()` pre-trains both sklearn classifiers + loads
+  all 11 detection corpora + builds the semantic-search index — first
+  request no longer pays the lazy-load cost (~12 s of YAML walks +
+  ~150 ms of training when these were paid on the request path).

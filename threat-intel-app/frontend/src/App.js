@@ -2402,6 +2402,60 @@ function _ocSources(result, ioc, type) {
     }
   }
 
+  // Round-14 DGA classifier — domain-only. Renders the trained-model
+  // verdict alongside reputation sources so analysts can compare the
+  // probability to TI hits. Skips when probability is exactly 0 (label
+  // too short to classify — see intel/dga_classifier.classify).
+  if (d.dga_classifier && typeof d.dga_classifier === 'object') {
+    const dc = d.dga_classifier;
+    const pct = typeof dc.probability === 'number' ? dc.probability : 0;
+    if (pct > 0) {
+      const c = pct >= 0.85 ? red : pct >= 0.6 ? orange : pct >= 0.35 ? yellow : green;
+      const pctText = `${(pct * 100).toFixed(1)}% DGA-likeness`;
+      const conf = dc.confidence ? ` · ${dc.confidence} confidence` : '';
+      const why = dc.summary
+        || `Trained classifier (sklearn LogisticRegression over char-bigram TF-IDF + structural features). Higher percentages indicate the label looks algorithmically generated.`;
+      out.push({
+        source: 'DGA classifier',
+        label:  `${pctText}${conf}`,
+        color:  c,
+        why,
+      });
+    }
+  }
+
+  // Round-14 phishing URL classifier — URL-only. Surfaces the GradientBoosting
+  // verdict + the strongest structural drivers (brand-confusable SLD, IP-in-URL,
+  // abused TLD, etc.) so analysts see WHY the model flagged.
+  if (d.phishing_classifier && typeof d.phishing_classifier === 'object') {
+    const pc = d.phishing_classifier;
+    const pct = typeof pc.probability === 'number' ? pc.probability : 0;
+    if (pct > 0) {
+      const c = pct >= 0.85 ? red : pct >= 0.6 ? orange : pct >= 0.35 ? yellow : green;
+      const feats = pc.features || {};
+      const drivers = [
+        feats.brand_confusable    && 'brand-confusable SLD',
+        feats.brand_in_subdomain  && 'brand in subdomain',
+        feats.brand_in_path       && 'brand in path',
+        feats.is_ip_host          && 'IP host',
+        feats.nonstd_port         && 'non-standard port',
+        feats.abused_tld          && 'abused TLD',
+        (feats.n_at || 0) > 0     && '@-obfuscation',
+      ].filter(Boolean);
+      const driverStr = drivers.length ? ` · ${drivers.slice(0, 3).join(', ')}` : '';
+      const pctText = `${(pct * 100).toFixed(1)}% phish-likeness`;
+      const conf = pc.confidence ? ` · ${pc.confidence} confidence` : '';
+      const why = pc.summary
+        || `Trained classifier (sklearn GradientBoosting over 22 URL-structural features incl. brand-distance Levenshtein vs ~60 impersonation targets).`;
+      out.push({
+        source: 'Phishing URL classifier',
+        label:  `${pctText}${conf}${driverStr}`,
+        color:  c,
+        why,
+      });
+    }
+  }
+
   // ─── SOURCE STATUS PASS ────────────────────────────────────────────────
   // The blocks above only push a row when a source returned USEFUL data
   // (no error AND non-empty). That meant a source which returned an
@@ -2440,6 +2494,10 @@ function _ocSources(result, ioc, type) {
     wayback: 'Wayback',                 certTransparency: 'Cert Transparency',
     fullhunt: 'FullHunt',               phishtank: 'PhishTank',
     urlscan_screenshot: 'URLScan screenshot',
+    // Round-14 trained classifiers — listed so an error state (sklearn
+    // unavailable, heuristic fallback active) is rendered consistently.
+    dga_classifier:      'DGA classifier',
+    phishing_classifier: 'Phishing URL classifier',
   };
   const _surfaced = new Set(out.map(r => r.source));
   for (const [key, blob] of Object.entries(d || {})) {
