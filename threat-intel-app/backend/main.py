@@ -135,6 +135,17 @@ async def _lifespan(app):
             ("falco rules",     "intel.falco_rules",         "stats",           None),
             ("Stratus Red Team","intel.stratus_techniques",  "stats",           None),
             ("IDS rules",       "intel.ids_rules",           "stats",           None),
+            # Defensive-context corpora — investigation.py loads each
+            # lazily inside the investigation node, so the first
+            # analyst's investigation was paying their YAML/JSON walk
+            # cost (50-500 ms each). Pre-warm in parallel here.
+            ("D3FEND",            "intel.d3fend",             "stats",          None),
+            ("CAPEC",             "intel.capec",              "stats",          None),
+            ("NIST 800-53",       "intel.nist_800_53",        "stats",          None),
+            ("CISA CPG",          "intel.cisa_cpg",           "stats",          None),
+            ("ETW providers",     "intel.etw_providers",      "stats",          None),
+            ("Forensic artifacts","intel.forensic_artifacts", "stats",          None),
+            ("Emulation plans",   "intel.emulation_plans",    "stats",          None),
         ]
         await asyncio.gather(*[_warm_one(*m) for m in light + heavy])
         # Semantic search index — depends on all 11 corpora being warm.
