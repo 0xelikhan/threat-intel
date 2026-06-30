@@ -2986,7 +2986,6 @@ def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
     pd     = data.get("pulsedive") or {}
     asn_rep= data.get("asn_reputation") or {}
     censys = data.get("censys") or {}
-    crowdsec = data.get("crowdsec") or {}
     proxycheck = data.get("proxycheck") or {}
     criminal_ip = data.get("criminal_ip") or {}
     feodo = data.get("feodo_tracker") or {}
@@ -3103,20 +3102,6 @@ def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
             piece = f"Pulsedive risk score: {risk}"
             if threats:
                 piece += f" (associated threats: {', '.join(threats[:3])})"
-            reputation_bits.append(piece + ".")
-
-    # CrowdSec CTI — aggregated score from the crowdsourced security
-    # network. Returns a 0-5 score + behaviour list (crawler, brute-force,
-    # web-scan, etc.). High-signal when behaviours include credential or
-    # exploit-attempt tags.
-    if crowdsec and not crowdsec.get("error"):
-        score = crowdsec.get("background_noise_score") or crowdsec.get("score")
-        behaviours = crowdsec.get("behaviors") or []
-        if score and score > 0:
-            piece = f"CrowdSec CTI reports a malicious-activity score of {score}/5"
-            if behaviours:
-                names = [b.get("name") or str(b) for b in behaviours[:3] if b]
-                piece += f" with observed behaviours: {', '.join(names)}"
             reputation_bits.append(piece + ".")
 
     # Criminal IP — paid TI service with inbound/outbound threat scores
@@ -3397,18 +3382,6 @@ def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
                 f"issued across {len(subs)} subdomains, indicating active "
                 "TLS infrastructure.")
 
-    # FullHunt — attack-surface inventory
-    fh = data.get("fullhunt") or {}
-    if fh and not fh.get("error"):
-        sub_count = fh.get("subdomain_count")
-        ports = fh.get("ports") or []
-        if sub_count or ports:
-            bits = []
-            if sub_count: bits.append(f"{sub_count} subdomains")
-            if ports:     bits.append(f"open ports {', '.join(str(p) for p in ports[:6])}")
-            sentences.append(
-                "FullHunt's attack-surface scan reports " + " and ".join(bits) + ".")
-
     # Typosquat — high-signal phishing indicator. Backend's _typosquat_check
     # writes {brand, distance} when the domain is an edit-distance match
     # against a well-known brand. These were absent from the email entirely
@@ -3576,7 +3549,7 @@ def _fmt_url_enrichment(url: str, data: Dict) -> str:
     vt = data.get("virustotal") or {}
     us = data.get("urlscan_screenshot") or {}
     uh = data.get("urlhaus_url") or {}
-    pt = data.get("phishtank") or {}
+    pc = data.get("phishing_classifier") or {}
     tf = data.get("threatfox") or {}
     otx = data.get("otx") or {}
 
@@ -3602,11 +3575,13 @@ def _fmt_url_enrichment(url: str, data: Dict) -> str:
             piece += f" (linked to {n_urls} known payload{'s' if n_urls != 1 else ''})"
         sentences.append(piece + ".")
 
-    if pt and not pt.get("error") and pt.get("in_database"):
-        verified = bool(pt.get("verified"))
+    if pc and pc.get("is_phish"):
+        prob = pc.get("probability") or 0.0
+        conf = pc.get("confidence") or ""
         sentences.append(
-            "PhishTank lists this URL as community-verified phishing." if verified
-            else "PhishTank has this URL flagged as phishing (pending verification).")
+            f"RECON's trained phishing-URL classifier rates this URL "
+            f"{round(prob * 100, 1)}% likely phishing"
+            + (f" ({conf} confidence)." if conf else "."))
 
     if tf and not tf.get("error"):
         fam = tf.get("malware") or tf.get("malware_family")
@@ -3993,9 +3968,9 @@ async def _gather_email_enrichment(log_text: str, parsed: Dict,
             "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY",
             # Canonical Censys names — PAT first, legacy v2 pair as fallback.
             "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET",
-            "CROWDSEC_KEY", "CRIMINAL_IP_KEY", "PROXYCHECK_KEY",
-            "FULLHUNT_KEY", "OPENCTI_URL", "OPENCTI_TOKEN",
-            "PHISHTANK_KEY", "HONEYPOT_KEY",
+            "CRIMINAL_IP_KEY", "PROXYCHECK_KEY",
+            "OPENCTI_URL", "OPENCTI_TOKEN",
+            "HONEYPOT_KEY",
         )}
 
         import aiohttp as _aiohttp

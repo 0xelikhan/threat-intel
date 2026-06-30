@@ -69,12 +69,10 @@ def _load_keys() -> Dict[str, str]:
               "GREYNOISE_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
               "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
               "HYBRID_ANALYSIS_KEY", "MALWAREBAZAAR_API_KEY",
-              "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET", "CROWDSEC_KEY",
-              "FULLHUNT_KEY", "PROXYCHECK_KEY",
-              "PHISHTANK_KEY", "OPENAI_API_KEY",
+              "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET",
+              "PROXYCHECK_KEY", "OPENAI_API_KEY",
               "OPENAI_BASE_URL", "ANTHROPIC_API_KEY", "CRIMINAL_IP_KEY",
-              "THEHIVE_URL", "THEHIVE_KEY", "SLACK_WEBHOOK_URL",
-              "TEAMS_WEBHOOK_URL"):
+              "THEHIVE_URL", "THEHIVE_KEY"):
         v = os.environ.get(k)
         if v and not keys.get(k):
             keys[k] = v
@@ -200,25 +198,6 @@ async def _probe_anthropic(session: aiohttp.ClientSession) -> Result:
                       "ANTHROPIC_API_KEY", "https://console.anthropic.com")
 
 
-# ─── Webhook reachability (only check shape — don't fire test payloads) ────
-def _probe_webhooks() -> List[Result]:
-    cat = "Webhook outbound"
-    out = []
-    for env, name, url_template in (
-        ("SLACK_WEBHOOK_URL", "Slack webhook",   "https://api.slack.com/messaging/webhooks"),
-        ("TEAMS_WEBHOOK_URL", "Teams webhook",   "https://learn.microsoft.com/microsoftteams/platform/webhooks-and-connectors/how-to/add-incoming-webhook"),
-        ("THEHIVE_URL",       "TheHive base URL","https://thehive-project.org"),
-    ):
-        v = KEYS.get(env, "")
-        if v:
-            out.append(Result(name, cat, "OK",
-                              f"{env} configured → {v[:60]}{'…' if len(v) > 60 else ''}"))
-        else:
-            out.append(Result(name, cat, "SKIP", f"{env} not configured",
-                              env, url_template))
-    return out
-
-
 # ─── Build the full probe list ─────────────────────────────────────────────
 async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
     P = []  # (coro, ...)
@@ -278,11 +257,6 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
         f"https://freeapi.robtex.com/ipquery/{TEST_IP}"))
     add(_probe(session, "HackerTarget reverse-IP", "IP enrichment",
         f"https://api.hackertarget.com/reverseiplookup/?q={TEST_IP}"))
-    add(_probe(session, "CrowdSec smoke", "IP enrichment",
-        f"https://cti.api.crowdsec.net/v2/smoke/{TEST_IP}",
-        headers={"x-api-key": KEYS.get("CROWDSEC_KEY", "")},
-        ok_statuses=(200, 404),
-        key_env="CROWDSEC_KEY", key_url="https://app.crowdsec.net"))
     add(_probe(session, "Criminal IP", "IP enrichment",
         f"https://api.criminalip.io/v1/asset/ip/report?ip={TEST_IP}",
         headers={"x-api-key": KEYS.get("CRIMINAL_IP_KEY", "")},
@@ -350,10 +324,6 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
     add(_probe(session, "HackerTarget DNS", "Domain enrichment",
         "https://api.hackertarget.com/dnslookup/",
         params={"q": TEST_DOMAIN}))
-    add(_probe(session, "FullHunt host", "Domain enrichment",
-        f"https://fullhunt.io/api/v1/host/{TEST_DOMAIN}",
-        headers={"X-API-KEY": KEYS.get("FULLHUNT_KEY", "")},
-        key_env="FULLHUNT_KEY", key_url="https://fullhunt.io"))
     # ── Hash enrichment ─────────────────────────────────────────────────
     add(_probe(session, "VirusTotal (file)", "Hash enrichment",
         f"https://www.virustotal.com/api/v3/files/{TEST_HASH}",
@@ -460,8 +430,6 @@ async def main():
     async with aiohttp.ClientSession(timeout=timeout) as session:
         probes = await _build_probes(session)
         results: List[Result] = list(await asyncio.gather(*probes))
-
-    results.extend(_probe_webhooks())
 
     # ── Print per-source table grouped by category ─────────────────────
     by_cat: Dict[str, List[Result]] = {}

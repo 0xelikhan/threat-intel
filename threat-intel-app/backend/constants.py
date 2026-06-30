@@ -67,12 +67,12 @@ IOC_TYPES: Tuple[str, ...] = ("ips", "domains", "hashes", "urls")
 
 ENRICHMENT_SOURCES: Tuple[str, ...] = (
     "abuseipdb", "ipinfo", "greynoise", "virustotal", "otx",
-    "circl_pdns", "robtex", "hackertarget", "censys", "crowdsec",
+    "circl_pdns", "robtex", "hackertarget", "censys",
     "misp_feeds", "misp_galaxy",
     "feodo_tracker", "tor", "bgp_ranking", "google_safebrowsing",
     "deception", "maltiverse", "opencti", "urlscan", "pulsedive",
     "malwarebazaar", "threatfox", "hybrid_analysis",
-    "deep_instinct", "cybereason", "whois", "dbl", "phishtank",
+    "deep_instinct", "cybereason", "whois", "dbl",
     "domain_intel", "feed_cache",
 )
 

@@ -84,12 +84,6 @@ def score_ip(ioc: str, enrichment: Dict, behavioral: Optional[Dict] = None,
     if (enrichment.get("feodo_tracker") or {}).get("verdict") == "MALICIOUS":
         factors.append(_factor("Feodo Tracker match", 30, "Botnet C2 blocklist hit", "reputation"))
 
-    cs = enrichment.get("crowdsec") or {}
-    if (cs.get("score_overall") or 0) > 5:
-        factors.append(_factor("CrowdSec score >5", 15,
-                               f"overall={cs.get('score_overall')} classifications={cs.get('classifications')}",
-                               "reputation"))
-
     # ── Context ────────────────────────────────────────────────────────────────
     gn = enrichment.get("greynoise") or {}
     gn_class = (gn.get("classification") or "").lower()

@@ -100,10 +100,10 @@ def _mcp_keys(cfg) -> dict:
         # Canonical Censys names — PAT first, legacy v2 pair as fallback.
         # Both are registered in config.py.
         "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET",
-        "CROWDSEC_KEY", "CRIMINAL_IP_KEY", "PROXYCHECK_KEY",
-        "WHOISXML_KEY", "GOOGLE_API_KEY", "FULLHUNT_KEY",
+        "CRIMINAL_IP_KEY", "PROXYCHECK_KEY",
+        "WHOISXML_KEY", "GOOGLE_API_KEY",
         "MALTIVERSE_KEY", "OPENCTI_URL", "OPENCTI_TOKEN",
-        "PHISHTANK_KEY", "HONEYPOT_KEY",
+        "HONEYPOT_KEY",
     )}
 
 

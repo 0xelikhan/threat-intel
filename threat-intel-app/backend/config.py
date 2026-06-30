@@ -154,28 +154,12 @@ API_KEY_DEFINITIONS = {
         "placeholder": "URLScan API key",
         "group": "API Keys"
     },
-    "CROWDSEC_KEY": {
-        "label": "CrowdSec CTI Key",
-        "description": "Crowd-sourced IP threat intelligence.",
-        "required": False,
-        "url": "https://app.crowdsec.net",
-        "placeholder": "CrowdSec CTI key",
-        "group": "API Keys"
-    },
     "PULSEDIVE_KEY": {
         "label": "Pulsedive API Key",
         "description": "Risk scoring and threat feed context.",
         "required": False,
         "url": "https://pulsedive.com",
         "placeholder": "Pulsedive API key",
-        "group": "API Keys"
-    },
-    "PHISHTANK_KEY": {
-        "label": "PhishTank App Key",
-        "description": "Phishing URL database lookup.",
-        "required": False,
-        "url": "https://phishtank.org",
-        "placeholder": "PhishTank app key",
         "group": "API Keys"
     },
     # ── Paste-site / asset enrichment sources ────────────────────────────────
@@ -271,14 +255,6 @@ API_KEY_DEFINITIONS = {
         "required": False,
         "url": "https://hybrid-analysis.com",
         "placeholder": "Hybrid Analysis API key",
-        "group": "API Keys"
-    },
-    "FULLHUNT_KEY": {
-        "label": "FullHunt API Key",
-        "description": "Attack surface and exposed service discovery. Free: 100/day.",
-        "required": False,
-        "url": "https://fullhunt.io",
-        "placeholder": "FullHunt API key",
         "group": "API Keys"
     },
     "PROXYCHECK_KEY": {
@@ -515,30 +491,6 @@ API_KEY_DEFINITIONS = {
         "required": False,
         "url": "",
         "placeholder": "FreshRSS API key",
-        "group": "Outbound Integrations",
-    },
-    "SLACK_WEBHOOK_URL": {
-        "label": "Slack · Incoming Webhook URL",
-        "description": "Slack incoming-webhook URL the /api/webhooks/send?target=slack endpoint posts to.",
-        "required": False,
-        "url": "https://api.slack.com/messaging/webhooks",
-        "placeholder": "https://hooks.slack.com/services/T.../B.../...",
-        "group": "Outbound Integrations",
-    },
-    "TEAMS_WEBHOOK_URL": {
-        "label": "Microsoft Teams · Incoming Webhook URL",
-        "description": "Teams channel incoming-webhook URL the /api/webhooks/send?target=teams endpoint posts to.",
-        "required": False,
-        "url": "https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/add-incoming-webhook",
-        "placeholder": "https://outlook.office.com/webhook/...",
-        "group": "Outbound Integrations",
-    },
-    "WEBHOOK_GENERIC_URL": {
-        "label": "Generic Webhook URL",
-        "description": "Raw POST destination for /api/webhooks/send?target=generic. The whole analysis JSON is posted as application/json.",
-        "required": False,
-        "url": "",
-        "placeholder": "https://your-soar.example.com/recon",
         "group": "Outbound Integrations",
     },
     "OPENCTI_URL": {

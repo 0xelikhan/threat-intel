@@ -389,15 +389,15 @@ def score_url(enrichment: dict) -> GTIScore:
     Score a URL.
     GTI URL logic similar to Domain, tailored for URL-specific properties.
 
-    Field-name note: the backend writes urlhaus_url (not urlhaus) and
-    phishtank with snake_case keys (in_database, verified). The original
-    code read urlhaus / phishtank.isPhishing / phishtank.inDatabase which
-    never matched anything, so URL scoring silently missed both sources
-    and a confirmed phishing URL only scored on the VT signal.
+    Field-name note: the backend writes urlhaus_url (not urlhaus). The
+    PhishTank source was removed when the operator deprecated it; URL
+    scoring now relies on VT, URLhaus, and the trained phishing-URL
+    classifier (intel/phishing_url_classifier.py) — the latter lands as
+    'phishing_classifier' in per-source enrichment.
     """
     vt      = enrichment.get("virustotal") or {}
     urlhaus = enrichment.get("urlhaus_url") or {}
-    pt      = enrichment.get("phishtank")   or {}
+    pc      = enrichment.get("phishing_classifier") or {}
 
     factors  = []
     verdict  = "UNKNOWN"
@@ -409,27 +409,28 @@ def score_url(enrichment: dict) -> GTIScore:
     # with verdict='MALICIOUS' attached. Presence is itself the hit signal.
     uh_hit    = bool(urlhaus) and urlhaus.get("verdict") == "MALICIOUS"
     uh_threat = urlhaus.get("threat") or ""
-    # phishtank parser writes in_database + verified; the dict is only
-    # constructed when in_database is True, so presence implies in_db.
-    in_pt    = bool(pt) and bool(pt.get("in_database"))
-    is_phish = bool(pt.get("verified"))
+    # phishing_classifier writes {probability, is_phish, confidence}.
+    # High-confidence trained-model hits substitute for the old PhishTank
+    # confirmed-phish signal.
+    pc_prob  = float(pc.get("probability") or 0.0)
+    pc_hit   = bool(pc.get("is_phish")) and pc_prob >= 0.85
 
     # ── Verdict ───────────────────────────────────────────────────────────────────
-    if vt_mal >= 5 or (is_phish and in_pt):
+    if vt_mal >= 5 or pc_hit:
         verdict = "MALICIOUS"
         if vt_mal >= 5:
             factors.append(f"VT: {vt_mal} engines flagged URL as malicious")
-        if is_phish:
-            factors.append("PhishTank: confirmed phishing URL")
+        if pc_hit:
+            factors.append(f"Phishing URL classifier: {round(pc_prob*100,1)}% likely phish")
     elif uh_hit or vt_mal >= 2 or vt_sus >= 3:
         verdict = "MALICIOUS" if uh_hit else "SUSPICIOUS"
         if uh_hit:
             factors.append(f"URLhaus: active malware distribution — {uh_threat or 'unknown family'}")
         elif vt_mal >= 2:
             factors.append(f"VT: {vt_mal} malicious, {vt_sus} suspicious")
-    elif in_pt and not is_phish:
+    elif pc.get("is_phish"):
         verdict = "SUSPICIOUS"
-        factors.append("PhishTank: in database but not yet verified")
+        factors.append(f"Phishing URL classifier: {round(pc_prob*100,1)}% likely phish")
     elif vt_mal == 0 and vt_sus == 0:
         verdict = "UNDETECTED"
 
@@ -449,7 +450,7 @@ def score_url(enrichment: dict) -> GTIScore:
         if any(k in combined for k in MALWARE_KEYWORDS) or uh_hit:
             severity = "HIGH"
             factors.append("Active malware distribution URL")
-        elif is_phish or any(k in combined for k in PHISH_KEYWORDS):
+        elif pc_hit or any(k in combined for k in PHISH_KEYWORDS):
             severity = "HIGH"
             factors.append("Phishing / credential harvesting URL")
         elif verdict == "MALICIOUS":
