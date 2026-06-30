@@ -574,6 +574,22 @@ API_KEY_DEFINITIONS = {
         "placeholder": "",
         "group": "API Keys",
     },
+    "CIRCL_PDNS_USER": {
+        "label": "CIRCL Passive DNS · Username",
+        "description": "CIRCL Passive DNS moved to authenticated access in 2025 (anonymous endpoint now returns 401). Free account at https://www.circl.lu/services/passive-dns/. Paired with CIRCL_PDNS_PASSWORD as HTTP Basic auth. When unset, enrichment skips the source cleanly (no 401 noise in logs).",
+        "required": False,
+        "url": "https://www.circl.lu/services/passive-dns/",
+        "placeholder": "CIRCL pDNS username",
+        "group": "API Keys",
+    },
+    "CIRCL_PDNS_PASSWORD": {
+        "label": "CIRCL Passive DNS · Password",
+        "description": "Paired with CIRCL_PDNS_USER. Used as HTTP Basic auth on every CIRCL pDNS query.",
+        "required": False,
+        "url": "",
+        "placeholder": "••••••••",
+        "group": "API Keys",
+    },
 }
 
 # Keys that work with no API key at all
