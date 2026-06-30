@@ -42,7 +42,7 @@ TOOL_SCHEMAS = [
             "name": "lookup_domain_reputation",
             "description": (
                 "Get full reputation + heuristics for a domain: VirusTotal, OTX, URLScan, "
-                "Pulsedive, Spamhaus DBL, certificate transparency subdomains (crt.sh), "
+                "Pulsedive, Spamhaus DBL, "
                 "WHOIS (registration date), Wayback Machine snapshot history, NRD age, "
                 "DGA score, IDN/punycode detection, typosquat brand matching, Maltiverse, "
                 "OpenCTI, FullHunt subdomain inventory, Google Safe Browsing, DNS records, "

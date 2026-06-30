@@ -60,18 +60,6 @@ def test_openai_provider_constructs_clean():
     assert isinstance(p._configured_model, str)
 
 
-def test_anthropic_provider_constructs_clean():
-    # This is the regression test for the bug fixed in commit 336d0ea —
-    # AnthropicProvider.__init__ used to leave _cached_client / _cached_key
-    # unset, relying on getattr(..., None) sentinel reads. Any caller that
-    # accessed the attributes directly would AttributeError.
-    from providers.anthropic_provider import AnthropicProvider
-    p = AnthropicProvider()
-    assert p._cached_client is None
-    assert p._cached_key is None
-    assert isinstance(p._configured_model, str)
-
-
 def test_ollama_provider_constructs_clean():
     from providers.ollama_provider import OllamaProvider
     p = OllamaProvider()
@@ -123,35 +111,6 @@ def test_ollama_complete_returns_envelope_when_unreachable():
     assert resp.provider == "ollama"
 
 
-def test_anthropic_complete_returns_envelope_without_sdk_key():
-    """Even when the anthropic SDK is installed but no key is configured,
-    .complete() must come back with .error rather than raise."""
-    from providers.anthropic_provider import AnthropicProvider
-    from providers.base import LLMResponse
-    p = AnthropicProvider()
-    # Wipe the key so the SDK rejects auth.
-    prior_env = os.environ.pop("ANTHROPIC_API_KEY", None)
-    from config import config as _cfg
-    prior_cfg = _cfg.get("ANTHROPIC_API_KEY")
-    _cfg._config.pop("ANTHROPIC_API_KEY", None)
-    try:
-        resp = asyncio.run(p.complete(
-            messages=[{"role": "user", "content": "hi"}],
-            max_tokens=4, temperature=0.0,
-        ))
-    finally:
-        if prior_env is not None:
-            os.environ["ANTHROPIC_API_KEY"] = prior_env
-        if prior_cfg:
-            _cfg._config["ANTHROPIC_API_KEY"] = prior_cfg
-    # Either the SDK isn't installed (error string includes "anthropic
-    # package not installed") OR the SDK is installed but rejects auth.
-    # Either way the result MUST be an LLMResponse, not a raised exception.
-    assert isinstance(resp, LLMResponse)
-    assert resp.error, f"missing-key call must populate .error, got {resp!r}"
-    assert resp.provider == "anthropic"
-
-
 # ─── Normalised type shape ────────────────────────────────────────────────
 def test_llm_response_defaults():
     from providers.base import LLMResponse
@@ -187,10 +146,6 @@ def test_provider_configured_per_active_llm():
         os.environ["LLM_PROVIDER"] = "openai"
         # Whatever the operator has in the dev config — just assert the
         # call returns a bool without raising.
-        assert isinstance(provider_configured(config), bool)
-
-        # anthropic checks ANTHROPIC_API_KEY
-        os.environ["LLM_PROVIDER"] = "anthropic"
         assert isinstance(provider_configured(config), bool)
     finally:
         if saved is None:

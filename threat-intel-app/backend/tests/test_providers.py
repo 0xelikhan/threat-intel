@@ -27,8 +27,6 @@ def test_factory_returns_known_providers():
     from providers import get_provider
     p = get_provider("openai")
     assert p.name in ("openai", "azure-openai")
-    p = get_provider("anthropic")
-    assert p.name == "anthropic"
     p = get_provider("ollama")
     assert p.name == "ollama"
     with pytest.raises(ValueError):
@@ -60,26 +58,6 @@ def test_openai_provider_complete():
     assert resp.error is None, f"openai error: {resp.error}"
     assert resp.provider in ("openai", "azure-openai")
     assert resp.message, "no message body returned"
-
-
-def test_anthropic_provider_complete():
-    """Hits real Anthropic when ANTHROPIC_API_KEY is set + the SDK is
-    installed; skips otherwise."""
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        pytest.skip("ANTHROPIC_API_KEY not set")
-    try:
-        import anthropic  # noqa: F401
-    except ImportError:
-        pytest.skip("anthropic SDK not installed (`pip install anthropic`)")
-    from providers import get_provider
-    p = get_provider("anthropic")
-    resp = asyncio.run(p.complete(
-        [{"role": "user", "content": "Reply with the single word: ready"}],
-        max_tokens=8, temperature=0.0,
-    ))
-    assert resp.error is None, f"anthropic error: {resp.error}"
-    assert resp.provider == "anthropic"
-    assert resp.message
 
 
 def test_ollama_provider_complete():

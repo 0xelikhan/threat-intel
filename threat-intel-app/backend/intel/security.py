@@ -384,17 +384,15 @@ def validate_file_upload(content: bytes, max_mb: int = 10) -> Tuple[bool, str]:
 # ─── security self-check ───────────────────────────────────────────────────────
 def security_self_check(config) -> dict:
     has_secret    = bool(os.environ.get("RECON_SECRET"))
-    # Provider-aware AI-key check so Anthropic / Ollama deployments
-    # don't fail this self-check just because OPENAI_API_KEY is unset.
+    # Provider-aware AI-key check so Ollama deployments don't fail this
+    # self-check just because OPENAI_API_KEY is unset.
     try:
         from providers import provider_configured
         has_llm = provider_configured(config)
     except Exception:
         has_llm = bool(config.get("OPENAI_API_KEY"))
     _llm_provider = (os.environ.get("LLM_PROVIDER") or "openai").strip().lower()
-    if _llm_provider == "anthropic":
-        _llm_label = "Anthropic key configured"
-    elif _llm_provider == "ollama":
+    if _llm_provider == "ollama":
         _llm_label = "Ollama endpoint reachable"
     else:
         _llm_label = "OpenAI key configured"

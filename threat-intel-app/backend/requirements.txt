@@ -17,7 +17,6 @@ mitreattack-python
 sigma-cli
 eml-parser
 yara-python>=4.3.0
-anthropic>=0.34.0
 mcp
 bcrypt>=4.0.0
 itsdangerous>=2.0.0

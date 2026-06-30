@@ -3886,12 +3886,9 @@ async def startup_check():
             pkg_status[name] = "missing"
 
     # Pick the required key based on the active LLM_PROVIDER instead of
-    # hardcoding OPENAI_API_KEY. Anthropic deployments need
-    # ANTHROPIC_API_KEY; Ollama needs nothing (local install).
+    # hardcoding OPENAI_API_KEY. Ollama needs nothing (local install).
     _llm_provider = (os.environ.get("LLM_PROVIDER") or "openai").strip().lower()
-    if _llm_provider == "anthropic":
-        required = ("ANTHROPIC_API_KEY",)
-    elif _llm_provider == "ollama":
+    if _llm_provider == "ollama":
         required = ()
     else:
         required = ("OPENAI_API_KEY",)
@@ -4329,8 +4326,8 @@ async def email_remediate(req: EmailRemediateRequest):
     if not _llm_key_configured():
         # Use the OPENAI_API_KEY_MISSING error message when the active
         # provider IS openai/azure so the existing analyst-facing copy
-        # still surfaces; for anthropic/ollama just say the provider
-        # isn't configured.
+        # still surfaces; for ollama just say the provider isn't
+        # configured.
         import os as _os
         _prov = (_os.environ.get("LLM_PROVIDER") or "openai").strip().lower()
         if _prov in ("openai", "azure", "azure-openai", "azureopenai"):
