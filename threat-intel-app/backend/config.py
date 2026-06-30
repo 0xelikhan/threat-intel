@@ -528,7 +528,7 @@ API_KEY_DEFINITIONS = {
     },
     "CIRCL_PDNS_USER": {
         "label": "CIRCL Passive DNS · Username",
-        "description": "CIRCL Passive DNS moved to authenticated access in 2025 (anonymous endpoint now returns 401). Free account at https://www.circl.lu/services/passive-dns/. Paired with CIRCL_PDNS_PASSWORD as HTTP Basic auth. When unset, enrichment skips the source cleanly (no 401 noise in logs).",
+        "description": "CIRCL Passive DNS is access-restricted (trusted partners only). Email CIRCL at https://www.circl.lu/services/passive-dns/ with your organisation, affiliation, and intended use — they issue HTTP Basic credentials. RECON queries the v2 API with dribble-disable-active-query (historical records only) + dribble-paginate-count=200 (caps responses on CDN-style hosts). Skipped cleanly when unset.",
         "required": False,
         "url": "https://www.circl.lu/services/passive-dns/",
         "placeholder": "CIRCL pDNS username",

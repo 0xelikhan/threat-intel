@@ -1260,13 +1260,21 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         _get(session, f"https://otx.alienvault.com/api/v1/indicators/IPv4/{ip}/general",
              headers={"X-OTX-API-KEY": keys.get("OTX_KEY", "")}),
         # ── free no-key sources (spec §3) ──────────────────────────────────────
-        # CIRCL pDNS moved to authenticated access in 2025. The free
-        # anonymous endpoint now returns 401. Gate on the operator having
-        # set CIRCL_PDNS_USER + CIRCL_PDNS_PASSWORD (free account at
-        # https://www.circl.lu/services/passive-dns/). Skip otherwise.
+        # CIRCL pDNS — trusted-partner access only (email CIRCL with
+        # affiliation + intended use to apply). v2 protocol since Nov 2023:
+        #   * dribble-disable-active-query — skip the real-time resolver
+        #     enabled by default in v2 (saves multi-second wait when we
+        #     only want historical records, which we always do).
+        #   * dribble-paginate-count — cap the response at 200 records
+        #     so very-popular hosts like CDN edges don't return 500k
+        #     CNAME rows we'd just truncate anyway.
+        # Backwards-compatible with v1; absent headers fall back to v1
+        # behaviour. Skip cleanly when creds aren't set.
         (_get(session, f"https://www.circl.lu/pdns/query/{ip}",
               auth=aiohttp.BasicAuth(keys.get("CIRCL_PDNS_USER", ""),
-                                     keys.get("CIRCL_PDNS_PASSWORD", "")))
+                                     keys.get("CIRCL_PDNS_PASSWORD", "")),
+              headers={"dribble-disable-active-query": "1",
+                       "dribble-paginate-count":       "200"})
          if keys.get("CIRCL_PDNS_USER") and keys.get("CIRCL_PDNS_PASSWORD")
          else _noop()),
         _get(session, f"https://freeapi.robtex.com/ipquery/{ip}"),

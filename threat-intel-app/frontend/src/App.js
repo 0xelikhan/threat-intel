@@ -2867,6 +2867,34 @@ function AttributionChip({ actor }) {
         <Typography sx={{ fontSize: 14, color: 'primary.main', fontWeight: 600 }}>
           {display}
         </Typography>
+        {actor.cross_walk?.mitre_id && (
+          <Box sx={{
+            fontFamily: '"IBM Plex Mono", monospace', fontSize: 10,
+            color: 'text.primary',
+            backgroundColor: muiAlpha('#0fbcff', 0.12),
+            border: `1px solid ${muiAlpha('#0fbcff', 0.35)}`,
+            borderRadius: '3px', px: 0.75, py: '1px',
+          }}>{actor.cross_walk.mitre_id}</Box>
+        )}
+        {actor.cross_walk?.microsoft_origin && (
+          <Box sx={{
+            fontFamily: '"IBM Plex Mono", monospace', fontSize: 10,
+            color: 'text.primary',
+            backgroundColor: muiAlpha('#16AD34', 0.12),
+            border: `1px solid ${muiAlpha('#16AD34', 0.35)}`,
+            borderRadius: '3px', px: 0.75, py: '1px',
+          }}>{actor.cross_walk.microsoft_origin}</Box>
+        )}
+        {actor.cross_walk?.confidence === 'high' && (
+          <Box sx={{
+            fontSize: 10, fontWeight: 700,
+            textTransform: 'uppercase', letterSpacing: '0.08em',
+            color: '#16AD34',
+            backgroundColor: muiAlpha('#16AD34', 0.12),
+            border: `1px solid ${muiAlpha('#16AD34', 0.45)}`,
+            borderRadius: '3px', px: 0.75, py: '1px',
+          }}>cross-confirmed</Box>
+        )}
         {actor.origin && (
           <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>· {actor.origin}</Typography>
         )}
@@ -2876,6 +2904,26 @@ function AttributionChip({ actor }) {
           </Typography>
         )}
       </Stack>
+      {/* Sectors targeted (from MISP-galaxy cross-walk). One concise row;
+          analyst gets the "what does this actor go after" answer without
+          needing to expand a tab. */}
+      {Array.isArray(actor.cross_walk?.sectors) && actor.cross_walk.sectors.length > 0 && (
+        <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ rowGap: 0.4 }}>
+          <Typography sx={{ fontSize: 10, color: 'text.tertiary',
+              fontWeight: 600, textTransform: 'uppercase',
+              letterSpacing: '0.06em', mr: 0.25 }}>
+            Targets:
+          </Typography>
+          {actor.cross_walk.sectors.slice(0, 6).map((s, i) => (
+            <Box key={i} sx={{
+              fontSize: 10.5, color: 'text.secondary',
+              backgroundColor: muiAlpha('#ffffff', 0.04),
+              border: `1px solid ${muiAlpha('#ffffff', 0.08)}`,
+              borderRadius: '3px', px: 0.6, py: '1px',
+            }}>{s}</Box>
+          ))}
+        </Stack>
+      )}
 
       {/* Single tab strip — click to reveal one section at a time. */}
       {tabs.length > 0 && (

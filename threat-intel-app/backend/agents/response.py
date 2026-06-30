@@ -36,16 +36,55 @@ for _a in ACTORS:
         _ACTOR_BY_TECH.setdefault(_tid, []).append(_a)
 
 
+def _enrich_actor_with_cross_walk(actor: dict) -> dict:
+    """Attach MISP-galaxy cross-walk metadata to a matched actor — sectors,
+    cross-source confirmation, MITRE G####, Microsoft Storm-/Typhoon
+    aliases — without touching the existing matchedTechniques + score.
+
+    When cross_walk_actor confirms the actor in ≥2 of (community, MITRE,
+    Microsoft), confidence='high' lights up the AttributionChip's
+    'cross-confirmed' badge. The existing score (precision-style TTP
+    overlap) remains the gate threshold; cross-walk is an additive
+    confidence dimension."""
+    try:
+        from intel.misp_galaxies import cross_walk_actor
+    except Exception:
+        return actor
+    name = actor.get("name") or actor.get("group") or ""
+    if not name:
+        return actor
+    walk = cross_walk_actor(name)
+    if not walk:
+        return actor
+    return {
+        **actor,
+        "cross_walk": {
+            "confidence":       walk.get("confidence"),
+            "tiers_hit":        walk.get("tiers_hit"),
+            "mitre_id":         walk.get("mitre_id"),
+            "microsoft_origin": walk.get("microsoft_origin"),
+            "sectors":          walk.get("sectors"),
+            "aliases":          walk.get("aliases", [])[:10],
+        },
+    }
+
+
 def _match_actors(mitre_techniques: list) -> list:
     """Match threat actors using MITRE ATT&CK groups + MISP galaxy enrichment.
-    Falls back to the hardcoded ACTORS list if neither external source is loaded."""
+    Falls back to the hardcoded ACTORS list if neither external source is loaded.
+
+    Round-16: every matched actor is post-processed through
+    _enrich_actor_with_cross_walk which attaches a cross_walk dict
+    pulling from MITRE-intrusion-set + Microsoft-activity-group +
+    community threat-actor catalogues. Lights up the frontend
+    AttributionChip with sectors + cross-confirmed badge."""
     if not mitre_techniques:
         return []
     try:
         from intel.actor_data import match_threat_actors
         rich = match_threat_actors(mitre_techniques)
         if rich:
-            return rich[:5]
+            return [_enrich_actor_with_cross_walk(a) for a in rich[:5]]
     except Exception as _e:
         import logging
         logging.getLogger("recon.response").debug(
@@ -69,7 +108,8 @@ def _match_actors(mitre_techniques: list) -> list:
             continue
         score = round(len(hits) / n_alert * 100)
         matched.append({**actor, "matchedTechniques": hits, "score": score})
-    return sorted(matched, key=lambda x: x["score"], reverse=True)[:5]
+    matched.sort(key=lambda x: x["score"], reverse=True)
+    return [_enrich_actor_with_cross_walk(a) for a in matched[:5]]
 
 
 def _attribution_evidence(mitre_techniques: list,
