@@ -1605,6 +1605,20 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         data["dga_classifier"] = _dga_classify(domain)
     except Exception:
         pass
+
+    # Microsoft 365 / Entra tenant recon (4 parallel probes against
+    # login.microsoftonline.com + SharePoint + Azure App Service). Only
+    # fires when the existing enrichment evidence indicates the domain
+    # IS on M365 — skip otherwise so non-M365 domains don't pay the
+    # network cost. Adapted from cti-expert (MIT).
+    try:
+        from intel.m365_tenant_recon import enrich as _m365_enrich, is_m365_candidate
+        if is_m365_candidate(data):
+            m365 = await _m365_enrich(session, domain)
+            if m365 and m365.get("is_m365"):
+                data["m365_tenant"] = m365
+    except Exception as _e:
+        _log.debug("m365 tenant recon failed for %s: %s", domain, _e)
     # Phishing.Database — synchronous in-memory lookup against the hourly
     # active feed warmed by the lifespan handler. Adds {"hit": True, ...}
     # when the domain is on the active phishing list.
@@ -2327,6 +2341,19 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
     try:
         from intel.phishing_url_classifier import classify as _phish_classify
         data["phishing_classifier"] = _phish_classify(url)
+    except Exception:
+        pass
+
+    # Admin / sensitive-endpoint classifier (subdomain prefix + path
+    # segment + localised keyword + scam-TLD amplifier). Purely string
+    # analysis. Adapted from cti-expert (MIT) — surfaces actor admin
+    # panels / back-office endpoints that DGA/phishing classifiers miss
+    # because the URL is structurally "normal" but lexically suspicious.
+    try:
+        from intel.admin_endpoint_classifier import classify as _admin_classify
+        admin_result = _admin_classify(url)
+        if admin_result.get("is_admin") or admin_result.get("indicator"):
+            data["admin_endpoint"] = admin_result
     except Exception:
         pass
 

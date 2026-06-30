@@ -18,7 +18,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import JSONResponse as _JSONResponse
-from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -2124,6 +2124,28 @@ async def export_cacao(run_id: str):
     return JSONResponse(content=pb,
                         headers={"Content-Disposition":
                                   f'attachment; filename="recon-playbook-{ts}.cacao.json"'})
+
+
+@app.get("/api/export/maltego/{run_id}")
+async def export_maltego(run_id: str):
+    """Emit the investigation as a Maltego-compatible GraphML graph.
+    Analyst teams that live in Maltego CE / XL can import this for link
+    analysis — every IOC becomes a node, every relationship (resolves
+    to / on_domain / attributed_to / seen_with) becomes an edge.
+    Caps per-IOC-type at 50 nodes so the canvas stays readable; analysts
+    can pull more via native Maltego transforms on the seed nodes."""
+    if run_id not in _results:
+        raise HTTPException(404, "Run not found")
+    state = _results[run_id]
+    from intel.maltego_export import to_graphml
+    graphml = to_graphml(state)
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return Response(
+        content=graphml,
+        media_type="application/graphml+xml",
+        headers={"Content-Disposition":
+                 f'attachment; filename="recon-{ts}.graphml"'},
+    )
 
 
 # ─── Outbound integrations: MISP / TheHive / STIX-Shifter ────────────────────
