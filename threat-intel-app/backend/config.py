@@ -13,13 +13,21 @@ CONFIG_FILE = DATA_DIR / "config.json"
 
 # All supported API keys with metadata for the settings UI
 API_KEY_DEFINITIONS = {
+    "LLM_PROVIDER": {
+        "label": "LLM Provider",
+        "description": "Which provider every AI call routes through. openai (default, also covers Azure OpenAI when OPENAI_BASE_URL is set), anthropic, or ollama.",
+        "required": False,
+        "default": "openai",
+        "placeholder": "openai | anthropic | ollama",
+        "group": "LLM Settings"
+    },
     "OPENAI_API_KEY": {
         "label": "OpenAI / Azure OpenAI Key",
         "description": "AI threat assessment, Sigma/KQL generation. Use your Azure OpenAI Key 1 if on Azure.",
         "required": True,
         "url": "https://platform.openai.com/api-keys",
         "placeholder": "sk-... or Azure OpenAI Key 1",
-        "group": "API Keys"
+        "group": "LLM Settings"
     },
     "OPENAI_BASE_URL": {
         "label": "OpenAI Base URL",
@@ -27,7 +35,15 @@ API_KEY_DEFINITIONS = {
         "required": False,
         "default": "https://api.openai.com/v1",
         "placeholder": "https://api.openai.com/v1",
-        "group": "API Keys"
+        "group": "LLM Settings"
+    },
+    "OPENAI_API_VERSION": {
+        "label": "OpenAI · API Version (Azure only)",
+        "description": "Azure OpenAI api-version string. Read by providers/openai_provider.py when OPENAI_BASE_URL points at *.openai.azure.com. Leave blank for vanilla OpenAI.",
+        "required": False,
+        "default": "",
+        "placeholder": "2024-02-01",
+        "group": "LLM Settings"
     },
     "AI_MODEL": {
         "label": "AI Model (deep reasoning)",
@@ -35,7 +51,7 @@ API_KEY_DEFINITIONS = {
         "required": False,
         "default": "gpt-4o-mini",
         "placeholder": "gpt-4o",
-        "group": "API Keys"
+        "group": "LLM Settings"
     },
     "FAST_AI_MODEL": {
         "label": "Fast AI Model (light tasks)",
@@ -43,15 +59,7 @@ API_KEY_DEFINITIONS = {
         "required": False,
         "default": "",
         "placeholder": "gpt-4o-mini",
-        "group": "API Keys"
-    },
-    "LLM_PROVIDER": {
-        "label": "LLM Provider",
-        "description": "Which provider every AI call routes through. openai (default, also covers Azure OpenAI when OPENAI_BASE_URL is set), anthropic, or ollama.",
-        "required": False,
-        "default": "openai",
-        "placeholder": "openai | anthropic | ollama",
-        "group": "API Keys"
+        "group": "LLM Settings"
     },
     "ANTHROPIC_API_KEY": {
         "label": "Anthropic API Key",
@@ -59,7 +67,7 @@ API_KEY_DEFINITIONS = {
         "required": False,
         "url": "https://console.anthropic.com",
         "placeholder": "sk-ant-...",
-        "group": "API Keys"
+        "group": "LLM Settings"
     },
     "OLLAMA_BASE_URL": {
         "label": "Ollama Base URL",
@@ -67,20 +75,20 @@ API_KEY_DEFINITIONS = {
         "required": False,
         "default": "http://localhost:11434",
         "placeholder": "http://localhost:11434",
-        "group": "API Keys"
+        "group": "LLM Settings"
     },
     "VIRUSTOTAL_KEY": {
         "label": "VirusTotal API Key",
-        "description": "IP, domain, URL, hash reputation. Free: 500 req/day.",
-        "required": True,
+        "description": "IP, domain, URL, hash reputation. Free: 500 req/day. Optional — enrichment degrades when missing but the platform still runs.",
+        "required": False,
         "url": "https://virustotal.com",
         "placeholder": "64-character hex key",
         "group": "API Keys"
     },
     "ABUSEIPDB_KEY": {
         "label": "AbuseIPDB API Key",
-        "description": "IP abuse confidence scores. Free: 1,000 checks/day.",
-        "required": True,
+        "description": "IP abuse confidence scores. Free: 1,000 checks/day. Optional — IPs still enrich via other sources when missing.",
+        "required": False,
         "url": "https://abuseipdb.com",
         "placeholder": "AbuseIPDB API key",
         "group": "API Keys"
@@ -98,8 +106,8 @@ API_KEY_DEFINITIONS = {
     },
     "IPINFO_TOKEN": {
         "label": "ipinfo.io Token",
-        "description": "IP geolocation, ASN. Required for Geo Map. Free: 50,000/month.",
-        "required": True,
+        "description": "IP geolocation, ASN. Optional — the Geolocation card shows a 'configure IPINFO_TOKEN' hint when missing; everything else still runs. Free: 50,000/month.",
+        "required": False,
         "url": "https://ipinfo.io",
         "placeholder": "ipinfo token",
         "group": "API Keys"
@@ -254,14 +262,6 @@ API_KEY_DEFINITIONS = {
         "placeholder": "FullHunt API key",
         "group": "API Keys"
     },
-    "POLYSWARM_KEY": {
-        "label": "Polyswarm API Key",
-        "description": "Decentralized malware scanning network.",
-        "required": False,
-        "url": "https://polyswarm.io",
-        "placeholder": "Polyswarm API key",
-        "group": "API Keys"
-    },
     "PROXYCHECK_KEY": {
         "label": "Proxycheck API Key",
         "description": "VPN, proxy, and Tor exit node detection. Free: 1,000/day.",
@@ -277,7 +277,7 @@ API_KEY_DEFINITIONS = {
         "required": False,
         "url": "",
         "placeholder": "Jane Analyst",
-        "group": "API Keys"
+        "group": "Email Composer"
     },
     "EMAIL_FROM_ADDRESS": {
         "label": "Email · From Address",
@@ -285,15 +285,15 @@ API_KEY_DEFINITIONS = {
         "required": False,
         "url": "",
         "placeholder": "analyst@example.com",
-        "group": "API Keys"
+        "group": "Email Composer"
     },
     "EMAIL_SIGNATURE": {
         "label": "Email · Custom Signature",
         "description": "Plain text or full HTML signature block. Leave blank to use the default.",
         "required": False,
         "url": "",
-        "placeholder": "Best regards,\\nJane Analyst\\nMDR Team",
-        "group": "API Keys"
+        "placeholder": "Best regards,\nJane Analyst\nMDR Team (use \\n for line breaks)",
+        "group": "Email Composer"
     },
     "EMAIL_TEAM_NAME": {
         "label": "Email · Team Name",
@@ -301,7 +301,7 @@ API_KEY_DEFINITIONS = {
         "required": False,
         "url": "",
         "placeholder": "the MDR analyst team",
-        "group": "API Keys"
+        "group": "Email Composer"
     },
     "EMAIL_SMTP_HOST": {
         "label": "Email · SMTP Host",
@@ -309,7 +309,7 @@ API_KEY_DEFINITIONS = {
         "required": False,
         "url": "",
         "placeholder": "smtp.office365.com",
-        "group": "API Keys"
+        "group": "Email Composer"
     },
     "EMAIL_SMTP_PORT": {
         "label": "Email · SMTP Port",
@@ -317,7 +317,7 @@ API_KEY_DEFINITIONS = {
         "required": False,
         "url": "",
         "placeholder": "587",
-        "group": "API Keys"
+        "group": "Email Composer"
     },
     "EMAIL_SMTP_USER": {
         "label": "Email · SMTP Username",
@@ -325,7 +325,7 @@ API_KEY_DEFINITIONS = {
         "required": False,
         "url": "",
         "placeholder": "analyst@example.com",
-        "group": "API Keys"
+        "group": "Email Composer"
     },
     "EMAIL_SMTP_PASSWORD": {
         "label": "Email · SMTP Password / App Password",
@@ -333,7 +333,7 @@ API_KEY_DEFINITIONS = {
         "required": False,
         "url": "",
         "placeholder": "••••••••",
-        "group": "API Keys"
+        "group": "Email Composer"
     },
     "EMAIL_COPY_TO": {
         "label": "Email · Default CC",
@@ -341,7 +341,7 @@ API_KEY_DEFINITIONS = {
         "required": False,
         "url": "",
         "placeholder": "team-inbox@example.com",
-        "group": "API Keys"
+        "group": "Email Composer"
     },
 
     # ─── Outbound integrations ──────────────────────────────────────────
@@ -458,6 +458,82 @@ API_KEY_DEFINITIONS = {
         "default": "1",
         "placeholder": "1",
         "group": "Enricher Toggles",
+    },
+
+    # ─── Keys that were consumed in code but missing from this dict before
+    # the round-15 audit. Added so /api/settings surfaces them and
+    # operators can configure them without reading source.
+    "MALTIVERSE_KEY": {
+        "label": "Maltiverse API Key",
+        "description": "Maltiverse IP/domain/hash threat-intel classification + tags. Free tier covers analyst-volume usage.",
+        "required": False,
+        "url": "https://maltiverse.com",
+        "placeholder": "Maltiverse API key",
+        "group": "API Keys",
+    },
+    "FRESHRSS_URL": {
+        "label": "FreshRSS · Base URL",
+        "description": "Your FreshRSS instance URL. Set with FRESHRSS_API_KEY to enable the periodic feed poll that streams vendor advisories + threat-research articles into RECON's intel cache.",
+        "required": False,
+        "url": "https://www.freshrss.org",
+        "placeholder": "https://freshrss.example.org",
+        "group": "Outbound Integrations",
+    },
+    "FRESHRSS_API_KEY": {
+        "label": "FreshRSS · API Key",
+        "description": "Greader-compatible API key from FreshRSS (Settings → Authentication → API access).",
+        "required": False,
+        "url": "",
+        "placeholder": "FreshRSS API key",
+        "group": "Outbound Integrations",
+    },
+    "SLACK_WEBHOOK_URL": {
+        "label": "Slack · Incoming Webhook URL",
+        "description": "Slack incoming-webhook URL the /api/webhooks/send?target=slack endpoint posts to.",
+        "required": False,
+        "url": "https://api.slack.com/messaging/webhooks",
+        "placeholder": "https://hooks.slack.com/services/T.../B.../...",
+        "group": "Outbound Integrations",
+    },
+    "TEAMS_WEBHOOK_URL": {
+        "label": "Microsoft Teams · Incoming Webhook URL",
+        "description": "Teams channel incoming-webhook URL the /api/webhooks/send?target=teams endpoint posts to.",
+        "required": False,
+        "url": "https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/add-incoming-webhook",
+        "placeholder": "https://outlook.office.com/webhook/...",
+        "group": "Outbound Integrations",
+    },
+    "WEBHOOK_GENERIC_URL": {
+        "label": "Generic Webhook URL",
+        "description": "Raw POST destination for /api/webhooks/send?target=generic. The whole analysis JSON is posted as application/json.",
+        "required": False,
+        "url": "",
+        "placeholder": "https://your-soar.example.com/recon",
+        "group": "Outbound Integrations",
+    },
+    "OPENCTI_URL": {
+        "label": "OpenCTI · Base URL",
+        "description": "Your OpenCTI platform URL. Set with OPENCTI_TOKEN to enable outbound push of investigations as STIX observables + the inbound knowledge-graph enrichment lookup in agents/enrichment.py.",
+        "required": False,
+        "url": "https://www.opencti.io",
+        "placeholder": "https://opencti.example.org",
+        "group": "Outbound Integrations",
+    },
+    "OPENCTI_TOKEN": {
+        "label": "OpenCTI · API Token",
+        "description": "OpenCTI API bearer token (Settings → Security → Tokens).",
+        "required": False,
+        "url": "",
+        "placeholder": "OpenCTI API token",
+        "group": "Outbound Integrations",
+    },
+    "API_TOKEN": {
+        "label": "API · X-API-Key shared secret",
+        "description": "Optional shared-secret token operators can require via the X-API-Key header in front of the cookie-auth gate. Surfaced in /api/health for status. Leave blank to keep the cookie-auth-only posture (default).",
+        "required": False,
+        "url": "",
+        "placeholder": "",
+        "group": "API Keys",
     },
 }
 
