@@ -318,7 +318,7 @@ def load_scan(sha256: str) -> Optional[Dict]:
     return _scan_store.get(sha256)
 
 
-# ─── domain pivots (WHOIS age + crt.sh) ───────────────────────────────────────
+# ─── domain pivots (WHOIS age) ─────────────────────────────────────────────────
 async def _domain_pivots(session, domains) -> Optional[Dict]:
     if not domains:
         return None
@@ -353,16 +353,6 @@ async def _one_domain_pivot(session, domain) -> Dict:
                             pivot["nrd_flag"] = "registered_within_last_30_days"
                     except Exception:
                         pass
-    except Exception:
-        pass
-    # crt.sh — sample of certificates for the domain
-    try:
-        async with session.get(f"https://crt.sh/?q={domain}&output=json") as r:
-            if r.status == 200:
-                d = await r.json()
-                if isinstance(d, list):
-                    pivot["cert_count"] = len(d)
-                    pivot["subjects"] = sorted({c.get("name_value") for c in d[:30] if c.get("name_value")})[:10]
     except Exception:
         pass
     return pivot

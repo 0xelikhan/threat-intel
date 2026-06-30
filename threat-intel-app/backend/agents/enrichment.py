@@ -87,7 +87,6 @@ _SLOW_HOSTS: "dict[str, tuple[aiohttp.ClientTimeout, float]]" = {
     # was hitting "timed out" because of the 10 s inner aiohttp
     # timeout, not the outer safety. Both bumped.
     "otx.alienvault.com":      (aiohttp.ClientTimeout(total=90),  90.0),
-    "crt.sh":                  (aiohttp.ClientTimeout(total=20),  20.0),
     "www.virustotal.com":      (aiohttp.ClientTimeout(total=20),  20.0),
     "www.hybrid-analysis.com": (aiohttp.ClientTimeout(total=20),  20.0),
 }
@@ -802,13 +801,6 @@ def _p_otx(r):
         out["verdict"] = "SUSPICIOUS"
     return out
 
-def _p_crt(r):
-    if isinstance(r, Exception) or not isinstance(r, list):
-        return _err("crt.sh", "No data")
-    subs = list({c.get("name_value") for c in r if isinstance(c, dict)})
-    return {"totalCerts": len(r), "subdomains": subs[:20]}
-
-
 def _p_whois(r):
     if _is_fail(r):
         return _err("whois", r)
@@ -1509,7 +1501,6 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
              headers={"API-Key": keys.get("URLSCAN_KEY", "")}),
         _get(session, f"https://otx.alienvault.com/api/v1/indicators/domain/{domain}/general",
              headers={"X-OTX-API-KEY": keys.get("OTX_KEY", "")}),
-        _get(session, f"https://crt.sh/?q=%25.{domain}&output=json"),
         _whois_coro,
         _get(session, "https://pulsedive.com/api/info.php",
              params={"indicator": domain, "pretty": 1, "key": keys.get("PULSEDIVE_KEY", "")}),
@@ -1520,16 +1511,15 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     )
 
     # WhoisXML returns its own normalised dict; who-dat passes through _p_whois.
-    raw_whois = results[4]
+    raw_whois = results[3]
     whois_data = raw_whois if (_whoisxml_key and isinstance(raw_whois, dict)) else _p_whois(raw_whois)
     data = {
         "virustotal":      _p_vt_domain(results[0]),
         "urlscan":         _p_urlscan(results[1]),
         "otx":             _p_otx(results[2]),
-        "certTransparency":_p_crt(results[3]),
         "whois":           whois_data,
-        "pulsedive":       _p_pd(results[5]),
-        "wayback":         _p_wayback(results[6]),
+        "pulsedive":       _p_pd(results[4]),
+        "wayback":         _p_wayback(results[5]),
         "local_feeds":     _local_domain_check(domain),
         "typosquat":       _typosquat_check(domain),
     }

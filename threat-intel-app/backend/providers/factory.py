@@ -12,10 +12,9 @@ from __future__ import annotations
 import os
 from typing import Dict
 
-from .base               import LLMProvider
-from .openai_provider    import OpenAIProvider
-from .anthropic_provider import AnthropicProvider
-from .ollama_provider    import OllamaProvider
+from .base            import LLMProvider
+from .openai_provider import OpenAIProvider
+from .ollama_provider import OllamaProvider
 
 
 _cache: Dict[str, LLMProvider] = {}
@@ -31,14 +30,11 @@ def get_provider(name: str | None = None) -> LLMProvider:
         return _cache[selected]
     if selected in ("openai", "azure", "azure-openai", "azureopenai"):
         provider: LLMProvider = OpenAIProvider()
-    elif selected == "anthropic":
-        provider = AnthropicProvider()
     elif selected == "ollama":
         provider = OllamaProvider()
     else:
         raise ValueError(
-            f"unknown LLM_PROVIDER={selected!r} — supported: openai, azure, "
-            f"anthropic, ollama"
+            f"unknown LLM_PROVIDER={selected!r} — supported: openai, azure, ollama"
         )
     _cache[selected] = provider
     return provider
@@ -46,25 +42,16 @@ def get_provider(name: str | None = None) -> LLMProvider:
 
 def list_providers() -> list[str]:
     """The names get_provider() will accept."""
-    return ["openai", "azure", "anthropic", "ollama"]
+    return ["openai", "azure", "ollama"]
 
 
 def provider_configured(config) -> bool:
     """True when the active LLM provider has the credentials it needs.
-
-    Many callers historically gated AI calls on `config.get("OPENAI_API_KEY")`
-    directly, which silently disabled AI features on Anthropic / Ollama
-    deployments even though everything underneath went through
-    get_provider(). This helper picks the right key per provider so a
-    single hardcoded check no longer leaks across the abstraction.
-
-    Ollama is locally-hosted with no key, so it always returns True.
-    """
+    OpenAI / Azure-OpenAI need OPENAI_API_KEY; Ollama is locally hosted
+    with no key. Anthropic provider was removed."""
     selected = (os.environ.get("LLM_PROVIDER") or "openai").strip().lower()
     if selected in ("openai", "azure", "azure-openai", "azureopenai"):
         return bool(config.get("OPENAI_API_KEY"))
-    if selected == "anthropic":
-        return bool(config.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY"))
     if selected == "ollama":
         return True
     return False

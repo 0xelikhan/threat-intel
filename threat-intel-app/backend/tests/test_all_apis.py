@@ -71,7 +71,7 @@ def _load_keys() -> Dict[str, str]:
               "HYBRID_ANALYSIS_KEY", "MALWAREBAZAAR_API_KEY",
               "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET",
               "PROXYCHECK_KEY", "OPENAI_API_KEY",
-              "OPENAI_BASE_URL", "ANTHROPIC_API_KEY", "CRIMINAL_IP_KEY",
+              "OPENAI_BASE_URL", "CRIMINAL_IP_KEY",
               "THEHIVE_URL", "THEHIVE_KEY"):
         v = os.environ.get(k)
         if v and not keys.get(k):
@@ -176,28 +176,6 @@ async def _probe_openai(session: aiohttp.ClientSession) -> Result:
                       "OPENAI_API_KEY", "https://platform.openai.com/api-keys")
 
 
-async def _probe_anthropic(session: aiohttp.ClientSession) -> Result:
-    name = "Anthropic Claude"
-    cat = "AI / LLM provider"
-    key = KEYS.get("ANTHROPIC_API_KEY", "")
-    if not key:
-        return Result(name, cat, "SKIP", "ANTHROPIC_API_KEY not configured",
-                      "ANTHROPIC_API_KEY", "https://console.anthropic.com")
-    try:
-        async with session.get(
-            "https://api.anthropic.com/v1/models",
-            headers={"x-api-key": key, "anthropic-version": "2023-06-01"},
-        ) as r:
-            body = await r.text()
-            if r.status == 200:
-                return Result(name, cat, "OK", f"HTTP 200 · models endpoint reachable")
-            return Result(name, cat, "FAIL", f"HTTP {r.status} · {body[:200]}",
-                          "ANTHROPIC_API_KEY", "https://console.anthropic.com")
-    except Exception as e:
-        return Result(name, cat, "FAIL", f"{type(e).__name__}: {str(e)[:80]}",
-                      "ANTHROPIC_API_KEY", "https://console.anthropic.com")
-
-
 # ─── Build the full probe list ─────────────────────────────────────────────
 async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
     P = []  # (coro, ...)
@@ -293,9 +271,6 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
         f"https://otx.alienvault.com/api/v1/indicators/domain/{TEST_DOMAIN}/general",
         headers={"X-OTX-API-KEY": KEYS.get("OTX_KEY", "")},
         key_env="OTX_KEY", key_url="https://otx.alienvault.com"))
-    add(_probe(session, "crt.sh CT", "Domain enrichment",
-        f"https://crt.sh/?q=%25.{TEST_DOMAIN}&output=json",
-        ok_statuses=(200, 502)))   # crt.sh occasionally 502s but is healthy
     add(_probe(session, "who-dat WHOIS", "Domain enrichment",
         f"https://who-dat.as93.net/{TEST_DOMAIN}"))
     add(_probe(session, "Pulsedive", "Domain enrichment",
@@ -380,7 +355,6 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
 
     # ── AI / LLM providers ─────────────────────────────────────────────
     P.append(_probe_openai(session))
-    P.append(_probe_anthropic(session))
 
     # ── Static datasets / threat feeds (free, no auth) ─────────────────
     add(_probe(session, "Feodo Tracker (IP block)", "Static feed",

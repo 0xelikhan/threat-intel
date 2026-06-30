@@ -68,13 +68,10 @@ def check_required_packages() -> Dict[str, Any]:
                 "bcrypt", "itsdangerous", "taxii2client",
                 "stix2", "yaml", "mitreattack")
     # 'yara' is yara-python; the YARA rule scanner falls back to a no-op
-    # when it isn't installed (every import is guarded). 'anthropic' is
-    # only imported by the AnthropicProvider's lazy _client() — deploys
-    # running LLM_PROVIDER=openai/azure/ollama don't need it at all, and
-    # ones that do still degrade to a clean LLMResponse.error rather than
-    # crashing. 'feedparser' was in the required list historically but
-    # nothing in the codebase imports it — removed entirely.
-    optional = ("yara", "anthropic")
+    # when it isn't installed (every import is guarded). 'feedparser' was
+    # in the required list historically but nothing in the codebase
+    # imports it — removed entirely.
+    optional = ("yara",)
 
     missing_req = []
     for p in required:
@@ -265,7 +262,7 @@ async def check_api_key_reachability(config_module) -> List[Dict[str, Any]]:
 async def check_ai_provider(config_module) -> Dict[str, Any]:
     """Send a tiny test message through the provider abstraction. Picks
     the configured-key check based on LLM_PROVIDER so the diagnostic
-    doesn't flag Anthropic / Ollama deployments as broken just because
+    doesn't flag Ollama deployments as broken just because
     OPENAI_API_KEY is unset."""
     from providers import provider_configured
     if not provider_configured(config_module):

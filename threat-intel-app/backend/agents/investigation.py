@@ -1402,7 +1402,7 @@ async def run_investigation(state: dict, on_event=None) -> dict:
 
     result = None
     tool_call_log = []
-    # Provider-aware gate — Anthropic / Ollama deployments were silently
+    # Provider-aware gate — Ollama deployments were silently
     # marked ai_unavailable by the OPENAI_API_KEY-only check even though
     # the underlying provider works fine.
     from providers import provider_configured
@@ -1905,7 +1905,7 @@ Investigate this alert. Use tools as needed to fill gaps. When done, produce the
             "attack_patterns": [],
             "geo_highlights": [],
             "recommended_actions": [
-                "Open Settings and verify your AI provider key for the active LLM_PROVIDER (OPENAI_API_KEY / ANTHROPIC_API_KEY / Ollama endpoint).",
+                "Verify your AI provider key for the active LLM_PROVIDER (OPENAI_API_KEY or the Ollama endpoint).",
                 "Review the enrichment data manually to assess this alert.",
             ],
             "tor_traffic": False,

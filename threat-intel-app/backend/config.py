@@ -15,10 +15,10 @@ CONFIG_FILE = DATA_DIR / "config.json"
 API_KEY_DEFINITIONS = {
     "LLM_PROVIDER": {
         "label": "LLM Provider",
-        "description": "Which provider every AI call routes through. openai (default, also covers Azure OpenAI when OPENAI_BASE_URL is set), anthropic, or ollama.",
+        "description": "Which provider every AI call routes through. openai (default, also covers Azure OpenAI when OPENAI_BASE_URL is set) or ollama (local).",
         "required": False,
         "default": "openai",
-        "placeholder": "openai | anthropic | ollama",
+        "placeholder": "openai | ollama",
         "group": "LLM Settings"
     },
     "OPENAI_API_KEY": {
@@ -59,23 +59,6 @@ API_KEY_DEFINITIONS = {
         "required": False,
         "default": "",
         "placeholder": "gpt-4o-mini",
-        "group": "LLM Settings"
-    },
-    "ANTHROPIC_API_KEY": {
-        "label": "Anthropic API Key",
-        "description": "Required when LLM_PROVIDER=anthropic. Claude Sonnet 4 by default.",
-        "required": False,
-        "url": "https://console.anthropic.com",
-        "placeholder": "sk-ant-...",
-        "group": "LLM Settings"
-    },
-    "ANTHROPIC_MODEL": {
-        "label": "Anthropic Model Override",
-        "description": "Model name read by providers/anthropic_provider.py. Defaults to claude-sonnet-4-6 when unset. Override here to pin a different snapshot.",
-        "required": False,
-        "url": "",
-        "default": "",
-        "placeholder": "claude-sonnet-4-6",
         "group": "LLM Settings"
     },
     "OLLAMA_BASE_URL": {
@@ -535,7 +518,6 @@ FREE_APIS = [
     "URLHaus (abuse.ch)",
     "Feodo Tracker (abuse.ch)",
     "SSL Blacklist (abuse.ch)",
-    "crt.sh (certificate transparency)",
     "WHOIS (who-dat.as93.net)",
     "BGP Ranking (CIRCL)",
     "CIRCL Passive DNS",
@@ -651,26 +633,19 @@ class ConfigManager:
         """True when every key the active LLM provider needs is set, plus
         every other key flagged required=True. OPENAI_API_KEY is marked
         required in API_KEY_DEFINITIONS but only OPENAI deployments
-        actually need it; Anthropic deployments need ANTHROPIC_API_KEY
-        and Ollama needs none. The old all-required-keys check rejected
-        non-OpenAI deployments as setup_required even when their provider
-        was reachable, so /api/analyze/sync 503'd."""
+        actually need it; Ollama is locally-hosted with no key."""
         import os as _os
         provider = (_os.environ.get("LLM_PROVIDER") or "openai").strip().lower()
         # LLM-related required keys: pick per active provider.
         if provider in ("openai", "azure", "azure-openai", "azureopenai"):
             llm_required = ("OPENAI_API_KEY",)
-        elif provider == "anthropic":
-            llm_required = ("ANTHROPIC_API_KEY",)
         else:
             # ollama: locally-hosted, no key required.
             llm_required = ()
-        # Every key marked required EXCEPT the LLM-related ones we've
-        # already handled (so OPENAI_API_KEY isn't counted twice or
-        # falsely required on a non-OpenAI deployment).
-        _LLM_KEYS = {"OPENAI_API_KEY", "ANTHROPIC_API_KEY"}
+        # Every key marked required EXCEPT OPENAI_API_KEY (we've handled
+        # it above per-provider).
         other_required = [k for k, v in API_KEY_DEFINITIONS.items()
-                          if v.get("required") and k not in _LLM_KEYS]
+                          if v.get("required") and k != "OPENAI_API_KEY"]
         for k in llm_required:
             if not self.get(k):
                 return False
@@ -687,13 +662,9 @@ class ConfigManager:
 
     def get_ai_provider(self) -> str:
         """Return the active LLM provider name. Used by /api/health for
-        the status badge. Previously this ignored LLM_PROVIDER entirely
-        and only distinguished azure vs vanilla OpenAI, so Anthropic /
-        Ollama deployments reported "openai" in the health response."""
+        the status badge."""
         import os as _os
         provider = (_os.environ.get("LLM_PROVIDER") or "openai").strip().lower()
-        if provider == "anthropic":
-            return "anthropic"
         if provider == "ollama":
             return "ollama"
         return "azure" if "openai.azure.com" in self.get("OPENAI_BASE_URL", "") else "openai"
