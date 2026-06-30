@@ -526,22 +526,6 @@ API_KEY_DEFINITIONS = {
         "placeholder": "",
         "group": "API Keys",
     },
-    "CIRCL_PDNS_USER": {
-        "label": "CIRCL Passive DNS · Username",
-        "description": "CIRCL Passive DNS is access-restricted (trusted partners only). Email CIRCL at https://www.circl.lu/services/passive-dns/ with your organisation, affiliation, and intended use — they issue HTTP Basic credentials. RECON queries the v2 API with dribble-disable-active-query (historical records only) + dribble-paginate-count=200 (caps responses on CDN-style hosts). Skipped cleanly when unset.",
-        "required": False,
-        "url": "https://www.circl.lu/services/passive-dns/",
-        "placeholder": "CIRCL pDNS username",
-        "group": "API Keys",
-    },
-    "CIRCL_PDNS_PASSWORD": {
-        "label": "CIRCL Passive DNS · Password",
-        "description": "Paired with CIRCL_PDNS_USER. Used as HTTP Basic auth on every CIRCL pDNS query.",
-        "required": False,
-        "url": "",
-        "placeholder": "••••••••",
-        "group": "API Keys",
-    },
 }
 
 # Keys that work with no API key at all
