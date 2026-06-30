@@ -962,9 +962,16 @@ def _p_tf(r):
 
 # ─── Free no-key sources (per spec §3) ─────────────────────────────────────────
 def _p_circl_pdns(r):
-    """Passive DNS from CIRCL — newline-delimited JSON, latest record per name."""
+    """Passive DNS from CIRCL — newline-delimited JSON, latest record per name.
+    CIRCL moved to authenticated access in 2025; when CIRCL_PDNS_USER /
+    CIRCL_PDNS_PASSWORD aren't set, enrich_ip dispatches `_noop()` which
+    lands here as {'skipped': True}. Pass that through so the UI doesn't
+    show 'unexpected format' for what's really 'not configured'."""
     if isinstance(r, Exception):
         return _err("circl_pdns", r)
+    if isinstance(r, dict) and r.get("skipped"):
+        return {"error": "CIRCL Passive DNS requires CIRCL_PDNS_USER + CIRCL_PDNS_PASSWORD (free at circl.lu)",
+                "error_type": "not_configured", "skipped": True}
     if isinstance(r, dict) and "raw" in r:
         try:
             import json
@@ -1282,7 +1289,15 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         _get(session, f"https://otx.alienvault.com/api/v1/indicators/IPv4/{ip}/general",
              headers={"X-OTX-API-KEY": keys.get("OTX_KEY", "")}),
         # ── free no-key sources (spec §3) ──────────────────────────────────────
-        _get(session, f"https://www.circl.lu/pdns/query/{ip}"),
+        # CIRCL pDNS moved to authenticated access in 2025. The free
+        # anonymous endpoint now returns 401. Gate on the operator having
+        # set CIRCL_PDNS_USER + CIRCL_PDNS_PASSWORD (free account at
+        # https://www.circl.lu/services/passive-dns/). Skip otherwise.
+        (_get(session, f"https://www.circl.lu/pdns/query/{ip}",
+              auth=aiohttp.BasicAuth(keys.get("CIRCL_PDNS_USER", ""),
+                                     keys.get("CIRCL_PDNS_PASSWORD", "")))
+         if keys.get("CIRCL_PDNS_USER") and keys.get("CIRCL_PDNS_PASSWORD")
+         else _noop()),
         _get(session, f"https://freeapi.robtex.com/ipquery/{ip}"),
         _get(session, f"https://api.hackertarget.com/reverseiplookup/?q={ip}"),
         # ── conditional authenticated sources ──────────────────────────────────
@@ -2419,6 +2434,12 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
         # MalwareBazaar, ThreatFox, and URLhaus (anonymous calls have
         # been rate-limited / soft-blocked since mid-2024).
         "ABUSECH_AUTH_KEY":    config.get("ABUSECH_AUTH_KEY"),
+        # CIRCL Passive DNS moved to authenticated access in 2025;
+        # operators get a free account at https://www.circl.lu/services/
+        # passive-dns/ and configure the user / password here. Without
+        # them, enrich_ip skips the call (no 401 noise in logs).
+        "CIRCL_PDNS_USER":     config.get("CIRCL_PDNS_USER"),
+        "CIRCL_PDNS_PASSWORD": config.get("CIRCL_PDNS_PASSWORD"),
     }
 
     iocs = state.get("iocs", {})
