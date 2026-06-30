@@ -569,6 +569,23 @@ RESPOND with this EXACT JSON (no markdown fences, no commentary):
       for user X 24h back'>",
     "<another>",
     "<another>"
+  ],
+  "intelligence_gaps": [
+    "<one-line gap: what evidence you would need to make a higher-confidence
+      verdict. e.g. 'No process-tree captured — would need EDR telemetry
+      from the host to confirm whether powershell.exe spawned regsvr32.exe.'
+      List 2-4 gaps. Empty list when the evidence is complete and you stand
+      fully behind the verdict.>",
+    "<another>"
+  ],
+  "analyst_caveats": [
+    "<one-line methodology caveat: assumptions, source-reliability limits,
+      time-bounded data freshness. e.g. 'GreyNoise classification is
+      tagging-based and may lag real intent by 24-48 h.' or 'OTX pulse
+      count includes researcher pulses, not just confirmed compromises.'
+      List 1-3 caveats analysts should know about your reasoning. Empty
+      list when the data is well-corroborated and no caveats apply.>",
+    "<another>"
   ]
 }}
 
@@ -745,6 +762,25 @@ analyst's UI strips them out, so writing them is wasted tokens."""
         "analyst_feedback":    state.get("analyst_feedback") or "",
     }
 
+    # Case-level rollup score with letter grade + recency multipliers.
+    # Lives alongside the per-IOC gti_scores so analysts can drill in
+    # both ways — case-level grade for verdict-at-a-glance, per-IOC for
+    # the drill-down. Adapted from cti-expert (MIT).
+    try:
+        from intel.case_score import compute as _compute_case_score
+        # We DO have the {**state} dict by the time we land here; pass
+        # it through. observation_ts defaults to "now" which means a
+        # freshly analyzed alert gets the recency boost (intended for
+        # live SOC traffic). Historical replay should override later.
+        response_summary["case_score"] = _compute_case_score({
+            **state,
+            "response_summary": response_summary,
+        })
+    except Exception as _e:
+        # Never let the rollup take down the whole response — the score
+        # is a nice-to-have, not load-bearing.
+        pass
+
     # Defensive coercion — every field below is LLM-emitted into the
     # `investigation` dict and the model occasionally ships them as a
     # string or dict instead of an array. The frontend's AnalystSummary
@@ -760,6 +796,19 @@ analyst's UI strips them out, so writing them is wasted tokens."""
         "analysis_assessment", "matched_actors", "atomic_examples",
         "mitre_evidence",
     )
+    # Round-15 — also coerce intelligence_gaps + analyst_caveats inside
+    # the nested analyst_summary dict (adapted from cti-expert INTSUM
+    # template). LLM occasionally returns them as a single string or
+    # nested dict; the React renderer's `.map()` would crash.
+    if isinstance(analyst_summary, dict):
+        for _k in ("intelligence_gaps", "analyst_caveats"):
+            _v = analyst_summary.get(_k)
+            if isinstance(_v, list):
+                continue
+            if isinstance(_v, str) and _v.strip():
+                analyst_summary[_k] = [_v.strip()]
+            else:
+                analyst_summary[_k] = []
     for _k in _ARRAY_FIELDS:
         _v = response_summary.get(_k)
         if isinstance(_v, list):

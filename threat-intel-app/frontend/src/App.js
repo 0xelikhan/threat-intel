@@ -2456,6 +2456,46 @@ function _ocSources(result, ioc, type) {
     }
   }
 
+  // Round-15 M365 tenant recon — domain-only. Surfaces tenant ID, brand,
+  // federation type, SharePoint / Azure App Service presence.
+  if (d.m365_tenant && typeof d.m365_tenant === 'object' && d.m365_tenant.is_m365) {
+    const m = d.m365_tenant;
+    const fedType = (m.federation_type || '').toLowerCase();
+    const c = fedType === 'federated' ? orange : cyan;
+    const bits = [
+      m.tenant_id && `tenant ${m.tenant_id.slice(0,8)}…`,
+      m.cloud_instance,
+      m.federation_type,
+      m.federation_provider && `idp:${m.federation_provider}`,
+      m.sharepoint && 'sharepoint',
+      m.azure_app_service && 'azure-app',
+    ].filter(Boolean).join(' · ');
+    out.push({
+      source: 'M365 tenant',
+      label:  bits || 'tenant fingerprinted',
+      color:  c,
+      why:    m.summary || 'Microsoft 365 tenant fingerprinted via unauthenticated probes (openid-configuration + getuserrealm.srf + SharePoint + Azure App Service).',
+    });
+  }
+
+  // Round-15 Admin endpoint classifier — URL-only. Surfaces admin / panel
+  // / customer-service endpoints flagged by subdomain prefix, path
+  // segment, or localised CJK keyword. Scam-TLD amplifier bumps color.
+  if (d.admin_endpoint && typeof d.admin_endpoint === 'object') {
+    const ae = d.admin_endpoint;
+    if (ae.indicator) {
+      const c = ae.verdict === 'MALICIOUS' ? red
+              : ae.verdict === 'SUSPICIOUS' ? orange
+              : tert;
+      out.push({
+        source: 'Admin endpoint',
+        label:  ae.indicator,
+        color:  c,
+        why:    ae.summary || 'Admin / sensitive endpoint indicator detected (subdomain prefix, path segment, or localised keyword).',
+      });
+    }
+  }
+
   // ─── SOURCE STATUS PASS ────────────────────────────────────────────────
   // The blocks above only push a row when a source returned USEFUL data
   // (no error AND non-empty). That meant a source which returned an
@@ -2498,6 +2538,9 @@ function _ocSources(result, ioc, type) {
     // unavailable, heuristic fallback active) is rendered consistently.
     dga_classifier:      'DGA classifier',
     phishing_classifier: 'Phishing URL classifier',
+    // Round-15 (cti-expert): M365 tenant recon + admin endpoint classifier.
+    m365_tenant:         'M365 tenant',
+    admin_endpoint:      'Admin endpoint',
   };
   const _surfaced = new Set(out.map(r => r.source));
   for (const [key, blob] of Object.entries(d || {})) {
@@ -3207,6 +3250,84 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
           </Typography>
         </Box>
       )}
+
+      {/* Round-15 (cti-expert steal) — Intelligence Gaps + Analyst
+          Caveats + Case Score letter grade. Lifted from INTSUM template
+          + weight-engine. Renders only when populated. */}
+      {(() => {
+        const gaps    = asArray(a?.intelligence_gaps);
+        const caveats = asArray(a?.analyst_caveats);
+        const cs      = rs?.case_score;
+        const hasCs   = cs && typeof cs.score === 'number';
+        if (!gaps.length && !caveats.length && !hasCs) return null;
+        const csColor = !hasCs ? '#848592'
+                      : cs.tier === 'CRITICAL'     ? '#EA4335'
+                      : cs.tier === 'ESCALATE'     ? '#F14337'
+                      : cs.tier === 'INVESTIGATE'  ? '#E6700F'
+                      : cs.tier === 'MONITOR'      ? '#E1B823'
+                      : '#16AD34';
+        return (
+          <Box sx={{ mt: 2, mb: 1 }}>
+            {hasCs && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.25,
+                  flexWrap: 'wrap' }}>
+                <Box sx={{
+                    fontFamily: '"IBM Plex Mono", monospace',
+                    fontSize: 13, fontWeight: 700, color: csColor,
+                    backgroundColor: muiAlpha(csColor, 0.12),
+                    border: `1px solid ${muiAlpha(csColor, 0.4)}`,
+                    borderRadius: '4px', px: 1.25, py: '3px' }}>
+                  {cs.grade} · case score {cs.score}/100
+                </Box>
+                <Typography sx={{ fontSize: 11, color: 'text.tertiary',
+                    textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Tier: {cs.tier}
+                </Typography>
+                <Typography sx={{ fontSize: 11, color: 'text.tertiary',
+                    flexBasis: '100%', mt: 0.25 }}>
+                  {cs.summary}
+                </Typography>
+              </Box>
+            )}
+            {gaps.length > 0 && (
+              <Box sx={{ mb: 1 }}>
+                <Typography sx={{ fontSize: 10.5, fontWeight: 700,
+                    color: 'text.tertiary', textTransform: 'uppercase',
+                    letterSpacing: '0.06em', mb: 0.5 }}>
+                  Intelligence gaps
+                </Typography>
+                <Box component="ul" sx={{ m: 0, pl: 2.25 }}>
+                  {gaps.slice(0, 6).map((g, i) => (
+                    <Box component="li" key={i}
+                      sx={{ fontSize: 12, color: 'text.secondary',
+                        lineHeight: 1.55, mb: 0.25 }}>
+                      {g}
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+            )}
+            {caveats.length > 0 && (
+              <Box>
+                <Typography sx={{ fontSize: 10.5, fontWeight: 700,
+                    color: 'text.tertiary', textTransform: 'uppercase',
+                    letterSpacing: '0.06em', mb: 0.5 }}>
+                  Analyst caveats
+                </Typography>
+                <Box component="ul" sx={{ m: 0, pl: 2.25 }}>
+                  {caveats.slice(0, 4).map((c, i) => (
+                    <Box component="li" key={i}
+                      sx={{ fontSize: 12, color: 'text.secondary',
+                        lineHeight: 1.55, mb: 0.25 }}>
+                      {c}
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+            )}
+          </Box>
+        );
+      })()}
 
       {/* Train-on-false-positives inline form — pinned directly under
           the AI analysis so the analyst can correct a wrong verdict
