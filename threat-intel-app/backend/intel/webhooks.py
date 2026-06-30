@@ -3,7 +3,9 @@ Outbound webhook integrations for SOC team chat and case management.
 Configured via config.json keys:
   - SLACK_WEBHOOK_URL
   - TEAMS_WEBHOOK_URL
-  - THEHIVE_URL  + THEHIVE_TOKEN
+  - THEHIVE_URL  + THEHIVE_KEY  (matches intel/thehive_push.py + config.py
+                                 — earlier "THEHIVE_TOKEN" reads were a
+                                 typo, the canonical name is THEHIVE_KEY)
   - WEBHOOK_GENERIC_URL  (raw POST of the analysis JSON)
 """
 import aiohttp
@@ -262,7 +264,7 @@ def available(config) -> dict:
     return {
         "slack":   bool(config.get("SLACK_WEBHOOK_URL")),
         "teams":   bool(config.get("TEAMS_WEBHOOK_URL")),
-        "thehive": bool(config.get("THEHIVE_URL")) and bool(config.get("THEHIVE_TOKEN")),
+        "thehive": bool(config.get("THEHIVE_URL")) and bool(config.get("THEHIVE_KEY")),
         "opencti": bool(config.get("OPENCTI_URL"))   and bool(config.get("OPENCTI_TOKEN")),
         "generic": bool(config.get("WEBHOOK_GENERIC_URL")),
     }

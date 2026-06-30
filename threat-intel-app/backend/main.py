@@ -2634,7 +2634,7 @@ async def send_webhook(target: str, run_id: str, request: Request):
         return await wh.send_teams(url, result, run_url)
     if target == "thehive":
         return await wh.send_thehive(config.get("THEHIVE_URL", ""),
-                                     config.get("THEHIVE_TOKEN", ""), result, run_url)
+                                     config.get("THEHIVE_KEY", ""), result, run_url)
     if target == "opencti":
         from intel.opencti import push_result
         return await push_result(result, config.get("OPENCTI_URL", ""),
@@ -2848,7 +2848,7 @@ async def scan_file_v2(file: UploadFile = File(...)):
         _keys = {k: (config.get(k) or "") for k in (
             "VIRUSTOTAL_KEY", "OTX_KEY", "HYBRID_ANALYSIS_KEY",
             "MALWAREBAZAAR_API_KEY", "ABUSECH_AUTH_KEY",
-            "MALTIVERSE_KEY", "POLYSWARM_KEY",
+            "MALTIVERSE_KEY",
         )}
         # Share the process-wide TCPConnector so the file scanner doesn't
         # spin up a fresh DNS cache + TLS handshakes for every upload.
@@ -3399,7 +3399,7 @@ async def scan_url_endpoint(req: ScanUrlRequest):
             "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
             "HYBRID_ANALYSIS_KEY", "MALWAREBAZAAR_API_KEY",
             "ABUSECH_AUTH_KEY",
-            "POLYSWARM_KEY", "PHISHTANK_KEY",
+            "PHISHTANK_KEY",
             "PROXYCHECK_KEY", "FULLHUNT_KEY", "CENSYS_API_KEY",
             "CENSYS_ID", "CENSYS_SECRET", "CRIMINAL_IP_KEY",
             "CROWDSEC_KEY",
