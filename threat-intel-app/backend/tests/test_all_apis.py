@@ -70,10 +70,10 @@ def _load_keys() -> Dict[str, str]:
               "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
               "HYBRID_ANALYSIS_KEY", "MALWAREBAZAAR_API_KEY",
               "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET", "CROWDSEC_KEY",
-              "FULLHUNT_KEY", "POLYSWARM_KEY", "PROXYCHECK_KEY",
+              "FULLHUNT_KEY", "PROXYCHECK_KEY",
               "PHISHTANK_KEY", "OPENAI_API_KEY",
               "OPENAI_BASE_URL", "ANTHROPIC_API_KEY", "CRIMINAL_IP_KEY",
-              "THEHIVE_URL", "THEHIVE_TOKEN", "SLACK_WEBHOOK_URL",
+              "THEHIVE_URL", "THEHIVE_KEY", "SLACK_WEBHOOK_URL",
               "TEAMS_WEBHOOK_URL"):
         v = os.environ.get(k)
         if v and not keys.get(k):
@@ -382,12 +382,8 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
     add(_probe(session, "CIRCL hashlookup", "Hash enrichment",
         f"https://hashlookup.circl.lu/lookup/sha256/{TEST_HASH}",
         ok_statuses=(200, 404)))
-    add(_probe(session, "PolySwarm", "Hash enrichment",
-        f"https://api.polyswarm.network/v2/search/hash/sha256",
-        params={"hash": TEST_HASH},
-        headers={"Authorization": KEYS.get("POLYSWARM_KEY", "")},
-        ok_statuses=(200, 400, 404),
-        key_env="POLYSWARM_KEY", key_url="https://polyswarm.network"))
+    # PolySwarm probe dropped — RECON enrichment never read POLYSWARM_KEY
+    # so the config + this smoke check were both orphan plumbing.
 
     # ── URL enrichment ──────────────────────────────────────────────────
     add(_probe(session, "URLhaus URL lookup", "URL enrichment",

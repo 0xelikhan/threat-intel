@@ -69,12 +69,30 @@ API_KEY_DEFINITIONS = {
         "placeholder": "sk-ant-...",
         "group": "LLM Settings"
     },
+    "ANTHROPIC_MODEL": {
+        "label": "Anthropic Model Override",
+        "description": "Model name read by providers/anthropic_provider.py. Defaults to claude-sonnet-4-6 when unset. Override here to pin a different snapshot.",
+        "required": False,
+        "url": "",
+        "default": "",
+        "placeholder": "claude-sonnet-4-6",
+        "group": "LLM Settings"
+    },
     "OLLAMA_BASE_URL": {
         "label": "Ollama Base URL",
         "description": "Local Ollama endpoint when LLM_PROVIDER=ollama. Default http://localhost:11434.",
         "required": False,
         "default": "http://localhost:11434",
         "placeholder": "http://localhost:11434",
+        "group": "LLM Settings"
+    },
+    "OLLAMA_MODEL": {
+        "label": "Ollama Model",
+        "description": "Local model name read by providers/ollama_provider.py (e.g. llama3.1, qwen2.5, mistral). Required when LLM_PROVIDER=ollama.",
+        "required": False,
+        "url": "",
+        "default": "",
+        "placeholder": "llama3.1",
         "group": "LLM Settings"
     },
     "VIRUSTOTAL_KEY": {
@@ -173,7 +191,8 @@ API_KEY_DEFINITIONS = {
         "label": "abuse.ch API Key",
         "description": "abuse.ch API key — free at auth.abuse.ch, unlocks MalwareBazaar, "
                        "ThreatFox, and URLhaus. Required since mid-2024; anonymous calls "
-                       "are heavily rate-limited.",
+                       "are heavily rate-limited. Backwards-compat alias: ABUSE_CH_AUTH_KEY "
+                       "(underscore variant) is also read by intel/file_correlation.py.",
         "required": False,
         "url": "https://auth.abuse.ch",
         "placeholder": "abuse.ch Auth-Key",
@@ -365,6 +384,7 @@ API_KEY_DEFINITIONS = {
         "label": "MISP · Verify TLS Certificate",
         "description": "Set to 0 to skip TLS verification for self-signed MISP deployments. Default 1 (verify).",
         "required": False,
+        "url": "",
         "default": "1",
         "placeholder": "1",
         "group": "Outbound Integrations",
@@ -403,10 +423,20 @@ API_KEY_DEFINITIONS = {
     },
     "RECON_TAXII_FEEDS": {
         "label": "TAXII Feeds · Enabled Slugs",
-        "description": "Comma-separated slugs from intel/taxii_feeds_catalog.py to pull on the periodic TAXII poll. Choices: cisa_ais, hailataxii, anomali_limo, mitre_attack_taxii, oasis_cti. Leave blank to disable polling. cisa_ais requires enrollment + RECON_TAXII_CISA_AIS_COLLECTION env override.",
+        "description": "Comma-separated slugs from intel/taxii_feeds_catalog.py to pull on the periodic TAXII poll. Choices: cisa_ais, hailataxii, anomali_limo, mitre_attack_taxii, oasis_cti. Leave blank to disable polling. cisa_ais also requires enrollment plus the RECON_TAXII_CISA_AIS_COLLECTION key below.",
         "required": False,
+        "url": "",
         "default": "",
         "placeholder": "hailataxii,anomali_limo",
+        "group": "Outbound Integrations",
+    },
+    "RECON_TAXII_CISA_AIS_COLLECTION": {
+        "label": "TAXII · CISA AIS Collection Override",
+        "description": "Operator-specific TAXII collection ID for the CISA Automated Indicator Sharing feed. Only used when RECON_TAXII_FEEDS includes cisa_ais. Set this after enrolling with CISA — they issue the collection ID per organisation.",
+        "required": False,
+        "url": "https://www.cisa.gov/topics/cyber-threats-and-advisories/information-sharing/automated-indicator-sharing-ais",
+        "default": "",
+        "placeholder": "your-org-collection-id",
         "group": "Outbound Integrations",
     },
 
@@ -525,6 +555,15 @@ API_KEY_DEFINITIONS = {
         "required": False,
         "url": "",
         "placeholder": "OpenCTI API token",
+        "group": "Outbound Integrations",
+    },
+    "OPENCTI_INSECURE_TLS": {
+        "label": "OpenCTI · Skip TLS Verification",
+        "description": "Set to 1 to skip TLS cert verification for self-signed OpenCTI deployments. Default 0.",
+        "required": False,
+        "url": "",
+        "default": "0",
+        "placeholder": "0",
         "group": "Outbound Integrations",
     },
     "API_TOKEN": {
