@@ -67,7 +67,7 @@ threat-intel-app/
 │   └── tests/               # pytest, namespace-based grouping
 └── frontend/
     └── src/
-        ├── App.js           # ~6.1k-line root — auth, routing, drawer,
+        ├── App.js           # ~6.3k-line root — auth, routing, drawer,
         │                    #   AND ~30 inline analysis sub-components
         │                    #   (Sidebar, AnalystSummary, ChatWithRecon,
         │                    #    Detection, ThreatScore, BulkTable, …).
@@ -165,6 +165,8 @@ SKILL_REGISTRY = {
   "match_sigma_rules", "classify_capabilities", "match_detections",
   # Round 14 — natural-language search across the 11 detection corpora
   "semantic_search_detections",
+  # Round 15 — see "Round 15" section below for the cti-expert
+  # integrations that landed as intel modules (not skills).
 }
 ```
 
@@ -593,3 +595,92 @@ as baseline; `sentence-transformers` is operator-opt-in
   all 11 detection corpora + builds the semantic-search index — first
   request no longer pays the lazy-load cost (~12 s of YAML walks +
   ~150 ms of training when these were paid on the request path).
+* Audit pass (post-round-14): pre-warm gap filled for the 7 defensive-
+  context corpora (D3FEND, CAPEC, NIST 800-53, CISA CPG, ETW providers,
+  ForensicArtifacts, emulation plans) — saves ~2-3 s off the first
+  investigation after a restart.
+* `intel/multi_log.py` deleted (audit found it orphaned; feature was
+  intentionally retired in triage.py but the module wasn't removed).
+
+## Round 15 — cti-expert integrations
+
+Adapted from 7onez/cti-expert (MIT, Hieu Ngo / chongluadao.vn). Audited
+the whole repo; four ship items + three narrow steals were worth
+absorbing. The other pieces (AEAD framework, TI-source curl handbooks,
+Scrapling/AgentFlow, DOCX report generator, drift monitor, guided-flow
+UX) were verified dud comparisons against RECON's equivalents.
+
+### Ship items
+
+* `scripts/stealer_log_parse.py` — operator-runnable CLI for infostealer
+  log triage. Family fingerprinting (StealC/Vidar/RedLine/Lumma/Raccoon/
+  RisePro/META), victim-vs-operator classification, cross-log actor
+  clustering by dropper/HWID/email. Stdlib-only. Intentionally NOT
+  wired into `/api/analyze` — stealer logs contain third-party PII that
+  the no-persistence policy treats as too sensitive for the bounded
+  in-memory stores. Run from a workstation with appropriate handling.
+
+* `intel/m365_tenant_recon.py` — unauthenticated Microsoft 365 / Entra
+  fingerprinting. Four parallel probes: `openid-configuration`
+  (tenant GUID via `issuer`), `getuserrealm.srf` (federation type +
+  IdP), `{tenant}.sharepoint.com`, `{tenant}.azurewebsites.net`.
+  Wired into `agents/enrichment.enrich_domain`, gated by
+  `is_m365_candidate()` which scans the rest of the domain's payload
+  for `protection.outlook.com` / `onmicrosoft.com` etc. so non-M365
+  domains skip the network cost. Output lands on `m365_tenant` in the
+  per-source enrichment dict; frontend `_ocSources` renders it as
+  "M365 tenant" with `tenant ID · cloud · federation · IdP · sharepoint`.
+
+* `intel/admin_endpoint_classifier.py` — admin / panel / customer-
+  service endpoint detector. Subdomain-prefix + path-segment +
+  localised-keyword matching (`管理` / `后台` / `客服` +
+  Indonesian / Spanish equivalents). Scam-TLD amplifier
+  (`.tk .top .icu .xyz …`) bumps verdict to MALICIOUS when combined
+  with a strong indicator. Wired into `agents/enrichment.enrich_url`,
+  surfaces as `admin_endpoint` in per-source dict.
+
+* `intel/maltego_export.py` + `GET /api/export/maltego/{run_id}` —
+  serialises the investigation IOCs + relationships to GraphML.
+  Standard `maltego.*` entity types so no custom-entity registration
+  needed in Maltego CE / XL. Derived edges: URL → on_domain → Domain;
+  Domain → resolves_to → IP (read from WHOIS); Actor → seen_with → IOCs.
+  Caps per IOC type at 50 nodes to keep the canvas readable.
+
+### Narrow steals
+
+* `intel/case_score.py` — case-level rollup score with letter grade
+  (`A1..F9`) + recency multipliers (≤30d ×1.25, >730d ×0.80) +
+  active-compromise amplifier (×1.35 when high-signal drivers like
+  KEV/named-malware combine with credential-access/lateral-movement/
+  C2). Lives ON TOP of the per-IOC `gti_score.py` — doesn't replace
+  it. Surfaces as `response_summary.case_score` with `{score, grade,
+  tier, drivers, multipliers, summary}`. Frontend renders a colored
+  chip in the Summary card. Adapted from cti-expert weight-engine.md
+  + exposure-model.md.
+
+* `analyst_summary.intelligence_gaps` + `analyst_summary.analyst_caveats`
+  — two new sections on the analyst-summary LLM prompt that force the
+  model to declare what evidence it would need for higher confidence
+  + what methodology caveats apply. Defensive-coerced to arrays so the
+  React renderer's `.map()` never sees a string / dict. Renders under
+  the prose paragraph in the Summary card. Adapted from cti-expert
+  INTSUM template.
+
+### Skipped (and why)
+
+* AEAD framework (Acquire/Enrich/Assess/Deliver) — rename of RECON's
+  triage→enrichment→investigation→response. No new mental model.
+* TI-source curl handbooks — cti-expert has zero real client code, no
+  fan-out engine, no pooling, no breaker. RECON's `agents/enrichment.py`
+  is a real implementation; nothing to copy from a handbook.
+* Scrapling / AgentFlow — pinned to 0.1.0 pre-stable, less capable
+  than RECON's LangGraph fan-out (their concurrency cap is 4-8 vs
+  ours at 16).
+* DOCX report generator — overkill for a web product; the structural
+  ideas (Gaps + Caveats) were absorbed via the steal above.
+* Drift monitor — targets persona/social-account watch (username
+  changes, follower deltas). Wrong domain for SOC alert triage.
+* Skill tiers / guided flows / case templates — UX paradigm doesn't
+  fit RECON's card-driven analyst report. The Novice/Specialist
+  verbosity toggle could work, but it's a UX experiment that needs
+  design feedback, not just code — deferred.
