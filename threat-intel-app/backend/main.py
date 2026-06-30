@@ -782,7 +782,6 @@ async def health(request: Request):
         "apiKeys":         {k: v["configured"] for k, v in status.items()},
         "requiredMissing": missing,
         "cachedRuns":      len(_results),
-        "webhooks":        _webhooks_available(),
         "intel_layer":     _intel_status(),
         "cache":           cache_block,
         "circuit_breaker": breaker_block,
@@ -958,14 +957,6 @@ async def auth_me(request: Request):
     if not user:
         raise HTTPException(401, "not authenticated")
     return {"user": user}
-
-
-def _webhooks_available() -> dict:
-    try:
-        from intel.webhooks import available
-        return available(config)
-    except Exception:
-        return {}
 
 
 def _intel_status() -> dict:
@@ -2612,38 +2603,10 @@ async def chat_send(run_id: str, req: dict):
                               headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-# ─── WEBHOOKS ─────────────────────────────────────────────────────────────────────
-@app.post("/api/webhook/{target}/{run_id}")
-async def send_webhook(target: str, run_id: str, request: Request):
-    """Dispatch an analysis result to a configured webhook target.
-    target ∈ {slack, teams, thehive, generic}."""
-    if run_id not in _results:
-        raise HTTPException(404, "Run not found")
-    from intel import webhooks as wh
-    result = {k: v for k, v in _results[run_id].items() if k != "stix_bundle"}
-    base = str(request.base_url).rstrip("/")
-    run_url = f"{base}/#run/{run_id}"
-
-    if target == "slack":
-        url = config.get("SLACK_WEBHOOK_URL")
-        if not url: raise HTTPException(400, "SLACK_WEBHOOK_URL not configured")
-        return await wh.send_slack(url, result, run_url)
-    if target == "teams":
-        url = config.get("TEAMS_WEBHOOK_URL")
-        if not url: raise HTTPException(400, "TEAMS_WEBHOOK_URL not configured")
-        return await wh.send_teams(url, result, run_url)
-    if target == "thehive":
-        return await wh.send_thehive(config.get("THEHIVE_URL", ""),
-                                     config.get("THEHIVE_KEY", ""), result, run_url)
-    if target == "opencti":
-        from intel.opencti import push_result
-        return await push_result(result, config.get("OPENCTI_URL", ""),
-                                  config.get("OPENCTI_TOKEN", ""))
-    if target == "generic":
-        url = config.get("WEBHOOK_GENERIC_URL")
-        if not url: raise HTTPException(400, "WEBHOOK_GENERIC_URL not configured")
-        return await wh.send_generic(url, result)
-    raise HTTPException(400, f"Unknown webhook target: {target}")
+# Webhook fan-out (Slack / Teams / TheHive / OpenCTI / generic) was
+# removed when the operator deprecated the surface. Use the dedicated
+# /api/integrations/{misp,thehive,stix-shifter}/push endpoints for the
+# remaining case-management push paths.
 
 
 # ─── REST API DOCS ────────────────────────────────────────────────────────────────
@@ -3399,10 +3362,8 @@ async def scan_url_endpoint(req: ScanUrlRequest):
             "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
             "HYBRID_ANALYSIS_KEY", "MALWAREBAZAAR_API_KEY",
             "ABUSECH_AUTH_KEY",
-            "PHISHTANK_KEY",
-            "PROXYCHECK_KEY", "FULLHUNT_KEY", "CENSYS_API_KEY",
+            "PROXYCHECK_KEY", "CENSYS_API_KEY",
             "CENSYS_ID", "CENSYS_SECRET", "CRIMINAL_IP_KEY",
-            "CROWDSEC_KEY",
         )}
         # Run hash correlation (file_correlation) + per-IOC enrichment in
         # parallel — every source the platform supports gets a fair shot.
@@ -3937,7 +3898,7 @@ async def startup_check():
         required = ("OPENAI_API_KEY",)
     optional = ("VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "GREYNOISE_KEY",
                 "OTX_KEY", "URLSCAN_KEY", "PULSEDIVE_KEY", "CENSYS_ID",
-                "CENSYS_SECRET", "HYBRID_ANALYSIS_KEY", "CROWDSEC_KEY",
+                "CENSYS_SECRET", "HYBRID_ANALYSIS_KEY",
                 "MALTIVERSE_KEY", "OPENCTI_TOKEN", "FRESHRSS_API_KEY")
 
     keys = {}
@@ -4282,13 +4243,10 @@ async def email_compose_ai(req: EmailComposeAIRequest):
         "CENSYS_API_KEY":     config.get("CENSYS_API_KEY"),
         "CENSYS_ID":          config.get("CENSYS_ID"),
         "CENSYS_SECRET":      config.get("CENSYS_SECRET"),
-        "CROWDSEC_KEY":       config.get("CROWDSEC_KEY"),
         "CRIMINAL_IP_KEY":    config.get("CRIMINAL_IP_KEY"),
         "PROXYCHECK_KEY":     config.get("PROXYCHECK_KEY"),
-        "FULLHUNT_KEY":       config.get("FULLHUNT_KEY"),
         "OPENCTI_URL":        config.get("OPENCTI_URL"),
         "OPENCTI_TOKEN":      config.get("OPENCTI_TOKEN"),
-        "PHISHTANK_KEY":      config.get("PHISHTANK_KEY"),
     }
     options = dict(req.options or {})
     if not options.get("team_name"):

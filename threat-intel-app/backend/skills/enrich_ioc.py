@@ -79,13 +79,13 @@ class EnrichIOCSkill(Skill):
         keys = {k: config.get(k, "") for k in (
             "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
             "GREYNOISE_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
-            "IPINFO_TOKEN", "WHOISXML_KEY", "CROWDSEC_KEY", "PHISHTANK_KEY",
+            "IPINFO_TOKEN", "WHOISXML_KEY",
             "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY", "HYBRID_ANALYSIS_KEY",
             # Canonical Censys names — PAT first, legacy v2 pair as fallback.
             # Both are registered in config.py.
             "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET",
             "CRIMINAL_IP_KEY", "PROXYCHECK_KEY",
-            "GOOGLE_API_KEY", "FULLHUNT_KEY", "HONEYPOT_KEY",
+            "GOOGLE_API_KEY", "HONEYPOT_KEY",
             "OPENCTI_URL", "OPENCTI_TOKEN",
         )}
 

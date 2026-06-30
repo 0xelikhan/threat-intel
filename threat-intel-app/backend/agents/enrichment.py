@@ -1135,33 +1135,6 @@ def _p_hybrid(r):
     }
 
 
-def _p_crowdsec(r):
-    """CrowdSec CTI smoke endpoint — score, classifications, attacks."""
-    if _is_fail(r):
-        return _err("crowdsec", r)
-    if r.get("message") or r.get("errors"):
-        return _err("crowdsec", r.get("message") or r.get("errors"))
-    score = (r.get("scores") or {}).get("overall") or {}
-    overall = score.get("aggressiveness") or score.get("total") or 0
-    out = {
-        "score_overall":       overall,
-        "score_aggressiveness": score.get("aggressiveness"),
-        "score_threat":         score.get("threat"),
-        "score_trust":          score.get("trust"),
-        "score_anomaly":        score.get("anomaly"),
-        "classifications":      [c.get("label") for c in (r.get("classifications") or {}).get("classifications", [])][:8],
-        "attack_details":       [a.get("name") for a in (r.get("attack_details") or [])][:8],
-        "behaviors":            [b.get("name") for b in (r.get("behaviors") or [])][:8],
-        "background_noise_score": r.get("background_noise_score"),
-        "reverse_dns":          r.get("reverse_dns"),
-    }
-    if overall > 3:
-        out["verdict"] = "SUSPICIOUS"
-    if any("attack" in (c or "").lower() for c in out["classifications"]):
-        out["verdict"] = "MALICIOUS"
-    return out
-
-
 # ─── ENRICHMENT FUNCTIONS ─────────────────────────────────────────────────────────
 def _local_ip_check(ip: str) -> dict:
     try:
@@ -1273,8 +1246,6 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
             censys_auth = "Basic " + _b64.b64encode(
                 f"{censys_id}:{censys_secret}".encode()).decode()
 
-    crowdsec_key = keys.get("CROWDSEC_KEY", "")
-
     tasks = [
         # ── keyed sources (existing) ───────────────────────────────────────────
         _get(session, "https://api.abuseipdb.com/api/v2/check",
@@ -1303,8 +1274,6 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         # ── conditional authenticated sources ──────────────────────────────────
         _get(session, censys_url,
              headers={"Authorization": censys_auth}) if censys_auth else _noop(),
-        _get(session, f"https://cti.api.crowdsec.net/v2/smoke/{ip}",
-             headers={"x-api-key": crowdsec_key}) if crowdsec_key else _noop(),
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -1327,11 +1296,6 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         cs = _p_censys(results[8])
         if "error" not in cs:
             data["censys"] = cs
-    # CrowdSec (optional)
-    if crowdsec_key and not isinstance(results[9], Exception):
-        cs2 = _p_crowdsec(results[9])
-        if "error" not in cs2:
-            data["crowdsec"] = cs2
     # Feodo Tracker (offline list)
     feodo = _p_feodo(ip)
     if feodo:
@@ -1782,29 +1746,6 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         osint["google_safebrowsing"] = gsb
     if osint:
         data["osint"] = osint
-
-    # FullHunt — subdomain + service inventory. Keyed via FULLHUNT_KEY.
-    fullhunt_key = keys.get("FULLHUNT_KEY", "")
-    if fullhunt_key:
-        try:
-            fh = await _get(
-                session, f"https://fullhunt.io/api/v1/host/{domain}",
-                headers={"X-API-KEY": fullhunt_key},
-            )
-            if isinstance(fh, dict) and not fh.get("error"):
-                data["fullhunt"] = {
-                    "host":             fh.get("host"),
-                    "ip_addresses":     (fh.get("ip_addresses") or [])[:6],
-                    "ports":            (fh.get("ports") or [])[:10],
-                    "subdomain_count":  fh.get("subdomain_count")
-                                        or len(fh.get("subdomains") or []),
-                    "tags":             (fh.get("tags") or [])[:6],
-                }
-            elif isinstance(fh, dict):
-                data["fullhunt"] = fh
-        except Exception as e:
-            data["fullhunt"] = {"error": _humanise_exc(e),
-                                 "error_type": "unreachable"}
 
     _cache[ck] = data
     return data
@@ -2267,19 +2208,6 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
     abusech_key = keys.get("ABUSECH_AUTH_KEY", "") or keys.get("MALWAREBAZAAR_API_KEY", "")
     _ac_headers = {"Auth-Key": abusech_key} if abusech_key else {}
 
-    # PhishTank — community phishing database. Free anonymous lookup
-    # supported but a key (PHISHTANK_KEY) raises the rate limit.
-    phishtank_key = keys.get("PHISHTANK_KEY", "")
-    _pt_params = {"url": url, "format": "json"}
-    if phishtank_key:
-        _pt_params["app_key"] = phishtank_key
-    _pt_co = _post(
-        session,
-        "https://checkurl.phishtank.com/checkurl/",
-        data=_pt_params,
-        headers={"User-Agent": "RECON/phishtank-check"},
-    )
-
     results = await asyncio.gather(
         _get(session, f"https://www.virustotal.com/api/v3/urls/{url_b64}",
              headers={"x-apikey": keys.get("VIRUSTOTAL_KEY", "")}),
@@ -2297,8 +2225,6 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
         _get(session,
              f"https://otx.alienvault.com/api/v1/indicators/url/{url}/general",
              headers={"X-OTX-API-KEY": keys.get("OTX_KEY", "")}),
-        # PhishTank community phishing DB
-        _pt_co,
         return_exceptions=True,
     )
 
@@ -2332,24 +2258,6 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
     otx_url = _ok_dict(results[4])
     if otx_url and not otx_url.get("error"):
         data["otx"] = _p_otx(otx_url)
-    # PhishTank — only surface positive results (in_database=True means
-    # the URL is on the phishing list). Negative responses are not noise
-    # worth showing.
-    pt = results[5]
-    if isinstance(pt, dict) and not pt.get("error"):
-        results_arr = (pt.get("results") or {})
-        in_db = results_arr.get("in_database") if isinstance(results_arr, dict) else False
-        if in_db:
-            data["phishtank"] = {
-                "in_database":      True,
-                "verified":         results_arr.get("verified"),
-                "phish_id":         results_arr.get("phish_id"),
-                "submission_time":  results_arr.get("submission_time"),
-                "verdict":          "MALICIOUS",
-                "summary":          ("PhishTank lists this URL as a verified phishing page"
-                                     if results_arr.get("verified")
-                                     else "PhishTank has this URL flagged (pending verification)"),
-            }
 
     # Phishing URL classifier (sklearn GradientBoosting over URL-structural
     # features). Purely local — string analysis, no network I/O.
@@ -2426,7 +2334,6 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
         "CENSYS_ID":           config.get("CENSYS_ID"),
         "CENSYS_SECRET":       config.get("CENSYS_SECRET"),
         "HYBRID_ANALYSIS_KEY": config.get("HYBRID_ANALYSIS_KEY"),
-        "CROWDSEC_KEY":        config.get("CROWDSEC_KEY"),
         "GOOGLE_API_KEY":      config.get("GOOGLE_API_KEY"),
         "HONEYPOT_KEY":        config.get("HONEYPOT_KEY"),
         "CRIMINAL_IP_KEY":     config.get("CRIMINAL_IP_KEY"),

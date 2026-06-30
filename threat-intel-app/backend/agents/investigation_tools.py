@@ -335,10 +335,10 @@ def _all_keys(config) -> dict:
         # names were not registered anywhere, so the AI tool's Censys
         # lookups silently never authenticated.
         "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET",
-        "CROWDSEC_KEY", "CRIMINAL_IP_KEY", "PROXYCHECK_KEY",
-        "WHOISXML_KEY", "GOOGLE_API_KEY", "FULLHUNT_KEY",
+        "CRIMINAL_IP_KEY", "PROXYCHECK_KEY",
+        "WHOISXML_KEY", "GOOGLE_API_KEY",
         "MALTIVERSE_KEY", "OPENCTI_URL", "OPENCTI_TOKEN",
-        "PHISHTANK_KEY", "HONEYPOT_KEY",
+        "HONEYPOT_KEY",
     )}
 
 

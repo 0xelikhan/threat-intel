@@ -30,8 +30,6 @@ import {
   TableRow       as MuiTableRow,
   TableCell      as MuiTableCell,
   TableContainer as MuiTableContainer,
-  Menu           as MuiMenu,
-  MenuItem       as MuiMenuItem,
   ToggleButton   as MuiToggleButton,
   ToggleButtonGroup as MuiToggleButtonGroup,
 } from '@mui/material';
@@ -5663,73 +5661,9 @@ function BulkTable({ result }) {
   );
 }
 
-/* ─── send-to-webhook button (Slack / Teams / TheHive / generic) ──────────────── */
-function SendToWebhook({ result, available }) {
-  const [open, setOpen] = useState(false);
-  const [status, setStatus] = useState(null);
-  const anchorRef = useRef(null);
-  const targets = Object.entries(available || {}).filter(([, ok]) => ok);
-  if (!result?.runId || !targets.length) return null;
-
-  const send = async (target) => {
-    setStatus({ target, state: 'sending' });
-    try {
-      const r = await cookieFetch(`/api/webhook/${target}/${result.runId}`, { method: 'POST' });
-      const data = await r.json();
-      setStatus({ target, state: r.ok && data.ok !== false ? 'ok' : 'err', detail: data });
-      setTimeout(() => setStatus(null), 3000);
-    } catch (e) {
-      setStatus({ target, state: 'err', detail: e.message });
-      setTimeout(() => setStatus(null), 3000);
-    }
-    setOpen(false);
-  };
-
-  const targetLabels = {
-    slack:   'Slack',
-    teams:   'Microsoft Teams',
-    thehive: 'TheHive',
-    opencti: 'OpenCTI (report + observables)',
-    generic: 'Webhook',
-  };
-
-  return (
-    <Box sx={{ position:'relative' }}>
-      <MuiButton ref={anchorRef} onClick={() => setOpen(o => !o)}
-        variant="outlined" size="small"
-        startIcon={<ArrowUpRight size={12}/>}>
-        Send to…
-      </MuiButton>
-      <MuiMenu anchorEl={anchorRef.current} open={open} onClose={() => setOpen(false)}
-        anchorOrigin={{ vertical:'bottom', horizontal:'right' }}
-        transformOrigin={{ vertical:'top', horizontal:'right' }}>
-        {targets.map(([target]) => (
-          <MuiMenuItem key={target} onClick={() => send(target)} sx={{ fontSize: 13 }}>
-            {targetLabels[target] || target}
-          </MuiMenuItem>
-        ))}
-      </MuiMenu>
-      {status && (
-        <Box sx={{
-          position:'absolute', top:'calc(100% + 8px)', right:0,
-          backgroundColor:'background.secondary',
-          border: theme => `1px solid ${muiAlpha(
-            status.state==='ok' ? theme.palette.success.main
-            : status.state==='err' ? theme.palette.error.main
-            : theme.palette.primary.main, 0.4)}`,
-          borderRadius:'4px', p:'7px 11px', fontSize:11,
-          color: status.state==='ok' ? 'success.main'
-               : status.state==='err' ? 'error.main' : 'primary.main',
-          whiteSpace:'nowrap',
-        }}>
-          {status.state === 'sending' && `Sending to ${status.target}…`}
-          {status.state === 'ok'      && `Sent to ${status.target}`}
-          {status.state === 'err'     && `Failed: ${status.detail?.error || 'unknown'}`}
-        </Box>
-      )}
-    </Box>
-  );
-}
+/* Webhook fan-out (Slack / Teams / TheHive / OpenCTI / generic) was
+   removed when the operator deprecated it. The remaining case-management
+   push paths live at /api/integrations/{misp,thehive,stix-shifter}/push. */
 
 
 /* ─── app ─────────────────────────────────────────────────────────────────────── */
@@ -5810,7 +5744,6 @@ function AppMain({ authUser, setAuthState }) {
   // results will land while waiting on the first stream event.
   const [analyzing, setAnalyzing] = useState(false);
   const [view, setView] = useState('detail'); // 'detail' | 'table'
-  const [webhooks, setWebhooks] = useState({});
   // Bumped on "go home" (logo) to remount the Sidebar — this clears its local
   // input state AND the AgentPipeline's internal trace/pipeline, which would
   // otherwise linger under the Analyze input after returning home.
@@ -5926,16 +5859,6 @@ function AppMain({ authUser, setAuthState }) {
   const mergePartial = useCallback((partial) => {
     if (!partial) return;
     setResult(prev => (prev ? { ...prev, ...partial } : partial));
-  }, []);
-
-  // Fetch which webhook destinations are configured on the backend
-  useEffect(() => {
-    let alive = true;
-    cookieFetch('/api/health')
-      .then(r => r.json())
-      .then(d => { if (alive) setWebhooks(d.webhooks || {}); })
-      .catch(() => {});
-    return () => { alive = false; };
   }, []);
 
   // Auto-detect bulk: 12+ indicators → default to table view
@@ -6067,10 +5990,10 @@ function AppMain({ authUser, setAuthState }) {
                 )}
               </MuiToggleButton>
             </MuiToggleButtonGroup>
-            <Stack direction="row" spacing={1} alignItems="center">
-              {/* Compose-email lives in the left sidebar ("Email"); no duplicate here. */}
-              <SendToWebhook result={result} available={webhooks}/>
-            </Stack>
+            {/* Compose-email lives in the left sidebar ("Email"); no
+                duplicate here. SendToWebhook removed with the webhook
+                surface; case-management push paths are operator-curl-
+                only via /api/integrations/{misp,thehive,stix-shifter}. */}
           </Stack>
         )}
 
