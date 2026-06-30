@@ -961,39 +961,6 @@ def _p_tf(r):
 
 
 # ─── Free no-key sources (per spec §3) ─────────────────────────────────────────
-def _p_circl_pdns(r):
-    """Passive DNS from CIRCL — newline-delimited JSON, latest record per name.
-    CIRCL moved to authenticated access in 2025; when CIRCL_PDNS_USER /
-    CIRCL_PDNS_PASSWORD aren't set, enrich_ip dispatches `_noop()` which
-    lands here as {'skipped': True}. Pass that through so the UI doesn't
-    show 'unexpected format' for what's really 'not configured'."""
-    if isinstance(r, Exception):
-        return _err("circl_pdns", r)
-    if isinstance(r, dict) and r.get("skipped"):
-        return {"error": "CIRCL Passive DNS requires CIRCL_PDNS_USER + CIRCL_PDNS_PASSWORD (free at circl.lu)",
-                "error_type": "not_configured", "skipped": True}
-    if isinstance(r, dict) and "raw" in r:
-        try:
-            import json
-            lines = [json.loads(l) for l in r["raw"].splitlines() if l.strip()]
-        except Exception as e:
-            return _err("circl_pdns", e)
-    elif isinstance(r, list):
-        lines = r
-    else:
-        return _err("circl_pdns", "unexpected format")
-    if not lines:
-        return _err("circl_pdns", "no records")
-    seen = lines[:20]
-    return {
-        "record_count":  len(lines),
-        "first_seen":    min((x.get("time_first") or 0 for x in seen), default=None),
-        "last_seen":     max((x.get("time_last")  or 0 for x in seen), default=None),
-        "rrtypes":       sorted({x.get("rrtype") for x in seen if x.get("rrtype")}),
-        "answers":       [{"rrname": x.get("rrname"), "rdata": x.get("rdata"), "rrtype": x.get("rrtype")} for x in seen[:5]],
-    }
-
-
 def _p_robtex(r):
     """Robtex free IP/domain lookup — passive DNS + ASN."""
     if _is_fail(r):
@@ -1260,23 +1227,6 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         _get(session, f"https://otx.alienvault.com/api/v1/indicators/IPv4/{ip}/general",
              headers={"X-OTX-API-KEY": keys.get("OTX_KEY", "")}),
         # ── free no-key sources (spec §3) ──────────────────────────────────────
-        # CIRCL pDNS — trusted-partner access only (email CIRCL with
-        # affiliation + intended use to apply). v2 protocol since Nov 2023:
-        #   * dribble-disable-active-query — skip the real-time resolver
-        #     enabled by default in v2 (saves multi-second wait when we
-        #     only want historical records, which we always do).
-        #   * dribble-paginate-count — cap the response at 200 records
-        #     so very-popular hosts like CDN edges don't return 500k
-        #     CNAME rows we'd just truncate anyway.
-        # Backwards-compatible with v1; absent headers fall back to v1
-        # behaviour. Skip cleanly when creds aren't set.
-        (_get(session, f"https://www.circl.lu/pdns/query/{ip}",
-              auth=aiohttp.BasicAuth(keys.get("CIRCL_PDNS_USER", ""),
-                                     keys.get("CIRCL_PDNS_PASSWORD", "")),
-              headers={"dribble-disable-active-query": "1",
-                       "dribble-paginate-count":       "200"})
-         if keys.get("CIRCL_PDNS_USER") and keys.get("CIRCL_PDNS_PASSWORD")
-         else _noop()),
         _get(session, f"https://freeapi.robtex.com/ipquery/{ip}"),
         _get(session, f"https://api.hackertarget.com/reverseiplookup/?q={ip}"),
         # ── conditional authenticated sources ──────────────────────────────────
@@ -1294,14 +1244,13 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         "greynoise":   _p_gn(results[2]),
         "virustotal":  _p_vt_ip(results[3]),
         "otx":         _p_otx(results[4]),
-        "circl_pdns":  _p_circl_pdns(results[5]),
-        "robtex":      _p_robtex(results[6]),
-        "hackertarget": _p_hackertarget(results[7]),
+        "robtex":      _p_robtex(results[5]),
+        "hackertarget": _p_hackertarget(results[6]),
         "local_feeds": _local_ip_check(ip),
     }
     # Censys (optional)
-    if censys_auth and not isinstance(results[8], Exception):
-        cs = _p_censys(results[8])
+    if censys_auth and not isinstance(results[7], Exception):
+        cs = _p_censys(results[7])
         if "error" not in cs:
             data["censys"] = cs
     # Feodo Tracker (offline list)
@@ -2349,12 +2298,6 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
         # MalwareBazaar, ThreatFox, and URLhaus (anonymous calls have
         # been rate-limited / soft-blocked since mid-2024).
         "ABUSECH_AUTH_KEY":    config.get("ABUSECH_AUTH_KEY"),
-        # CIRCL Passive DNS moved to authenticated access in 2025;
-        # operators get a free account at https://www.circl.lu/services/
-        # passive-dns/ and configure the user / password here. Without
-        # them, enrich_ip skips the call (no 401 noise in logs).
-        "CIRCL_PDNS_USER":     config.get("CIRCL_PDNS_USER"),
-        "CIRCL_PDNS_PASSWORD": config.get("CIRCL_PDNS_PASSWORD"),
     }
 
     iocs = state.get("iocs", {})

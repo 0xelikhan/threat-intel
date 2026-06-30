@@ -3834,7 +3834,6 @@ async def status_check():
 
     # Free no-key sources (probe with cheap GETs)
     free_probes = [
-        ("circl_pdns",   "https://www.circl.lu/pdns/query/1.1.1.1"),
         ("robtex",       "https://freeapi.robtex.com/ipquery/1.1.1.1"),
         ("hackertarget", "https://api.hackertarget.com/aslookup/?q=1.1.1.1"),
         ("hashlookup",   "https://hashlookup.circl.lu/lookup/sha256/0000000000000000000000000000000000000000000000000000000000000000"),

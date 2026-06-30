@@ -237,22 +237,6 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
         f"https://otx.alienvault.com/api/v1/indicators/IPv4/{TEST_IP}/general",
         headers={"X-OTX-API-KEY": KEYS.get("OTX_KEY", "")},
         key_env="OTX_KEY", key_url="https://otx.alienvault.com"))
-    # CIRCL Passive DNS moved to authenticated access in 2025; anonymous
-    # endpoint returns 401 / times out. When CIRCL_PDNS_USER + PASSWORD
-    # are configured we probe with auth; otherwise we mark it as a
-    # configured-skip rather than a smoke failure.
-    _circl_user = KEYS.get("CIRCL_PDNS_USER", "")
-    _circl_pass = KEYS.get("CIRCL_PDNS_PASSWORD", "")
-    if _circl_user and _circl_pass:
-        add(_probe(session, "CIRCL passive DNS", "IP enrichment",
-            f"https://www.circl.lu/pdns/query/{TEST_IP}",
-            auth=aiohttp.BasicAuth(_circl_user, _circl_pass),
-            ok_statuses=(200, 404),
-            key_env="CIRCL_PDNS_USER",
-            key_url="https://www.circl.lu/services/passive-dns/"))
-    # No `else` smoke probe — the anonymous endpoint always fails now
-    # and would produce a confusing "FAIL" line for what's actually
-    # "operator hasn't enrolled with CIRCL yet".
     add(_probe(session, "Robtex free", "IP enrichment",
         f"https://freeapi.robtex.com/ipquery/{TEST_IP}"))
     add(_probe(session, "HackerTarget reverse-IP", "IP enrichment",
