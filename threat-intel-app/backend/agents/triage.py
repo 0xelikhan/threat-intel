@@ -786,6 +786,50 @@ async def run_triage(state: dict) -> dict:
             "priority_iocs":  [],
         }
 
+    # Benign fast-path: signed-vendor + tenant-permit + zero positive
+    # cross-refs is a strong signal this is a policy-audit event, not a
+    # threat. Skip the AI classifier (saves ~4-5s of TTFT). The downstream
+    # investigation stage's benign short-circuit picks the alert up next
+    # and the response fast-path finishes it — total pipeline drops to
+    # triage + enrichment + a few ms of synthesis.
+    if ai_result is None:
+        _t2_start = time.perf_counter()
+        try:
+            from intel.signal_priority import (
+                _KNOWN_GOOD_VENDOR_PATTERNS as _KG,
+                _TENANT_PERMIT_PATTERNS as _TP,
+            )
+            _raw_lc = raw  # regexes are case-insensitive
+            _kg_hit = any(rx.search(_raw_lc) for rx in _KG)
+            _tp_hits = sum(1 for rx in _TP if rx.search(_raw_lc))
+            _no_pos_cross = not any(
+                cross_refs.get(k) for k in
+                ("kev", "lolbas", "loldrivers", "rmm_abuse",
+                 "suspicious_paths", "phishing_kits")
+            )
+            if _kg_hit and _tp_hits >= 2 and _no_pos_cross and heuristic_score < 0.35:
+                skipped_for_speed = True
+                ai_result = {
+                    "triage_score":   max(heuristic_score, 0.05),
+                    "should_proceed": True,   # investigation short-circuits it
+                    "reasoning":      (
+                        f"Benign fast-path: signed-vendor + tenant-permit "
+                        f"markers ({_tp_hits}) with zero positive cross-refs — "
+                        f"AI triage skipped."
+                    ),
+                    "alert_type":     "benign_permit",
+                    "urgency":        "low",
+                    "false_positive_indicators": [
+                        "known-good vendor pattern",
+                        "tenant policy permit",
+                    ],
+                    "priority_iocs":  [],
+                }
+        except Exception as _e:
+            # If signal_priority patterns aren't importable, fall through
+            # to the AI path — don't fail the whole triage stage.
+            pass
+
     # Use the provider-abstraction-aware check so triage runs the AI
     # path on Anthropic / Ollama deployments too; the old direct
     # OPENAI_API_KEY check skipped AI triage entirely on non-OpenAI
