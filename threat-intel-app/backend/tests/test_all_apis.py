@@ -112,6 +112,7 @@ async def _probe(session: aiohttp.ClientSession, name: str, category: str,
                  json_body: Any = None,
                  auth: Optional[aiohttp.BasicAuth] = None,
                  ok_statuses: Tuple[int, ...] = (200,),
+                 timeout_s: float = 12.0,
                  key_env: str = "",
                  key_url: str = "") -> Result:
     if key_env and not KEYS.get(key_env):
@@ -119,7 +120,7 @@ async def _probe(session: aiohttp.ClientSession, name: str, category: str,
                       f"{key_env} not configured", key_env, key_url)
     try:
         req = session.get if method == "GET" else session.post
-        kw: Dict[str, Any] = {}
+        kw: Dict[str, Any] = {"timeout": aiohttp.ClientTimeout(total=timeout_s)}
         if headers:   kw["headers"] = headers
         if params:    kw["params"]  = params
         if data is not None: kw["data"] = data
@@ -134,7 +135,8 @@ async def _probe(session: aiohttp.ClientSession, name: str, category: str,
             return Result(name, category, "FAIL",
                           f"HTTP {r.status} · {snippet}", key_env, key_url)
     except asyncio.TimeoutError:
-        return Result(name, category, "FAIL", "request timed out after 12s",
+        return Result(name, category, "FAIL",
+                      f"request timed out after {int(timeout_s)}s",
                       key_env, key_url)
     except aiohttp.ClientConnectorError as e:
         return Result(name, category, "FAIL", f"could not connect: {str(e)[:80]}",
@@ -214,6 +216,9 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
     add(_probe(session, "OTX (IPv4)", "IP enrichment",
         f"https://otx.alienvault.com/api/v1/indicators/IPv4/{TEST_IP}/general",
         headers={"X-OTX-API-KEY": KEYS.get("OTX_KEY", "")},
+        # OTX runs slow (10-15 s anon, longer with a key) — production uses
+        # a 90s per-host override; smoke needs 30s to match reality.
+        timeout_s=30,
         key_env="OTX_KEY", key_url="https://otx.alienvault.com"))
     add(_probe(session, "Robtex free", "IP enrichment",
         f"https://freeapi.robtex.com/ipquery/{TEST_IP}"))
@@ -270,6 +275,7 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
     add(_probe(session, "OTX (domain)", "Domain enrichment",
         f"https://otx.alienvault.com/api/v1/indicators/domain/{TEST_DOMAIN}/general",
         headers={"X-OTX-API-KEY": KEYS.get("OTX_KEY", "")},
+        timeout_s=30,
         key_env="OTX_KEY", key_url="https://otx.alienvault.com"))
     add(_probe(session, "who-dat WHOIS", "Domain enrichment",
         f"https://who-dat.as93.net/{TEST_DOMAIN}"))
@@ -292,6 +298,7 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
     add(_probe(session, "OTX (file)", "Hash enrichment",
         f"https://otx.alienvault.com/api/v1/indicators/file/{TEST_HASH}/general",
         headers={"X-OTX-API-KEY": KEYS.get("OTX_KEY", "")},
+        timeout_s=30,
         key_env="OTX_KEY", key_url="https://otx.alienvault.com"))
     add(_probe(session, "MalwareBazaar (hash)", "Hash enrichment",
         "https://mb-api.abuse.ch/api/v1/",
@@ -326,8 +333,6 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
     add(_probe(session, "CIRCL hashlookup", "Hash enrichment",
         f"https://hashlookup.circl.lu/lookup/sha256/{TEST_HASH}",
         ok_statuses=(200, 404)))
-    # PolySwarm probe dropped — RECON enrichment never read POLYSWARM_KEY
-    # so the config + this smoke check were both orphan plumbing.
 
     # ── URL enrichment ──────────────────────────────────────────────────
     add(_probe(session, "URLhaus URL lookup", "URL enrichment",

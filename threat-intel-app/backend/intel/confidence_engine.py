@@ -7,7 +7,7 @@ exactly why a score was assigned.
 
 Score buckets (cap at 100):
   Reputation        VT>50%=30, AbuseIPDB>75=20, ThreatFox=25,
-                    Feodo/SSLBL=30, CrowdSec>5=15
+                    Feodo/SSLBL=30
   Context           GreyNoise mal=20 / benign=-20, suspicious ports
                     (4444/8080/1080/etc.)=10, bulletproof ASN=15
   Behavioral        PowerShell encoded=20, malware family=25,

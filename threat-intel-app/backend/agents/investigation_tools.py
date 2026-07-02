@@ -21,13 +21,12 @@ TOOL_SCHEMAS = [
                 "Get full reputation for an IP across all configured sources: VirusTotal, "
                 "AbuseIPDB confidence score, GreyNoise classification (incl. RIOT), OTX "
                 "pulse count, IPInfo geo+ASN, Tor exit status, offline blocklists (52K+ "
-                "IPs), Censys open-ports + TLS cert, CrowdSec attack scenarios, Criminal "
-                "IP inbound/outbound threat scoring, ProxyCheck VPN/proxy classification, "
-                "Maltiverse, CIRCL passive DNS, Hackertarget reverse-IP, Feodo Tracker "
-                "active-C2 list, Google Safe Browsing, BGP ranking, ASN reputation "
-                "(bulletproof / VPN / anonymizer). Use when you have an IP and want to "
-                "know whether it's malicious, what's hosted there, what country/ASN, or "
-                "whether it's known anonymizer infrastructure."
+                "IPs), Censys open-ports + TLS cert, Criminal IP inbound/outbound threat "
+                "scoring, ProxyCheck VPN/proxy classification, Maltiverse, Hackertarget "
+                "reverse-IP, Feodo Tracker active-C2 list, Google Safe Browsing, BGP "
+                "ranking, ASN reputation (bulletproof / VPN / anonymizer). Use when you "
+                "have an IP and want to know whether it's malicious, what's hosted there, "
+                "what country/ASN, or whether it's known anonymizer infrastructure."
             ),
             "parameters": {
                 "type": "object",
@@ -45,10 +44,10 @@ TOOL_SCHEMAS = [
                 "Pulsedive, Spamhaus DBL, "
                 "WHOIS (registration date), Wayback Machine snapshot history, NRD age, "
                 "DGA score, IDN/punycode detection, typosquat brand matching, Maltiverse, "
-                "OpenCTI, FullHunt subdomain inventory, Google Safe Browsing, DNS records, "
-                "offline phishing-domain blocklists. Use when you have a domain and want "
-                "to know if it's malicious, when it was registered, whether it impersonates "
-                "a brand, or whether it's algorithmically generated."
+                "OpenCTI, Google Safe Browsing, DNS records, offline phishing-domain "
+                "blocklists. Use when you have a domain and want to know if it's "
+                "malicious, when it was registered, whether it impersonates a brand, or "
+                "whether it's algorithmically generated."
             ),
             "parameters": {
                 "type": "object",
@@ -317,13 +316,10 @@ async def execute_tool(name: str, args: dict, config) -> dict:
 
 
 # Each enrich_* below internally cherry-picks the keys it needs, so we
-# pass the FULL configured key set instead of a hand-curated subset.
-# The earlier subset was missing ABUSECH_AUTH_KEY / HYBRID_ANALYSIS_KEY /
-# CRIMINAL_IP / CENSYS / CROWDSEC / PROXYCHECK / URLSCAN / WHOISXML /
-# GOOGLE / FULLHUNT etc., which meant the AI's tool calls during
-# investigation got a substantially degraded enrichment vs. the main
-# /api/analyze pipeline — abuse.ch endpoints in particular were hit
-# anonymously and rate-limited.
+# pass the FULL configured key set instead of a hand-curated subset —
+# this avoids the AI's tool calls getting a degraded enrichment vs. the
+# main /api/analyze pipeline (abuse.ch endpoints in particular need
+# ABUSECH_AUTH_KEY to dodge anonymous rate limits).
 def _all_keys(config) -> dict:
     return {k: config.get(k) for k in (
         "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "IPINFO_TOKEN", "GREYNOISE_KEY",

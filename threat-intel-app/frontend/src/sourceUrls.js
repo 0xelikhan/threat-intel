@@ -41,7 +41,6 @@ const BUILDERS = {
     ip:     v => `https://search.censys.io/hosts/${enc(v)}`,
     domain: v => `https://search.censys.io/domains/${enc(v)}`,
   },
-  'CrowdSec':        { ip: v => `https://app.crowdsec.net/cti/${enc(v)}` },
   'Criminal IP':     { ip: v => `https://www.criminalip.io/asset/report/${enc(v)}` },
   'DShield · SANS ISC': { ip: v => `https://isc.sans.edu/ipinfo/${enc(v)}` },
   'Feodo Tracker':   { ip: v => `https://feodotracker.abuse.ch/browse/host/${enc(v)}/` },
@@ -111,7 +110,6 @@ const BUILDERS = {
   // record page surfaces "Known Exploited" status directly when it
   // applies.
   'CISA KEV':        { cve:  v => `https://www.cve.org/CVERecord?id=${enc(v)}` },
-  'Cert Transparency': { domain: v => `https://crt.sh/?q=${enc(v)}` },
   'Wayback':         { domain: v => `https://web.archive.org/web/*/${enc(v)}` },
 };
 

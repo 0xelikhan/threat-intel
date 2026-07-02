@@ -389,9 +389,8 @@ def score_url(enrichment: dict) -> GTIScore:
     Score a URL.
     GTI URL logic similar to Domain, tailored for URL-specific properties.
 
-    Field-name note: the backend writes urlhaus_url (not urlhaus). The
-    PhishTank source was removed when the operator deprecated it; URL
-    scoring now relies on VT, URLhaus, and the trained phishing-URL
+    Field-name note: the backend writes urlhaus_url (not urlhaus). URL
+    scoring relies on VT, URLhaus, and the trained phishing-URL
     classifier (intel/phishing_url_classifier.py) — the latter lands as
     'phishing_classifier' in per-source enrichment.
     """
@@ -410,8 +409,7 @@ def score_url(enrichment: dict) -> GTIScore:
     uh_hit    = bool(urlhaus) and urlhaus.get("verdict") == "MALICIOUS"
     uh_threat = urlhaus.get("threat") or ""
     # phishing_classifier writes {probability, is_phish, confidence}.
-    # High-confidence trained-model hits substitute for the old PhishTank
-    # confirmed-phish signal.
+    # High-confidence trained-model hits drive the MALICIOUS verdict.
     pc_prob  = float(pc.get("probability") or 0.0)
     pc_hit   = bool(pc.get("is_phish")) and pc_prob >= 0.85
 

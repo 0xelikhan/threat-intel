@@ -87,11 +87,7 @@ async def analyze_log(log_text: str) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Full configured key set so MCP tool callers get the same enrichment
-# coverage as /api/analyze. The earlier cherry-picked subsets silently
-# dropped abuse.ch unified auth, Hybrid Analysis, Censys, CrowdSec,
-# Criminal IP, ProxyCheck, Maltiverse, OpenCTI, FullHunt, WhoisXML,
-# and Google Safe Browsing — making the MCP "lookup" tools quietly
-# weaker than the docstrings promised.
+# coverage as /api/analyze.
 def _mcp_keys(cfg) -> dict:
     return {k: cfg.get(k) for k in (
         "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "IPINFO_TOKEN", "GREYNOISE_KEY",
@@ -112,10 +108,10 @@ async def lookup_ip(ip: str) -> dict:
     """Comprehensive IP reputation across all configured sources.
 
     Sources: offline blocklists (52K+ IPs), AbuseIPDB, VirusTotal, GreyNoise,
-    OTX, IPInfo geolocation, Tor exit list, Censys, CrowdSec, Criminal IP,
-    ProxyCheck, Maltiverse, OpenCTI, CIRCL passive DNS, Robtex, Hackertarget
-    reverse-IP, Feodo Tracker active-C2 list, Google Safe Browsing, ASN
-    reputation (flags bulletproof hosters / VPNs / anonymizers).
+    OTX, IPInfo geolocation, Tor exit list, Censys, Criminal IP, ProxyCheck,
+    Maltiverse, OpenCTI, Robtex, Hackertarget reverse-IP, Feodo Tracker
+    active-C2 list, Google Safe Browsing, ASN reputation (flags bulletproof
+    hosters / VPNs / anonymizers).
     """
     from config import config as _cfg
     from agents.enrichment import enrich_ip
@@ -128,11 +124,10 @@ async def lookup_ip(ip: str) -> dict:
 async def lookup_domain(domain: str) -> dict:
     """Comprehensive domain reputation + heuristics.
 
-    Sources: VirusTotal, URLScan, OTX, Pulsedive, certificate transparency,
-    WHOIS / WhoisXML, Wayback Machine, Spamhaus DBL, Maltiverse, OpenCTI,
-    FullHunt subdomain inventory, Google Safe Browsing, DNS records, plus
-    offline heuristics: NRD age, same-day registration flag, DGA score,
-    IDN / punycode attack detection, typosquat brand matching.
+    Sources: VirusTotal, URLScan, OTX, Pulsedive, WHOIS / WhoisXML, Wayback
+    Machine, Spamhaus DBL, Maltiverse, OpenCTI, Google Safe Browsing, DNS
+    records, plus offline heuristics: NRD age, same-day registration flag,
+    DGA score, IDN / punycode attack detection, typosquat brand matching.
     """
     from config import config as _cfg
     from agents.enrichment import enrich_domain
