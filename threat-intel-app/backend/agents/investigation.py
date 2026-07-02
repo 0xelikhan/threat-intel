@@ -1558,7 +1558,7 @@ Tool-budget tips:
                     "## ENRICHMENT SUMMARY (server-side empirical baseline — quote in your summary)\n"
                     + enrichment_summary_line,
                 ]
-                _iocs_dump = json.dumps(state.get("iocs", {}) or {}, indent=2)[:1000]
+                _iocs_dump = json.dumps(state.get("iocs", {}) or {}, separators=(",", ":"))[:800]
                 if _iocs_dump.strip() not in ("", "{}"):
                     _sections.append(f"## Extracted IOCs\n{_iocs_dump}")
                 if cross_ctx and cross_ctx.strip() and cross_ctx.strip() != "(none)":
@@ -1578,13 +1578,13 @@ Tool-budget tips:
                 if _bi_cats:
                     _sections.append(
                         "## Behavioral / TTP indicators extracted from raw input (spec §1 — pre-enrichment)\n"
-                        + json.dumps(_bi_cats, indent=2)[:2000]
+                        + json.dumps(_bi_cats, separators=(",", ":"))[:1600]
                     )
                 _payloads = (state.get("behavioral_indicators") or {}).get("decoded_payloads") or []
                 if _payloads:
                     _sections.append(
                         "## Decoded payloads (base64 / hex / unicode / fromCharCode / etc. — already deobfuscated by triage)\n"
-                        + json.dumps(_payloads, indent=2)[:1200]
+                        + json.dumps(_payloads, separators=(",", ":"))[:1000]
                     )
                 else:
                     # Only inline the "don't hallucinate decoded content" rule
@@ -1605,13 +1605,13 @@ Tool-budget tips:
                             {k: {"score": v.get("score"), "verdict": v.get("verdict"),
                                  "top_factors": [(f["factor"], f["points"]) for f in (v.get("factors") or [])[:4]]}
                              for k, v in _conf_scores.items()},
-                            indent=2,
-                        )[:2000]
+                            separators=(",", ":"),
+                        )[:1600]
                     )
                 if compressed:
                     _sections.append(
                         "## Baseline enrichment summary (do NOT re-query these IPs/domains/hashes)\n"
-                        + json.dumps(compressed, indent=2)[:2800]
+                        + json.dumps(compressed, separators=(",", ":"))[:2200]
                     )
                 _sections.append(
                     "Investigate this alert. Use tools as needed to fill gaps. "
@@ -1636,7 +1636,7 @@ Tool-budget tips:
                         tools=TOOL_SCHEMAS,
                         tool_choice="auto",
                         temperature=0.1,
-                        max_tokens=800,
+                        max_tokens=400,
                     )
                     if resp.error:
                         raise RuntimeError(resp.error)
@@ -2023,7 +2023,7 @@ Tool-budget tips:
                     model=config.get_model(),   # smart
                     messages=[{"role": "user", "content": PROMPT.format(
                         raw_input=_raw_for_fallback[:2400],
-                        enrichments=json.dumps(compressed, indent=2)[:5000] or "(empty — log-only analysis required)",
+                        enrichments=json.dumps(compressed, separators=(",", ":"))[:4000] or "(empty — log-only analysis required)",
                         alert_type=alert_type,
                         triage_score=round(triage_score, 2),
                         cross_ctx=cross_ctx or "(none)",
