@@ -1176,7 +1176,25 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
         yield f"data: {json.dumps({'event': 'partial_result', 'runId': run_id, 'result': _strip(state, run_id, label)})}\n\n"
 
         # ── Stage 4: RESPONSE (Sigma/KQL/multi-SIEM/analyst hand-off) ───────
-        state = await run_response(state)
+        # Stream the analyst_summary as tokens arrive so the disposition
+        # + reason land in the UI live instead of blocking the analyst
+        # for 5-10s on the LLM completion.
+        rsp_q: asyncio.Queue = asyncio.Queue()
+        async def _on_rsp_event(entry, _q=rsp_q):
+            if entry.get("type") == "analyst_summary_partial":
+                # Emit as partial_result with the analyst_summary slotted
+                # into response_summary so the frontend's existing partial
+                # merge path picks it up without any new event handler.
+                await _q.put(("partial", {
+                    "response_summary": {
+                        "analyst_summary": entry.get("analyst_summary") or {},
+                    },
+                }))
+        rsp_task = asyncio.create_task(run_response(state, on_event=_on_rsp_event))
+        _bg_tasks.append(rsp_task)
+        async for frame in _drain_events(rsp_task, rsp_q, run_id, label):
+            yield frame
+        state = await rsp_task
         trace = state.get("agent_trace", [])
         if trace:
             yield f"data: {json.dumps({'event': 'agent_update', 'runId': run_id, 'trace': trace[-1]})}\n\n"

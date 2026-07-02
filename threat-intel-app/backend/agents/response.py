@@ -354,26 +354,85 @@ def _make_client(config):
         return None
 
 
-async def _ai_call_json(prompt: str, config, max_tokens: int = 1400) -> dict:
+async def _ai_call_json(prompt: str, config, max_tokens: int = 1400,
+                         on_partial=None) -> dict:
+    """Fast-tier JSON completion with optional streaming.
+
+    When `on_partial` is provided, the call switches to streaming mode:
+    each chunk arrival triggers a truncation-tolerant re-parse and calls
+    on_partial(dict) with whatever fields are already complete. The
+    frontend can render disposition + reason live as they arrive instead
+    of waiting 5-10s for the full response.
+    """
     provider = _make_client(config)
     if not provider:
         return {}
-    resp = await provider.complete(
-        model=config.get_model(fast=True),
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=max_tokens,
-        temperature=0.1,
-        response_format={"type": "json_object"},
-    )
-    if resp.error:
-        return {}
-    # Truncation-tolerant parse so a capped response keeps its completed
-    # fields instead of returning {} (lets us run a tighter token budget).
     from agents.investigation import _loads_lenient
-    return _loads_lenient(resp.message)
+
+    if on_partial is None:
+        # Legacy non-streaming path — kept for callers that don't wire SSE.
+        resp = await provider.complete(
+            model=config.get_model(fast=True),
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=max_tokens,
+            temperature=0.1,
+            response_format={"type": "json_object"},
+        )
+        if resp.error:
+            return {}
+        return _loads_lenient(resp.message)
+
+    # Streaming path — accumulate deltas, re-parse periodically, emit
+    # partial dicts through on_partial. Throttle to at most one emit
+    # every 6 chunks so we don't fire 500 partials for a 700-token
+    # response.
+    accumulated = []
+    last_emit_at = 0
+    try:
+        async for chunk in provider.stream(
+            model=config.get_model(fast=True),
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=max_tokens,
+            temperature=0.1,
+            response_format={"type": "json_object"},
+        ):
+            if chunk.error:
+                break
+            if chunk.delta_text:
+                accumulated.append(chunk.delta_text)
+                if len(accumulated) - last_emit_at >= 6:
+                    last_emit_at = len(accumulated)
+                    partial = _loads_lenient("".join(accumulated))
+                    if isinstance(partial, dict) and partial:
+                        try:
+                            await on_partial(partial)
+                        except Exception as _e:
+                            _log.debug("analyst_summary on_partial failed: %s", _e)
+    except Exception as _e:
+        _log.warning("analyst_summary stream failed, falling back: %s", _e)
+        # Streaming path failed — fall back to non-streaming completion
+        # so the analysis still lands.
+        resp = await provider.complete(
+            model=config.get_model(fast=True),
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=max_tokens,
+            temperature=0.1,
+            response_format={"type": "json_object"},
+        )
+        if resp.error:
+            return {}
+        return _loads_lenient(resp.message)
+    return _loads_lenient("".join(accumulated))
 
 
-async def run_response(state: dict) -> dict:
+async def run_response(state: dict, on_event=None) -> dict:
+    """Response synthesis stage.
+
+    on_event(entry) — optional streaming callback the orchestrator wires
+    into the SSE writer. Enables progressive rendering of the analyst
+    summary (disposition + reason appear as the LLM emits them, rather
+    than the analyst waiting 5-10s for the full JSON to land).
+    """
     from config import config
     from gti_score import compute_gti_scores
     import time
@@ -777,12 +836,84 @@ PROSE STYLE: do NOT use em dashes (—) or en dashes (–) anywhere in the
 output. Use commas, periods, or restructure the sentence instead. The
 analyst's UI strips them out, so writing them is wasted tokens."""
 
-    # Detection content (Sigma/KQL/multi-SIEM) is generated ON DEMAND from the UI
-    # via /api/detection — it's the slowest part of this stage and isn't needed on
-    # every alert. Here we only generate the analyst Summary (the verdict hand-off),
-    # which keeps the response stage to a single AI call. The trimmed schema (no
-    # client email / IR playbook — neither is shown in the UI) needs little headroom.
-    analyst_summary = await _ai_call_json(analyst_prompt, config, max_tokens=700)
+    # ── DETERMINISTIC CLEAR FAST-PATH ─────────────────────────────────────
+    # When the tier framework says the alert is unambiguously benign, we
+    # can skip the analyst_summary LLM call entirely (saves ~5-10s per
+    # alert). Trigger conditions:
+    #   * verdict_floor = INFORMATIONAL or LOW
+    #   * threat_level  = INFORMATIONAL or LOW
+    #   * no TIER 1 or TIER 2 signals fired
+    #   * at least one DOWNWEIGHT signal fired
+    #   * no operator analyst note (analyst text needs the LLM to ACK it)
+    #   * no analyst feedback re-run (re-runs must respect analyst input)
+    _floor_benign = (_tier_signals.get("verdict_floor") or "").upper() in ("INFORMATIONAL", "LOW")
+    _tl_benign    = (threat_level or "").upper() in ("INFORMATIONAL", "LOW")
+    _no_pos_sigs  = not _tier_signals.get("tier_1") and not _tier_signals.get("tier_2")
+    _has_downwt   = bool(_tier_signals.get("downweight"))
+    _no_notes     = not (_operator_note or state.get("analyst_feedback"))
+    _fast_path    = (_floor_benign and _tl_benign and _no_pos_sigs
+                     and _has_downwt and _no_notes)
+
+    if _fast_path:
+        _t_saved = time.perf_counter()
+        _dw_reasons = "; ".join(
+            (s.get("signal") if isinstance(s, dict) else str(s))
+            for s in _tier_signals["downweight"][:2]
+        )
+        # Synthesised disposition mirrors the shape the LLM would have
+        # returned so downstream defensive coercion + rendering paths
+        # keep working identically.
+        analyst_summary = {
+            "disposition":         "CLEAR",
+            "disposition_reason":  (
+                f"Deterministic verdict: tier framework classified this as "
+                f"informational activity. Downweight signals: {_dw_reasons}. "
+                f"No verdict-determining or corroborating tier signals fired."
+            ),
+            "escalation_steps":    [],
+            "intelligence_gaps":   [],
+            "analyst_caveats":     [
+                "Verdict produced by deterministic tier framework rather "
+                "than LLM analysis. If this alert's context differs from a "
+                "routine known-good pattern, re-analyze with an analyst note."
+            ],
+        }
+        _log.info("response.fast_path skip: saved LLM call (%.2fs elapsed to gate)",
+                  time.perf_counter() - _t_saved)
+        # Emit the deterministic verdict immediately so the UI lands the
+        # disposition without waiting for the remaining downstream work
+        # (STIX build, JA3 lookup, GTI compute, etc.). Same channel the
+        # streaming path uses, so the frontend needs no new event
+        # handler.
+        if on_event:
+            try:
+                await on_event({
+                    "type":             "analyst_summary_partial",
+                    "analyst_summary":  analyst_summary,
+                })
+            except Exception as _e:
+                _log.debug("fast_path partial emit failed: %s", _e)
+    else:
+        # Detection content (Sigma/KQL/multi-SIEM) is generated ON DEMAND from the UI
+        # via /api/detection — it's the slowest part of this stage and isn't needed on
+        # every alert. Here we only generate the analyst Summary (the verdict hand-off),
+        # which keeps the response stage to a single AI call. The trimmed schema (no
+        # client email / IR playbook — neither is shown in the UI) needs little headroom.
+        #
+        # Streaming — when the orchestrator wired an on_event callback,
+        # emit partial analyst_summary dicts as tokens arrive so the
+        # frontend can render the disposition + reason live.
+        _partial_cb = None
+        if on_event:
+            async def _emit_partial(partial: dict):
+                await on_event({
+                    "type":             "analyst_summary_partial",
+                    "analyst_summary":  partial,
+                })
+            _partial_cb = _emit_partial
+        analyst_summary = await _ai_call_json(
+            analyst_prompt, config, max_tokens=700, on_partial=_partial_cb
+        )
 
     # DISPOSITION SAFETY NET — the belt-and-braces enforcement of the
     # tier framework in intel/signal_priority.py. Even with the prompt-
