@@ -1152,28 +1152,6 @@ const _AI_FALLBACK_ACTIONS = new Set([
   'Review enrichment data manually.',
   'Configure OpenAI API key for AI analysis.',
 ]);
-function RecommendedActions({ rs, bare }) {
-  const items = asArray(rs?.recommended_actions)
-    .filter(a => typeof a === 'string' && a.trim() && !_AI_FALLBACK_ACTIONS.has(a.trim()));
-  if (!items.length) return null;
-  const body = (
-    <Box component="ol" sx={{ pl: 0, m: 0, listStyle: 'none' }}>
-      {items.map((a, i) => (
-        <Box component="li" key={i} sx={{
-          display: 'flex', gap: 1.25, py: 0.75,
-          borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
-          fontSize: 13, color: 'text.primary', lineHeight: 1.6,
-        }}>
-          <Box component="span" sx={{ color: 'success.main', minWidth: 18,
-            fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{i + 1}</Box>
-          <span>{a}</span>
-        </Box>
-      ))}
-    </Box>
-  );
-  if (bare) return body;
-  return <Card title="Recommended actions" accent="#16AD34">{body}</Card>;
-}
 
 // Senior-analyst context paragraph. Stored as a string on rs.analyst_notes
 // per investigation.py:865 — render as a soft prose block, not a textarea.
@@ -1222,13 +1200,13 @@ function Triage({ result, rs }) {
   const hasSandbox = Object.values(result?.enrichments?.hashes || {})
     .some(p => p?.sandbox_deep && p.sandbox_deep.process_tree);
 
-  const recActions = asArray(rs?.recommended_actions)
-    .filter(a => typeof a === 'string' && a.trim() && !_AI_FALLBACK_ACTIONS.has(a.trim()));
-  const hasRec = recActions.length > 0;
+  // Recommended actions moved to the Summary card as a Next Steps
+  // block — analysts need to see "what to do" immediately, not buried
+  // inside Triage. Only analyst_notes stays here for context prose.
   const hasNotes = !!(rs?.analyst_notes || '').trim();
 
   if (!hasLogs && !hasSup && !hasOsint && !hasBehavior
-      && !hasCross && !hasSandbox && !hasRec && !hasNotes
+      && !hasCross && !hasSandbox && !hasNotes
       && !hasUrlscan) return null;
 
   const Label = ({ children }) => (
@@ -1275,8 +1253,6 @@ function Triage({ result, rs }) {
         <InfrastructureIntel result={result} bare hideUrlscan/></Section>
       <Section show={hasSup}      label="Filtered as benign · MISP warninglists">
         <SuppressedIOCs result={result} bare/></Section>
-      <Section show={hasRec}      label="Recommended actions">
-        <RecommendedActions rs={rs} bare/></Section>
       <Section show={hasNotes}    label="Analyst notes">
         <AnalystNotes rs={rs} bare/></Section>
     </Card>
@@ -3167,6 +3143,73 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
           {enrichLine}
         </Typography>
       )}
+
+      {/* NEXT STEPS — consolidated action guidance. Two AI-produced
+          lists are merged here so the analyst sees "what to do" in one
+          place, deduped, right under the reasoning:
+            * escalation_steps  — concrete steps from the disposition
+                                   prompt when disposition == ESCALATE
+                                   (e.g. "Query Entra ID sign-in logs
+                                    for user X 24h back")
+            * recommended_actions — from the investigation prompt;
+                                   analyst-facing action guidance
+                                   regardless of disposition
+          Previously escalation_steps rendered NOWHERE and
+          recommended_actions was buried inside the Triage card. */}
+      {(() => {
+        const escSteps = asArray(a?.escalation_steps)
+          .filter(s => typeof s === 'string' && s.trim());
+        const recActs = asArray(rs?.recommended_actions)
+          .filter(s => typeof s === 'string' && s.trim()
+                        && !_AI_FALLBACK_ACTIONS.has(s.trim()));
+        // Dedup — escalation_steps and recommended_actions occasionally
+        // overlap when the LLM is being redundant. Simple token-overlap
+        // check drops the recommended_action when it's basically the
+        // same as an escalation step.
+        const _norm = s => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ')
+                             .trim().split(/\s+/).filter(w => w.length >= 4);
+        const _sim = (a1, b1) => {
+          const A = new Set(_norm(a1)); const B = new Set(_norm(b1));
+          if (!A.size || !B.size) return 0;
+          const inter = [...A].filter(t => B.has(t)).length;
+          return inter / Math.max(1, Math.min(A.size, B.size));
+        };
+        const dedupedRec = recActs.filter(r =>
+          !escSteps.some(e => _sim(e, r) >= 0.55));
+        const items = [...escSteps, ...dedupedRec].slice(0, 6);
+        if (!items.length) return null;
+        const isEscalate = a?.disposition === 'ESCALATE';
+        const accent = isEscalate ? dispColor : '#16AD34';
+        return (
+          <Box sx={{
+            mt: 2, mb: 1.5,
+            backgroundColor: muiAlpha(accent, 0.06),
+            border: `1px solid ${muiAlpha(accent, 0.25)}`,
+            borderLeft: `3px solid ${accent}`,
+            borderRadius: '4px', p: '10px 14px',
+          }}>
+            <Typography sx={{ fontSize: 10.5, fontWeight: 700, color: accent,
+              textTransform: 'uppercase', letterSpacing: '0.08em', mb: 0.75 }}>
+              {isEscalate ? 'Next steps · escalate' : 'Recommended actions'}
+            </Typography>
+            <Box component="ol" sx={{ pl: 0, m: 0, listStyle: 'none' }}>
+              {items.map((step, i) => (
+                <Box component="li" key={i} sx={{
+                  display: 'flex', gap: 1.25, py: 0.5,
+                  borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
+                  fontSize: 13, color: 'text.primary', lineHeight: 1.55,
+                }}>
+                  <Box component="span" sx={{ color: accent, minWidth: 18,
+                    fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                    {i + 1}
+                  </Box>
+                  <span>{step}</span>
+                </Box>
+              ))}
+            </Box>
+          </Box>
+        );
+      })()}
 
       {/* When this run was re-analysed with analyst feedback, surface
           the analyst's exact statement above the train-on-FP form so

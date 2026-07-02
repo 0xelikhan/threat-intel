@@ -1002,7 +1002,11 @@ analyst's UI strips them out, so writing them is wasted tokens."""
     # template). LLM occasionally returns them as a single string or
     # nested dict; the React renderer's `.map()` would crash.
     if isinstance(analyst_summary, dict):
-        for _k in ("intelligence_gaps", "analyst_caveats"):
+        # escalation_steps added to this coercion — the frontend Next
+        # Steps block calls .filter() on it, which crashes on non-array
+        # values. LLM occasionally emits a single string here when the
+        # model condenses the list.
+        for _k in ("intelligence_gaps", "analyst_caveats", "escalation_steps"):
             _v = analyst_summary.get(_k)
             if isinstance(_v, list):
                 continue
