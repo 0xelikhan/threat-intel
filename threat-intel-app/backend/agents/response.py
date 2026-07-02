@@ -469,6 +469,32 @@ async def run_response(state: dict) -> dict:
     _flagged_map = (_enr_sum.get("flagged_per_ioc") or {})
     _enr_line    = (_enr_sum.get("line") or "").strip()
 
+    # Deterministic tier bucketing — computed BEFORE the LLM sees the
+    # evidence pack so the model can't rationalise a CLEAR when a
+    # TIER 1 signal is present. See intel/signal_priority.py.
+    try:
+        from intel.signal_priority import (
+            extract_tier_signals as _extract_tiers,
+            format_signal_correlation as _format_correlation,
+        )
+        _tier_signals = _extract_tiers({
+            **state,
+            "investigation_result": investigation,
+            "response_summary": {  # partial — case_score not built yet
+                "cross_refs":    rs_cross,
+                "matched_actors": matched_actors,
+                "malware_family": investigation.get("malware_family")
+                                  or state.get("malware_family"),
+            },
+        })
+        _correlation_prose = _format_correlation(state, _tier_signals)
+    except Exception as _e:
+        _log.warning("signal_priority extraction failed: %s", _e)
+        _tier_signals = {"tier_1": [], "tier_2": [], "tier_3": [],
+                         "downweight": [], "verdict_floor": threat_level,
+                         "block_clear": False}
+        _correlation_prose = ""
+
     evidence_pack = {
         "alert_text_first_300": (state.get("raw_input_clean") or state.get("raw_input") or "")[:300],
         # Analyst commentary the operator typed in the analyze textbox
@@ -480,6 +506,14 @@ async def run_response(state: dict) -> dict:
         # in this dict it didn't happen.
         "ground_truth_flagged":  _flagged_map,
         "enrichment_summary":    _enr_line,
+        # Signal tier framework — the LLM MUST read this first. If
+        # tier_1 is non-empty, CLEAR is blocked deterministically.
+        "signal_tier_1_present":  [s["signal"] for s in _tier_signals["tier_1"]],
+        "signal_tier_2_present":  [s["signal"] for s in _tier_signals["tier_2"]],
+        "signal_tier_3_present":  [s["signal"] for s in _tier_signals["tier_3"]],
+        "signal_downweight":      [s["signal"] for s in _tier_signals["downweight"]],
+        "signal_verdict_floor":   _tier_signals["verdict_floor"],
+        "signal_block_clear":     _tier_signals["block_clear"],
         "key_findings":          investigation.get("key_findings", [])[:6],
         "correlated_signals":   investigation.get("correlated_signals", [])[:5],
         "ioc_assessments":      investigation.get("ioc_assessments", [])[:8],
@@ -556,7 +590,42 @@ Confidence (0-1)           : {state.get('confidence', 0.0)}
 One-line summary           : {summary}
 MITRE techniques mapped    : {mitre_str}
 
-Evidence pack:
+══════════════════════════════════════════════════════════════════════════════════
+SIGNAL PRIORITY LADDER — READ THIS BEFORE PICKING DISPOSITION
+══════════════════════════════════════════════════════════════════════════════════
+The tier framework below was computed DETERMINISTICALLY from the raw log +
+enrichment data, BEFORE you saw the evidence. It represents the strongest
+signals fired, ranked by their verdict weight. Your disposition MUST respect
+the verdict floor and the block_clear flag — those are not suggestions, they
+are the codified analyst calibration.
+
+{_correlation_prose if _correlation_prose else "  (no significant signals fired — evidence is thin)"}
+
+══════════════════════════════════════════════════════════════════════════════════
+CORRELATION APPROACH (this is where bad dispositions come from — do this right)
+══════════════════════════════════════════════════════════════════════════════════
+Answer these questions IN ORDER before you write disposition_reason:
+
+  1. Which TIER 1 signals fired?            → those set the verdict floor
+  2. Which TIER 2 signals corroborate?      → those raise confidence
+  3. Which DOWNWEIGHT signals fired?        → only relevant when no TIER 1/2
+  4. Do the tiers align or conflict?
+        * All point same direction → high-confidence verdict
+        * TIER 1 fires + DOWNWEIGHT fires → TIER 1 WINS. The downweight
+          reasons are not enough to overrule a nation-state / KEV /
+          malware-family / cred-access / MFA-bypass finding.
+        * No TIER 1/2, only DOWNWEIGHT → lean CLEAR/MONITOR
+  5. Match your disposition to the strongest tier fired:
+        * Any TIER 1     → ESCALATE (or MONITOR only if signal_block_clear
+                            is False AND the log itself only marked
+                            "Medium" risk)
+        * ≥2 TIER 2      → ESCALATE
+        * 1 TIER 2       → ESCALATE if no downweight; MONITOR otherwise
+        * Only TIER 3    → MONITOR or CLEAR (context, not verdict)
+        * DOWNWEIGHT only→ CLEAR
+
+Evidence pack (raw JSON — refer to the tier ladder above for the correlated
+view; use the JSON to pull specific evidence values to cite):
 {json.dumps(evidence_pack, indent=2)[:3500]}
 
 ══════════════════════════════════════════════════════════════════════════════════
@@ -714,6 +783,43 @@ analyst's UI strips them out, so writing them is wasted tokens."""
     # which keeps the response stage to a single AI call. The trimmed schema (no
     # client email / IR playbook — neither is shown in the UI) needs little headroom.
     analyst_summary = await _ai_call_json(analyst_prompt, config, max_tokens=700)
+
+    # DISPOSITION SAFETY NET — the belt-and-braces enforcement of the
+    # tier framework in intel/signal_priority.py. Even with the prompt-
+    # level guardrails, LLMs sometimes still emit CLEAR when a TIER 1
+    # signal fired. Force-upgrade CLEAR → ESCALATE and stamp a machine-
+    # readable reason on override_reason so the analyst can see why.
+    # This is what actually stops the "Storm-#### signed in, clean IP,
+    # safe to clear" contradiction from reaching production.
+    try:
+        if isinstance(analyst_summary, dict) \
+                and analyst_summary.get("disposition") == "CLEAR" \
+                and _tier_signals.get("block_clear"):
+            from intel.signal_priority import should_block_clear as _should_block
+            _blocked, _reason = _should_block({
+                **state,
+                "investigation_result": investigation,
+                "response_summary": {
+                    "cross_refs":    rs_cross,
+                    "matched_actors": matched_actors,
+                    "malware_family": investigation.get("malware_family")
+                                      or state.get("malware_family"),
+                },
+            })
+            if _blocked:
+                original_reason = analyst_summary.get("disposition_reason", "")
+                analyst_summary["disposition"] = "ESCALATE"
+                analyst_summary["disposition_reason"] = (
+                    f"AUTO-OVERRIDE: model recommended CLEAR but "
+                    f"{_reason} Upgraded to ESCALATE. "
+                    f"Model's original reason: {original_reason[:400]}"
+                )
+                analyst_summary["safety_net_override"] = _reason
+                _log.warning("disposition safety net fired: CLEAR → ESCALATE (%s)",
+                             _reason)
+    except Exception as _e:
+        _log.debug("disposition safety net failed: %s", _e)
+
     # Strip em / en dashes from every prose field the analyst will read in
     # the Summary card. The AI tends to insert " — " between clauses; the
     # CLAUDE.md convention is to avoid em dashes in user-facing strings
