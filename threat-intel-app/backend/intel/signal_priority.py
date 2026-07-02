@@ -146,7 +146,8 @@ _UPSTREAM_HIGH_RISK_PATTERNS = [
 ]
 
 # Credential-access + MFA-bypass markers from raw log content. Reduces
-# reliance on behavioral_indicators alone.
+# reliance on behavioral_indicators alone. Includes Unix credential
+# targets (/etc/shadow, /etc/passwd, ~/.ssh/id_rsa) alongside Windows.
 _CREDENTIAL_ACCESS_PATTERNS = [
     re.compile(r"\bLSASS\b"),
     re.compile(r"\bDCSync\b", re.I),
@@ -158,6 +159,17 @@ _CREDENTIAL_ACCESS_PATTERNS = [
     re.compile(r"\bsession\s+token\s+replay\b", re.I),
     re.compile(r"\bpass[- ]the[- ]hash\b", re.I),
     re.compile(r"\bpass[- ]the[- ]ticket\b", re.I),
+    # Linux credential targets
+    re.compile(r"(?:cat|less|more|head|tail|dd\s+if=)\s+/etc/shadow\b", re.I),
+    re.compile(r"(?:cat|less|more|head|tail|dd\s+if=)\s+/etc/passwd\b", re.I),
+    re.compile(r"/etc/shadow\b.*\b(?:copied|exfiltrated|accessed)", re.I | re.S),
+    re.compile(r"(?:cat|scp|curl|wget)\s+.*?~?/\.ssh/id_[a-z0-9_]+\b", re.I),
+    re.compile(r"\.ssh/id_rsa\b.*(?:exfiltrated|leaked|read|copied)", re.I | re.S),
+    # macOS credential targets — Keychain, TCC.db (holds sensitive perms)
+    re.compile(r"\blogin\.keychain(-db)?\b.*(?:accessed|copied|read|dumped)", re.I | re.S),
+    re.compile(r"\bsecurity\s+dump-keychain\b", re.I),
+    re.compile(r"\bsecurity\s+find-generic-password\b.*-w\b", re.I),
+    re.compile(r"\bTCC\.db\b.*(?:modified|inserted\s+into|updated)", re.I | re.S),
 ]
 
 # Ransomware behavioural markers.
@@ -218,6 +230,237 @@ _CLOUD_ATTACK_PATTERNS = [
     re.compile(r"\bCreateAccessKey\b.*(?:contractor|external|new-user|guest)", re.I | re.S),
     # Suspicious AWS API from unusual IP (Moscow / Beijing / Tehran / known-bad)
     re.compile(r"\bMoscow\b.*\b(?:AWS|IAM|GuardDuty|CloudTrail)\b", re.I | re.S),
+]
+
+# ──────────────────────────────────────────────────────────────────────
+# LINUX ATTACK PATTERNS
+# ──────────────────────────────────────────────────────────────────────
+# TIER 1 — verdict-determining. Reverse shells, container escape,
+# kernel rootkit indicators, log-tampering. These are unambiguously
+# malicious on any Linux host.
+_LINUX_TIER1_PATTERNS = [
+    # Reverse shells — bash/nc/python/perl/ruby/php/socat variants
+    ("reverse shell (bash /dev/tcp)",
+     re.compile(r"\bbash\s+-i\s*>\s*&\s*/dev/tcp/", re.I)),
+    ("reverse shell (bash /dev/tcp) — alt form",
+     re.compile(r"/dev/tcp/\d{1,3}(?:\.\d{1,3}){3}/\d{1,5}", re.I)),
+    ("reverse shell (nc -e)",
+     re.compile(r"\bnc(?:at)?\s+-e\s+(?:/bin/(?:sh|bash|dash)|cmd\.exe)", re.I)),
+    ("reverse shell (nc mkfifo)",
+     re.compile(r"\bmkfifo\s+.*?nc(?:at)?\s+.*?\d{1,3}(?:\.\d{1,3}){3}", re.I | re.S)),
+    ("reverse shell (python socket)",
+     re.compile(r"python\d?\s+-c\s+['\"].*?socket\.socket\(.*?\.connect\(", re.I | re.S)),
+    ("reverse shell (perl socket)",
+     re.compile(r"perl\s+-e\s+['\"].*?socket\(S,PF_INET", re.I | re.S)),
+    ("reverse shell (socat)",
+     re.compile(r"\bsocat\s+.*?tcp[-:]connect:", re.I)),
+    ("reverse shell (php)",
+     re.compile(r"php\s+-r\s+['\"].*?fsockopen\(", re.I | re.S)),
+
+    # Container escape indicators
+    ("container escape — /proc/1/root mount",
+     re.compile(r"mount\s+.*?/proc/1/root", re.I)),
+    ("container escape — docker.sock mounted",
+     re.compile(r"/var/run/docker\.sock(?:\s+mounted|.*mounted\s+into)", re.I)),
+    ("container escape — privileged container",
+     re.compile(r"privileged\s*:\s*true\b|--privileged\b", re.I)),
+    ("container escape — hostPath / hostNetwork",
+     re.compile(r"\bhostPath\s*:|hostNetwork\s*:\s*true\b|hostPID\s*:\s*true\b", re.I)),
+    ("container escape — cgroups notify_on_release",
+     re.compile(r"notify_on_release.*release_agent", re.I | re.S)),
+
+    # Kernel rootkit / module load
+    ("kernel module load (insmod / rootkit)",
+     re.compile(r"\binsmod\s+.*?\.ko\b", re.I)),
+    ("kernel module load with suspicious path",
+     re.compile(r"\bmodprobe\s+.*?/tmp/|/dev/shm/", re.I)),
+    ("/dev/kmem or /dev/mem write",
+     re.compile(r"write\s+to\s+/dev/(?:kmem|mem)\b", re.I)),
+
+    # LD_PRELOAD injection
+    ("LD_PRELOAD injection",
+     re.compile(r"\bLD_PRELOAD\s*=\s*(?:['\"]?/tmp/|/dev/shm/|['\"]?[^\s]+\.so)", re.I)),
+    ("LD_LIBRARY_PATH hijack to /tmp",
+     re.compile(r"\bLD_LIBRARY_PATH\s*=\s*[^\s]*/tmp/", re.I)),
+
+    # Log tampering
+    ("audit log tampered",
+     re.compile(r"(?:>\s*|truncate.*?)/var/log/(?:audit/)?audit\.log", re.I)),
+    ("bash history cleared / redirected",
+     re.compile(r"(?:>\s*~?/\.bash_history|unset\s+HISTFILE|history\s+-c\s*&&\s*)", re.I)),
+
+    # Passwd/shadow direct modification
+    ("passwd/shadow direct write",
+     re.compile(r"(?:echo\s+.*?>>|>\s*)/etc/(?:passwd|shadow|sudoers)\b", re.I)),
+
+    # Cryptominer named
+    ("cryptominer (xmrig / cpuminer / t-rex / phoenixminer)",
+     re.compile(r"\b(?:xmrig|cpuminer|t-rex|phoenixminer|nsfminer|nbminer|nanominer)\b", re.I)),
+    ("monero pool connection",
+     re.compile(r"\b(?:supportxmr|nanopool|minergate|monerohash|pool\.hashvault)\.com\b", re.I)),
+
+    # SUID escalation
+    ("SUID bit added to unusual binary",
+     re.compile(r"\bchmod\s+(?:[+]?4[0-7]{3}|u[+]s)\s+/(?:tmp|home|var/tmp|dev/shm)/", re.I)),
+]
+
+# TIER 2 — corroborating Linux attack signals.
+_LINUX_TIER2_PATTERNS = [
+    # auditd EXECVE with suspicious command
+    ("auditd EXECVE curl|bash pattern",
+     re.compile(r"type=EXECVE.*?(?:curl|wget)\s+[^\s]+\s*\|\s*(?:bash|sh|python|perl)", re.I)),
+    ("curl piped to shell",
+     re.compile(r"(?:curl|wget)\s+(?:-[a-z]+\s+)*(?:https?://)?[^\s|]+\s*\|\s*(?:bash|sh|zsh)", re.I)),
+
+    # SELinux AVC denials against sensitive contexts
+    ("SELinux AVC denied for shell exec from unusual context",
+     re.compile(r"avc:\s+denied\s+\{[^}]*(?:execute|execute_no_trans)[^}]*\}.*?(?:tmp_t|user_tmp_t|var_tmp_t)", re.I | re.S)),
+    ("SELinux AVC denied — passwd/shadow read",
+     re.compile(r"avc:\s+denied\s+\{[^}]*read[^}]*\}.*?shadow_t", re.I | re.S)),
+
+    # systemd persistence
+    ("systemd unit ExecStart in /tmp or /dev/shm",
+     re.compile(r"ExecStart\s*=\s*/(?:tmp|dev/shm|home/[^/]+/\.[^/]+)/", re.I)),
+    ("systemd service enabled from user tmp dir",
+     re.compile(r"systemctl\s+enable\s+.*?/(?:tmp|dev/shm)/", re.I)),
+
+    # cron persistence
+    ("cron persistence in /etc/cron paths",
+     re.compile(r"(?:echo\s+.*?>|>\s*|writing\s+to)/etc/cron\.(?:d|daily|hourly|weekly|monthly)/", re.I)),
+    ("crontab entry with suspicious payload",
+     re.compile(r"crontab.*?(?:curl|wget|base64\s+-d|\|\s*bash)", re.I | re.S)),
+
+    # SSH tunneling
+    ("SSH reverse port forward established",
+     re.compile(r"\bssh\s+.*?-R\s+\d+:", re.I)),
+    ("SSH dynamic proxy (SOCKS)",
+     re.compile(r"\bssh\s+.*?-D\s+\d+\b", re.I)),
+    ("SSH known-suspicious flag combo",
+     re.compile(r"\bssh\s+.*?-[a-zA-Z]*[fN]{1,2}[a-zA-Z]*\s+.*?-[a-zA-Z]*[LR]\s+", re.I)),
+
+    # sudo abuse
+    ("sudo NOPASSWD granted to unusual user",
+     re.compile(r"\bNOPASSWD\s*:\s*ALL\b", re.I)),
+    ("sudo su to root from service account",
+     re.compile(r"sudo\s+.*?(?:USER=root|TARGET=root).*?COMMAND=/bin/(?:sh|bash)", re.I | re.S)),
+
+    # Docker / Kubernetes
+    ("Docker socket exposed to container",
+     re.compile(r"-v\s+/var/run/docker\.sock:/var/run/docker\.sock", re.I)),
+    ("K8s pod created in kube-system by non-controller",
+     re.compile(r"kube-system.*?created.*?(?:serviceaccount|user)\s*:", re.I | re.S)),
+    ("K8s exec into pod with sh/bash",
+     re.compile(r"kubectl\s+exec\s+.*?--\s+(?:/bin/)?(?:sh|bash)\b", re.I)),
+
+    # fail2ban / brute-force
+    ("fail2ban banned IP after N attempts (large N)",
+     re.compile(r"fail2ban.*?[Bb]an\s+\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", re.I)),
+    ("sshd many failed passwords",
+     re.compile(r"sshd.*?Failed\s+password\s+for.*?\d{2,}\s+time", re.I | re.S)),
+
+    # Package manager unusual
+    ("apt/yum install from suspicious URL",
+     re.compile(r"(?:apt-get|yum|dnf|pacman)\s+install\s+.*?(?:https?://[^\s]+\.(?:tk|top|icu|xyz)|/tmp/)", re.I)),
+
+    # Firewall modification
+    ("iptables flush all rules",
+     re.compile(r"iptables\s+(?:-F|--flush)(?:\s+.*)?\s*(?:$|#|&&)", re.I | re.M)),
+    ("iptables allow C2 outbound",
+     re.compile(r"iptables\s+.*?-A\s+OUTPUT.*?-d\s+\d{1,3}(?:\.\d{1,3}){3}.*?-j\s+ACCEPT", re.I)),
+
+    # Bash history exfil
+    ("bash history exfil",
+     re.compile(r"\bcat\s+.*?~?/\.bash_history\b.*?(?:curl|wget|nc)", re.I | re.S)),
+
+    # New user creation
+    ("useradd with -o -u 0 (uid 0 backdoor)",
+     re.compile(r"useradd\s+.*?-u\s+0\b|adduser\s+.*?-uid\s+0\b", re.I)),
+]
+
+# ──────────────────────────────────────────────────────────────────────
+# macOS ATTACK PATTERNS
+# ──────────────────────────────────────────────────────────────────────
+# TIER 1 — LaunchDaemon persistence, TCC.db modification, quarantine
+# bypass, KEXT loading of unsigned code.
+_MACOS_TIER1_PATTERNS = [
+    # LaunchDaemon / LaunchAgent persistence
+    ("LaunchDaemon dropped in /Library/LaunchDaemons",
+     re.compile(r"/Library/LaunchDaemons/[a-z0-9_.\-]+\.plist\b.*?(?:created|written|dropped|installed)", re.I | re.S)),
+    ("LaunchAgent dropped in ~/Library/LaunchAgents",
+     re.compile(r"(?:~|/Users/[^/]+)/Library/LaunchAgents/[a-z0-9_.\-]+\.plist\b.*?(?:created|written|dropped)", re.I | re.S)),
+    ("launchctl load of unusual plist",
+     re.compile(r"launchctl\s+load\s+.*?(?:/tmp/|/var/tmp/|/private/tmp/)", re.I)),
+
+    # TCC.db bypass
+    ("TCC.db direct modification (privacy bypass)",
+     re.compile(r"/Library/Application Support/com\.apple\.TCC/TCC\.db\b.*(?:INSERT|UPDATE|modified|written)", re.I | re.S)),
+    ("sqlite3 write to TCC.db",
+     re.compile(r"sqlite3\s+.*?TCC\.db\s+.*?(?:INSERT|UPDATE|REPLACE)", re.I | re.S)),
+
+    # Quarantine attribute stripped
+    ("Gatekeeper bypass — quarantine xattr removed",
+     re.compile(r"xattr\s+-d\s+com\.apple\.quarantine\b", re.I)),
+    ("Gatekeeper disabled",
+     re.compile(r"\bspctl\s+--master-disable\b", re.I)),
+
+    # Unsigned KEXT load
+    ("KEXT load without valid signature",
+     re.compile(r"kextload\s+.*?(?:/tmp/|/Users/[^/]+/Downloads/)", re.I)),
+    ("kext-dev-mode / SIP disable",
+     re.compile(r"csrutil\s+(?:disable|clear)\b|kext-dev-mode\s*=\s*1", re.I)),
+
+    # osascript with suspicious payload
+    ("osascript do shell script with base64",
+     re.compile(r"osascript\s+-e\s+['\"].*?do\s+shell\s+script.*?base64", re.I | re.S)),
+    ("osascript do shell script with curl/wget/nc",
+     re.compile(r"osascript\s+-e\s+['\"].*?do\s+shell\s+script.*?(?:curl|wget|nc\s+-e)", re.I | re.S)),
+
+    # macOS reverse shell
+    ("macOS reverse shell (bash /dev/tcp)",
+     re.compile(r"\bbash\s+-i\s*>\s*&\s*/dev/tcp/", re.I)),  # also caught in Linux
+]
+
+# TIER 2 — corroborating macOS signals.
+_MACOS_TIER2_PATTERNS = [
+    # Persistence variants
+    ("login hook installed",
+     re.compile(r"defaults\s+write\s+com\.apple\.loginwindow\s+LoginHook", re.I)),
+    ("logout hook installed",
+     re.compile(r"defaults\s+write\s+com\.apple\.loginwindow\s+LogoutHook", re.I)),
+    ("Cron persistence on macOS",
+     re.compile(r"crontab\s+.*?(?:curl|wget|osascript|bash)", re.I | re.S)),
+
+    # Authorization changes
+    ("Authorization plist modification (rights removed)",
+     re.compile(r"/etc/authorization\b.*?(?:modified|written)", re.I | re.S)),
+    ("security authorizationdb modification",
+     re.compile(r"security\s+authorizationdb\s+write\b", re.I)),
+
+    # Detection notifications
+    ("XProtect / MRT match logged",
+     re.compile(r"\b(?:XProtect|MRT|MRTAgent)\b.*?(?:detected|blocked|found|remediated)", re.I | re.S)),
+    ("Gatekeeper blocked signed cert revoked",
+     re.compile(r"Gatekeeper.*?(?:signature\s+invalid|developer\s+ID\s+revoked)", re.I | re.S)),
+
+    # Endpoint Security Framework events
+    ("ES event: ES_EVENT_TYPE_NOTIFY_EXEC unusual",
+     re.compile(r"ES_EVENT_TYPE_NOTIFY_EXEC.*?(?:/tmp/|/private/tmp/|/Users/[^/]+/Downloads/)", re.I)),
+
+    # Application bundle in unusual location
+    ("app bundle created in /tmp",
+     re.compile(r"/(?:tmp|private/tmp)/[a-z0-9_.\-]+\.app\b", re.I)),
+
+    # Sandbox escape / entitlement abuse
+    ("codesign check bypass",
+     re.compile(r"codesign\s+.*?--force.*?--sign\s+-\s+", re.I)),
+
+    # Suspicious osascript execution
+    ("osascript spawned by unusual parent",
+     re.compile(r"parent\s*:\s*(?:Preview|Safari|Terminal|iTerm|Mail).*?osascript", re.I | re.S)),
+
+    # Common macOS malware families
+    ("named macOS malware family",
+     re.compile(r"\b(?:XLoader|Silver\s*Sparrow|Shlayer|OSAMiner|CDDS|Bundlore|XcodeSpy|iWebUpdate|CookieMiner|CrescentCore)\b", re.I)),
 ]
 
 # C2 / beaconing / covert-channel patterns.
@@ -529,6 +772,24 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
             _push(tier_1, name, f"matched pattern in raw alert content")
             break
 
+    # Linux TIER 1 — reverse shell, container escape, kernel rootkit,
+    # LD_PRELOAD, log tampering, passwd/shadow write, cryptominer.
+    for name, rx in _LINUX_TIER1_PATTERNS:
+        m = rx.search(log_text)
+        if m:
+            _push(tier_1, f"Linux: {name}",
+                  f"matched '{m.group(0)[:80]}'")
+            break
+
+    # macOS TIER 1 — LaunchDaemon/Agent persistence, TCC.db bypass,
+    # Gatekeeper bypass, unsigned KEXT load, osascript exec.
+    for name, rx in _MACOS_TIER1_PATTERNS:
+        m = rx.search(log_text)
+        if m:
+            _push(tier_1, f"macOS: {name}",
+                  f"matched '{m.group(0)[:80]}'")
+            break
+
     # VT >= 5 same IOC
     vt_hi_ioc = ""
     for _t, ioc, p in _iter_ioc_enrichments(state):
@@ -653,6 +914,26 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
         m = rx.search(log_text)
         if m:
             _push(tier_2, "C2 / covert-channel pattern",
+                  f"matched '{m.group(0)[:80]}'")
+            break
+
+    # Linux TIER 2 — auditd EXECVE, SELinux AVC, systemd/cron
+    # persistence, SSH tunneling, sudo abuse, Docker socket exposure,
+    # K8s privileged pod, fail2ban, package manager, iptables mods,
+    # bash history exfil, useradd uid=0.
+    for name, rx in _LINUX_TIER2_PATTERNS:
+        m = rx.search(log_text)
+        if m:
+            _push(tier_2, f"Linux: {name}",
+                  f"matched '{m.group(0)[:80]}'")
+            break
+
+    # macOS TIER 2 — login/logout hooks, cron, authorization plist,
+    # XProtect/MRT, Endpoint Security, macOS malware families.
+    for name, rx in _MACOS_TIER2_PATTERNS:
+        m = rx.search(log_text)
+        if m:
+            _push(tier_2, f"macOS: {name}",
                   f"matched '{m.group(0)[:80]}'")
             break
 
@@ -793,6 +1074,22 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
         r"\bDNS\s+tunnel(?:ing|ling)",
         r"\bknown\s+Tor\s+exit",
         r"\bknown\s+malicious\s+ip",
+        # Linux attack markers
+        r"\bbash\s+-i\s*>\s*&\s*/dev/tcp/",
+        r"\bnc(?:at)?\s+-e\s+/bin/(?:sh|bash)",
+        r"\bLD_PRELOAD\s*=\s*(?:/tmp/|/dev/shm/)",
+        r"\binsmod\s+.*?\.ko",
+        r"/var/run/docker\.sock",
+        r"\bprivileged\s*:\s*true",
+        r"\b(?:xmrig|cpuminer)\b",
+        r"\bcurl\s+[^\s|]+\s*\|\s*bash\b",
+        r"\bavc:\s+denied",
+        # macOS attack markers
+        r"/Library/LaunchDaemons/[a-z0-9_.\-]+\.plist",
+        r"\bTCC\.db\b.*(?:INSERT|UPDATE)",
+        r"\bxattr\s+-d\s+com\.apple\.quarantine",
+        r"\bcsrutil\s+disable",
+        r"\bosascript\s+.*?do\s+shell\s+script",
     ]
     _text_has_red_flag = any(re.search(p, log_text, re.I | re.S) for p in _text_red_flags)
     if all_clean and checked >= 2 and not tier_1 and not tier_2 and not _text_has_red_flag:
