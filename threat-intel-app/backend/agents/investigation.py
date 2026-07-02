@@ -1119,6 +1119,99 @@ async def run_investigation(state: dict, on_event=None) -> dict:
                 # debug so it surfaces only when chasing this code path.
                 _log.debug("on_event failed: %s", _e)
 
+    # ── BENIGN SHORT-CIRCUIT ──────────────────────────────────────────────
+    # When the deterministic tier framework already says the alert is
+    # unambiguously benign — no verdict-determining or corroborating
+    # signals, at least one downweight (known-good vendor, MISP
+    # warninglist, tenant permit), no operator note, no analyst feedback —
+    # skip the whole tool-loop + 3-way synth stage. Saves ~20-25s per
+    # benign alert. Downstream response.py's fast-path picks this up
+    # and skips its LLM call too, so the pipeline becomes triage +
+    # enrichment + a few ms of synthesis.
+    try:
+        from intel.signal_priority import extract_tier_signals
+        _tiers_early = extract_tier_signals(state)
+    except Exception as _e:
+        _log.debug("early tier extract failed: %s", _e)
+        _tiers_early = None
+    _has_note = bool((state.get("raw_input") or "").strip()
+                     and any(k in (state.get("raw_input") or "").lower()
+                             for k in ("analyst note", "analyst_note:")))
+    if (_tiers_early
+            and not _tiers_early.get("tier_1")
+            and not _tiers_early.get("tier_2")
+            and _tiers_early.get("downweight")
+            and (_tiers_early.get("verdict_floor") or "").upper() in ("INFORMATIONAL", "LOW")
+            and not state.get("analyst_feedback")
+            and not _has_note):
+        _log.info("investigation.benign_short_circuit: skipping tool-loop + synth")
+        _dw = _tiers_early["downweight"]
+        _dw_summary = "; ".join(
+            (s.get("signal") if isinstance(s, dict) else str(s)) for s in _dw[:2]
+        )
+        # Synthesise a minimal investigation_result. Downstream response.py
+        # reads every field via .get(..., default) with safe defaults, so
+        # the absence of tool-loop-derived fields (attack_chain_hypothesis,
+        # diamond_model, etc.) is harmless — they render as empty in the UI.
+        _synth_investigation = {
+            "threat_level":         "INFORMATIONAL",
+            "confidence":           0.90,
+            "summary":              (
+                "Deterministic short-circuit: enrichment came back clean and "
+                "downweight signals fired (" + _dw_summary + "). Skipped "
+                "tool-calling investigation."
+            ),
+            "threat_level_reasoning": (
+                "Signal-priority framework classified this as informational: "
+                "no TIER 1 or TIER 2 signals fired across enrichment or raw "
+                "log, and at least one DOWNWEIGHT signal grounded the verdict."
+            ),
+            "key_findings":         [],
+            "ioc_assessments":      [],
+            "mitre_techniques":     [],
+            "attack_patterns":      [],
+            "recommended_actions":  [],
+            "correlated_signals":   [],
+            "mitre_evidence":       [],
+            "chain_of_thought":     [],
+            "confirmed_facts":      [_dw_summary] if _dw_summary else [],
+            "analysis_assessment":  [],
+            "probing_questions":    [],
+            "diamond_model":        {},
+            "kill_chain":           {},
+            "pyramid_of_pain":      [],
+            "evidence_ratings":     [],
+            "attack_chain_hypothesis": "",
+            "confidence_basis":     "Deterministic tier-framework classification",
+            "false_positive_check": "Downweight signals present + no positive TI hits",
+            "assessment_basis":     [],
+            "attribution_hints":    None,
+            "geo_highlights":       [],
+            "tor_traffic":          False,
+            "verdict_classification": "not_malicious",
+            "needs_more_enrichment": False,
+            "malware_family":       "",
+            "enrichment_summary":   state.get("enrichment_summary", {}) or {},
+        }
+        # Trace entry so the UI shows the short-circuit reason inline.
+        trace_entry = {
+            "agent":     "investigation",
+            "status":    "complete",
+            "type":      "short_circuit",
+            "summary":   "Benign short-circuit — tier framework classified as informational",
+            "duration_ms": int((time.perf_counter() - _t_start) * 1000),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        await _emit(trace_entry)
+        trace = state.get("agent_trace", []) + [trace_entry]
+        return {
+            **state,
+            "investigation_result": _synth_investigation,
+            "threat_level":         "INFORMATIONAL",
+            "confidence":           0.90,
+            "agent_trace":          trace,
+        }
+
     enrichments = state.get("enrichments", {})
     trace = state.get("agent_trace", [])
     triage_score = state.get("triage_score", 0.0)
