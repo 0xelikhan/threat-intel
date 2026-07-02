@@ -961,6 +961,18 @@ analyst's UI strips them out, so writing them is wasted tokens."""
         # the frontend can render an "Updated based on analyst feedback"
         # banner and the case file persists the operator's verdict.
         "analyst_feedback":    state.get("analyst_feedback") or "",
+        # Signal tier bucketing — deterministic reasoning surface. The
+        # frontend renders a chip strip so the analyst sees the WHY
+        # (named-actor + upstream high-risk vs. warninglist + signed
+        # browser) in 2 seconds without reading the AI prose.
+        "signal_tiers":        {
+            "tier_1":        _tier_signals.get("tier_1")     or [],
+            "tier_2":        _tier_signals.get("tier_2")     or [],
+            "tier_3":        _tier_signals.get("tier_3")     or [],
+            "downweight":    _tier_signals.get("downweight") or [],
+            "verdict_floor": _tier_signals.get("verdict_floor") or threat_level,
+            "block_clear":   bool(_tier_signals.get("block_clear")),
+        },
     }
 
     # Case-level rollup score with letter grade + recency multipliers.
