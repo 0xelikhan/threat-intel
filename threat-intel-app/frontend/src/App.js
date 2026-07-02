@@ -3072,7 +3072,17 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
   //   3. Enrichment-summary line rendered as a small mono footer
   //      underneath, not as a trailing prose sentence.
   const dispReason = (a?.disposition_reason || '').trim();
-  const enrichLine = (rs?.enrichment_summary?.line || '').trim();
+  const enrichLine = (() => {
+    const line = (rs?.enrichment_summary?.line || '').trim();
+    // Hide the mono footer when there's nothing to summarise. The
+    // ThreatScore dial above already conveys "no IOCs, clean" — a
+    // second sentence saying "0 IOCs enriched, 0 flagged" is noise.
+    if (!line) return '';
+    if (/^\s*0\s+IOCs?\b/i.test(line) && !/flagged\s+[1-9]/i.test(line)) {
+      return '';
+    }
+    return line;
+  })();
   const _toks = (s) => new Set((s.toLowerCase().match(/[a-z0-9@.-]{4,}/g) || []));
   const _overlap = (x, y) => {
     if (!x || !y) return 0;
@@ -3188,7 +3198,13 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
         const gaps    = asArray(a?.intelligence_gaps);
         const caveats = asArray(a?.analyst_caveats);
         const cs      = rs?.case_score;
-        const hasCs   = cs && typeof cs.score === 'number';
+        // Hide the chip entirely when no signals actually fired — the
+        // ThreatScore dial + disposition pill above already convey
+        // "clean". "A1 · case score 0/100 · No significant signals" is
+        // pure noise on benign alerts.
+        const csHasSignal = cs && typeof cs.score === 'number'
+                            && (cs.score > 0 || (asArray(cs.drivers).length > 0));
+        const hasCs   = !!csHasSignal;
         if (!gaps.length && !caveats.length && !hasCs) return null;
         const csColor = !hasCs ? '#848592'
                       : cs.tier === 'CRITICAL'     ? '#EA4335'

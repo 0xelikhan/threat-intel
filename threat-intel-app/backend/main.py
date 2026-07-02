@@ -736,11 +736,10 @@ async def health(request: Request):
     timestamp} envelope. That's all a probe needs.
 
     Authenticated callers (the frontend dashboard reading via cookie)
-    get the full breakdown: which API keys are wired up, which
-    webhooks are available, the cache + circuit-breaker + diagnosis
-    rollups. The full payload used to leak to unauth callers — an
-    information disclosure surface (which TI sources are wired, which
-    webhook destinations are configured) for free reconnaissance.
+    get the full breakdown: which API keys are wired up, the cache +
+    circuit-breaker + diagnosis rollups. The full payload used to leak
+    to unauth callers — an information disclosure surface (which TI
+    sources are wired) for free reconnaissance.
     """
     is_authed = bool(current_user(request.session))
     base = {
@@ -2662,11 +2661,6 @@ async def api_docs(request: Request):
                 "method": "GET",  "path": "/api/export/stix/{run_id}",
                 "description": "Download STIX 2.1 bundle for a run.",
                 "example": f"curl {base}/api/export/stix/<run_id> -o bundle.stix.json",
-            },
-            {
-                "method": "POST", "path": "/api/webhook/{target}/{run_id}",
-                "description": "Push a result to Slack / Teams / TheHive / generic webhook. Targets must be configured in config.json.",
-                "example": f"curl -X POST {base}/api/webhook/slack/<run_id>",
             },
             {
                 "method": "POST", "path": "/api/detection",

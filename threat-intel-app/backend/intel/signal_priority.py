@@ -180,8 +180,19 @@ _LATERAL_MOVEMENT_PATTERNS = [
 ]
 
 # Known-good vendor pattern markers — DOWNWEIGHT signals when they
-# appear in the log.
+# appear in the log. Coverage includes:
+#   * management / EDR agents that generate high volumes of benign alerts
+#   * mainstream browsers + their signing certs (Google LLC, Microsoft
+#     Corporation, Mozilla Corporation) — the common allow-list case
+#     ("chrome.exe signed by Google" is a strong benign-context signal)
+#   * ThreatLocker "(Built-In)" policies — when a ThreatLocker tenant's
+#     built-in policy MATCHES the event, ThreatLocker's own trust team
+#     already vetted the application, so the alert is by-design benign
+#   * tenant permit markers (Action: Permit, Effective Action: Permitted,
+#     Monitor Only: true) — the operator's policy engine already
+#     decided this activity is allowed
 _KNOWN_GOOD_VENDOR_PATTERNS = [
+    # Management / EDR agents
     re.compile(r"\bDell\s+SupportAssist\b", re.I),
     re.compile(r"\bHP\s+Support\s+Assistant\b", re.I),
     re.compile(r"\bMicrosoft\s+Defender\b", re.I),
@@ -192,6 +203,26 @@ _KNOWN_GOOD_VENDOR_PATTERNS = [
     re.compile(r"\bVeeam\s+backup\b", re.I),
     re.compile(r"\bSplunk\s+forwarder\b", re.I),
     re.compile(r"\bZscaler\s+client\b", re.I),
+    # Mainstream browsers — process paths + certificate subject lines
+    re.compile(r"\\google\\chrome\\application\\chrome\.exe", re.I),
+    re.compile(r"\\microsoft\\edge\\application\\msedge\.exe", re.I),
+    re.compile(r"\\mozilla firefox\\firefox\.exe", re.I),
+    re.compile(r"cn=google llc,", re.I),
+    re.compile(r"cn=microsoft corporation,", re.I),
+    re.compile(r"cn=mozilla corporation,", re.I),
+    re.compile(r"cn=apple inc\.,", re.I),
+    # ThreatLocker built-in policy — vetted by the vendor's trust team
+    re.compile(r"\bPolicy Name\s*:.*\(Built-In\)", re.I),
+    re.compile(r"\(Built-In\)\s*$", re.I | re.M),
+]
+
+# Tenant policy engine markers — separate from vendor known-good so we
+# can score them independently. When both fire on the same log the
+# alert is essentially a policy-audit event, not a threat.
+_TENANT_PERMIT_PATTERNS = [
+    re.compile(r"\bAction\s*:\s*Permit\b", re.I),
+    re.compile(r"\bEffective Action\s*:\s*Permitted\b", re.I),
+    re.compile(r"\bMonitor Only\s*:\s*true\b", re.I),
 ]
 
 
@@ -433,9 +464,23 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
     for rx in _KNOWN_GOOD_VENDOR_PATTERNS:
         m = rx.search(all_text)
         if m:
-            _push(downweight, "known-good vendor pattern",
+            _push(downweight, "known-good vendor / signed application",
                   f"matched '{m.group(0)[:60]}'")
             break
+
+    # Tenant-policy permit markers — the operator's own policy engine
+    # (ThreatLocker, Sentinel allow-list, MDE ASR exclusion, etc.) has
+    # already made a decision to permit. Two independent markers ⇒
+    # strong signal that this is a policy-audit event, not a threat.
+    _permit_hits = []
+    for rx in _TENANT_PERMIT_PATTERNS:
+        m = rx.search(log_text)
+        if m:
+            _permit_hits.append(m.group(0))
+    if len(_permit_hits) >= 2:
+        _push(downweight, "tenant policy engine permitted the action",
+              f"{len(_permit_hits)} permit markers in log: "
+              + "; ".join(h[:40] for h in _permit_hits[:3]))
 
     # Every keyed source clean across every IOC = strong downweight —
     # only meaningful when no TIER 1/2 fired.
@@ -512,9 +557,9 @@ def format_signal_correlation(state: Dict[str, Any],
             lines.append(f"  • {s['signal']} — {s['evidence']}")
     if not lines:
         return ""
-    lines.append(f"→ Deterministic verdict floor: {tiers['verdict_floor']}")
+    lines.append(f"=> Deterministic verdict floor: {tiers['verdict_floor']}")
     if tiers["block_clear"]:
-        lines.append("→ CLEAR is BLOCKED by the tier framework. Choose ESCALATE or MONITOR.")
+        lines.append("=> CLEAR is BLOCKED by the tier framework. Choose ESCALATE or MONITOR.")
     return "\n".join(lines)
 
 
