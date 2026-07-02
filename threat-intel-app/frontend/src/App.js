@@ -3084,10 +3084,21 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
     if (!t) return '';
     return /[.!?]$/.test(t) ? t : t + '.';
   };
+  // Case-score trailing sentence — folded INTO the prose paragraph
+  // instead of taking a dedicated block. Only added when the score
+  // actually fired (drivers > 0 or score > 0), otherwise it's noise.
+  const _cs = rs?.case_score;
+  const _csHasSignal = _cs && typeof _cs.score === 'number'
+                       && (_cs.score > 0 || (asArray(_cs.drivers).length > 0));
+  const caseSentence = _csHasSignal
+    ? `Case-level rollup: ${_cs.grade} · ${_cs.score}/100 (${_cs.tier}).`
+    : '';
   const combined = [
     _ensurePeriod(plainEnglish),
     _ensurePeriod(_summary),
     _ensurePeriod(_dispReason),
+    enrichLine ? _ensurePeriod(enrichLine) : '',
+    caseSentence,
   ].filter(Boolean).join(' ');
 
   return (
@@ -3172,19 +3183,6 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
                                   pl: 1.5 } : {}),
         }}>
           {combined}
-        </Typography>
-      )}
-
-      {enrichLine && (
-        <Typography sx={{
-          fontFamily: '"IBM Plex Mono", monospace',
-          fontSize: 11, color: 'text.tertiary', lineHeight: 1.55,
-          mb: 1.5, pl: hasDisposition ? 1.5 : 0,
-          borderLeft: hasDisposition
-            ? `3px solid ${muiAlpha(dispColor, 0.3)}`
-            : 'none',
-        }}>
-          {enrichLine}
         </Typography>
       )}
 
@@ -3278,90 +3276,6 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
         </Box>
       )}
 
-      {/* Round-15 (cti-expert steal) — Intelligence Gaps + Analyst
-          Caveats + Case Score letter grade. Lifted from INTSUM template
-          + weight-engine. Renders only when populated. */}
-      {(() => {
-        const gaps    = asArray(a?.intelligence_gaps);
-        const caveats = asArray(a?.analyst_caveats);
-        const cs      = rs?.case_score;
-        // Hide the chip entirely when no signals actually fired — the
-        // ThreatScore dial + disposition pill above already convey
-        // "clean". "A1 · case score 0/100 · No significant signals" is
-        // pure noise on benign alerts.
-        const csHasSignal = cs && typeof cs.score === 'number'
-                            && (cs.score > 0 || (asArray(cs.drivers).length > 0));
-        const hasCs   = !!csHasSignal;
-        if (!gaps.length && !caveats.length && !hasCs) return null;
-        const csColor = !hasCs ? '#848592'
-                      : cs.tier === 'CRITICAL'     ? '#EA4335'
-                      : cs.tier === 'ESCALATE'     ? '#F14337'
-                      : cs.tier === 'INVESTIGATE'  ? '#E6700F'
-                      : cs.tier === 'MONITOR'      ? '#E1B823'
-                      : '#16AD34';
-        return (
-          <Box sx={{ mt: 2, mb: 1 }}>
-            {hasCs && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.25,
-                  flexWrap: 'wrap' }}>
-                <Box sx={{
-                    fontFamily: '"IBM Plex Mono", monospace',
-                    fontSize: 13, fontWeight: 700, color: csColor,
-                    backgroundColor: muiAlpha(csColor, 0.12),
-                    border: `1px solid ${muiAlpha(csColor, 0.4)}`,
-                    borderRadius: '4px', px: 1.25, py: '3px' }}>
-                  {cs.grade} · case score {cs.score}/100
-                </Box>
-                <Typography sx={{ fontSize: 11, color: 'text.tertiary',
-                    textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Tier: {cs.tier}
-                </Typography>
-                <Typography sx={{ fontSize: 11, color: 'text.tertiary',
-                    flexBasis: '100%', mt: 0.25 }}>
-                  {cs.summary}
-                </Typography>
-              </Box>
-            )}
-            {gaps.length > 0 && (
-              <Box sx={{ mb: 1 }}>
-                <Typography sx={{ fontSize: 10.5, fontWeight: 700,
-                    color: 'text.tertiary', textTransform: 'uppercase',
-                    letterSpacing: '0.06em', mb: 0.5 }}>
-                  Intelligence gaps
-                </Typography>
-                <Box component="ul" sx={{ m: 0, pl: 2.25 }}>
-                  {gaps.slice(0, 6).map((g, i) => (
-                    <Box component="li" key={i}
-                      sx={{ fontSize: 12, color: 'text.secondary',
-                        lineHeight: 1.55, mb: 0.25 }}>
-                      {g}
-                    </Box>
-                  ))}
-                </Box>
-              </Box>
-            )}
-            {caveats.length > 0 && (
-              <Box>
-                <Typography sx={{ fontSize: 10.5, fontWeight: 700,
-                    color: 'text.tertiary', textTransform: 'uppercase',
-                    letterSpacing: '0.06em', mb: 0.5 }}>
-                  Analyst caveats
-                </Typography>
-                <Box component="ul" sx={{ m: 0, pl: 2.25 }}>
-                  {caveats.slice(0, 4).map((c, i) => (
-                    <Box component="li" key={i}
-                      sx={{ fontSize: 12, color: 'text.secondary',
-                        lineHeight: 1.55, mb: 0.25 }}>
-                      {c}
-                    </Box>
-                  ))}
-                </Box>
-              </Box>
-            )}
-          </Box>
-        );
-      })()}
-
       {/* Train-on-false-positives inline form — pinned directly under
           the AI analysis so the analyst can correct a wrong verdict
           without scrolling further. Renders nothing when there's no
@@ -3373,27 +3287,31 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
         onComplete={onFeedbackComplete}
       />
 
-      {/* PRINCIPLE 7 — Confirmed facts vs analyst assessment.
-          Cross-field de-dup: when the AI ignored its prompt and put the
-          same paraphrased verdict in BOTH `summary` (rendered in the
-          combined paragraph above) AND `analysis_assessment` (rendered
-          below), drop the duplicates from analysis_assessment. Catches
-          the wording-shift dupes a strict string-equal check misses
-          (e.g. "the deletion of X by user Y is not suspicious" vs
-          "user Y deleted X, not malicious"). */}
+      {/* FINDINGS — one consolidated block combining what used to be
+          four separately-stacked blocks:
+            * Confirmed facts (evidence-backed, from investigation)
+            * Analysis (AI inference, distinct from fact)
+            * Intelligence gaps (what we don't know yet)
+            * Analyst caveats (methodology / scope disclaimers)
+          Cross-field de-dup: drops analysis sentences whose tokens
+          overlap the already-rendered prose paragraph by >= 50%. */}
       {(() => {
-        const confirmed = asArray(rs?.confirmed_facts);
+        const confirmed = asArray(rs?.confirmed_facts).filter(Boolean);
         const analysis_ = asArray(rs?.analysis_assessment).filter(s => {
           if (!s) return false;
-          // Drop assessment sentences whose tokens overlap any of the
-          // already-rendered prose (combined paragraph + dispReason +
-          // confirmed facts) by >= 50%.
           const compareAgainst = [combined, _dispReason, dispReason,
                                   ...confirmed].filter(Boolean).join(' ');
           return _overlap(s, compareAgainst) < 0.5;
         });
-        if (!confirmed.length && !analysis_.length) return null;
-        return <ConfirmedVsAnalysis confirmed={confirmed} analysis={analysis_} />;
+        const gaps    = asArray(a?.intelligence_gaps).filter(Boolean);
+        const caveats = asArray(a?.analyst_caveats).filter(Boolean);
+        if (!confirmed.length && !analysis_.length
+            && !gaps.length && !caveats.length) return null;
+        return <ConfirmedVsAnalysis
+                  confirmed={confirmed}
+                  analysis={analysis_}
+                  gaps={gaps}
+                  caveats={caveats} />;
       })()}
 
       {/* Calibration: every analyst override is a training signal. */}
@@ -3533,63 +3451,57 @@ function VerdictOverride({ result, rs }) {
        Analysis  = analyst inferences clearly labeled as assessment
        Rendered as two visually distinct sections so analysts know exactly
        what is evidence and what is interpretation.                       */
-function ConfirmedVsAnalysis({ confirmed, analysis }) {
-  const hasConfirmed = Array.isArray(confirmed) && confirmed.filter(Boolean).length > 0;
-  const hasAnalysis  = Array.isArray(analysis)  && analysis.filter(Boolean).length > 0;
-  if (!hasConfirmed && !hasAnalysis) return null;
-
-  const Section = ({ title, color, items, label }) => (
-    <Box sx={{ mt: 1, p: '10px 12px', borderRadius: '4px',
-      backgroundColor: muiAlpha(color, 0.05),
-      border: `1px solid ${muiAlpha(color, 0.22)}`,
-      borderLeft: `3px solid ${color}` }}>
-      <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.75 }}>
-        <Box sx={{ width: 5, height: 5, borderRadius: 99, backgroundColor: color }}/>
-        <Typography sx={{ fontSize: 11, fontWeight: 700, color,
-          textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-          {title}
-        </Typography>
-        {label && (
-          <Typography sx={{ fontSize: 10, color: 'text.tertiary', fontStyle: 'italic' }}>
-            · {label}
-          </Typography>
-        )}
-      </Stack>
-      <Stack spacing={0.5} component="ul" sx={{ m: 0, pl: 2.25, listStyle: 'none' }}>
-        {items.map((item, i) => (
-          <Typography
-            key={i}
-            component="li"
-            sx={{ fontSize: 12.5, color: 'text.primary', lineHeight: 1.55,
-              position: 'relative',
-              '&::before': {
-                content: '"›"', color, position: 'absolute', left: -14, fontWeight: 700,
-              } }}>
-            {String(item)}
-          </Typography>
-        ))}
-      </Stack>
-    </Box>
-  );
+function ConfirmedVsAnalysis({ confirmed, analysis, gaps, caveats }) {
+  // Consolidated Findings block. Replaces four separately-stacked
+  // labeled blocks (Confirmed, Analysis, Intelligence gaps, Analyst
+  // caveats) with a single bordered box + one bullet per finding.
+  // Each bullet gets a small colored kind-marker + one-word kind
+  // label so the semantic distinction survives the consolidation:
+  //    ● Confirmed  — green, evidence-backed
+  //    ○ Analysis   — yellow, AI inference
+  //    ? Gap        — grey, unknown / to-investigate
+  //    ! Caveat     — orange, methodology disclaimer
+  const _conf  = (Array.isArray(confirmed) ? confirmed : []).filter(Boolean);
+  const _anly  = (Array.isArray(analysis)  ? analysis  : []).filter(Boolean);
+  const _gaps  = (Array.isArray(gaps)      ? gaps      : []).filter(Boolean);
+  const _cavs  = (Array.isArray(caveats)   ? caveats   : []).filter(Boolean);
+  const rows = [
+    ..._conf.map(s => ({ kind: 'Confirmed', color: '#17AB1F', marker: '●', text: String(s) })),
+    ..._anly.map(s => ({ kind: 'Analysis',  color: '#E1B823', marker: '○', text: String(s) })),
+    ..._gaps.map(s => ({ kind: 'Gap',       color: '#8892A6', marker: '?', text: String(s) })),
+    ..._cavs.map(s => ({ kind: 'Caveat',    color: '#E6700F', marker: '!', text: String(s) })),
+  ];
+  if (!rows.length) return null;
 
   return (
-    <Box sx={{ mb: 1.5 }}>
-      {hasConfirmed && (
-        <Section
-          title="Confirmed"
-          color="#17AB1F"
-          items={confirmed.filter(Boolean)}
-          label="directly supported by enrichment data"
-        />
-      )}
-      {hasAnalysis && (
-        <Section
-          title="Analysis"
-          color="#E1B823"
-          items={analysis.filter(Boolean)}
-          label="analyst assessment, not confirmed fact"
-        />
-      )}
+    <Box sx={{ mt: 2, mb: 1.5, p: '10px 14px', borderRadius: '4px',
+      backgroundColor: muiAlpha('#8892A6', 0.05),
+      border: `1px solid ${muiAlpha('#8892A6', 0.22)}`,
+      borderLeft: `3px solid ${muiAlpha('#8892A6', 0.55)}` }}>
+      <Typography sx={{ fontSize: 10.5, fontWeight: 700,
+        color: 'text.tertiary', textTransform: 'uppercase',
+        letterSpacing: '0.08em', mb: 0.75 }}>
+        Findings
+      </Typography>
+      <Stack spacing={0.5} component="ul" sx={{ m: 0, pl: 0, listStyle: 'none' }}>
+        {rows.map((r, i) => (
+          <Box component="li" key={i} sx={{
+            display: 'flex', alignItems: 'baseline', gap: 1,
+            fontSize: 12.5, color: 'text.primary', lineHeight: 1.55,
+          }}>
+            <Box component="span" sx={{ color: r.color, fontWeight: 700,
+              minWidth: 12, textAlign: 'center' }}>
+              {r.marker}
+            </Box>
+            <Box component="span" sx={{ color: r.color, fontSize: 10,
+              fontWeight: 700, textTransform: 'uppercase',
+              letterSpacing: '0.05em', minWidth: 62 }}>
+              {r.kind}
+            </Box>
+            <Box component="span" sx={{ flex: 1 }}>{r.text}</Box>
+          </Box>
+        ))}
+      </Stack>
     </Box>
   );
 }
