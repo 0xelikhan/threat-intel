@@ -762,6 +762,25 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
     # KEV hits boost score significantly — actively exploited CVE = real threat
     if cross_refs.get("kev"):
         heuristic_score = min(1.0, heuristic_score + 0.3)
+    # Behavioural red-flag boosts — patterns in the raw log text that
+    # deserve investigation regardless of IOC count. Prevents the AI
+    # classifier from dropping obvious attacker behaviour as "noise".
+    try:
+        import re as _re_bh
+        _bh_patterns = [
+            (r"\b(?:mshta|regsvr32|rundll32|certutil|bitsadmin)(?:\.exe)?\s+.*?(?:javascript\s*:|https?://|/i\s*:|-urlcache|-decode)", 0.35),
+            (r"\b(?:powershell|cmd)(?:\.exe)?\s+.*?\b(?:-e(?:nc)?|-encodedcommand|-executionpolicy\s+bypass|frombase64string|downloadstring|downloadfile|iex\b|invoke-expression)", 0.35),
+            (r"parent\s*(?:process)?\s*:\s*(?:outlook|winword|excel|powerpnt|chrome|msedge|firefox|acrord32)\.exe.*?(?:powershell|cmd|wscript|cscript|mshta)", 0.35),
+            (r"\blsass(?:\.exe)?\s*(?:memory\s+access|dump)", 0.40),
+            (r"\bvssadmin\s+delete\s+shadows\b", 0.50),
+            (r"\b(?:midnight\s+blizzard|storm-\d+|apt\d{2,4}|lockbit|conti|blackcat|alphv|lazarus|cozy\s+bear|fancy\s+bear)\b", 0.50),
+        ]
+        for pat, bump in _bh_patterns:
+            if _re_bh.search(pat, raw, _re_bh.I | _re_bh.S):
+                heuristic_score = min(1.0, heuristic_score + bump)
+                break  # single boost per alert; don't stack
+    except Exception:
+        pass
     total_iocs = sum(len(v) for v in iocs.values())
     trace = state.get("agent_trace", [])
     ts = datetime.now(timezone.utc).isoformat()
