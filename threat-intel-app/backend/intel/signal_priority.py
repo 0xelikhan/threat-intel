@@ -197,23 +197,47 @@ _KNOWN_GOOD_VENDOR_PATTERNS = [
     re.compile(r"\bHP\s+Support\s+Assistant\b", re.I),
     re.compile(r"\bMicrosoft\s+Defender\b", re.I),
     re.compile(r"\bWindows\s+Update\b", re.I),
+    re.compile(r"\bWindows\s+Defender\s+Antivirus\b", re.I),
     re.compile(r"\bCrowdStrike\s+Falcon\b", re.I),
     re.compile(r"\bSCCM\s+client\b", re.I),
     re.compile(r"\bIntune\s+agent\b", re.I),
     re.compile(r"\bVeeam\s+backup\b", re.I),
     re.compile(r"\bSplunk\s+forwarder\b", re.I),
     re.compile(r"\bZscaler\s+client\b", re.I),
+    re.compile(r"\bSentinelOne\s+agent\b", re.I),
+    re.compile(r"\bTaniumClient\.exe\b", re.I),
+    re.compile(r"\bBigFix\s+agent\b", re.I),
+    re.compile(r"\bDatto\s+RMM\b", re.I),   # legit when signed + tenant-managed
     # Mainstream browsers — process paths + certificate subject lines
     re.compile(r"\\google\\chrome\\application\\chrome\.exe", re.I),
     re.compile(r"\\microsoft\\edge\\application\\msedge\.exe", re.I),
     re.compile(r"\\mozilla firefox\\firefox\.exe", re.I),
+    re.compile(r"\\brave\\application\\brave\.exe", re.I),
     re.compile(r"cn=google llc,", re.I),
     re.compile(r"cn=microsoft corporation,", re.I),
     re.compile(r"cn=mozilla corporation,", re.I),
     re.compile(r"cn=apple inc\.,", re.I),
+    re.compile(r"cn=adobe inc\.,", re.I),
+    re.compile(r"cn=zoom video communications,", re.I),
+    re.compile(r"cn=slack technologies,", re.I),
+    re.compile(r"cn=dropbox,", re.I),
     # ThreatLocker built-in policy — vetted by the vendor's trust team
     re.compile(r"\bPolicy Name\s*:.*\(Built-In\)", re.I),
     re.compile(r"\(Built-In\)\s*$", re.I | re.M),
+    # Defender routine remediation — malware detection with confirmed removal
+    # is a resolved event, not an active compromise; ThreatLocker/MDE alerts
+    # of this shape ARE benign from a triage standpoint.
+    re.compile(r"\bThreat\s+Status\s*:\s*Remediated\b", re.I),
+    re.compile(r"\bAction\s+Taken\s*:\s*Quarantine\b", re.I),
+    re.compile(r"\bActionSuccess\s*:\s*true\b", re.I),
+    re.compile(r"\bDefender\s+has\s+removed\b", re.I),
+    # ThreatLocker Ringfencing block — a policy decision, not a compromise
+    re.compile(r"\bRingfencing\b", re.I),
+    re.compile(r"\bRingfence\s+Policy\b", re.I),
+    # Entra ID clean sign-in
+    re.compile(r"\brisk\s*state\s*:\s*none\b", re.I),
+    re.compile(r"\brisk\s*level\s*aggregated\s*:\s*none\b", re.I),
+    re.compile(r"\brisk\s*detail\s*:\s*none\b", re.I),
 ]
 
 # Tenant policy engine markers — separate from vendor known-good so we

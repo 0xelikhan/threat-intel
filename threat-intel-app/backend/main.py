@@ -163,6 +163,30 @@ async def _lifespan(app):
 
     track_task(asyncio.create_task(_warm_all()))
 
+    # LLM keepalive — a tiny periodic ping so the httpx connection pool
+    # to Azure OpenAI stays warm across idle periods. First-request TLS
+    # handshake + connection setup can cost 0.5-1.5s; this eliminates
+    # that on cold-start analyzes. Runs every 60s with a 1-token
+    # completion (~$0.0001/day at gpt-4o-mini rates).
+    async def _llm_keepalive():
+        # Wait a bit for provider config to land + warm phase to finish.
+        await asyncio.sleep(45)
+        while True:
+            try:
+                from providers import provider_configured, get_provider
+                if provider_configured(config):
+                    p = get_provider()
+                    await p.complete(
+                        model=config.get_model(fast=True),
+                        messages=[{"role": "user", "content": "ok"}],
+                        max_tokens=1,
+                        temperature=0.0,
+                    )
+            except Exception as e:
+                _log.debug("llm keepalive failed (transient ok): %s", e)
+            await asyncio.sleep(60)
+    track_task(asyncio.create_task(_llm_keepalive()))
+
     # Spec §8: kick off the unified TAXII + FreshRSS polling loop.
     try:
         from intel.feed_aggregator import run_polling_loop

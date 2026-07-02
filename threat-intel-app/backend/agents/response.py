@@ -914,8 +914,13 @@ analyst's UI strips them out, so writing them is wasted tokens."""
                     "analyst_summary":  partial,
                 })
             _partial_cb = _emit_partial
+        # 550-token cap — analyst_summary schema (disposition + reason +
+        # escalation_steps + intelligence_gaps + analyst_caveats) rarely
+        # needs 700; production output centers around 400-500. Streaming
+        # stops at natural JSON end; the cap only bites when the model
+        # would have padded.
         analyst_summary = await _ai_call_json(
-            analyst_prompt, config, max_tokens=700, on_partial=_partial_cb
+            analyst_prompt, config, max_tokens=550, on_partial=_partial_cb
         )
 
     # DISPOSITION SAFETY NET — the belt-and-braces enforcement of the
