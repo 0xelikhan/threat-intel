@@ -1003,7 +1003,7 @@ def _p_feodo(ip: str) -> dict:
     return {}
 
 
-# ─── Authenticated sources (Censys / Hybrid Analysis / CrowdSec) ───────────────
+# ─── Authenticated sources (Censys / Hybrid Analysis) ─────────────────────────
 def _p_censys(r):
     """Censys host view — handles BOTH the legacy search.censys.io/v2
     response shape and the new api.platform.censys.io/v3 shape.

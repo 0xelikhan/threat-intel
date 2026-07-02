@@ -802,11 +802,11 @@ KNOWN_GOOD_MATCHES  (pre-analysis match against curated patterns for legitimate
 ENRICHED IOC DATA   (TI sources: VirusTotal, AbuseIPDB, GreyNoise (incl. RIOT),
                      OTX, URLScan, Pulsedive, MalwareBazaar, ThreatFox, URLhaus,
                      CIRCL hashlookup, Hybrid Analysis sandbox, Team Cymru MHR,
-                     Maltiverse, OpenCTI, Censys, CrowdSec, Criminal IP, ProxyCheck,
-                     Feodo Tracker, Spamhaus DBL, Google Safe Browsing, FullHunt,
-                     PhishTank, MISP feeds, plus offline IP blocklists + phishing-
-                     domain feeds; may be EMPTY if the log contains no IPs/domains/
-                     hashes — that is OK, reason on the log):
+                     Maltiverse, OpenCTI, Censys, Criminal IP, ProxyCheck,
+                     Feodo Tracker, Spamhaus DBL, Google Safe Browsing, MISP
+                     feeds, plus offline IP blocklists + phishing-domain feeds;
+                     may be EMPTY if the log contains no IPs/domains/hashes —
+                     that is OK, reason on the log):
 {enrichments}
 
 LOCAL THREAT INTEL CROSS-REFERENCES:

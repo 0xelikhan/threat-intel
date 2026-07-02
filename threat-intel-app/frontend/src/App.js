@@ -1965,41 +1965,6 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // CrowdSec CTI — _p_crowdsec returns classifications / attack_details /
-  // behaviors / score_overall, not "reputation"/"scenarios". Show
-  // whichever signals exist for this IP.
-  if (d.crowdsec && !d.crowdsec.error) {
-    const cs = d.crowdsec;
-    const cls = (cs.classifications || []).filter(Boolean);
-    const attacks = (cs.attack_details || []).filter(Boolean);
-    const overall = cs.score_overall;
-    if (cls.length || attacks.length || (overall && overall > 0)) {
-      const lead = cls[0] || attacks[0] || `aggressiveness ${overall}`;
-      const extra = (cls.length > 1 ? cls.slice(1, 3) : attacks.slice(0, 2));
-      const c = /malicious|known|crawler.*bad/i.test(lead) ? red
-              : /suspicious|brute|exploit/i.test(lead) ? orange
-              : (overall || 0) >= 3 ? orange : tert;
-      out.push({
-        source: 'CrowdSec',
-        label: `${lead}${extra.length ? ` · ${extra.join(', ')}` : ''}`,
-        color: c,
-        why: 'CrowdSec aggregates real-time attack signals from a community of deployed sensors. Classifications + attack scenarios show what behaviour got the IP reported.',
-      });
-    }
-  }
-
-  // CIRCL passive DNS — count of historical DNS records.
-  if (d.circl_pdns && !d.circl_pdns.error) {
-    const p = d.circl_pdns;
-    const n = p.record_count ?? (p.answers?.length) ?? 0;
-    if (n > 0) {
-      out.push({ source: 'CIRCL pDNS',
-                 label: `${n} historical record${n === 1 ? '' : 's'}`,
-                 color: tert,
-                 why: 'Passive DNS history from CIRCL. Many historical records = the indicator has hosted/resolved many things over time (could be infrastructure, could be DNS rotation for C2).' });
-    }
-  }
-
   // Robtex — ASN + passive DNS summary. Parser key is `asnName` (camel),
   // not `as_name` — the snake-case version never existed, which silently
   // dropped the org name from the label.
@@ -2172,24 +2137,6 @@ function _ocSources(result, ioc, type) {
   }
 
   // ─── Domain-specific rows ────────────────────────────────────────────
-  // Cert Transparency (crt.sh) — count of unique certs + subdomains.
-  // Skip the row when crt.sh has zero certs for the domain ("0 certs"
-  // is more confusing than informative — looks like the source ran but
-  // analyst can't tell whether that means "domain unregistered" or
-  // "issued certs but pre-CT" or "we missed something").
-  if (d.certTransparency && !d.certTransparency.error
-      && d.certTransparency.totalCerts) {
-    const ct = d.certTransparency;
-    const n = ct.totalCerts;
-    const subs = (ct.subdomains || []).length;
-    out.push({
-      source: 'Cert Transparency',
-      label: `${n} cert${n === 1 ? '' : 's'}${subs ? ` · ${subs} unique subdomains` : ''}`,
-      color: tert,
-      why: 'Public CT logs (crt.sh). Many historical certs across many subdomains = legitimate long-running infra; few or one = newly issued or limited use (more suspicious for phishing).',
-    });
-  }
-
   // Wayback Machine — closest snapshot date (parser returns
   // has_snapshots + closest_snapshot; first/last variants don't exist).
   // Surface the "no snapshots" case too, since a brand-new domain
@@ -2244,17 +2191,6 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // FullHunt — subdomain inventory.
-  if (d.fullhunt && !d.fullhunt.error
-      && (d.fullhunt.subdomain_count || (d.fullhunt.ports || []).length)) {
-    const f = d.fullhunt;
-    const bits = [];
-    if (f.subdomain_count) bits.push(`${f.subdomain_count} subdomains`);
-    if ((f.ports || []).length) bits.push(`ports ${(f.ports || []).slice(0, 4).join(', ')}`);
-    out.push({ source: 'FullHunt', label: bits.join(' · '), color: tert,
-               why: 'FullHunt enumerates the attack surface of a domain (subdomains + open services). Larger footprint = bigger target / more potential entry points for attackers.' });
-  }
-
   // DNS records (subset of osint) — A/AAAA/MX/NS visibility. Parser
   // returns {records: {A:[…], AAAA:[…], MX:[…], NS:[…]}} (uppercase
   // type keys, nested under `records`). Earlier code read dns.a /
@@ -2289,20 +2225,6 @@ function _ocSources(result, ioc, type) {
   }
 
   // ─── URL-specific rows ───────────────────────────────────────────────
-  // PhishTank — community phishing database.
-  if (d.phishtank && !d.phishtank.error && d.phishtank.in_database) {
-    const p = d.phishtank;
-    const verified = p.verified === true || p.verified === 'y';
-    out.push({
-      source: 'PhishTank',
-      label: `${verified ? 'verified phishing' : 'reported phishing'}${p.submission_time ? ` · ${String(p.submission_time).slice(0, 10)}` : ''}`,
-      color: red,
-      why: verified
-        ? 'Community-verified phishing site — multiple PhishTank moderators have confirmed this URL is phishing.'
-        : 'Reported as phishing by a community member but not yet verified. Treat as suspicious pending confirmation.',
-    });
-  }
-
   // NVD CVE — score + severity + description summary.
   if (d.nvd && !d.nvd.error && d.nvd.found) {
     const n = d.nvd;
@@ -2517,7 +2439,7 @@ function _ocSources(result, ioc, type) {
     cisa_kev: 'CISA KEV',
     hybrid_analysis: 'Hybrid Analysis',
     whois: 'WHOIS',                      ipinfo: 'IPInfo',
-    censys: 'Censys',                    crowdsec: 'CrowdSec',
+    censys: 'Censys',
     feodo_tracker: 'Feodo Tracker',
     misp_feeds: 'MISP Feeds',
     // Previously omitted from this map — when these sources errored
@@ -2526,9 +2448,7 @@ function _ocSources(result, ioc, type) {
     // the same dimmed "source-status" row format as the others.
     proxycheck: 'ProxyCheck',           opencti: 'OpenCTI',
     team_cymru_mhr: 'Team Cymru MHR',   hackertarget: 'Hackertarget',
-    robtex: 'Robtex',                   circl_pdns: 'CIRCL pDNS',
-    wayback: 'Wayback',                 certTransparency: 'Cert Transparency',
-    fullhunt: 'FullHunt',               phishtank: 'PhishTank',
+    robtex: 'Robtex',                   wayback: 'Wayback',
     urlscan_screenshot: 'URLScan screenshot',
     // Round-14 trained classifiers — listed so an error state (sklearn
     // unavailable, heuristic fallback active) is rendered consistently.
@@ -2545,15 +2465,24 @@ function _ocSources(result, ioc, type) {
     if (!blob || typeof blob !== 'object') continue;
     const err = blob.error;
     if (!err) continue;
-    // Sources that simply aren't configured shouldn't pretend they
-    // failed — skip them entirely so the per-IOC panel only shows
-    // sources that ACTUALLY attempted to run.
-    if (blob.error_type === 'not_configured') continue;
+    // Skip sources that have nothing actionable to report. Three classes
+    // get hidden because the analyst can't do anything with them:
+    //   * not_configured  — operator hasn't added the key yet
+    //   * rate_limited    — free-tier daily / burst quota (GreyNoise 25/wk,
+    //                       Pulsedive 1/sec, who-dat WHOIS burst, etc.).
+    //                       Real verdicts come back from the OTHER sources;
+    //                       a "rate-limited" row is just noise.
+    //   * timed_out       — upstream slowness; production has per-host
+    //                       overrides, the smoke probe is the only thing
+    //                       that ever reads this for non-actionable hosts.
+    //   * circuit_open    — recent failures triggered the breaker; analyst
+    //                       can't fix it in this run, and the breaker
+    //                       half-opens on its own.
+    if (['not_configured', 'rate_limited', 'timed_out', 'circuit_open']
+        .includes(blob.error_type)) continue;
     // Translate the remaining error_type values to readable phrasing
     let status;
-    if (blob.error_type === 'circuit_open') {
-      status = `temporarily skipped (recent failures opened the breaker — retry in a few minutes)`;
-    } else if (blob.error_type === 'auth_failed') {
+    if (blob.error_type === 'auth_failed') {
       // abuse.ch issues a unified Auth-Key that all three of its APIs
       // share — when it expires/rotates, ThreatFox/MalwareBazaar/URLhaus
       // all fail together. Point the analyst at the right rotation
@@ -2563,10 +2492,6 @@ function _ocSources(result, ioc, type) {
       status = isAbuseCh
         ? `couldn't authenticate — rotate the abuse.ch Auth-Key at https://auth.abuse.ch and update ABUSECH_AUTH_KEY in Settings`
         : `couldn't authenticate — verify the ${label} API key in Settings`;
-    } else if (blob.error_type === 'rate_limited') {
-      status = `rate-limited (HTTP 429) — daily quota or burst limit reached`;
-    } else if (blob.error_type === 'timed_out') {
-      status = `request timed out — source may be slow or unreachable`;
     } else if (blob.error_type === 'http_error') {
       status = `source returned an HTTP error — ${String(err).slice(0, 100)}`;
     } else if (typeof err === 'string' && err.toLowerCase() === 'no data') {

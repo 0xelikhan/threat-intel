@@ -2971,10 +2971,10 @@ def _strip_asn_prefix(org: str) -> Tuple[str, str]:
 def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
     """Client-readable summary paragraph for an IP. Pulls from every
     API source we have — AbuseIPDB, VirusTotal, IPInfo, GreyNoise,
-    Maltiverse, Pulsedive, Censys, CrowdSec, Criminal IP, ProxyCheck,
-    Feodo Tracker, BGP ranking, ASN reputation, Tor — and renders as
-    natural-language sentences so the customer can read it without
-    decoding CLI-style fragments."""
+    Maltiverse, Pulsedive, Censys, Criminal IP, ProxyCheck, Feodo
+    Tracker, BGP ranking, ASN reputation, Tor — and renders as natural-
+    language sentences so the customer can read it without decoding
+    CLI-style fragments."""
     if not data or not isinstance(data, dict):
         return ""
 
@@ -3536,13 +3536,9 @@ def _fmt_hash_enrichment(h: str, data: Dict) -> str:
 
 def _fmt_url_enrichment(url: str, data: Dict) -> str:
     """Client-readable summary for a URL. Pulls from VirusTotal, URLhaus
-    (the canonical malware-distribution list), PhishTank, ThreatFox, OTX,
-    and URLScan's archived-screenshot lookup — the actual sources URL
-    enrichment writes. Earlier code read data["urlscan"] (a domain-bucket
-    key) and ignored urlhaus_url / phishtank / threatfox entirely, so
-    customer emails about a confirmed phishing or malware-distribution
-    URL only mentioned the VT count and never the explicit malice signal.
-    """
+    (the canonical malware-distribution list), the trained phishing-URL
+    classifier (round-14), ThreatFox, OTX, and URLScan's archived-
+    screenshot lookup — the actual sources URL enrichment writes."""
     if not data or not isinstance(data, dict):
         return ""
 
@@ -3956,10 +3952,9 @@ async def _gather_email_enrichment(log_text: str, parsed: Dict,
 
         # Snapshot the keys we need into a plain dict so enrichment can
         # read them without going through ConfigManager. Full key set so
-        # this matches the /api/analyze pipeline — the earlier subset was
-        # missing ABUSECH_AUTH_KEY (so MalwareBazaar/ThreatFox/URLhaus
-        # got rate-limited on every email), plus Censys / CrowdSec /
-        # Criminal IP / ProxyCheck / FullHunt / OpenCTI / PhishTank.
+        # this matches the /api/analyze pipeline (ABUSECH_AUTH_KEY in
+        # particular avoids rate-limited MalwareBazaar/ThreatFox/URLhaus
+        # responses on every email).
         keys = {k: (config.get(k) or "") for k in (
             "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
             "GREYNOISE_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",

@@ -71,11 +71,7 @@ class EnrichIOCSkill(Skill):
 
         _log = logging.getLogger("recon.skill.enrich_ioc")
         # Full key set so the skill's enrichment matches the main /api/analyze
-        # pipeline. The earlier subset was missing ABUSECH_AUTH_KEY (so
-        # MalwareBazaar/ThreatFox/URLhaus all hit anonymously and were
-        # rate-limited), HYBRID_ANALYSIS_KEY, CENSYS / CRIMINAL_IP /
-        # PROXYCHECK / GOOGLE / FULLHUNT etc. Each enrich_* internally
-        # cherry-picks what it needs.
+        # pipeline. Each enrich_* internally cherry-picks what it needs.
         keys = {k: config.get(k, "") for k in (
             "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
             "GREYNOISE_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",

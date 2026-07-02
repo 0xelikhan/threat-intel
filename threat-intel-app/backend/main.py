@@ -4216,12 +4216,10 @@ async def email_compose_ai(req: EmailComposeAIRequest):
         "EMAIL_FROM_NAME":    config.get("EMAIL_FROM_NAME"),
         "EMAIL_FROM_ADDRESS": config.get("EMAIL_FROM_ADDRESS"),
         "EMAIL_SIGNATURE":    config.get("EMAIL_SIGNATURE"),
-        # Enrichment APIs — full set. The earlier "every enrichment-API
-        # key" comment was wrong: ABUSECH_AUTH_KEY / Censys / CrowdSec /
-        # Criminal IP / ProxyCheck / FullHunt / OpenCTI / PhishTank were
-        # silently missing, so compose_ai's enrichment fan-out had the
-        # same throttling-on-abuse.ch + skipped-source problems as the
-        # other key-stripped call sites we just fixed.
+        # Enrichment APIs — full set so compose_ai's enrichment fan-out
+        # matches the /api/analyze pipeline (ABUSECH_AUTH_KEY in
+        # particular avoids anonymous rate-limits on MalwareBazaar /
+        # ThreatFox / URLhaus).
         "VIRUSTOTAL_KEY":     config.get("VIRUSTOTAL_KEY"),
         "ABUSEIPDB_KEY":      config.get("ABUSEIPDB_KEY"),
         "OTX_KEY":            config.get("OTX_KEY"),

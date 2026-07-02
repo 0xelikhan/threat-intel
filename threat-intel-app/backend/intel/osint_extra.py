@@ -5,8 +5,8 @@ Adds to enrichment.py: full DNS record enumeration (hackertarget), CIRCL BGP
 ranking, VirusTotal graph relationships for hashes, MalwareBazaar similar
 samples by family, Google Safe Browsing lookup when a key is configured.
 
-The crt.sh / WHOIS / Wayback / Tor lookups already exist in enrichment.py and
-are unchanged. These helpers are called from enrichment functions and merged
+The WHOIS / Wayback / Tor lookups already exist in enrichment.py and are
+unchanged. These helpers are called from enrichment functions and merged
 into a single `osint` section per IOC.
 """
 
