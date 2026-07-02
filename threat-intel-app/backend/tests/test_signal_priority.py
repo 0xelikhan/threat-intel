@@ -140,6 +140,59 @@ def test_correlation_prose_empty_when_no_signals():
 
 # ─── Feedback loop guard ───────────────────────────────────────────────────
 
+def test_threatlocker_builtin_policy_fires_downweight_signals():
+    """Real ThreatLocker allowlist audit event — Chromium ChatGPT
+    extension permitted by a BUILT-IN policy under a Google-signed
+    chrome.exe. Should be INFORMATIONAL, block_clear=False, with two
+    strong DOWNWEIGHT signals so the LLM confidently picks CLEAR."""
+    from intel.signal_priority import extract_tier_signals
+    log = (
+        "Date: Jul 2, 2026, 6:56:46 AM\n"
+        "User: AZUREAD\\STUARTCHOAK\n"
+        "Policy Name: Chromium Ext Chat GPT (Built-In)\n"
+        "Action Type: Execute\n"
+        "Action: Permit\n"
+        "Process Path : c:\\program files\\google\\chrome\\application\\chrome.exe\n"
+        "Application Name : Chromium Ext Chat GPT for Chrome (Built-In)\n"
+        "Monitor Only : true\n"
+        "SHA256 : 9376139fba3a19836f1776c62ea2d5d6d476dc226d6aaa936d3c6110b0dc473c\n"
+        "Effective Action : Permitted\n"
+        "Parent Process Certificate : cn=google llc, o=google llc, l=mountain view\n"
+    )
+    t = extract_tier_signals({"raw_input": log})
+    assert not t["tier_1"]
+    assert not t["tier_2"]
+    assert t["verdict_floor"] == "INFORMATIONAL"
+    assert t["block_clear"] is False
+    dw_signals = [s["signal"] for s in t["downweight"]]
+    assert any("known-good" in s or "signed" in s for s in dw_signals), dw_signals
+    assert any("permitted" in s.lower() for s in dw_signals), dw_signals
+
+
+def test_chrome_msedge_firefox_process_paths_are_downweight():
+    from intel.signal_priority import extract_tier_signals
+    for path in (
+        r"c:\program files\google\chrome\application\chrome.exe",
+        r"c:\program files (x86)\microsoft\edge\application\msedge.exe",
+        r"c:\program files\mozilla firefox\firefox.exe",
+    ):
+        t = extract_tier_signals({"raw_input": f"Process: {path}"})
+        assert any("known-good" in s["signal"] or "signed" in s["signal"]
+                   for s in t["downweight"]), (path, t)
+
+
+def test_tenant_permit_alone_not_downweight_needs_two_markers():
+    """Just 'Action: Permit' without other permit markers shouldn't
+    trigger the tenant policy downweight — we want at least two of
+    (Action:Permit, Effective Action:Permitted, Monitor Only:true)
+    firing together to avoid false positives on generic permit logs."""
+    from intel.signal_priority import extract_tier_signals
+    t = extract_tier_signals({"raw_input": "Action: Permit"})
+    perm_hits = [s for s in t["downweight"]
+                 if "permitted" in s["signal"].lower()]
+    assert not perm_hits, perm_hits
+
+
 def test_actor_detection_ignores_ai_generated_summary():
     """Regression guard: the actor detection must NOT read the AI's own
     summary — otherwise the AI recognises an actor once and every future

@@ -276,7 +276,6 @@ def score_domain(enrichment: dict) -> GTIScore:
     otx      = enrichment.get("otx")              or {}
     whois    = enrichment.get("whois")            or {}
     pd       = enrichment.get("pulsedive")        or {}
-    crt      = enrichment.get("certTransparency") or {}
 
     factors  = []
     verdict  = "UNKNOWN"
@@ -367,9 +366,6 @@ def score_domain(enrichment: dict) -> GTIScore:
         modifier += 5; factors.append(f"OTX: {otx_cnt} pulses")
     elif otx_cnt >= 3:
         modifier += 2
-    if crt.get("totalCerts", 0) > 100 and verdict == "MALICIOUS":
-        modifier += 3; factors.append("High cert count on malicious domain — infra scale indicator")
-
     score = _clamp(base + modifier, 0, 100)
     label, color = _label_and_color(score, verdict)
     return GTIScore(score=score, verdict=verdict, severity=severity,

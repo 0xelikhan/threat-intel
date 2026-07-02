@@ -3205,7 +3205,6 @@ def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
     mal_t = data.get("maltiverse") or {}
     urlscan = data.get("urlscan") or {}
     wayback = data.get("wayback") or {}
-    crt = data.get("certTransparency") or {}
     pd = data.get("pulsedive") or {}
     heur = data.get("heuristics") or {}
 
@@ -3355,16 +3354,6 @@ def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
             sentences.append(
                 f"The Wayback Machine archive snapshot dates back to "
                 f"{str(wayback.get('closest_snapshot'))[:10]}.")
-
-    # Cert Transparency — useful when many subdomains hint at infra reuse
-    if crt and not crt.get("error"):
-        subs = crt.get("subdomains") or []
-        certs = crt.get("totalCerts")
-        if certs and certs >= 100:
-            sentences.append(
-                f"Certificate Transparency logs show {certs} certificates "
-                f"issued across {len(subs)} subdomains, indicating active "
-                "TLS infrastructure.")
 
     # Typosquat — high-signal phishing indicator. Backend's _typosquat_check
     # writes {brand, distance} when the domain is an edit-distance match

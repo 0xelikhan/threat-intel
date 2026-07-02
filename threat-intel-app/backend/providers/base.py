@@ -1,7 +1,7 @@
 """
 Abstract LLMProvider interface + normalised response/chunk dataclasses.
 
-All adapters (OpenAI, Anthropic, Ollama) translate to/from these shapes
+All adapters (OpenAI, Ollama) translate to/from these shapes
 so callers never see vendor-specific structures. Adding a new provider
 means: subclass LLMProvider, implement complete() and stream(), register
 in providers/factory.py.
@@ -54,8 +54,8 @@ class LLMProvider(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
-        """Short stable identifier — 'openai', 'azure-openai', 'anthropic',
-        'ollama'. Used in audit log + LLMResponse.provider."""
+        """Short stable identifier — 'openai', 'azure-openai', 'ollama'.
+        Used in audit log + LLMResponse.provider."""
 
     @property
     def supports_tools(self) -> bool:

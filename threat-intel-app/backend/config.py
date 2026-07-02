@@ -512,7 +512,6 @@ FREE_APIS = [
     "SSL Blacklist (abuse.ch)",
     "WHOIS (who-dat.as93.net)",
     "BGP Ranking (CIRCL)",
-    "CIRCL Passive DNS",
     "Robtex",
     "Tor exit node list (torproject.org)",
     "CIRCL Hashlookup",

@@ -297,7 +297,7 @@ def is_m365_candidate(per_source_enrichment: Dict[str, Any]) -> bool:
     # Look at WHOIS / DNS-style fields that the existing enrichment
     # already populates. Field names vary by source; check several.
     pools: List[str] = []
-    for key in ("whois", "wayback", "certTransparency", "shodan", "ipinfo"):
+    for key in ("whois", "wayback", "shodan", "ipinfo"):
         v = per_source_enrichment.get(key)
         if isinstance(v, dict):
             for sub in v.values():

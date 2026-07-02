@@ -38,7 +38,6 @@ threat-intel-app/
 │   │   ├── base.py          # ABC + LLMResponse / LLMChunk shapes
 │   │   ├── factory.py       # get_provider(name=None) singleton
 │   │   ├── openai_provider.py
-│   │   ├── anthropic_provider.py
 │   │   └── ollama_provider.py
 │   ├── skills/              # Granular, individually-runnable units
 │   │   ├── base.py          # Skill ABC
@@ -85,8 +84,6 @@ threat-intel-app/
             ├── ui.js                # Shared MUI primitives (Tag, Card, …)
             ├── AgentPipeline.jsx    # The analyze SSE stream UI
             ├── FileScannerView.jsx  # Big file-analyst report (lazy)
-            ├── EmailComposerView.jsx# Email composer (lazy)
-            ├── SettingsView.jsx     # API-key + integration config (lazy)
             ├── MapTab.jsx           # Leaflet IP geo (lazy)
             ├── LoginPage.jsx        # (lazy)
             ├── URLScanLive.jsx      # URLScan submit + poll block
@@ -136,13 +133,10 @@ Implementations:
 * `openai_provider.py` — Azure OpenAI auto-detected when `OPENAI_BASE_URL`
   contains `openai.azure.com`. Manual retry layer: 429 → wait 2s retry once;
   5xx → retry once; auth errors → clear analyst message, no retry.
-* `anthropic_provider.py` — Claude Sonnet, default `claude-sonnet-4-6`
-  (the 4-20250514 snapshot reached EOL on 2026-06-15). Override via
-  `ANTHROPIC_MODEL` env or settings.
 * `ollama_provider.py` — local models, no tool calling.
 
-To swap the backend LLM for the whole platform set
-`LLM_PROVIDER=anthropic` (or `=ollama`) and restart. No code edits.
+To swap the backend LLM to a local Ollama instance set
+`LLM_PROVIDER=ollama` and restart. No code edits.
 
 ---
 
@@ -532,13 +526,8 @@ box via built-in fallbacks; fetchers add depth.
 
 ## Rounds 12-14 (post-expansion polish)
 
-### Round 12-13 — Settings UI + perf profiling
+### Round 12-13 — perf profiling + email polish
 
-* `frontend/src/components/SettingsView.jsx` — operator config UI
-  rendering everything in `backend/config.py::API_KEY_DEFINITIONS`
-  (API Keys / Outbound Integrations / Enricher Toggles). Masked
-  display + reveal/edit/revert/save without shell-editing
-  `data/config.json`.
 * `agents/enrichment.py::_record_timing` / `network_timings_snapshot`
   — per-host timing histogram surfaced at `/api/status` under
   `network_timings` (mean / max / ok / errors). `POST

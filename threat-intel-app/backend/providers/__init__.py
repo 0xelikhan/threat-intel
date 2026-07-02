@@ -3,9 +3,8 @@ Model-agnostic LLM provider layer.
 
 Every place in the codebase that needs to call an LLM goes through this
 module instead of importing a vendor SDK directly. Provider is selected
-at runtime via the LLM_PROVIDER env var (openai / azure / anthropic /
-ollama). Callers stay vendor-neutral; swapping models is a config
-change.
+at runtime via the LLM_PROVIDER env var (openai / azure / ollama).
+Callers stay vendor-neutral; swapping models is a config change.
 
 Public API:
     from providers import get_provider

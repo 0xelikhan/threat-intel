@@ -254,7 +254,6 @@ def _compress(enrichments: dict) -> dict:
             "vt_malicious":  (d.get("virustotal") or {}).get("malicious"),
             "otx_pulses":    (d.get("otx") or {}).get("pulseCount"),
             "pd_risk":       (d.get("pulsedive") or {}).get("risk"),
-            "cert_count":    (d.get("certTransparency") or {}).get("totalCerts"),
             "whois_created": (d.get("whois") or {}).get("created"),
             "registered_today":  nrd.get("is_same_day"),
             "age_days":      nrd.get("age_days"),
