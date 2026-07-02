@@ -162,13 +162,80 @@ _CREDENTIAL_ACCESS_PATTERNS = [
 
 # Ransomware behavioural markers.
 _RANSOMWARE_PATTERNS = [
-    re.compile(r"\bvssadmin\s+delete\s+shadows\b", re.I),
-    re.compile(r"\bwmic\s+shadowcopy\s+delete\b", re.I),
-    re.compile(r"\bbcdedit.*\bsafeboot\b", re.I),
+    # Allow optional .exe suffix — `vssadmin.exe delete shadows` was slipping
+    # through the old \s+ requirement because `.exe` isn't whitespace.
+    re.compile(r"\bvssadmin(?:\.exe)?\s+delete\s+shadows\b", re.I),
+    re.compile(r"\bwmic(?:\.exe)?\s+shadowcopy\s+delete\b", re.I),
+    re.compile(r"\bbcdedit(?:\.exe)?.*\bsafeboot\b", re.I),
     re.compile(r"\bransom.?note\b", re.I),
     re.compile(r"\bencrypted\s+by\b", re.I),
     re.compile(r"\bLockBit|Conti|BlackCat|ALPHV|BlackByte|Royal\s+Ransom|"
                r"Cl0p|Play\s+Ransom|Rhysida|Akira", re.I),
+]
+
+# Identity / IAM attack patterns — password spray, MFA fatigue,
+# privileged role assignment, suspicious service principal creation.
+# Fires TIER 2 in the extractor.
+_IDENTITY_ATTACK_PATTERNS = [
+    re.compile(r"\bpassword\s+spray(?:ing)?\s+(?:attack|detected|attempt)", re.I),
+    re.compile(r"\bfailed\s+login\s+attempts?\s*:\s*[1-9]\d{2,}", re.I),  # >=100
+    re.compile(r"\bMFA\s+fatigue\s+attack\b", re.I),
+    re.compile(r"\bMFA\s+push\s+requests?\s*:\s*[1-9]\d{1,}\s+in\b", re.I),  # >=10 pushes
+    re.compile(r"\bnew\s+(?:assignment\s+to|assignment\s+of|role\s+assignment).*Global\s+Administrator", re.I | re.S),
+    re.compile(r"\bassign(?:ed|ment)\s+.*(?:Global\s+Administrator|Privileged\s+Role\s+Administrator|User\s+Administrator|Security\s+Administrator)", re.I | re.S),
+    re.compile(r"\bnew\s+service\s+principal\s+created\b.*?(?:Mail\.Read|Files\.ReadWrite|User\.Read\.All|Directory\.ReadWrite|Application\.ReadWrite)", re.I | re.S),
+    re.compile(r"\bimpossible\s+travel\b", re.I),
+    re.compile(r"\batypical\s+travel\b", re.I),
+    re.compile(r"\banonymous\s+ip\s+use\b", re.I),
+    re.compile(r"\battack\s+tool\s+detected\b", re.I),  # Entra risk detection
+    re.compile(r"\bleaked\s+credentials\b", re.I),
+    re.compile(r"\bmalware\s+linked\s+ip\b", re.I),
+]
+
+# Cloud (AWS / Azure / GCP) attack patterns.
+_CLOUD_ATTACK_PATTERNS = [
+    # AWS GuardDuty finding categories that are always malicious-signal
+    re.compile(r"\bGuardDuty\s+Finding\s*:?\s*(?:UnauthorizedAccess|CredentialAccess|Backdoor|CryptoCurrency|Trojan|Impact|Discovery|Exfiltration)", re.I),
+    re.compile(r"\bInstanceCredentialExfiltration\b", re.I),
+    re.compile(r"\bMaliciousIPCaller\b", re.I),
+    # AWS access key from bad geo
+    re.compile(r"\bAKIA[A-Z0-9]{16}\b.*?(?:used|accessed|invoked)\s+from\s+\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", re.I | re.S),
+    # S3 public exposure
+    re.compile(r"\bS3\s+bucket\s+(?:ACL|policy)\s+changed\s+to\s+public", re.I),
+    re.compile(r"\bS3\s+bucket.*(?:public-read|public-read-write)\b", re.I | re.S),
+    # Azure Key Vault
+    re.compile(r"\bKey\s+Vault\s*:?\s*Key\s+deleted\b", re.I),
+    re.compile(r"\b(?:master|root|prod)[-_ ]?(?:encryption[-_ ]?)?key.*deleted\b", re.I | re.S),
+    re.compile(r"\bKeyVault\s+Purge\b", re.I),
+    # Azure high-severity incident
+    re.compile(r"\bAzure\s+Sentinel\b.*?\bseverity\s*:?\s*(?:high|critical)", re.I | re.S),
+    # AWS root account use — always high signal
+    re.compile(r"\broot\s+account\s+(?:login|used|access|activity)", re.I),
+    re.compile(r"\buserIdentity[^{]*\btype\s*:\s*[\"']?Root[\"']?", re.I),
+    # IAM privilege escalation
+    re.compile(r"\bAttachUserPolicy\b.*AdministratorAccess", re.I | re.S),
+    re.compile(r"\bAttachRolePolicy\b.*AdministratorAccess", re.I | re.S),
+    re.compile(r"\bCreateAccessKey\b.*(?:contractor|external|new-user|guest)", re.I | re.S),
+    # Suspicious AWS API from unusual IP (Moscow / Beijing / Tehran / known-bad)
+    re.compile(r"\bMoscow\b.*\b(?:AWS|IAM|GuardDuty|CloudTrail)\b", re.I | re.S),
+]
+
+# C2 / beaconing / covert-channel patterns.
+_C2_BEACON_PATTERNS = [
+    re.compile(r"\bCobalt\s+Strike\s+beacon\b", re.I),
+    re.compile(r"\bSliver\s+(?:beacon|C2|implant)\b", re.I),
+    re.compile(r"\bBrute\s+Ratel\b", re.I),
+    re.compile(r"\bMerlin\s+agent\b", re.I),
+    re.compile(r"\bmetasploit\s+(?:meterpreter|payload|handler)\b", re.I),
+    re.compile(r"\bbeacon\s+pattern\s+detected\b", re.I),
+    re.compile(r"\bC2\s+(?:callback|beacon|traffic|channel)\b", re.I),
+    re.compile(r"\binterval\s*:?\s*\d+s\s*\(\s*[±+/-]{1,3}\s*\d+%?\s*\)\s+sustained", re.I),  # jitter beacon
+    re.compile(r"\bDNS\s+tunnel(?:ing|ling|s)\b", re.I),
+    re.compile(r"\bTXT\s+quer(?:y|ies)\s*:\s*[1-9]\d{2,}\s+in\b", re.I),  # >=100 TXT queries
+    re.compile(r"\bknown\s+Tor\s+exit\b", re.I),
+    re.compile(r"\bTor\s+exit\s+node\b", re.I),
+    re.compile(r"\bknown\s+malicious\s+ip\b", re.I),
+    re.compile(r"\bmalicious\s+ip\s+(?:address|hit|match)\b", re.I),
 ]
 
 _LATERAL_MOVEMENT_PATTERNS = [
@@ -439,6 +506,29 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
         _push(tier_1, "confirmed C2 callback (Feodo Tracker)",
               "IP appears on the abuse.ch Feodo Tracker active-C2 list")
 
+    # Critical cloud events — TIER 1 by themselves. These are events
+    # where the "worst-case" has already happened (data exposed, keys
+    # deleted, root credential used) and no confirmation of exploitation
+    # is needed — the exposure IS the incident.
+    _CRITICAL_CLOUD_TIER1 = [
+        (r"\bS3\s+bucket\s+(?:ACL|policy)\s+changed\s+to\s+public.*?(?:prod|production|backup|customer|pii|hipaa|pci)",
+         "public S3 exposure of production/backup data"),
+        (r"\b(?:prod|production|backup|customer|pii|hipaa|pci)[-_a-z0-9]*\s+bucket.*(?:public-read|public-read-write)",
+         "public S3 exposure of production/backup data"),
+        (r"\bKey\s+Vault\s*:?\s*Key\s+deleted\b.*?(?:master|root|encryption)",
+         "critical key deletion (master/root/encryption)"),
+        (r"\broot\s+account\s+(?:login|used|access)\s+from\s+\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}",
+         "AWS root account use from external IP"),
+        (r"\bGuardDuty\s+Finding\s*:?\s*(?:UnauthorizedAccess|CredentialAccess|Backdoor|CryptoCurrency|Trojan|Impact)",
+         "AWS GuardDuty malicious-activity finding"),
+        (r"\bInstanceCredentialExfiltration\b",
+         "AWS instance credential exfiltration"),
+    ]
+    for pat, name in _CRITICAL_CLOUD_TIER1:
+        if re.search(pat, log_text, re.I | re.S):
+            _push(tier_1, name, f"matched pattern in raw alert content")
+            break
+
     # VT >= 5 same IOC
     vt_hi_ioc = ""
     for _t, ioc, p in _iter_ioc_enrichments(state):
@@ -532,6 +622,38 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
         if m:
             _push(tier_2, "brand-impersonation typosquat domain",
                   f"matched '{m.group(0)[:60]}'")
+            break
+
+    # Identity / IAM attacks — password spray, MFA fatigue, privileged
+    # role assignment, suspicious service principal. These land as
+    # narrative text in Entra/Okta/Azure logs and were slipping through
+    # the tier framework because none of them touched enrichment
+    # signals or the older behavioural patterns.
+    for rx in _IDENTITY_ATTACK_PATTERNS:
+        m = rx.search(log_text)
+        if m:
+            _push(tier_2, "identity attack pattern",
+                  f"matched '{m.group(0)[:80]}'")
+            break
+
+    # Cloud attack patterns — AWS GuardDuty findings, S3 exposure,
+    # Azure Key Vault deletion, root-account use, IAM privilege
+    # escalation. Fires TIER 2 which combined with a bad-geo indicator
+    # (185.220.101.45 / Moscow / etc.) escalates to HIGH.
+    for rx in _CLOUD_ATTACK_PATTERNS:
+        m = rx.search(log_text)
+        if m:
+            _push(tier_2, "cloud attack pattern",
+                  f"matched '{m.group(0)[:80]}'")
+            break
+
+    # C2 / beaconing / covert channel — Cobalt Strike / Sliver / DNS
+    # tunneling / Tor exit outbound / known-malicious-IP tags.
+    for rx in _C2_BEACON_PATTERNS:
+        m = rx.search(log_text)
+        if m:
+            _push(tier_2, "C2 / covert-channel pattern",
+                  f"matched '{m.group(0)[:80]}'")
             break
 
     otx_ge_5 = False
@@ -652,6 +774,25 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
         r"\b(?:mshta|regsvr32|rundll32|certutil|bitsadmin)\.exe\s+.*?(?:javascript\s*:|https?://|/i\s*:|-urlcache|-decode)",
         r"\blsass(?:\.exe)?\s*(?:memory\s+access|dump)",
         r"parent\s*(?:process)?\s*:\s*(?:outlook|winword|excel|powerpnt|chrome|msedge|firefox|acrord32)\.exe.*?(?:powershell|cmd|wscript|cscript|mshta)",
+        # Ransomware
+        r"\bvssadmin(?:\.exe)?\s+delete\s+shadows",
+        r"\b(?:LockBit|Conti|BlackCat|ALPHV|BlackByte|Rhysida|Akira|Cl0p)\b",
+        # Identity attacks
+        r"\bpassword\s+spray(?:ing)?",
+        r"\bMFA\s+fatigue",
+        r"\bimpossible\s+travel",
+        r"\bnew\s+(?:assignment|role\s+assignment).*Global\s+Administrator",
+        # Cloud
+        r"\bGuardDuty\s+Finding\s*:?\s*(?:Unauthorized|Credential|Backdoor|Crypto|Trojan)",
+        r"\bS3\s+bucket\s+(?:ACL|policy)\s+changed\s+to\s+public",
+        r"\bKey\s+Vault\s*:?\s*Key\s+deleted",
+        r"\broot\s+account\s+(?:login|used|access)",
+        # C2
+        r"\bCobalt\s+Strike\s+beacon",
+        r"\bbeacon\s+pattern\s+detected",
+        r"\bDNS\s+tunnel(?:ing|ling)",
+        r"\bknown\s+Tor\s+exit",
+        r"\bknown\s+malicious\s+ip",
     ]
     _text_has_red_flag = any(re.search(p, log_text, re.I | re.S) for p in _text_red_flags)
     if all_clean and checked >= 2 and not tier_1 and not tier_2 and not _text_has_red_flag:

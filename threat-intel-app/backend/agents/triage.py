@@ -768,12 +768,39 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
     try:
         import re as _re_bh
         _bh_patterns = [
+            # LOLBAS abuse
             (r"\b(?:mshta|regsvr32|rundll32|certutil|bitsadmin)(?:\.exe)?\s+.*?(?:javascript\s*:|https?://|/i\s*:|-urlcache|-decode)", 0.35),
+            # Encoded PS / execution-policy bypass
             (r"\b(?:powershell|cmd)(?:\.exe)?\s+.*?\b(?:-e(?:nc)?|-encodedcommand|-executionpolicy\s+bypass|frombase64string|downloadstring|downloadfile|iex\b|invoke-expression)", 0.35),
+            # Suspicious parent → child
             (r"parent\s*(?:process)?\s*:\s*(?:outlook|winword|excel|powerpnt|chrome|msedge|firefox|acrord32)\.exe.*?(?:powershell|cmd|wscript|cscript|mshta)", 0.35),
+            # LSASS access / dump
             (r"\blsass(?:\.exe)?\s*(?:memory\s+access|dump)", 0.40),
-            (r"\bvssadmin\s+delete\s+shadows\b", 0.50),
-            (r"\b(?:midnight\s+blizzard|storm-\d+|apt\d{2,4}|lockbit|conti|blackcat|alphv|lazarus|cozy\s+bear|fancy\s+bear)\b", 0.50),
+            # Ransomware behaviour (allow .exe suffix — was slipping through)
+            (r"\bvssadmin(?:\.exe)?\s+delete\s+shadows\b", 0.50),
+            (r"\bwmic(?:\.exe)?\s+shadowcopy\s+delete\b", 0.50),
+            # Named threat actors / ransomware families
+            (r"\b(?:midnight\s+blizzard|storm-\d+|apt\d{2,4}|lockbit|conti|blackcat|alphv|lazarus|cozy\s+bear|fancy\s+bear|rhysida|akira|cl0p)\b", 0.50),
+            # Identity attacks
+            (r"\bpassword\s+spray(?:ing)?\s+(?:attack|detected|attempt)", 0.45),
+            (r"\bMFA\s+fatigue\s+attack\b", 0.45),
+            (r"\bimpossible\s+travel\b", 0.40),
+            (r"\bnew\s+(?:assignment\s+to|role\s+assignment).*Global\s+Administrator", 0.40),
+            (r"\bnew\s+service\s+principal\s+created\b.*?(?:Mail\.Read|Files\.ReadWrite|User\.Read\.All|Directory\.ReadWrite)", 0.40),
+            # Cloud attacks
+            (r"\bGuardDuty\s+Finding\s*:?\s*(?:UnauthorizedAccess|CredentialAccess|Backdoor|CryptoCurrency|Trojan|Impact)", 0.45),
+            (r"\bInstanceCredentialExfiltration\b", 0.45),
+            (r"\bS3\s+bucket\s+(?:ACL|policy)\s+changed\s+to\s+public", 0.45),
+            (r"\bKey\s+Vault\s*:?\s*Key\s+deleted\b", 0.45),
+            (r"\broot\s+account\s+(?:login|used|access|activity)", 0.45),
+            (r"\bAttachUserPolicy\b.*AdministratorAccess", 0.45),
+            # C2 / covert-channel
+            (r"\bCobalt\s+Strike\s+beacon\b", 0.50),
+            (r"\bSliver\s+(?:beacon|C2|implant)\b", 0.50),
+            (r"\bbeacon\s+pattern\s+detected\b", 0.40),
+            (r"\bDNS\s+tunnel(?:ing|ling)\b", 0.40),
+            (r"\bknown\s+Tor\s+exit\b", 0.35),
+            (r"\bknown\s+malicious\s+ip\b", 0.35),
         ]
         for pat, bump in _bh_patterns:
             if _re_bh.search(pat, raw, _re_bh.I | _re_bh.S):
