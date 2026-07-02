@@ -1663,6 +1663,16 @@ Tool-budget tips:
                             return tc, args, res
 
                         outcomes = await asyncio.gather(*[_run_tool(tc) for tc in resp.tool_calls])
+                        # Adaptive break: watch tool results as they land. If none
+                        # of iteration 1's tools returned a meaningful new signal
+                        # (named malware family, KEV/CVE hit, tracked actor,
+                        # ransomware marker, credential-access indicator, verdict
+                        # bump), the model won't have reason to call MORE tools
+                        # in iteration 2 — synth-only will get us to the answer
+                        # ~5-8s faster. Iteration 0 is where the model asks its
+                        # highest-value questions; if none of those returned a
+                        # payoff, more roundtrips are unlikely to.
+                        _iter_yielded_signal = False
                         for tc, args, tool_result in outcomes:
                             summary = _summarize_for_trace(tc["name"], tool_result)
                             tool_call_log.append({
@@ -1696,6 +1706,27 @@ Tool-budget tips:
                                 "tool_call_id":  tc["id"],
                                 "content":       json.dumps(tool_result, default=str)[:4000],
                             })
+                            # Check this tool result for actionable signal keywords.
+                            _res_text = json.dumps(tool_result, default=str).lower()[:4000]
+                            if any(k in _res_text for k in (
+                                    "malicious", "known_ransomware", "ransomware_use",
+                                    "kev", "storm-", "apt", "unc4", "fin7", "fin8",
+                                    "midnight blizzard", "cozy bear", "fancy bear",
+                                    "lockbit", "conti", "blackcat", "alphv",
+                                    "credential_access", "lateral_movement",
+                                    "mimikatz", "lsass", "dcsync",
+                                    "verdict\": \"malicious",
+                                    "\"score\": 100", "\"score\": 90", "\"score\": 95",
+                                    "\"abusescore\": 9", "\"abusescore\": 100",
+                            )):
+                                _iter_yielded_signal = True
+                        # If iteration 0 pulled nothing actionable, break out —
+                        # the model would just be asking the same kind of
+                        # questions again with the same likely null result.
+                        if iteration == 0 and not _iter_yielded_signal:
+                            _log.info("investigation.adaptive_break: iter 0 tools "
+                                       "returned no strong signal; skipping iter 1")
+                            break
                         # Continue the loop — AI may call more tools
                         continue
 
