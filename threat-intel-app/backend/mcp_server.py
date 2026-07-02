@@ -90,7 +90,7 @@ async def analyze_log(log_text: str) -> dict:
 # coverage as /api/analyze.
 def _mcp_keys(cfg) -> dict:
     return {k: cfg.get(k) for k in (
-        "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "IPINFO_TOKEN", "GREYNOISE_KEY",
+        "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "IPINFO_TOKEN",
         "OTX_KEY", "URLSCAN_KEY", "PULSEDIVE_KEY",
         "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY", "HYBRID_ANALYSIS_KEY",
         # Canonical Censys names — PAT first, legacy v2 pair as fallback.
@@ -107,8 +107,8 @@ def _mcp_keys(cfg) -> dict:
 async def lookup_ip(ip: str) -> dict:
     """Comprehensive IP reputation across all configured sources.
 
-    Sources: offline blocklists (52K+ IPs), AbuseIPDB, VirusTotal, GreyNoise,
-    OTX, IPInfo geolocation, Tor exit list, Censys, Criminal IP, ProxyCheck,
+    Sources: offline blocklists (52K+ IPs), AbuseIPDB, VirusTotal, OTX,
+    IPInfo geolocation, Tor exit list, Censys, Criminal IP, ProxyCheck,
     Maltiverse, OpenCTI, Robtex, Hackertarget reverse-IP, Feodo Tracker
     active-C2 list, Google Safe Browsing, ASN reputation (flags bulletproof
     hosters / VPNs / anonymizers).

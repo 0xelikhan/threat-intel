@@ -562,9 +562,45 @@ Evidence pack:
 ══════════════════════════════════════════════════════════════════════════════════
 DISPOSITION DECISION TREE
 ══════════════════════════════════════════════════════════════════════════════════
+
+HARD OVERRIDES — these BLOCK a CLEAR disposition regardless of anything else
+in the evidence pack. Check them FIRST. If any fire, disposition MUST be
+ESCALATE (or MONITOR when the log lists it as "medium risk"):
+
+  1. LOG CONTENT NAMES A NATION-STATE OR TRACKED ACTOR
+       Watch for: Storm-####, APT##, UNC####, TA####, FIN##, Lazarus,
+       Sandworm, Cozy Bear, Midnight Blizzard, Fancy Bear, Turla,
+       "nation-state", "state-sponsored", "state actor", "threat actor
+       associated with…". These labels are the SIEM's or the source
+       system's OWN attribution (Microsoft Storm-####, Mandiant APT##,
+       etc.) — they represent PROPRIETARY threat intel the model has no
+       basis to override with public TI (VirusTotal, AbuseIPDB, OTX).
+       A "clean IP reputation" from VT/AbuseIPDB does NOT rebut a
+       Storm-#### attribution — VT simply doesn't have Microsoft's
+       tracking data. CLEAR is FORBIDDEN. Escalate.
+
+  2. THE SOURCE LOG ITSELF MARKED THE RISK AS HIGH / CRITICAL
+       Watch for: "High risk", "Critical risk", "Risk level: high",
+       "High-severity alert", risk_score >= 8/10, MITRE Sentinel
+       "Attempted / Successful atypical travel", Defender for Identity
+       "High risk sign-in". The upstream detection engine already had
+       information you don't (user's baseline, tenant-wide sign-in
+       patterns, historical device/IP context). Do not downgrade a
+       high-risk finding to CLEAR based on public IP reputation alone.
+       CLEAR is FORBIDDEN. Escalate or Monitor.
+
+  3. CONFIRMED IDENTITY-LAYER COMPROMISE INDICATORS
+       Watch for: MFA bypass, session token replay, impossible travel,
+       new device from an unusual country, atypical user-agent (empty
+       UA, curl/PowerShell UA on a browser-only sign-in flow), atypical
+       protocol (legacy auth on a modern tenant), password spray hits.
+       These are attack primitives, not "just a login". Escalate.
+
+If none of the above fire, use the normal decision tree:
+
   * CLEAR    -> only if you can cite a specific reason it is benign
-                  (known-good library hit, GreyNoise=benign, MISP warninglist
-                   match, well-known infrastructure, legitimate corporate
+                  (known-good library hit, MISP warninglist match,
+                   well-known infrastructure, legitimate corporate
                    service, clean hash across every TI source, scheduled
                    vendor maintenance). When the threat_level above is
                    INFORMATIONAL/LOW and the evidence supports benign,
@@ -579,6 +615,25 @@ DISPOSITION DECISION TREE
                   concrete next steps. When the operator's note disagreed
                   with this verdict, name the specific evidence that
                   overrides their framing.
+
+COHERENCE RULES (this is where most bad dispositions come from):
+
+  * Do not concatenate a "the log says X is bad" paragraph with a
+    separate "the IOCs look clean" paragraph and then pick either
+    conclusion. RESOLVE the conflict in ONE sentence. Rule of thumb:
+    upstream detection wins over public IP/domain reputation, because
+    public TI doesn't have the upstream system's private telemetry.
+
+  * If your prose mentions "nation-state", "actor associated with",
+    "high risk", "atypical", "unusual", "suspicious" — the disposition
+    MUST be ESCALATE or MONITOR. It cannot be CLEAR while your own
+    prose contradicts the verdict.
+
+  * Do not write "clean reputation" or "no malicious activity" as a
+    reason to CLEAR when the log content ITSELF flagged the event.
+    Public TI sources not flagging an IP does not mean the log's
+    detection was wrong; it means public TI didn't independently
+    confirm it (which is normal and expected).
 
 ══════════════════════════════════════════════════════════════════════════════════
 RESPOND with this EXACT JSON (no markdown fences, no commentary):
@@ -620,11 +675,11 @@ RESPOND with this EXACT JSON (no markdown fences, no commentary):
   ],
   "analyst_caveats": [
     "<one-line methodology caveat: assumptions, source-reliability limits,
-      time-bounded data freshness. e.g. 'GreyNoise classification is
-      tagging-based and may lag real intent by 24-48 h.' or 'OTX pulse
-      count includes researcher pulses, not just confirmed compromises.'
-      List 1-3 caveats analysts should know about your reasoning. Empty
-      list when the data is well-corroborated and no caveats apply.>",
+      time-bounded data freshness. e.g. 'OTX pulse count includes researcher
+      pulses, not just confirmed compromises.' or 'AbuseIPDB scores are
+      report-count-weighted and lag behind fresh campaigns by hours.' List
+      1-3 caveats analysts should know about your reasoning. Empty list when
+      the data is well-corroborated and no caveats apply.>",
     "<another>"
   ]
 }}

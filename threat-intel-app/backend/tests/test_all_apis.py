@@ -66,7 +66,7 @@ def _load_keys() -> Dict[str, str]:
                 pass
     # Env-var fallback / overlay
     for k in ("VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
-              "GREYNOISE_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
+              "PULSEDIVE_KEY", "MALTIVERSE_KEY",
               "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
               "HYBRID_ANALYSIS_KEY", "MALWAREBAZAAR_API_KEY",
               "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET",
@@ -197,22 +197,6 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
         f"https://ipinfo.io/{TEST_IP}/json",
         params={"token": KEYS.get("IPINFO_TOKEN", "")},
         key_env="IPINFO_TOKEN", key_url="https://ipinfo.io"))
-    # GreyNoise Community + RIOT both return HTTP 404 with a structured
-    # JSON body ("IP not observed scanning the internet" / "IP not in RIOT
-    # list") when the queried IP simply isn't in their dataset — that's a
-    # CLEAN verdict, not a service failure. Accept 404 as OK; the snippet
-    # text is preserved in the OK row so the operator can still see the
-    # canonical "not observed" message.
-    add(_probe(session, "GreyNoise Community", "IP enrichment",
-        f"https://api.greynoise.io/v3/community/{TEST_IP}",
-        headers={"key": KEYS.get("GREYNOISE_KEY", "")},
-        ok_statuses=(200, 404),
-        key_env="GREYNOISE_KEY", key_url="https://greynoise.io"))
-    add(_probe(session, "GreyNoise RIOT", "IP enrichment",
-        f"https://api.greynoise.io/v3/riot/{TEST_IP}",
-        headers={"key": KEYS.get("GREYNOISE_KEY", "")},
-        ok_statuses=(200, 404),  # 404 = IP not in RIOT (benign), still healthy
-        key_env="GREYNOISE_KEY", key_url="https://greynoise.io"))
     add(_probe(session, "OTX (IPv4)", "IP enrichment",
         f"https://otx.alienvault.com/api/v1/indicators/IPv4/{TEST_IP}/general",
         headers={"X-OTX-API-KEY": KEYS.get("OTX_KEY", "")},

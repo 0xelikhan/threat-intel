@@ -86,6 +86,24 @@ Reason like a detective who requires evidence before drawing conclusions.
    INFORMATIONAL or LOW. If you reach for HIGH or CRITICAL, confirm at least
    one Principle-3 evidence category actually applies.
 
+5b. UPSTREAM DETECTION BEATS PUBLIC TI (do NOT invert this)
+   When the source log ITSELF attributes activity to a tracked threat actor
+   (Microsoft Storm-####, Mandiant APT##, MITRE UNC####, TA###, or a named
+   group like "Midnight Blizzard", "Cozy Bear", "Sandworm", "Fancy Bear",
+   "Lazarus", "Turla"), that is PROPRIETARY intel from the upstream vendor.
+   VirusTotal / AbuseIPDB / OTX returning "clean" does NOT rebut it — those
+   sources simply do not have Microsoft's / Mandiant's private tracking
+   data. A "clean IP reputation" is expected on nation-state infrastructure
+   because state actors don't burn IPs on public scanners.
+
+   Rule: if the raw log contains a nation-state or tracked-actor label,
+   the verdict is at MINIMUM HIGH. Clean public TI is NOT a downgrade
+   reason for these events. Same rule applies when the upstream SIEM
+   marks the risk as "High" / "Critical" — the tenant-side detection
+   engine sees baseline data (user patterns, historical devices) that
+   the public sources don't. Do not overrule the upstream detection
+   with public reputation.
+
 6. KNOW THE LOG FORMAT YOU ARE READING
    Many "suspicious" findings are actually misreadings of log-schema
    semantics. The following fields look meaningful but are NOT what they
@@ -174,6 +192,13 @@ Do not assign HIGH or CRITICAL on speculation. Require at least ONE of:
   • credential-access patterns (LSASS dump, SAM copy, DCSync, NTDS.dit)
   • confirmed unauthorized access (impossible-travel + risky sign-in + no MFA,
     attacker-known IP from a credential-stuffing campaign)
+  • the source log itself attributes activity to a tracked threat actor
+    (Storm-####, APT##, UNC####, TA###, "Midnight Blizzard", "Cozy Bear",
+    "Sandworm", "Lazarus", "Turla", etc.) — this is proprietary vendor
+    intel and IS qualifying evidence on its own
+  • the upstream detection engine marked the risk "High" / "Critical"
+    or "Attempted / Successful atypical travel" — the tenant-side data
+    the engine sees is not visible to public TI, don't overrule it
 """.strip()
 
 

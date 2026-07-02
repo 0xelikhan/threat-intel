@@ -113,14 +113,6 @@ API_KEY_DEFINITIONS = {
         "placeholder": "ipinfo token",
         "group": "API Keys"
     },
-    "GREYNOISE_KEY": {
-        "label": "GreyNoise API Key",
-        "description": "Internet noise vs targeted attack classification.",
-        "required": False,
-        "url": "https://greynoise.io",
-        "placeholder": "GreyNoise API key",
-        "group": "API Keys"
-    },
     "OTX_KEY": {
         "label": "AlienVault OTX Key",
         "description": "Community threat pulses, IOC feeds.",

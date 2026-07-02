@@ -66,11 +66,6 @@ describe('sourceUrl', () => {
       .toBe('https://www.abuseipdb.com/check/1.2.3.4');
   });
 
-  test('GreyNoise IP path uses the viz host', () => {
-    expect(sourceUrl('GreyNoise', '1.2.3.4', 'ip'))
-      .toBe('https://viz.greynoise.io/ip/1.2.3.4');
-  });
-
   test('Censys distinguishes hosts vs domains', () => {
     expect(sourceUrl('Censys', '1.2.3.4', 'ip'))
       .toBe('https://search.censys.io/hosts/1.2.3.4');

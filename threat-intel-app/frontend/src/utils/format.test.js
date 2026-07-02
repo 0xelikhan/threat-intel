@@ -164,11 +164,10 @@ describe('verdictBucket', () => {
     expect(verdictBucket(v)).toBe(expected);
   });
 
-  test('CLEAN_INFRA is BLUE not GREEN (the GreyNoise RIOT fix)', () => {
-    // Regression test for the bug where Azure-RIOT IPs were rendered
-    // CLEAN/green, leading analysts to clear inbound RDP alerts on the
-    // "GreyNoise says it's clean" signal. CLEAN_INFRA gets its own
-    // blue bucket so the analyst can see "known infra, NOT safe traffic".
+  test('CLEAN_INFRA is BLUE not GREEN', () => {
+    // Known-good hosting infra (Cloudflare / cloud CDN / etc.) gets its
+    // own blue bucket so the analyst can see "known infra, NOT safe
+    // traffic" — attackers spin up VMs in these clouds routinely.
     expect(verdictBucket('CLEAN_INFRA')).toBe('blue');
     expect(verdictBucket('CLEAN_INFRA')).not.toBe('green');
   });

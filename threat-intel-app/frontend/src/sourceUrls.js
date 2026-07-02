@@ -36,7 +36,6 @@ const BUILDERS = {
   },
   'AbuseIPDB':       { ip: v => `https://www.abuseipdb.com/check/${enc(v)}` },
   'IPInfo':          { ip: v => `https://ipinfo.io/${enc(v)}` },
-  'GreyNoise':       { ip: v => `https://viz.greynoise.io/ip/${enc(v)}` },
   'Censys': {
     ip:     v => `https://search.censys.io/hosts/${enc(v)}`,
     domain: v => `https://search.censys.io/domains/${enc(v)}`,

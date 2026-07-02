@@ -67,7 +67,7 @@ def _load_keys() -> Dict[str, str]:
                 pass
     for k in (
         "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
-        "GREYNOISE_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
+        "PULSEDIVE_KEY", "MALTIVERSE_KEY",
         "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
         "HYBRID_ANALYSIS_KEY", "MALWAREBAZAAR_API_KEY",
         "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET",
@@ -206,10 +206,6 @@ async def _build_sources(session: aiohttp.ClientSession) -> List[Tuple[str, str,
         s.append(("IP", "IPInfo", _gen(session,
             f"https://ipinfo.io/{TEST_IP}/json",
             params={"token": K["IPINFO_TOKEN"]})))
-    if K.get("GREYNOISE_KEY"):
-        s.append(("IP", "GreyNoise Community", _gen(session,
-            f"https://api.greynoise.io/v3/community/{TEST_IP}",
-            headers={"key": K["GREYNOISE_KEY"]})))
     if K.get("OTX_KEY"):
         s.append(("IP", "OTX (IP)", _gen(session,
             f"https://otx.alienvault.com/api/v1/indicators/IPv4/{TEST_IP}/general",

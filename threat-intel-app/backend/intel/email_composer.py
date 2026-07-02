@@ -2970,18 +2970,17 @@ def _strip_asn_prefix(org: str) -> Tuple[str, str]:
 
 def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
     """Client-readable summary paragraph for an IP. Pulls from every
-    API source we have — AbuseIPDB, VirusTotal, IPInfo, GreyNoise,
-    Maltiverse, Pulsedive, Censys, Criminal IP, ProxyCheck, Feodo
-    Tracker, BGP ranking, ASN reputation, Tor — and renders as natural-
-    language sentences so the customer can read it without decoding
-    CLI-style fragments."""
+    API source we have — AbuseIPDB, VirusTotal, IPInfo, Maltiverse,
+    Pulsedive, Censys, Criminal IP, ProxyCheck, Feodo Tracker, BGP
+    ranking, ASN reputation, Tor — and renders as natural-language
+    sentences so the customer can read it without decoding CLI-style
+    fragments."""
     if not data or not isinstance(data, dict):
         return ""
 
     abuse = data.get("abuseipdb") or {}
     ipinfo = data.get("ipinfo") or {}
     vt     = data.get("virustotal") or {}
-    gn     = data.get("greynoise") or {}
     mal_t  = data.get("maltiverse") or {}
     pd     = data.get("pulsedive") or {}
     asn_rep= data.get("asn_reputation") or {}
@@ -3072,21 +3071,6 @@ def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
             else:
                 reputation_bits.append(
                     f"VirusTotal shows the IP clean across {total} engines.")
-
-    if gn and not gn.get("error"):
-        cls = (gn.get("classification") or "").strip().lower()
-        name = (gn.get("name") or "").strip()
-        # GreyNoise sometimes reports an actor 'name' of 'unknown' which
-        # adds no information — skip the parenthetical in that case.
-        named = name if name and name.lower() != "unknown" else ""
-        if cls in ("malicious", "suspicious"):
-            reputation_bits.append(
-                f"GreyNoise classifies it as {cls}"
-                + (f" ({named})" if named else "") + ".")
-        elif cls == "benign":
-            reputation_bits.append(
-                f"GreyNoise recognises it as benign Internet noise"
-                + (f" ({named})" if named else "") + ".")
 
     if mal_t and not mal_t.get("error"):
         cls = (mal_t.get("classification") or "").strip().lower()
@@ -3957,7 +3941,7 @@ async def _gather_email_enrichment(log_text: str, parsed: Dict,
         # responses on every email).
         keys = {k: (config.get(k) or "") for k in (
             "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
-            "GREYNOISE_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
+            "PULSEDIVE_KEY", "MALTIVERSE_KEY",
             "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
             "HYBRID_ANALYSIS_KEY",
             "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY",
@@ -4136,7 +4120,7 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     facts_block = _render_facts_block(parsed, options)
 
     # ── OSINT enrichment fan-out ─────────────────────────────────────────
-    # Pull AbuseIPDB / VirusTotal / IPInfo / Maltiverse / GreyNoise / WHOIS
+    # Pull AbuseIPDB / VirusTotal / IPInfo / Maltiverse / WHOIS
     # context for IOCs found in the log. Append the rendered lines to the
     # facts block as a 'Threat intelligence' subsection AND pass the
     # compact rendering into the AI prompt so the analysis paragraph can
@@ -4211,7 +4195,7 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "GROUNDING:\n"
         "* Every claim MUST trace back to a parsed field, the raw log, OR "
         "the enrichment block (AbuseIPDB / VirusTotal / IPInfo / WHOIS / "
-        "Maltiverse / GreyNoise / Spamhaus / etc.). Do not invent IPs, "
+        "Maltiverse / Spamhaus / etc.). Do not invent IPs, "
         "hashes, users, processes, malware names, or campaigns that "
         "aren't in the input.\n"
         "* When the enrichment block contains relevant context (an IP's "
@@ -4235,9 +4219,9 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "* Confirmed-malicious — multiple corroborating signals such as\n"
         "    - a hash matching a known malware family (VirusTotal multi-\n"
         "      engine flag, MalwareBazaar / Hybrid Analysis verdict)\n"
-        "    - an IP that GreyNoise / Maltiverse / AbuseIPDB classify as\n"
-        "      malicious, especially when it overlaps with Tor exits or\n"
-        "      known C2 infrastructure\n"
+        "    - an IP that Maltiverse / AbuseIPDB classify as malicious,\n"
+        "      especially when it overlaps with Tor exits or known C2\n"
+        "      infrastructure\n"
         "    - Office → PowerShell -enc / cmd / wscript spawn chains\n"
         "    - newly-registered brand-impersonation domains on Spamhaus\n"
         "      DBL or with VT engine hits\n"

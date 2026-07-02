@@ -8,8 +8,8 @@ exactly why a score was assigned.
 Score buckets (cap at 100):
   Reputation        VT>50%=30, AbuseIPDB>75=20, ThreatFox=25,
                     Feodo/SSLBL=30
-  Context           GreyNoise mal=20 / benign=-20, suspicious ports
-                    (4444/8080/1080/etc.)=10, bulletproof ASN=15
+  Context           suspicious ports (4444/8080/1080/etc.)=10,
+                    bulletproof ASN=15
   Behavioral        PowerShell encoded=20, malware family=25,
                     C2 framework=30, persistence mechanism=15
   Feed              TAXII match=20, FreshRSS article=10
@@ -85,17 +85,6 @@ def score_ip(ioc: str, enrichment: Dict, behavioral: Optional[Dict] = None,
         factors.append(_factor("Feodo Tracker match", 30, "Botnet C2 blocklist hit", "reputation"))
 
     # ── Context ────────────────────────────────────────────────────────────────
-    gn = enrichment.get("greynoise") or {}
-    gn_class = (gn.get("classification") or "").lower()
-    if gn_class == "malicious":
-        factors.append(_factor("GreyNoise classification: malicious", 20,
-                               f"actor={gn.get('actor') or gn.get('name')}",
-                               "context"))
-    elif gn_class == "benign":
-        factors.append(_factor("GreyNoise classification: benign", -20,
-                               f"actor={gn.get('actor') or gn.get('name')}",
-                               "context"))
-
     isp_org = " ".join([(abuse.get("isp") or ""),
                         (enrichment.get("ipinfo") or {}).get("org") or ""]).lower()
     bp_hits = [k for k in _BULLETPROOF_ASNS if k in isp_org]
