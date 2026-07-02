@@ -1067,7 +1067,7 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
         yield "data: [DONE]\n\n"
         return
 
-    from agents.triage        import run_triage
+    from agents.triage        import run_triage, finalize_triage_ai
     from agents.enrichment    import run_enrichment
     from agents.investigation import run_investigation
     from agents.response      import run_response
@@ -1092,8 +1092,12 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
         from agents.orchestrator import make_initial_state
         state = make_initial_state(raw_input, input_type, analyst_feedback)
 
-        # ── Stage 1: TRIAGE ──────────────────────────────────────────────────
-        state = await run_triage(state)
+        # ── Stage 1: TRIAGE (heuristic + defer AI) ─────────────────────────
+        # Two-phase triage: heuristic + IOC extraction land synchronously
+        # (~500 ms) so we can start enrichment right away; the AI
+        # classifier LLM call (~2-3 s) runs concurrently with enrichment
+        # via finalize_triage_ai. Overlaps the two expensive stages.
+        state = await run_triage(state, defer_ai=True)
         trace = state.get("agent_trace", [])
         if trace:
             yield f"data: {json.dumps({'event': 'agent_update', 'runId': run_id, 'trace': trace[-1]})}\n\n"
@@ -1101,16 +1105,24 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
         # the sidebar IOC list and the EmailAnalysis card render instantly.
         yield f"data: {json.dumps({'event': 'partial_result', 'runId': run_id, 'result': _strip(state, run_id, label)})}\n\n"
 
-        # Drop alert if triage refused (very low score AND no signals)
-        if not state.get("should_proceed") and state.get("triage_score", 0) <= 0.10:
+        # Drop alert if the heuristic phase already knows we're way below
+        # the proceed threshold. (Full drop-if-benign decision waits for
+        # the final AI-merged score.)
+        if state.get("triage_score", 0) < 0.05 and not state.get("_pending_ai_triage"):
             yield f"data: {json.dumps({'event': 'complete', 'runId': run_id, 'result': _strip(state, run_id, label), 'timestamp': _ts()})}\n\n"
             yield "data: [DONE]\n\n"
             return
 
-        # ── Stage 2: ENRICHMENT (skip when no enrichable IOCs) ──────────────
+        # ── Stage 2: ENRICHMENT ‖ AI-TRIAGE FINALIZE (concurrent) ──────────
         iocs = state.get("iocs", {}) or {}
         has_enrichable = any((iocs.get(k) or []) for k in
                              ("ips", "domains", "hashes", "urls", "emails", "cves"))
+        # Kick off the deferred AI triage classifier as a background task
+        # so it overlaps with the enrichment fan-out. finalize_triage_ai
+        # is a no-op if _pending_ai_triage isn't set (e.g. AI unconfigured
+        # or benign fast-path already fired).
+        ai_finalize_task = asyncio.create_task(finalize_triage_ai(state))
+        _bg_tasks.append(ai_finalize_task)
         if has_enrichable:
             # Stream each IOC type's enrichment as it lands so cards fill
             # progressively rather than all at once when the slowest type returns.
@@ -1122,6 +1134,25 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
             async for frame in _drain_events(enr_task, enr_q, run_id, label):
                 yield frame
             state = await enr_task
+        # Merge in the AI-triage result (fields it wrote: triage_score,
+        # should_proceed, triage_reasoning, alert_type in trace). Waited
+        # for both stages so investigation sees the fully-populated state.
+        _ai_state = await ai_finalize_task
+        if _ai_state.get("triage_score") is not None:
+            state["triage_score"]     = _ai_state["triage_score"]
+            state["should_proceed"]   = _ai_state.get("should_proceed",
+                                                     state.get("should_proceed"))
+            state["triage_reasoning"] = _ai_state.get("triage_reasoning",
+                                                     state.get("triage_reasoning"))
+            state["agent_trace"]      = _ai_state.get("agent_trace",
+                                                     state.get("agent_trace"))
+        # Now that the final AI-merged score is known, do the drop
+        # decision the deferred-AI path could not make earlier.
+        if not state.get("should_proceed") and state.get("triage_score", 0) <= 0.10:
+            yield f"data: {json.dumps({'event': 'complete', 'runId': run_id, 'result': _strip(state, run_id, label), 'timestamp': _ts()})}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+        if has_enrichable:
             # GTI scores depend on enrichment data
             state["gti_scores"] = compute_gti_scores(state.get("enrichments", {}))
             trace = state.get("agent_trace", [])

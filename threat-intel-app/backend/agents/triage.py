@@ -579,7 +579,18 @@ Respond with exactly this JSON:
 }}"""
 
 
-async def run_triage(state: dict) -> dict:
+async def run_triage(state: dict, defer_ai: bool = False) -> dict:
+    """Full triage stage: heuristic IOC extraction + MISP warninglist +
+    behavioural TTP mapping + cross_refs + AI classifier.
+
+    defer_ai=True short-circuits BEFORE the AI classifier LLM call and
+    returns state with a `_pending_ai_triage` marker set. The caller is
+    then expected to run `finalize_triage_ai(state)` (typically in
+    parallel with the enrichment stage) to fill in alert_type / urgency /
+    reasoning / final_score. Used by the SSE pipeline in main.py to
+    overlap the AI classifier's ~2-3s LLM call with the enrichment
+    stage's HTTP fan-out.
+    """
     from config import config
     import time
     _t_start = time.perf_counter()
@@ -830,6 +841,50 @@ async def run_triage(state: dict) -> dict:
             # to the AI path — don't fail the whole triage stage.
             pass
 
+    # Defer-AI short-circuit: return early with heuristic-derived state
+    # + everything needed to finalize the AI classifier later. Caller
+    # (main.py's _stream) will kick off finalize_triage_ai concurrently
+    # with enrichment.
+    if defer_ai and ai_result is None:
+        trace.append({
+            "agent": "triage",
+            "status": "pending_ai",
+            "summary": "Heuristic triage complete; AI classifier deferred (running in parallel with enrichment).",
+            "score": round(heuristic_score, 2),
+            "alert_type": derive_alert_type(iocs, cross_refs),
+            "urgency": "medium",
+            "ioc_count": total_iocs,
+            "elapsed_ms": int((time.perf_counter() - _t_start) * 1000),
+            "ai_skipped": False,
+            "timestamp": ts,
+        })
+        return {
+            **state,
+            "iocs": iocs,
+            "suppressed_iocs":       suppressed_iocs,
+            "behavioral_indicators": behavioral_indicators,
+            "log_translation":       log_translation,
+            "defender_parse":        defender_parse,
+            "multi_log":             multi_log,
+            "log_count":             (multi_log or {}).get("log_count", 1),
+            "triage_score":          heuristic_score,
+            # should_proceed conservatively True — the enrichment stage
+            # gates itself on IOCs anyway; the final AI-merged score
+            # will make the real drop decision after finalize.
+            "should_proceed":        heuristic_score > 0.10,
+            "triage_reasoning":      "heuristic complete; AI pending",
+            "cross_refs":            cross_refs,
+            "email_analysis":        email_analysis,
+            "agent_trace":           trace,
+            "_pending_ai_triage":    {
+                "heuristic_score":  heuristic_score,
+                "ioc_summary":      ioc_summary,
+                "iocs":             iocs,
+                "cross_refs":       cross_refs,
+                "scrubbed_snippet": (state.get("raw_input_clean") or raw)[:600],
+            },
+        }
+
     # Use the provider-abstraction-aware check so triage runs the AI
     # path on Anthropic / Ollama deployments too; the old direct
     # OPENAI_API_KEY check skipped AI triage entirely on non-OpenAI
@@ -914,3 +969,88 @@ async def run_triage(state: dict) -> dict:
         "email_analysis":        email_analysis,
         "agent_trace":           trace,
     }
+
+
+async def finalize_triage_ai(state: dict) -> dict:
+    """Runs the AI classifier LLM call that `run_triage(..., defer_ai=True)`
+    skipped, merges the result back into state, and updates the trace
+    entry.
+
+    Designed to run concurrently with `run_enrichment` — the AI call
+    doesn't touch enrichments and enrichment doesn't touch the fields
+    finalize_triage_ai writes to, so the two overlap safely. Caller
+    awaits both before starting investigation.
+
+    When state has no `_pending_ai_triage` marker (defer wasn't used),
+    the function is a no-op and returns state unchanged.
+    """
+    pending = state.get("_pending_ai_triage")
+    if not pending:
+        return state
+    from config import config
+    heuristic_score = pending.get("heuristic_score", 0.0)
+    iocs = pending.get("iocs", {})
+    cross_refs = pending.get("cross_refs", {})
+    scrubbed = pending.get("scrubbed_snippet", "")
+    ioc_summary = pending.get("ioc_summary", "")
+
+    ai_result = None
+    try:
+        from providers import provider_configured, get_provider
+        if provider_configured(config):
+            provider = get_provider()
+            resp = await provider.complete(
+                model=config.get_model(fast=True),
+                messages=[{"role": "user", "content": TRIAGE_PROMPT.format(
+                    log_snippet=scrubbed, ioc_summary=ioc_summary,
+                )}],
+                max_tokens=220,
+                temperature=0.0,
+                response_format={"type": "json_object"},
+            )
+            if not resp.error:
+                ai_result = json.loads(resp.message)
+    except Exception:
+        ai_result = None
+
+    if ai_result is None:
+        ai_result = {
+            "triage_score":   heuristic_score,
+            "should_proceed": heuristic_score > 0.15,
+            "reasoning":      "Heuristic score (AI unavailable or key not configured).",
+            "alert_type":     derive_alert_type(iocs, cross_refs),
+            "urgency":        "medium",
+            "false_positive_indicators": [],
+            "priority_iocs":  [],
+        }
+
+    try:
+        _ai_score = float(ai_result.get("triage_score", heuristic_score))
+    except (TypeError, ValueError):
+        _ai_score = heuristic_score
+    final_score = (_ai_score + heuristic_score) / 2
+
+    # Update the pending trace entry in place with the final AI-merged
+    # score + AI-supplied alert_type / reasoning / urgency.
+    trace = list(state.get("agent_trace", []))
+    for i, t in enumerate(trace):
+        if t.get("agent") == "triage" and t.get("status") == "pending_ai":
+            trace[i] = {
+                **t,
+                "status":      "complete",
+                "summary":     ai_result.get("reasoning", ""),
+                "score":       round(final_score, 2),
+                "alert_type":  ai_result.get("alert_type", "unknown"),
+                "urgency":     ai_result.get("urgency", "medium"),
+            }
+            break
+
+    new_state = dict(state)
+    new_state.pop("_pending_ai_triage", None)
+    new_state.update({
+        "triage_score":     final_score,
+        "should_proceed":   ai_result.get("should_proceed", True) and final_score > 0.15,
+        "triage_reasoning": ai_result.get("reasoning", ""),
+        "agent_trace":      trace,
+    })
+    return new_state
