@@ -24,7 +24,7 @@ class EnrichIOCSkill(Skill):
     @property
     def description(self) -> str:
         return ("Look up one IOC against every configured TI source "
-                "(VirusTotal, AbuseIPDB, OTX, GreyNoise, URLScan, Shodan, "
+                "(VirusTotal, AbuseIPDB, OTX, URLScan, Shodan, "
                 "Pulsedive, Maltiverse, WHOIS, DNS, BGP, etc.) and return a "
                 "structured verdict alongside the raw per-source payloads.")
 
@@ -74,7 +74,7 @@ class EnrichIOCSkill(Skill):
         # pipeline. Each enrich_* internally cherry-picks what it needs.
         keys = {k: config.get(k, "") for k in (
             "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
-            "GREYNOISE_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
+            "PULSEDIVE_KEY", "MALTIVERSE_KEY",
             "IPINFO_TOKEN", "WHOISXML_KEY",
             "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY", "HYBRID_ANALYSIS_KEY",
             # Canonical Censys names — PAT first, legacy v2 pair as fallback.

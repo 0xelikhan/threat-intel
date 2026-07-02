@@ -614,15 +614,15 @@ function SandboxBehavioral({ result, bare }) {
 }
 
 /* ─── honeypot / deception intelligence (spec §5) ────────────────────────────
- * Per-IP rollup of: GreyNoise RIOT (known-good infra), DShield SANS ISC,
- * StopForumSpam, Emerging Threats blocklist, Project Honeypot HTTP:BL.
- * Each source returns flagged + summary.
+ * Per-IP rollup of: DShield SANS ISC, StopForumSpam, Emerging Threats
+ * blocklist, Project Honeypot HTTP:BL. Each source returns flagged +
+ * summary.
  */
 function HoneypotActivity({ result, bare }) {
   const ips = result?.enrichments?.ips || {};
   const rows = Object.entries(ips)
     .map(([ip, payload]) => ({ ip, dec: payload?.deception, full: payload }))
-    .filter(r => r.dec && (r.dec.flagged_count > 0 || r.dec.greynoise_riot?.is_known_good));
+    .filter(r => r.dec && r.dec.flagged_count > 0);
   if (!rows.length) return null;
 
   const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
@@ -633,20 +633,6 @@ function HoneypotActivity({ result, bare }) {
   const renderSource = (key, payload) => {
     if (!payload) return null;
     switch (key) {
-      case 'greynoise_riot': {
-        if (!payload.is_known_good) return null;
-        return {
-          name: 'GreyNoise RIOT', good: true,
-          headline: 'known-good infrastructure',
-          rows: [
-            payload.name        && ['Service',     payload.name],
-            payload.category    && ['Category',    payload.category],
-            payload.trust_level && ['Trust level', String(payload.trust_level)],
-            payload.description && ['Description', payload.description],
-            payload.last_updated && ['Last updated', payload.last_updated.slice(0, 10)],
-          ].filter(Boolean),
-        };
-      }
       case 'dshield': {
         if (!payload.flagged) return null;
         return {
@@ -703,8 +689,8 @@ function HoneypotActivity({ result, bare }) {
   const body = (
     <>
       <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.5, lineHeight: 1.6 }}>
-        Cross-checked against GreyNoise RIOT, DShield SANS ISC, StopForumSpam,
-        Emerging Threats compromised IPs, and Project Honeypot HTTP:BL.
+        Cross-checked against DShield SANS ISC, StopForumSpam, Emerging
+        Threats compromised IPs, and Project Honeypot HTTP:BL.
       </Typography>
       {rows.map(({ ip, dec, full }) => {
         // ── Per-IP context (ASN / country / ISP / AbuseIPDB) — already
@@ -738,7 +724,6 @@ function HoneypotActivity({ result, bare }) {
         ].filter(Boolean);
 
         const renderedSources = [
-          renderSource('greynoise_riot',    dec.greynoise_riot),
           renderSource('dshield',           dec.dshield),
           renderSource('stopforumspam',     dec.stopforumspam),
           renderSource('emerging_threats',  dec.emerging_threats),
@@ -808,12 +793,6 @@ function HoneypotActivity({ result, bare }) {
                 sx={{ fontSize: 10.5, color: '#0fbcff', textDecoration: 'none',
                   '&:hover': { textDecoration: 'underline' } }}>
                 DShield ↗
-              </Box>
-              <Box component="a" target="_blank" rel="noreferrer"
-                href={`https://www.greynoise.io/viz/ip/${ip}`}
-                sx={{ fontSize: 10.5, color: '#0fbcff', textDecoration: 'none',
-                  '&:hover': { textDecoration: 'underline' } }}>
-                GreyNoise ↗
               </Box>
             </Stack>
 
@@ -975,7 +954,7 @@ function hasOsintContent(result) {
   const hasRows = ['ips', 'domains', 'hashes'].some(cat =>
     Object.values(enr[cat] || {}).some(p => p?.osint && Object.keys(p.osint).length));
   const hasHoneypot = Object.values(enr.ips || {})
-    .some(p => p?.deception && (p.deception.flagged_count > 0 || p.deception.greynoise_riot?.is_known_good));
+    .some(p => p?.deception && p.deception.flagged_count > 0);
   // JA3 / JA4 fingerprints live under Detection Rules now, not OSINT.
   return hasRows || hasHoneypot;
 }
@@ -997,7 +976,7 @@ function InfrastructureIntel({ result, bare, hideUrlscan = false, hideGeopolitic
   const hasGeo = !hideGeopolitical
     && !!(gp && !gp.error && (gp.countries?.length || gp.attribution));
   const hasHoneypot = Object.values(result?.enrichments?.ips || {})
-    .some(p => p?.deception && (p.deception.flagged_count > 0 || p.deception.greynoise_riot?.is_known_good));
+    .some(p => p?.deception && p.deception.flagged_count > 0);
   // When URL detonation has been lifted to its own top-of-Triage section,
   // suppress the duplicate inside OSINT so it doesn't render twice.
   const hasUrlscan = !hideUrlscan && !!(result?.iocs?.urls || []).length;
@@ -1611,8 +1590,8 @@ function ThreatScore({ result }) {
 
       {/* Per-indicator list — click a row to expand the per-source breakdown
           so the analyst sees WHICH TI source said what (VirusTotal ratio,
-          AbuseIPDB abuse %, Maltiverse classification + tags, GreyNoise
-          classification, OTX pulses, etc.) without leaving the Summary. */}
+          AbuseIPDB abuse %, Maltiverse classification + tags, OTX pulses,
+          etc.) without leaving the Summary. */}
       <Block title="Per-indicator score · click to expand sources">
         <PerIndicatorList sorted={sorted} result={result}/>
       </Block>
@@ -1812,24 +1791,6 @@ function _ocSources(result, ioc, type) {
                  label: 'no community pulses for this indicator',
                  color: tert,
                  why: 'AlienVault OTX queried but no researcher has tagged this indicator in a public pulse.' });
-    }
-  }
-
-  // GreyNoise — classification.
-  if (d.greynoise && !d.greynoise.error) {
-    const g = d.greynoise;
-    const cls = g.classification || g.label || (g.is_known_good ? 'benign' : '');
-    if (cls) {
-      const c = /malicious/i.test(cls) ? red
-              : /benign|known/i.test(cls) ? green
-              : /suspicious/i.test(cls) ? orange : tert;
-      const extra = g.name ? ` · ${g.name}` : '';
-      const why =
-          /malicious/i.test(cls)      ? 'GreyNoise observed this IP actively scanning the internet for malicious purposes.'
-        : /benign|known/i.test(cls)   ? 'GreyNoise identifies this as known-good infrastructure (search crawler, CDN, etc.) — safe to ignore.'
-        : /suspicious/i.test(cls)     ? 'GreyNoise saw unusual scanning patterns — not confirmed malicious but worth attention.'
-        :                                'GreyNoise observed background internet scanner traffic from this IP.';
-      out.push({ source: 'GreyNoise', label: `${cls}${extra}`, color: c, why });
     }
   }
 
@@ -2429,7 +2390,7 @@ function _ocSources(result, ioc, type) {
   // to retry or check their API key configuration).
   const _sourceLabels = {
     virustotal: 'VirusTotal',          abuseipdb: 'AbuseIPDB',
-    otx: 'OTX',                         greynoise: 'GreyNoise',
+    otx: 'OTX',
     maltiverse: 'Maltiverse',           threatfox: 'ThreatFox',
     malwarebazaar: 'MalwareBazaar',     urlscan: 'URLScan.io',
     pulsedive: 'Pulsedive',             spamhaus_dbl: 'Spamhaus DBL',
@@ -2468,8 +2429,8 @@ function _ocSources(result, ioc, type) {
     // Skip sources that have nothing actionable to report. Three classes
     // get hidden because the analyst can't do anything with them:
     //   * not_configured  — operator hasn't added the key yet
-    //   * rate_limited    — free-tier daily / burst quota (GreyNoise 25/wk,
-    //                       Pulsedive 1/sec, who-dat WHOIS burst, etc.).
+    //   * rate_limited    — free-tier daily / burst quota (Pulsedive 1/sec,
+    //                       who-dat WHOIS burst, etc.).
     //                       Real verdicts come back from the OTHER sources;
     //                       a "rate-limited" row is just noise.
     //   * timed_out       — upstream slowness; production has per-host
@@ -5559,7 +5520,6 @@ function BulkTable({ result }) {
       const meta = [];
       if (d.virustotal?.malicious != null) meta.push(`VT ${d.virustotal.malicious}`);
       if (d.abuseipdb?.abuseScore)         meta.push(`Abuse ${d.abuseipdb.abuseScore}%`);
-      if (d.greynoise?.classification)     meta.push(`GN ${d.greynoise.classification}`);
       if (d.tor?.isExitNode)               meta.push('Tor');
       if (d.heuristics?.nrd?.is_same_day)  meta.push('reg-today');
       if (d.heuristics?.dga?.flagged)      meta.push('DGA');

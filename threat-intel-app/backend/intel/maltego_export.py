@@ -111,8 +111,8 @@ def _emit_edge(
 def _summarise_ioc(per_source: Dict[str, Any]) -> Tuple[str, str]:
     """Compress one IOC's per-source enrichment into (confidence, note)
     for the Maltego node. We pull the strongest signal — VirusTotal
-    detections, AbuseIPDB confidence, GreyNoise label — into the note
-    so the graph view is informative without expanding every node."""
+    detections, AbuseIPDB confidence — into the note so the graph view
+    is informative without expanding every node."""
     if not isinstance(per_source, dict):
         return "Low", ""
     bits: List[str] = []
@@ -130,11 +130,6 @@ def _summarise_ioc(per_source: Dict[str, Any]) -> Tuple[str, str]:
             bits.append(f"AbuseIPDB {score}%")
             if isinstance(score, (int, float)) and score >= 75:
                 confidence = "High"
-    gn = per_source.get("greynoise") or {}
-    if isinstance(gn, dict) and not gn.get("error"):
-        cls = gn.get("classification") or gn.get("label")
-        if cls:
-            bits.append(f"GreyNoise: {cls}")
     return confidence, " · ".join(bits)
 
 

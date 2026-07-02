@@ -19,9 +19,9 @@ TOOL_SCHEMAS = [
             "name": "lookup_ip_reputation",
             "description": (
                 "Get full reputation for an IP across all configured sources: VirusTotal, "
-                "AbuseIPDB confidence score, GreyNoise classification (incl. RIOT), OTX "
-                "pulse count, IPInfo geo+ASN, Tor exit status, offline blocklists (52K+ "
-                "IPs), Censys open-ports + TLS cert, Criminal IP inbound/outbound threat "
+                "AbuseIPDB confidence score, OTX pulse count, IPInfo geo+ASN, Tor exit "
+                "status, offline blocklists (52K+ IPs), Censys open-ports + TLS cert, "
+                "Criminal IP inbound/outbound threat "
                 "scoring, ProxyCheck VPN/proxy classification, Maltiverse, Hackertarget "
                 "reverse-IP, Feodo Tracker active-C2 list, Google Safe Browsing, BGP "
                 "ranking, ASN reputation (bulletproof / VPN / anonymizer). Use when you "
@@ -235,9 +235,8 @@ def _summarize_for_trace(name: str, result: dict) -> str:
     if name == "lookup_ip_reputation":
         abuse = (result.get("abuseipdb") or {}).get("abuseScore", "-")
         vt    = (result.get("virustotal") or {}).get("malicious", "-")
-        gn    = (result.get("greynoise") or {}).get("classification", "-")
         local = (result.get("local_feeds") or {}).get("source")
-        bits  = [f"AbuseIPDB {abuse}", f"VT {vt}", f"GreyNoise {gn}"]
+        bits  = [f"AbuseIPDB {abuse}", f"VT {vt}"]
         if local: bits.append(f"blocklist:{local}")
         return " · ".join(bits)
     if name == "lookup_domain_reputation":
@@ -322,7 +321,7 @@ async def execute_tool(name: str, args: dict, config) -> dict:
 # ABUSECH_AUTH_KEY to dodge anonymous rate limits).
 def _all_keys(config) -> dict:
     return {k: config.get(k) for k in (
-        "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "IPINFO_TOKEN", "GREYNOISE_KEY",
+        "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "IPINFO_TOKEN",
         "OTX_KEY", "URLSCAN_KEY", "PULSEDIVE_KEY",
         "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY", "HYBRID_ANALYSIS_KEY",
         # Censys: PAT-first, legacy v2 ID/Secret pair as the configured

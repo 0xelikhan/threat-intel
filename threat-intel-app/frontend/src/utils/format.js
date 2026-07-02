@@ -116,7 +116,7 @@ const _VERDICT_TO_BUCKET = {
   MALICIOUS:   'red',
   SUSPICIOUS:  'orange',
   CLEAN:       'green',
-  CLEAN_INFRA: 'blue',   // NEW (added when we fixed GreyNoise RIOT bug)
+  CLEAN_INFRA: 'blue',   // known-good hosting infra (Cloudflare / cloud CDN / etc.)
   BENIGN:      'green',
   UNKNOWN:     'grey',
   UNDETECTED:  'grey',

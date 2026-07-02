@@ -43,7 +43,6 @@ def test_summary_cobalt_strike_multiple_flags():
         "ips": {"185.220.101.45": {
             "abuseipdb": {"abuseScore": 95},
             "virustotal": {"malicious": 12},
-            "greynoise":  {"classification": "malicious"},
             "tor":        {"isExitNode": True},
         }},
         "hashes": {"AABB": {
@@ -66,21 +65,10 @@ def test_summary_handles_errors_and_skipped():
         "abuseipdb": {"abuseScore": 0, "country": "US"},      # returned, not flagged
         "virustotal": {"error": "auth_failed", "error_type": "auth_failed"},  # not returned
         "otx":       {"skipped": True, "error": "no key"},     # not returned
-        "greynoise": {"classification": "benign"},             # returned, not flagged
     }}}
     s = compute_enrichment_summary(enr)
-    assert s["returned_count"] == 2
-    assert s["total_count"] == 4
-    assert s["flagged_count"] == 0
-
-
-def test_summary_greynoise_benign_does_not_count_as_flag():
-    """GreyNoise benign tag must NOT count as a malicious verdict — common
-    false-positive source if we counted any payload as a flag."""
-    enr = {"ips": {"1.1.1.1": {
-        "greynoise": {"classification": "benign"},
-    }}}
-    s = compute_enrichment_summary(enr)
+    assert s["returned_count"] == 1
+    assert s["total_count"] == 3
     assert s["flagged_count"] == 0
 
 

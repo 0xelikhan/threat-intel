@@ -66,7 +66,7 @@ MITRE_TACTICS: Tuple[str, ...] = (
 IOC_TYPES: Tuple[str, ...] = ("ips", "domains", "hashes", "urls")
 
 ENRICHMENT_SOURCES: Tuple[str, ...] = (
-    "abuseipdb", "ipinfo", "greynoise", "virustotal", "otx",
+    "abuseipdb", "ipinfo", "virustotal", "otx",
     "robtex", "hackertarget", "censys",
     "misp_feeds", "misp_galaxy",
     "feodo_tracker", "tor", "bgp_ranking", "google_safebrowsing",

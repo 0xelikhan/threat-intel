@@ -69,10 +69,6 @@ def _src_flagged_malicious(src_name: str, payload: Any) -> bool:
         return int(p.get("abuseScore") or 0) >= 50
     if s == "otx":
         return int(p.get("pulseCount") or 0) >= 1
-    if s == "greynoise":
-        # GreyNoise classification "malicious" is the explicit malicious tag;
-        # "benign" / "unknown" do NOT count.
-        return (p.get("classification") or "").lower() == "malicious"
     if s in ("malwarebazaar", "threatfox", "hybrid_analysis"):
         # Any hit on these is a malicious verdict (they're malware-specific dbs)
         return bool(p.get("found") or p.get("malware_family") or p.get("malwareName"))
@@ -247,7 +243,6 @@ def _compress(enrichments: dict) -> dict:
             "country":      (d.get("ipinfo") or {}).get("country"),
             "org":          (d.get("ipinfo") or {}).get("org"),
             "is_tor":       (d.get("tor") or {}).get("isExitNode"),
-            "gn_class":     (d.get("greynoise") or {}).get("classification"),
             "otx_pulses":   (d.get("otx") or {}).get("pulseCount"),
             "active_today": (abuse.get("recent_activity") or {}).get("is_active_today"),
             "local_feeds":  (d.get("local_feeds") or {}).get("source"),
@@ -329,7 +324,7 @@ Malware-specific FALSE POSITIVES to explicitly rule out:
 C2 / NETWORK-INFRASTRUCTURE FOCUS — weight these signals heaviest
 ═══════════════════════════════════════════════════════════════════════════════════
 Priority signals (check in this order):
-  1. Destination IP reputation (AbuseIPDB / VT / GreyNoise / offline blocklists)
+  1. Destination IP reputation (AbuseIPDB / VT / offline blocklists)
   2. ASN reputation (bulletproof hosters, VPN/anonymizer infrastructure)
   3. Domain age — newly-registered C2 is a strong tell
   4. DGA score / random subdomain patterns / Tor exit
@@ -489,11 +484,9 @@ PRINCIPLE 1 — Context matters more than patterns
   context unless an enrichment source explicitly flagged the specific IP.
 
   CRITICAL COROLLARY: cloud-provider attribution is ALSO NOT exonerating
-  evidence. A GreyNoise verdict of CLEAN_INFRA (RIOT match for Azure /
-  AWS / Google) identifies the IP's OWNER, not the legitimacy of the
-  specific traffic. Attackers spin up VMs in these clouds and inherit
-  the RIOT-benign classification. Do NOT clear alerts of the following
-  shapes solely on cloud-provider attribution:
+  evidence. Attackers spin up VMs in Azure / AWS / GCP and inherit the
+  cloud-provider ASN. Do NOT clear alerts of the following shapes solely
+  on cloud-provider attribution:
     - Inbound RDP / SSH / SMB authentication from an internet IP
     - Lateral movement (SMB, WMI, WinRM, PsExec, scheduled-task push)
     - C2 callbacks / beaconing patterns
@@ -799,14 +792,14 @@ KNOWN_GOOD_MATCHES  (pre-analysis match against curated patterns for legitimate
                      unless concrete malicious evidence contradicts it):
 {known_good_matches}
 
-ENRICHED IOC DATA   (TI sources: VirusTotal, AbuseIPDB, GreyNoise (incl. RIOT),
-                     OTX, URLScan, Pulsedive, MalwareBazaar, ThreatFox, URLhaus,
-                     CIRCL hashlookup, Hybrid Analysis sandbox, Team Cymru MHR,
-                     Maltiverse, OpenCTI, Censys, Criminal IP, ProxyCheck,
-                     Feodo Tracker, Spamhaus DBL, Google Safe Browsing, MISP
-                     feeds, plus offline IP blocklists + phishing-domain feeds;
-                     may be EMPTY if the log contains no IPs/domains/hashes —
-                     that is OK, reason on the log):
+ENRICHED IOC DATA   (TI sources: VirusTotal, AbuseIPDB, OTX, URLScan, Pulsedive,
+                     MalwareBazaar, ThreatFox, URLhaus, CIRCL hashlookup, Hybrid
+                     Analysis sandbox, Team Cymru MHR, Maltiverse, OpenCTI,
+                     Censys, Criminal IP, ProxyCheck, Feodo Tracker, Spamhaus
+                     DBL, Google Safe Browsing, MISP feeds, plus offline IP
+                     blocklists + phishing-domain feeds; may be EMPTY if the
+                     log contains no IPs/domains/hashes — that is OK, reason
+                     on the log):
 {enrichments}
 
 LOCAL THREAT INTEL CROSS-REFERENCES:
@@ -862,9 +855,9 @@ ANALYTICAL FRAMEWORK — work through each in order
    specific signal that supports it. T1566 Phishing → "EML auth failure + lookalike
    domain registered same day + matched EvilProxy kit URL".
 
-6) **False-positive check.** Could any signal be legit? GreyNoise "benign" tag for
-   internet scanners, MISP warning list match, well-known service infrastructure,
-   ASN belonging to a major cloud provider for legitimate apps, etc.
+6) **False-positive check.** Could any signal be legit? MISP warning list match,
+   well-known service infrastructure, ASN belonging to a major cloud provider
+   for legitimate apps, etc.
 
 7) **Gap analysis.** If your confidence is below 0.6, name exactly which additional
    enrichment would resolve the uncertainty.
@@ -924,7 +917,7 @@ COMMON FALSE-POSITIVE PATTERNS (recognise these and ask the right question):
   • Sanctioned cloud / CDN traffic (Cloudflare, Fastly, Akamai, AWS, Azure, GCP)
   • Legitimate admin maintenance (PowerShell remoting, WMIC) during business hours
   • MDM push commands (Jamf, Intune) — looks like remote command execution
-  • Corporate VPN exit IPs flagged as anonymizer by GreyNoise
+  • Corporate VPN exit IPs flagged as anonymizer
 
 CONFIDENT-MALICIOUS PATTERNS (don't waste time asking — verdict it):
   • KEV CVE + ransomware_use=true present in alert
@@ -936,7 +929,6 @@ CONFIDENT-MALICIOUS PATTERNS (don't waste time asking — verdict it):
   • Cobalt Strike / Sliver / Brute Ratel JA3 fingerprint
 
 CONFIDENT-BENIGN PATTERNS (don't waste time asking — clear it):
-  • GreyNoise tag "benign" + known scanner name
   • MISP warning-list match (1.2M entries of legit infrastructure)
   • Domain WHOIS shows registered >5 years ago + clean across all sources
   • IP belongs to AWS/Azure/GCP cloud range AND no other suspicious signals

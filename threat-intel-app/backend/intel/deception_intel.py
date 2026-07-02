@@ -1,10 +1,8 @@
 """
 Deception / honeypot intelligence — spec §5.
 
-Free no-key sources (RIOT requires GREYNOISE_KEY which is already configured):
+Free no-key sources:
 
-  GreyNoise RIOT       → /v3/riot/{ip} — is this a known safe service (Cloudflare,
-                         Google, AWS)? If so we skip full enrichment.
   DShield (SANS ISC)   → https://isc.sans.edu/api/ip/{ip}?json — attack count,
                          report count, threat level, block list status.
   StopForumSpam        → https://api.stopforumspam.org/api?json&ip={ip} — spam
@@ -61,20 +59,16 @@ async def _refresh_et(session: aiohttp.ClientSession) -> None:
 async def enrich_deception(session: aiohttp.ClientSession, ip: str, keys: Dict) -> Dict:
     """Run all deception-intel sources in parallel. Returns a combined dict."""
     await _refresh_et(session)
-    gn_key = keys.get("GREYNOISE_KEY", "")
     hp_key = keys.get("HONEYPOT_KEY", "")
 
     tasks = [
-        _riot(session, ip, gn_key),
         _dshield(session, ip),
         _stopforumspam(session, ip),
         _project_honeypot(session, ip, hp_key),
     ]
-    riot, dshield, sfs, hp = await asyncio.gather(*tasks, return_exceptions=True)
+    dshield, sfs, hp = await asyncio.gather(*tasks, return_exceptions=True)
 
     out: Dict = {}
-    if isinstance(riot, dict) and "error" not in riot:
-        out["greynoise_riot"] = riot
     if isinstance(dshield, dict) and "error" not in dshield:
         out["dshield"] = dshield
     if isinstance(sfs, dict) and "error" not in sfs:
@@ -98,33 +92,6 @@ async def enrich_deception(session: aiohttp.ClientSession, ip: str, keys: Dict) 
 
 
 # ─── individual probes ─────────────────────────────────────────────────────────
-async def _riot(session, ip: str, key: str) -> Dict:
-    """GreyNoise RIOT — known-good infrastructure (Cloudflare/Google/AWS etc.)."""
-    if not key:
-        return {"error": "no GREYNOISE_KEY", "source": "greynoise_riot"}
-    try:
-        async with session.get(
-            f"https://api.greynoise.io/v3/riot/{ip}",
-            headers={"key": key}, timeout=_TIMEOUT,
-        ) as r:
-            if r.status == 404:
-                return {"riot": False, "is_known_good": False}
-            if r.status != 200:
-                return {"error": f"HTTP {r.status}", "source": "greynoise_riot"}
-            d = await r.json()
-            return {
-                "riot":            d.get("riot", False),
-                "is_known_good":   bool(d.get("riot")),
-                "category":        d.get("category"),
-                "name":            d.get("name"),
-                "description":     (d.get("description") or "")[:200],
-                "trust_level":     d.get("trust_level"),
-                "last_updated":    d.get("last_updated"),
-            }
-    except Exception as e:
-        return {"error": str(e), "source": "greynoise_riot"}
-
-
 async def _dshield(session, ip: str) -> Dict:
     """DShield / SANS Internet Storm Center."""
     try:

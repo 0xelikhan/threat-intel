@@ -24,7 +24,7 @@ For each, the format is
 We extract the IP, ASN, and last-seen timestamp into a single inverted
 index. enrich_ip surfaces "this IP appears on N DataPlane feeds (SSH
 brute, SIP fraud)" as a confident "actively-attacking infrastructure"
-verdict — stronger than a single GreyNoise sighting.
+verdict.
 """
 
 from __future__ import annotations

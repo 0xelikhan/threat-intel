@@ -1,13 +1,11 @@
 """Regression tests for the verdict-mapping audit pass.
 
-Two bugs found while auditing every _p_* parser in agents/enrichment.py
-after the GreyNoise RIOT misclassification:
+Two bugs found while auditing every _p_* parser in agents/enrichment.py:
 
   - AbuseIPDB:        score == 50 fell into UNKNOWN (off-by-one between
                       the > 50 SUSPICIOUS branch and the >= 0 catch-all).
   - Hybrid Analysis:  "suspicious" verdict was being mapped to MALICIOUS,
-                      same severity-amplification pattern as GreyNoise
-                      mapping RIOT-only matches to CLEAN.
+                      a severity-amplification bug.
 
 Bucket every threshold here so future tweaks can't silently regress.
 """
@@ -76,7 +74,7 @@ def test_hybrid_malicious_stays_malicious():
 
 def test_hybrid_suspicious_does_not_amplify_to_malicious():
     """The bug case: HA's 'suspicious' verdict was being mapped to
-    MALICIOUS — same severity-amplification pattern as GreyNoise."""
+    MALICIOUS — a severity-amplification bug."""
     out = _p_hybrid(_hybrid_blob("suspicious"))
     assert out["verdict"] == "SUSPICIOUS"
     assert out["verdict"] != "MALICIOUS"

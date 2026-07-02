@@ -126,13 +126,6 @@ _REGISTRY: Dict[str, Dict[str, str]] = {
         "fix_hint":  ("Open Settings and add OTX_KEY from your OTX profile → "
                       "API integration page. Free for community use."),
     },
-    "GREYNOISE_KEY_MISSING": {
-        "detail":    "GreyNoise API key is not configured.",
-        "error_code": "greynoise_key_missing",
-        "fix_hint":  ("Open Settings and add GREYNOISE_KEY from your GreyNoise "
-                      "Community account → API page."),
-    },
-
     # ── Static datasets ───────────────────────────────────────────────────────
     "MITRE_DATASET_MISSING": {
         "detail":    "MITRE ATT&CK dataset (enterprise-attack.json) is missing.",

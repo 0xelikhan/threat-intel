@@ -55,8 +55,6 @@ function getIPDetails(ip, enrichments) {
     abuseScore: data.abuseipdb?.abuseScore,
     vtMalicious: data.virustotal?.malicious,
     isTor: data.tor?.isExitNode,
-    isNoise: data.greynoise?.noise,
-    greynoiseClass: data.greynoise?.classification,
     otxPulses: data.otx?.pulseCount
   };
 }
@@ -228,7 +226,6 @@ export default function MapTab({ result }) {
                     <td style={{ padding: '8px 10px' }}>
                       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                         {d.isTor && <span style={{ background: '#2d0a3d', border: '1px solid #cc5de8', color: '#cc5de8', padding: '1px 5px', borderRadius: '2px', fontSize: '9px' }}>TOR</span>}
-                        {d.isNoise && <span style={{ background: '#1a1a0a', border: '1px solid #4a5568', color: '#718096', padding: '1px 5px', borderRadius: '2px', fontSize: '9px' }}>NOISE</span>}
                         {d.abuseScore > 50 && <span style={{ background: '#2d1a0a', border: '1px solid #ff8c00', color: '#ffa94d', padding: '1px 5px', borderRadius: '2px', fontSize: '9px' }}>ABUSE {d.abuseScore}%</span>}
                         {d.otxPulses > 0 && <span style={{ background: '#1a1a2d', border: '1px solid #4a9eff', color: '#74c0fc', padding: '1px 5px', borderRadius: '2px', fontSize: '9px' }}>OTX {d.otxPulses}</span>}
                       </div>

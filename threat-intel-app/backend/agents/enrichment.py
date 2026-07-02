@@ -463,80 +463,6 @@ def _p_ipinfo(r):
             "asn": (r.get("org") or "").split(" ")[0] if (r.get("org") or "").startswith("AS") else None}
 
 
-def _p_gn(r):
-    """GreyNoise community + enterprise format. Extracts tags/CVEs/actor.
-
-    Verdict semantics — important nuance the AI prompt also reinforces:
-
-      * noise=True, classification=malicious  -> MALICIOUS
-        (observed scanning the internet with malicious intent)
-      * noise=True, classification=benign     -> CLEAN
-        (observed scanning the internet from a research / pentest source
-        that GreyNoise has classified — true benign noise)
-      * riot=True, noise=False                -> CLEAN_INFRA
-        (RIOT: the IP belongs to known business infrastructure such as
-        Microsoft Azure / Google / AWS / Cloudflare. This is NOT a
-        blanket 'safe traffic' verdict — attackers regularly spin up
-        VMs in these clouds and inherit the RIOT classification. We
-        emit a distinct verdict so the AI can weigh it correctly for
-        inbound-auth / lateral-movement / C2 contexts.)
-      * classification=unknown                -> SUSPICIOUS
-        (observed scanning but uncategorised)
-      * everything else                       -> no verdict
-        (not observed by their sensors — the analyst-facing card stays
-        informational rather than claiming a verdict either way)
-    """
-    if _is_fail(r):
-        return _err("greynoise", "Not in GreyNoise" if isinstance(r, dict) else r)
-    classification = r.get("classification") or ""
-    noise = bool(r.get("noise"))
-    riot  = bool(r.get("riot"))
-    out = {
-        "noise":          noise,
-        "riot":           riot,
-        "classification": classification,
-        "name":           r.get("name"),
-        "actor":          r.get("actor") or r.get("name"),
-        "tags":           r.get("tags") or [],
-        "cve":            r.get("cve") or [],
-        "first_seen":     r.get("first_seen"),
-        "last_seen":      r.get("last_seen"),
-        "vpn":            r.get("vpn"),
-        "tor":            r.get("tor") or (r.get("metadata") or {}).get("tor"),
-    }
-    meta = r.get("metadata") or {}
-    if meta:
-        out["asn"]          = meta.get("asn")
-        out["organization"] = meta.get("organization")
-        out["city"]         = meta.get("city")
-        out["country"]      = meta.get("country")
-        out["os"]           = meta.get("os")
-    # Source-level verdict — see docstring for the full state table.
-    if classification == "malicious":
-        out["verdict"] = "MALICIOUS"
-    elif noise and classification == "benign":
-        out["verdict"] = "CLEAN"
-        out["benign_note"] = (
-            f"GreyNoise observed this IP scanning the internet and "
-            f"classified the scanner as benign{(' (' + r.get('name') + ')') if r.get('name') else ''}."
-        )
-    elif riot and not noise:
-        # RIOT-only: known infrastructure, NOT a 'safe traffic' verdict.
-        # The dedicated verdict + note steer the AI away from clearing
-        # alerts solely on cloud-provider attribution.
-        out["verdict"] = "CLEAN_INFRA"
-        out["infra_note"] = (
-            f"GreyNoise RIOT: this IP belongs to {r.get('name') or 'known business infrastructure'}. "
-            "This identifies the OWNER of the IP, not the legitimacy of the "
-            "specific traffic. Attackers commonly spin up VMs in these "
-            "clouds and inherit the RIOT classification. Do NOT treat this "
-            "as exonerating evidence for inbound authentication, lateral "
-            "movement, C2 callbacks, or data exfiltration."
-        )
-    elif classification == "unknown":
-        out["verdict"] = "SUSPICIOUS"
-    return out
-
 
 def _vt_top_labels(attrs: dict) -> list:
     """Pull the most specific detection labels from VT analysis results."""
@@ -1057,10 +983,9 @@ def _p_hybrid(r):
 
     Verdict mapping respects HA's own taxonomy — they distinguish
     'malicious' from 'suspicious' deliberately, and collapsing the two
-    into MALICIOUS amplifies severity beyond what the source said
-    (same bug pattern as the GreyNoise RIOT-as-CLEAN bug). HA verdicts
-    in the wild: 'no_specific_threat' / 'no specific threat' (clean
-    enough), 'suspicious', 'malicious', 'unknown', or empty.
+    into MALICIOUS amplifies severity beyond what the source said. HA
+    verdicts in the wild: 'no_specific_threat' / 'no specific threat'
+    (clean enough), 'suspicious', 'malicious', 'unknown', or empty.
     """
     if _is_fail(r):
         return _err("hybrid_analysis", r)
@@ -1212,8 +1137,6 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
              headers={"Key": keys.get("ABUSEIPDB_KEY", ""), "Accept": "application/json"}),
         _get(session, f"https://ipinfo.io/{ip}/json",
              params={"token": keys.get("IPINFO_TOKEN", "")}),
-        _get(session, f"https://api.greynoise.io/v3/community/{ip}",
-             headers={"key": keys.get("GREYNOISE_KEY", "")}),
         _get(session, f"https://www.virustotal.com/api/v3/ip_addresses/{ip}",
              headers={"x-apikey": keys.get("VIRUSTOTAL_KEY", "")}),
         _get(session, f"https://otx.alienvault.com/api/v1/indicators/IPv4/{ip}/general",
@@ -1233,16 +1156,15 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         "tor":         {"isExitNode": ip in tor_nodes},
         "abuseipdb":   abuse_data,
         "ipinfo":      ipinfo_data,
-        "greynoise":   _p_gn(results[2]),
-        "virustotal":  _p_vt_ip(results[3]),
-        "otx":         _p_otx(results[4]),
-        "robtex":      _p_robtex(results[5]),
-        "hackertarget": _p_hackertarget(results[6]),
+        "virustotal":  _p_vt_ip(results[2]),
+        "otx":         _p_otx(results[3]),
+        "robtex":      _p_robtex(results[4]),
+        "hackertarget": _p_hackertarget(results[5]),
         "local_feeds": _local_ip_check(ip),
     }
     # Censys (optional)
-    if censys_auth and not isinstance(results[7], Exception):
-        cs = _p_censys(results[7])
+    if censys_auth and not isinstance(results[6], Exception):
+        cs = _p_censys(results[6])
         if "error" not in cs:
             data["censys"] = cs
     # Feodo Tracker (offline list)
@@ -2273,7 +2195,6 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
         "VIRUSTOTAL_KEY":      config.get("VIRUSTOTAL_KEY"),
         "ABUSEIPDB_KEY":       config.get("ABUSEIPDB_KEY"),
         "IPINFO_TOKEN":        config.get("IPINFO_TOKEN"),
-        "GREYNOISE_KEY":       config.get("GREYNOISE_KEY"),
         "URLSCAN_KEY":         config.get("URLSCAN_KEY"),
         "OTX_KEY":             config.get("OTX_KEY"),
         "PULSEDIVE_KEY":       config.get("PULSEDIVE_KEY"),

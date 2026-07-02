@@ -188,11 +188,10 @@ def score_ip(enrichment: dict) -> GTIScore:
     """
     Score an IP address.
     GTI IP logic mirrors Domain coverage — verdict based on Mandiant analytics
-    (approximated via AbuseIPDB + VT + GreyNoise) and Google SafeBrowsing signals.
+    (approximated via AbuseIPDB + VT) and Google SafeBrowsing signals.
     """
     abuse = enrichment.get("abuseipdb")  or {}
     vt    = enrichment.get("virustotal") or {}
-    gn    = enrichment.get("greynoise")  or {}
     otx   = enrichment.get("otx")        or {}
     tor   = enrichment.get("tor")        or {}
 
@@ -203,8 +202,6 @@ def score_ip(enrichment: dict) -> GTIScore:
     abuse_score = abuse.get("abuseScore") or 0
     vt_mal      = vt.get("malicious")    or 0
     vt_rep      = vt.get("reputation")   or 0
-    gn_class    = gn.get("classification") or ""
-    gn_noise    = gn.get("noise") or False
     is_tor      = tor.get("isExitNode") or False
     otx_cnt     = otx.get("pulseCount") or 0
 
@@ -215,16 +212,12 @@ def score_ip(enrichment: dict) -> GTIScore:
             factors.append(f"AbuseIPDB score: {abuse_score}% — highly abusive")
         if vt_mal >= 5:
             factors.append(f"VT: {vt_mal} engines flagged as malicious")
-    elif abuse_score >= 25 or vt_mal >= 2 or gn_class == "malicious":
+    elif abuse_score >= 25 or vt_mal >= 2:
         verdict = "SUSPICIOUS"
         if abuse_score >= 25:
             factors.append(f"AbuseIPDB score: {abuse_score}% — suspicious activity")
-        if gn_class == "malicious":
-            factors.append("GreyNoise: classified as malicious")
-    elif gn_noise or (abuse_score < 5 and vt_mal == 0):
+    elif abuse_score < 5 and vt_mal == 0:
         verdict = "UNDETECTED"
-        if gn_noise:
-            factors.append("GreyNoise: mass internet scanner — low targeted threat")
     else:
         verdict = "UNDETECTED"
 

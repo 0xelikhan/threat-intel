@@ -201,10 +201,6 @@ async def check_api_key_reachability(config_module) -> List[Dict[str, Any]]:
             "https://api.abuseipdb.com/api/v2/check?ipAddress=8.8.8.8",
             lambda k: {"Key": k, "Accept": "application/json"}, {200, 401, 403, 422},
         ),
-        "greynoise": (
-            "https://api.greynoise.io/v3/community/8.8.8.8",
-            lambda k: {"key": k}, {200, 401, 403, 404},
-        ),
         "otx": (
             "https://otx.alienvault.com/api/v1/user/me",
             lambda k: {"X-OTX-API-KEY": k}, {200, 401, 403},

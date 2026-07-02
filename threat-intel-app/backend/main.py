@@ -3340,7 +3340,7 @@ async def scan_url_endpoint(req: ScanUrlRequest):
     #  (1) file_correlation runs hash-based lookups (VT/MalwareBazaar/Hybrid
     #      Analysis on the downloaded content) and lands under threat_intel.
     #  (2) url_enrichment runs URL + domain reputation (VT URL endpoint,
-    #      Maltiverse hostname, GreyNoise/AbuseIPDB/Shodan when the
+    #      Maltiverse hostname, AbuseIPDB/Shodan when the
     #      hostname resolves to an IP, etc.) and lands under enrichments.
     #      Without this, the AI summary cited "VirusTotal/Maltiverse" with no
     #      actual data behind it because file_correlation only sees the
@@ -3358,7 +3358,7 @@ async def scan_url_endpoint(req: ScanUrlRequest):
         sha256 = (analysis.get("hashes") or {}).get("sha256")
         keys = {k: config.get(k, "") for k in (
             "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
-            "GREYNOISE_KEY", "PULSEDIVE_KEY", "MALTIVERSE_KEY",
+            "PULSEDIVE_KEY", "MALTIVERSE_KEY",
             "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
             "HYBRID_ANALYSIS_KEY", "MALWAREBAZAAR_API_KEY",
             "ABUSECH_AUTH_KEY",
@@ -3818,9 +3818,6 @@ async def status_check():
         checks.append(("abuseipdb", "https://api.abuseipdb.com/api/v2/check",
                        {"Key": config.get("ABUSEIPDB_KEY"), "Accept": "application/json"},
                        {"ipAddress": "8.8.8.8"}))
-    if config.get("GREYNOISE_KEY"):
-        checks.append(("greynoise", "https://api.greynoise.io/ping",
-                       {"key": config.get("GREYNOISE_KEY")}, None))
     if config.get("OTX_KEY"):
         checks.append(("otx", "https://otx.alienvault.com/api/v1/user/me",
                        {"X-OTX-API-KEY": config.get("OTX_KEY")}, None))
@@ -3892,7 +3889,7 @@ async def startup_check():
         required = ()
     else:
         required = ("OPENAI_API_KEY",)
-    optional = ("VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "GREYNOISE_KEY",
+    optional = ("VIRUSTOTAL_KEY", "ABUSEIPDB_KEY",
                 "OTX_KEY", "URLSCAN_KEY", "PULSEDIVE_KEY", "CENSYS_ID",
                 "CENSYS_SECRET", "HYBRID_ANALYSIS_KEY",
                 "MALTIVERSE_KEY", "OPENCTI_TOKEN", "FRESHRSS_API_KEY")
@@ -4224,7 +4221,6 @@ async def email_compose_ai(req: EmailComposeAIRequest):
         "ABUSEIPDB_KEY":      config.get("ABUSEIPDB_KEY"),
         "OTX_KEY":            config.get("OTX_KEY"),
         "URLSCAN_KEY":        config.get("URLSCAN_KEY"),
-        "GREYNOISE_KEY":      config.get("GREYNOISE_KEY"),
         "PULSEDIVE_KEY":      config.get("PULSEDIVE_KEY"),
         "MALTIVERSE_KEY":     config.get("MALTIVERSE_KEY"),
         "IPINFO_TOKEN":       config.get("IPINFO_TOKEN"),
