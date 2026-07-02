@@ -4,8 +4,11 @@ Reads AI config at call time.
 """
 
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
+
+_log = logging.getLogger("recon.response")
 
 
 ACTORS = [
