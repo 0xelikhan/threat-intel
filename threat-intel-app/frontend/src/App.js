@@ -3120,6 +3120,50 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
         </Stack>
       )}
 
+      {/* Tier signals strip — the deterministic "why" at a glance. Red
+          chips are TIER 1 (verdict-determining: named actor, upstream
+          High-risk, ransomware behaviour, credential access, KEV+active
+          exploitation, ≥5 VT engines on one IOC). Orange chips are TIER 2
+          (corroborating: 2-4 VT engines, AbuseIPDB ≥75, LOLBAS abuse,
+          MalwareBazaar family match, phishing-classifier ≥85%). Grey
+          chips are DOWNWEIGHT (MISP warninglist, signed-vendor process
+          paths, tenant policy permit). TIER 3 is deliberately omitted —
+          it's context-only per the framework, so it would be noise here.
+          Analyst reads this in 2 seconds and knows WHY without touching
+          prose. */}
+      {(() => {
+        const st = rs?.signal_tiers;
+        if (!st) return null;
+        const t1 = asArray(st.tier_1);
+        const t2 = asArray(st.tier_2);
+        const dw = asArray(st.downweight);
+        if (!t1.length && !t2.length && !dw.length) return null;
+        const _chip = (label, color, key) => (
+          <Box key={key} sx={{
+            display: 'inline-flex', alignItems: 'center',
+            fontSize: 10.5, fontWeight: 600,
+            color: color,
+            backgroundColor: muiAlpha(color, 0.10),
+            border: `1px solid ${muiAlpha(color, 0.35)}`,
+            borderRadius: '3px',
+            px: 0.75, py: '2px',
+            lineHeight: 1.35,
+            whiteSpace: 'nowrap',
+            maxWidth: 320,
+            overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>{label}</Box>
+        );
+        return (
+          <Stack direction="row" spacing={0.75} alignItems="center"
+            useFlexGap flexWrap="wrap"
+            sx={{ mb: 1.5, rowGap: 0.75 }}>
+            {t1.map((s, i) => _chip(s.signal || s, '#F14337', `t1-${i}`))}
+            {t2.map((s, i) => _chip(s.signal || s, '#E1B823', `t2-${i}`))}
+            {dw.map((s, i) => _chip(s.signal || s, '#8892A6', `dw-${i}`))}
+          </Stack>
+        );
+      })()}
+
       {combined && (
         <Typography sx={{
           fontSize: 13.5, color: 'text.primary', lineHeight: 1.75,
