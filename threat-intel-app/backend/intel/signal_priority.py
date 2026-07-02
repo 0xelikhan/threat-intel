@@ -179,6 +179,70 @@ _LATERAL_MOVEMENT_PATTERNS = [
     re.compile(r"\bschtasks.*\/s\s+\\\\\S+", re.I),
 ]
 
+# Encoded / obfuscated command-line patterns — high signal for
+# phishing→execution or living-off-the-land malicious activity.
+# Fires TIER 2 by itself; combined with a suspicious parent (below)
+# should elevate the verdict.
+_ENCODED_CMD_PATTERNS = [
+    re.compile(r"powershell(?:\.exe)?\s+.*?-e(?:nc(?:oded)?|ncodedcommand)?\s+[A-Za-z0-9+/=]{40,}", re.I),
+    re.compile(r"powershell(?:\.exe)?\s+.*?-enc\b.*?[A-Za-z0-9+/=]{40,}", re.I),
+    re.compile(r"powershell(?:\.exe)?\s+.*?FromBase64String\b", re.I),
+    re.compile(r"powershell(?:\.exe)?\s+.*?\bIEX\b", re.I),
+    re.compile(r"powershell(?:\.exe)?\s+.*?\bInvoke-Expression\b", re.I),
+    re.compile(r"powershell(?:\.exe)?\s+.*?DownloadString\b", re.I),
+    re.compile(r"powershell(?:\.exe)?\s+.*?DownloadFile\b", re.I),
+    # Bypass execution policy is a strong signal on its own
+    re.compile(r"-ExecutionPolicy\s+Bypass\b", re.I),
+    re.compile(r"-ep\s+bypass\b", re.I),
+]
+
+# Suspicious parent → child process pairs. Email client / browser /
+# Office app spawning a shell is the classic phishing execution chain.
+# Fires TIER 2 when detected in the raw log text.
+_SUSPICIOUS_PARENT_CHILD_PATTERNS = [
+    # Outlook / email → shell/scripting
+    re.compile(r"parent\s*(?:process)?\s*:\s*outlook\.exe.*?(?:powershell|cmd|wscript|cscript|mshta|rundll32)", re.I | re.S),
+    re.compile(r"parent\s*(?:process)?\s*:\s*thunderbird\.exe.*?(?:powershell|cmd|wscript|cscript)", re.I | re.S),
+    # Office apps → shell/scripting/downloader
+    re.compile(r"parent\s*(?:process)?\s*:\s*(?:winword|excel|powerpnt)\.exe.*?(?:powershell|cmd|wscript|cscript|mshta|rundll32|regsvr32|curl|certutil)", re.I | re.S),
+    # Browsers → shell/scripting (very rare in legit flows)
+    re.compile(r"parent\s*(?:process)?\s*:\s*(?:chrome|msedge|firefox|brave)\.exe.*?(?:powershell|cmd|wscript|cscript)", re.I | re.S),
+    # Adobe Reader → shell (exploit CVE pattern)
+    re.compile(r"parent\s*(?:process)?\s*:\s*acrord32\.exe.*?(?:powershell|cmd|wscript|cscript)", re.I | re.S),
+]
+
+# LOLBAS abuse — living-off-the-land binaries with red-flag arguments.
+# mshta.exe / regsvr32.exe / rundll32.exe with remote URIs or JS is
+# almost always malicious. Fires TIER 2.
+_LOLBAS_ABUSE_PATTERNS = [
+    re.compile(r"mshta(?:\.exe)?\s+.*?javascript\s*:", re.I),
+    re.compile(r"mshta(?:\.exe)?\s+.*?(?:https?|ftp)://", re.I),
+    re.compile(r"regsvr32(?:\.exe)?\s+.*?/i\s*:\s*(?:https?|ftp)://", re.I),
+    re.compile(r"regsvr32(?:\.exe)?\s+.*?/s\s+.*?scrobj\.dll", re.I),
+    re.compile(r"rundll32(?:\.exe)?\s+.*?javascript\s*:", re.I),
+    re.compile(r"rundll32(?:\.exe)?\s+.*?(?:https?|ftp)://", re.I),
+    re.compile(r"certutil(?:\.exe)?\s+.*?-urlcache\s+.*?(?:https?|ftp)://", re.I),
+    re.compile(r"certutil(?:\.exe)?\s+.*?-decode\b", re.I),
+    re.compile(r"bitsadmin(?:\.exe)?\s+.*?/transfer\s+.*?(?:https?|ftp)://", re.I),
+    re.compile(r"wmic(?:\.exe)?\s+.*?process\s+call\s+create\b", re.I),
+]
+
+# Suspicious top-level domains — common in phishing kits + malware
+# infra. Fires TIER 2 when a URL/domain in the raw text uses one of
+# these TLDs. Combined with any other tier signal ⇒ HIGH.
+_SUSPICIOUS_TLD_PATTERNS = [
+    re.compile(r"\bhttps?://[a-z0-9.-]+\.(?:tk|top|icu|xyz|gq|ml|cf|ga|buzz|click|link)(?:/|\s|$)", re.I),
+    re.compile(r"\b[a-z0-9-]+\.(?:tk|top|icu|xyz|gq|ml|cf|ga|buzz|click|link)\b", re.I),
+]
+
+# Brand-impersonation typosquat patterns — subdomain / hyphenated
+# tokens combined with common brand names in unusual TLDs. Fires
+# TIER 2. Real Microsoft is never on .tk / .top / .icu / .xyz.
+_TYPOSQUAT_PATTERNS = [
+    re.compile(r"\b(?:microsoft|office|outlook|onedrive|sharepoint|azure|entra|apple|icloud|google|gmail|amazon|paypal|dropbox|docusign|adobe|netflix|linkedin|instagram|facebook|whatsapp)[-.]?(?:secure|update|verify|login|signin|account|auth|helpdesk|support)\b[^\s]*\.(?:tk|top|icu|xyz|gq|ml|cf|ga|buzz|click|link|info|online|site|website|store|shop)\b", re.I),
+    re.compile(r"\b(?:microsoft|office|outlook|onedrive|sharepoint|azure|entra|apple|icloud|google|gmail|amazon|paypal|dropbox|docusign|adobe|netflix|linkedin|instagram|facebook|whatsapp)-[a-z0-9-]+\.(?:com|net|org)\b", re.I),
+]
+
 # Known-good vendor pattern markers — DOWNWEIGHT signals when they
 # appear in the log. Coverage includes:
 #   * management / EDR agents that generate high volumes of benign alerts
@@ -416,6 +480,60 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                       f"matched '{m.group(0)[:60]}'")
                 break
 
+    # LOLBAS abuse with remote URI / JS payload — mshta / regsvr32 /
+    # rundll32 / certutil / bitsadmin / wmic with malicious argument
+    # shapes. Not the same as the local cross-refs `lolbas` bucket
+    # (which fires on just the binary name); this catches the ABUSE
+    # signature.
+    for rx in _LOLBAS_ABUSE_PATTERNS:
+        m = rx.search(log_text)
+        if m:
+            _push(tier_2, "LOLBAS abuse pattern (remote URI / JS payload)",
+                  f"matched '{m.group(0)[:80]}'")
+            break
+
+    # Encoded / obfuscated command-line — high-signal for phishing
+    # execution chains. Fires once even if multiple patterns match.
+    for rx in _ENCODED_CMD_PATTERNS:
+        m = rx.search(log_text)
+        if m:
+            _push(tier_2, "encoded / obfuscated command-line",
+                  f"matched '{m.group(0)[:80]}'")
+            break
+
+    # Suspicious parent → child process chain — email client / browser /
+    # Office app spawning shell or scripting engine. Classic phishing
+    # execution pattern.
+    for rx in _SUSPICIOUS_PARENT_CHILD_PATTERNS:
+        m = rx.search(log_text)
+        if m:
+            _push(tier_2, "suspicious parent → child process chain",
+                  f"matched '{m.group(0)[:80]}'")
+            break
+
+    # Suspicious TLD in URL/domain (.tk / .top / .icu / .xyz / etc.) —
+    # these TLDs disproportionately host phishing + malware infra.
+    # Only fires when no legit downweight signal is present, and only
+    # when there are no verdict-clearing high-signal patterns (avoid
+    # double-firing when combined with tenant permit).
+    for rx in _SUSPICIOUS_TLD_PATTERNS:
+        m = rx.search(log_text)
+        if m:
+            _push(tier_2, "suspicious TLD (phishing-infra hotspot)",
+                  f"matched '{m.group(0)[:60]}'")
+            break
+
+    # Brand-impersonation typosquat — microsoft-secure-update.tk shape.
+    # Combined with the TLD pattern above, but this fires standalone
+    # too when the brand token is in a .com/.net domain with a
+    # suspicious hyphenated prefix.
+    for rx in _TYPOSQUAT_PATTERNS:
+        m = rx.search(log_text)
+        if m:
+            _push(tier_2, "brand-impersonation typosquat domain",
+                  f"matched '{m.group(0)[:60]}'")
+            break
+
     otx_ge_5 = False
     for _t, ioc, p in _iter_ioc_enrichments(state):
         otx = p.get("otx") or {}
@@ -506,8 +624,11 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
               f"{len(_permit_hits)} permit markers in log: "
               + "; ".join(h[:40] for h in _permit_hits[:3]))
 
-    # Every keyed source clean across every IOC = strong downweight —
-    # only meaningful when no TIER 1/2 fired.
+    # Every keyed source clean across every IOC = downweight — but
+    # ONLY when we've checked at least 2 IOCs AND the log text itself
+    # doesn't carry positive behavioural markers. A single clean IP
+    # with encoded PowerShell in the same log is NOT benign; the old
+    # rule fired downweight anyway and let the short-circuit misclassify.
     all_clean = True
     checked = 0
     for _t, ioc, p in _iter_ioc_enrichments(state):
@@ -522,7 +643,18 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
             if isinstance(score, (int, float)) and score > 25:
                 all_clean = False
                 break
-    if all_clean and checked >= 1 and not tier_1 and not tier_2:
+    # Text-side red flags that veto the "all clean" downweight even
+    # when TI reputation is clean. Keeps the tier framework honest on
+    # behavioural-only malicious activity (LSASS access, encoded PS,
+    # LOLBAS abuse, etc.).
+    _text_red_flags = [
+        r"\b(?:powershell|cmd)\.exe\s+.*?\b(?:-e(?:nc)?|-encodedcommand|-executionpolicy\s+bypass|frombase64string|downloadstring|downloadfile|iex|invoke-expression)\b",
+        r"\b(?:mshta|regsvr32|rundll32|certutil|bitsadmin)\.exe\s+.*?(?:javascript\s*:|https?://|/i\s*:|-urlcache|-decode)",
+        r"\blsass(?:\.exe)?\s*(?:memory\s+access|dump)",
+        r"parent\s*(?:process)?\s*:\s*(?:outlook|winword|excel|powerpnt|chrome|msedge|firefox|acrord32)\.exe.*?(?:powershell|cmd|wscript|cscript|mshta)",
+    ]
+    _text_has_red_flag = any(re.search(p, log_text, re.I | re.S) for p in _text_red_flags)
+    if all_clean and checked >= 2 and not tier_1 and not tier_2 and not _text_has_red_flag:
         _push(downweight,
               "clean across every keyed TI source with no TIER 1/2 signals",
               f"{checked} IOCs checked, all reputation-clean")
