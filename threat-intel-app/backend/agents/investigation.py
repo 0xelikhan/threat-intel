@@ -995,7 +995,7 @@ RESPOND WITH EXACTLY THIS JSON (no markdown fences, no commentary outside the JS
 ═══════════════════════════════════════════════════════════════════════════════════
 {{
   "threat_level": "CRITICAL|HIGH|MEDIUM|LOW|INFORMATIONAL",
-  "threat_level_reasoning": "<REQUIRED — 2-4 sentences explaining why THIS specific threat_level was chosen. Name the threat_level explicitly. State what drove it UP and what kept it from being higher/lower. Analyst reads this directly under the badge.>",
+  "threat_level_reasoning": "<REQUIRED — 2-4 sentences. Must follow this correlation structure: (1) name the STRONGEST signal from the log or enrichment (e.g. 'log content names Storm-#### as the actor', 'KEV CVE with active exploitation', '5 VT engines flagging the payload hash', 'MFA bypass token replay'). (2) name what corroborates it (any TIER 2 signals: 2-4 VT engines, AbuseIPDB >=75, lateral movement pattern, MalwareBazaar family match, etc.). (3) name any signal that COULD downgrade it (MISP warninglist match, known-good vendor pattern, clean-across-every-source), and state why that downgrade is or isn't strong enough to overrule the strongest signal. (4) declare the picked threat_level and cite the deciding tier. Rule: if any TIER 1 signal fires, threat_level is HIGH minimum. Public-TI cleanliness NEVER overrules a nation-state / KEV / malware-family / credential-access / MFA-bypass finding — those sources don't have the upstream vendor's proprietary attribution data. Analyst reads this directly under the badge.>",
   "confidence": <float 0.0-1.0>,
   "confidence_basis": "<one sentence: WHY this confidence level given the evidence>",
   "needs_more_enrichment": <true|false>,
