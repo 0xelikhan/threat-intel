@@ -801,6 +801,38 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
             (r"\bDNS\s+tunnel(?:ing|ling)\b", 0.40),
             (r"\bknown\s+Tor\s+exit\b", 0.35),
             (r"\bknown\s+malicious\s+ip\b", 0.35),
+            # Linux TIER 1 attack markers
+            (r"\bbash\s+-i\s*>\s*&\s*/dev/tcp/", 0.55),
+            (r"\bnc(?:at)?\s+-e\s+/bin/(?:sh|bash|dash)", 0.55),
+            (r"\bLD_PRELOAD\s*=\s*(?:/tmp/|/dev/shm/|['\"]?[^\s]+\.so)", 0.50),
+            (r"\binsmod\s+.*?\.ko\b", 0.50),
+            (r"mount\s+.*?/proc/1/root", 0.55),
+            (r"/var/run/docker\.sock.*mounted", 0.45),
+            (r"\bprivileged\s*:\s*true\b|--privileged\b", 0.45),
+            (r"(?:>\s*|truncate.*?)/var/log/(?:audit/)?audit\.log", 0.55),
+            (r"\b(?:xmrig|cpuminer|t-rex|phoenixminer)\b", 0.50),
+            (r"(?:cat|less|dd\s+if=)\s+/etc/shadow\b", 0.55),
+            # Linux TIER 2
+            (r"\bssh\s+.*?-R\s+\d+:", 0.35),
+            (r"\bssh\s+.*?-D\s+\d+\b", 0.35),
+            (r"\bNOPASSWD\s*:\s*ALL\b", 0.35),
+            (r"(?:curl|wget)\s+(?:-[a-z]+\s+)*(?:https?://)?[^\s|]+\s*\|\s*(?:bash|sh)", 0.45),
+            (r"crontab.*?(?:curl|wget|base64\s+-d|\|\s*bash)", 0.40),
+            (r"\bavc:\s+denied\s+\{[^}]*execute", 0.35),
+            (r"ExecStart\s*=\s*/(?:tmp|dev/shm)/", 0.45),
+            (r"useradd\s+.*?-u\s+0\b", 0.50),
+            # macOS TIER 1 attack markers
+            (r"/Library/LaunchDaemons/[a-z0-9_.\-]+\.plist.*?(?:created|written|dropped)", 0.50),
+            (r"\bTCC\.db\b.*?(?:INSERT|UPDATE|modified)", 0.55),
+            (r"\bxattr\s+-d\s+com\.apple\.quarantine\b", 0.45),
+            (r"\bspctl\s+--master-disable\b", 0.50),
+            (r"\bcsrutil\s+disable\b", 0.55),
+            (r"osascript\s+-e\s+['\"].*?do\s+shell\s+script.*?(?:base64|curl|wget|nc\s+-e)", 0.50),
+            (r"\bsecurity\s+dump-keychain\b", 0.50),
+            # macOS TIER 2
+            (r"defaults\s+write\s+com\.apple\.loginwindow\s+(?:Login|Logout)Hook", 0.40),
+            (r"\bXProtect\b.*?(?:detected|blocked)", 0.35),
+            (r"\b(?:XLoader|Silver\s*Sparrow|Shlayer|OSAMiner|Bundlore|XcodeSpy|CookieMiner)\b", 0.50),
         ]
         for pat, bump in _bh_patterns:
             if _re_bh.search(pat, raw, _re_bh.I | _re_bh.S):
