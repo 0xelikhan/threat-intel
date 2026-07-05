@@ -233,6 +233,97 @@ _CLOUD_ATTACK_PATTERNS = [
 ]
 
 # ──────────────────────────────────────────────────────────────────────
+# WINDOWS AD / KERBEROS ATTACK PATTERNS — TIER 1
+# ──────────────────────────────────────────────────────────────────────
+_WIN_AD_TIER1_PATTERNS = [
+    # Kerberos attacks
+    ("Kerberoasting attempt",
+     re.compile(r"\bkerberoast(?:ing)?\s+(?:attempt|attack|detected)", re.I)),
+    ("Kerberoasting — RC4-HMAC downgrade + Event 4769",
+     re.compile(r"(?:event\s+id\s*:?\s*4769.*?RC4[- ]HMAC|RC4[- ]HMAC.*?event\s+id\s*:?\s*4769)", re.I | re.S)),
+    ("AS-REP roasting",
+     re.compile(r"\bAS[-_ ]REP\s+roast(?:ing)?\b", re.I)),
+    ("AS-REP roasting — DONT_REQ_PREAUTH targeting",
+     re.compile(r"\bDONT_REQ_PREAUTH\b.*?(?:target|attempt|multiple)", re.I | re.S)),
+    ("Golden Ticket usage",
+     re.compile(r"\bgolden\s+ticket\b.*?(?:used|usage|suspected|detected)", re.I | re.S)),
+    ("Golden Ticket — unusual TGT lifetime",
+     re.compile(r"\bTGT\s+lifetime\s*:?\s*\d+\s*year", re.I)),
+    ("Silver Ticket usage",
+     re.compile(r"\bsilver\s+ticket\b.*?(?:used|usage|suspected|detected)", re.I | re.S)),
+    ("DCSync from non-DC",
+     re.compile(r"\bDCSync\s+.*?(?:non[-_ ]DC|workstation|not\s+a\s+domain\s+controller)", re.I | re.S)),
+    ("DCSync — Directory Replication permissions abuse",
+     re.compile(r"\bDirectory\s+Replication\s+permissions\b.*?(?:granted|abuse)", re.I | re.S)),
+    # CVE exploitation
+    ("Zerologon exploitation (CVE-2020-1472)",
+     re.compile(r"\bzerologon\b|\bCVE-2020-1472\b", re.I)),
+    ("Zerologon — Netlogon NULL session flood",
+     re.compile(r"\bnetlogon\b.*?NULL\s+session.*?(?:flood|bombardment|attempts?)", re.I | re.S)),
+    ("PrintNightmare exploitation (CVE-2021-34527)",
+     re.compile(r"\bprintnightmare\b|\bCVE-2021-34527\b", re.I)),
+    ("PrintNightmare — RpcAddPrinterDriver from non-admin",
+     re.compile(r"\bRpcAddPrinterDriver\b.*?(?:remote\s+non-admin|non-privileged|unusual)", re.I | re.S)),
+    ("Follina MSDT exploitation (CVE-2022-30190)",
+     re.compile(r"\bfollina\b|\bms-msdt\b.*?(?:id=PCWDiagnostic|invoke|exploit)", re.I | re.S)),
+    ("Log4Shell JNDI injection (CVE-2021-44228)",
+     re.compile(r"\$\{jndi\s*:\s*(?:ldap|rmi|dns|nis|nds|corba|iiop)\s*:", re.I)),
+    ("ProxyShell / ProxyLogon exploitation",
+     re.compile(r"\bproxy(?:shell|logon)\b.*?(?:exploitation|attempt|detected)", re.I | re.S)),
+    # Security tooling disabled — high-signal ATT&CK T1562
+    ("Windows Defender AV disabled",
+     re.compile(r"Set-MpPreference\s+.*?-Disable(?:RealtimeMonitoring|BehaviorMonitoring|IntrusionPreventionSystem|IOAVProtection|ScriptScanning)\s+\$?true", re.I)),
+    ("Defender exclusion added",
+     re.compile(r"Add-MpPreference\s+.*?-Exclusion(?:Path|Extension|Process)\b", re.I)),
+    ("Sysmon service stopped",
+     re.compile(r"(?:net\s+stop|Stop-Service|sc\s+stop)\s+.*?sysmon(?:64|drv)?\b", re.I)),
+    ("Sysmon driver unloaded",
+     re.compile(r"\bfltmc\s+unload\s+sysmon\b|sysmon\s+.*?-u\s+force", re.I)),
+    ("EDR service tampered",
+     re.compile(r"(?:net\s+stop|Stop-Service|sc\s+stop)\s+.*?(?:CrowdStrike|CSFalcon|SentinelOne|SentinelAgent|MsSense|WinDefend|MpsSvc)\b", re.I)),
+    ("BitLocker encryption disabled",
+     re.compile(r"\bmanage-bde\s+.*?-(?:protectors\s+-disable|off)\b", re.I)),
+    ("BitLocker suspended via PowerShell",
+     re.compile(r"\bSuspend-BitLocker\b", re.I)),
+    # AD identity
+    ("Group Policy weakened",
+     re.compile(r"Group\s+Policy.*?(?:password\s+policy\s+weakened|min\s+length\s+.*?->\s*\d)", re.I | re.S)),
+    # Persistence
+    ("WMI event subscription persistence",
+     re.compile(r"(?:EventFilter\s*:.*?EventConsumer\s*:|CommandLineEventConsumer.*?FilterToConsumerBinding)", re.I | re.S)),
+    ("WMI persistence — __InstanceModificationEvent watcher",
+     re.compile(r"__InstanceModificationEvent\s+.*?WITHIN\s+\d+", re.I | re.S)),
+    ("schtasks persistence — onlogon / onstart with high privilege",
+     re.compile(r"\bschtasks(?:\.exe)?\s+/create\s+.*?/sc\s+(?:onlogon|onstart|onidle)", re.I | re.S)),
+    ("Registry Run key persistence with suspicious value",
+     re.compile(r"HK(?:LM|CU)\\Software\\Microsoft\\Windows\\CurrentVersion\\Run.*?(?:AppData|Public|Temp|ProgramData)\\.*?\.(?:exe|dll|ps1|vbs|bat)", re.I | re.S)),
+]
+
+# Cloud attacks TIER 1 (additional — beyond critical cloud already in _CRITICAL_CLOUD_TIER1)
+_CLOUD_ATTACK_TIER1_EXTRA = [
+    # Mass secret access
+    ("AWS mass GetSecretValue calls",
+     re.compile(r"mass\s+GetSecretValue\s+calls|GetSecretValue\s+.*?(?:47|100|1000)\s+.*?in\s+\d+\s+min", re.I | re.S)),
+    ("Secrets accessed baseline exceeded",
+     re.compile(r"Secrets\s+accessed\s*:\s*\d{2,}\s+in\s+\d+\s+min", re.I)),
+    # Conditional Access disabled
+    ("Azure Conditional Access policy disabled",
+     re.compile(r"Conditional\s+Access\s+policy\s+disabled", re.I)),
+    ("MFA policy removed for admins",
+     re.compile(r"Require\s+MFA\s+for\s+admins.*?(?:disabled|removed)", re.I | re.S)),
+    # GCP IAM
+    ("GCP high-privilege IAM role granted to external",
+     re.compile(r"GCP\s+IAM.*?roles?/(?:iam\.securityAdmin|owner|editor|iam\.roleAdmin)\b.*?(?:external|@evil|@attacker)", re.I | re.S)),
+    ("GCP roles/Owner or roles/Editor granted externally",
+     re.compile(r"\broles/(?:owner|editor|iam\.securityAdmin|iam\.roleAdmin)\s+granted\b.*?(?:external|no\s+approval|no\s+ticket)", re.I | re.S)),
+    # O365 forwarding rule to external — high-signal BEC persistence
+    ("O365 inbox forwarding rule to external",
+     re.compile(r"O365\s+.*?forwarding\s+rule\s+created.*?forward\s+to\s*:\s*.*?@(?!contoso\.com|company\.com)", re.I | re.S)),
+    ("Inbox rule — delete on forward",
+     re.compile(r"Delete\s+on\s+forward\s*:\s*true", re.I)),
+]
+
+# ──────────────────────────────────────────────────────────────────────
 # LINUX ATTACK PATTERNS
 # ──────────────────────────────────────────────────────────────────────
 # TIER 1 — verdict-determining. Reverse shells, container escape,
@@ -302,6 +393,70 @@ _LINUX_TIER1_PATTERNS = [
     # SUID escalation
     ("SUID bit added to unusual binary",
      re.compile(r"\bchmod\s+(?:[+]?4[0-7]{3}|u[+]s)\s+/(?:tmp|home|var/tmp|dev/shm)/", re.I)),
+
+    # authorized_keys / SSH persistence
+    ("SSH authorized_keys modified — new key added",
+     re.compile(r"authorized_keys\b.*?(?:new\s+ssh\s+key|added\s+by|key\s+added)", re.I | re.S)),
+
+    # PAM backdoor
+    ("PAM backdoor — pam_permit.so added",
+     re.compile(r"/etc/pam\.d/\S+\b.*?(?:pam_permit\.so|auth\s+sufficient\s+pam_permit)", re.I | re.S)),
+
+    # /etc/ld.so.preload write — universal LD_PRELOAD alternative
+    ("/etc/ld.so.preload modified",
+     re.compile(r"/etc/ld\.so\.preload\b.*?(?:modified|added|written|new\s+entry)", re.I | re.S)),
+
+    # sudoers backdoor
+    ("sudoers backdoor — NOPASSWD via web-app or non-admin",
+     re.compile(r"/etc/sudoers\b.*?(?:modified|written|edited).*?NOPASSWD", re.I | re.S)),
+    ("sudoers echo append backdoor",
+     re.compile(r"echo\s+['\"][^'\"]*NOPASSWD[^'\"]*['\"]\s*>>\s*/etc/sudoers", re.I)),
+
+    # .bashrc / .profile backdoor
+    ("bashrc / profile backdoor with curl payload",
+     re.compile(r"~?/\.(?:bashrc|profile|bash_profile|zshrc)\b.*?(?:appended|modification|new\s+line).*?(?:curl|wget|nc\s+-e)", re.I | re.S)),
+
+    # syslog / journal tampering
+    ("systemd journal cleared",
+     re.compile(r"journalctl\s+--vacuum-(?:time|size|files)\s*[=\s]\s*\S+", re.I)),
+    ("rsyslog forward to external IP",
+     re.compile(r"(?:rsyslog\.conf|/etc/syslog).*?\*\.\*\s+@@?\d{1,3}(?:\.\d{1,3}){3}", re.I | re.S)),
+
+    # Meterpreter / staging
+    ("Meterpreter stage-0 shellcode signature",
+     re.compile(r"meterpreter\s+(?:stage[-_ ]0|session|payload|signature)", re.I)),
+    ("Metasploit reverse handler",
+     re.compile(r"metasploit\s+.*?(?:handler|payload|reverse)", re.I | re.S)),
+
+    # SSH key harvest
+    ("SSH keyscan harvest across hosts",
+     re.compile(r"ssh-keyscan\s+.*?(?:for\s+\S+\s+in|>>\s+/tmp/|>>\s+/dev/shm)", re.I | re.S)),
+
+    # GTFOBins-style SUID escalation
+    ("GTFOBins find -exec /bin/sh",
+     re.compile(r"\bfind\s+\S+\s+.*?-exec\s+(?:/bin/)?(?:sh|bash)\s+-p", re.I)),
+    ("GTFOBins vim / nano / less shell escape",
+     re.compile(r"(?:vim|nano|less|more)\s+.*?:!(?:/bin/)?(?:sh|bash)", re.I)),
+
+    # Docker privileged variants
+    ("Docker run with --cap-add=ALL",
+     re.compile(r"docker\s+run\s+.*?--cap-add\s*=?\s*ALL\b", re.I)),
+    ("Docker run mounting host root",
+     re.compile(r"docker\s+run\s+.*?-v\s+/:/host\b", re.I)),
+    ("Docker run --pid=host or --network=host",
+     re.compile(r"docker\s+run\s+.*?--(?:pid|network|ipc|uts)=host\b", re.I)),
+
+    # iptables C2 allow — as TIER 1 since it opens attacker's channel
+    ("iptables allow outbound to bad IP",
+     re.compile(r"iptables\s+.*?-[AI]\s+(?:OUTPUT|FORWARD).*?-d\s+\d{1,3}(?:\.\d{1,3}){3}.*?-j\s+ACCEPT", re.I)),
+    ("iptables allow inbound reverse tunnel port",
+     re.compile(r"iptables\s+.*?-[AI]\s+INPUT.*?-p\s+tcp\s+.*?--dport\s+(?:4444|8080|1337|31337|4448)", re.I)),
+
+    # Modules on boot
+    ("kernel module registered at boot",
+     re.compile(r"/etc/modules-load\.d/\S+\.conf\b.*?(?:created|written|registered|modified|added)", re.I | re.S)),
+    ("modprobe.d config with malicious module",
+     re.compile(r"/etc/modprobe\.d/\S+\.conf.*?(?:install|blacklist).*?/tmp/|/dev/shm/", re.I | re.S)),
 ]
 
 # TIER 2 — corroborating Linux attack signals.
@@ -418,6 +573,40 @@ _MACOS_TIER1_PATTERNS = [
     # macOS reverse shell
     ("macOS reverse shell (bash /dev/tcp)",
      re.compile(r"\bbash\s+-i\s*>\s*&\s*/dev/tcp/", re.I)),  # also caught in Linux
+
+    # DYLD_INSERT_LIBRARIES — macOS equivalent of LD_PRELOAD
+    ("DYLD_INSERT_LIBRARIES injection",
+     re.compile(r"\bDYLD_INSERT_LIBRARIES\s*=\s*(?:['\"]?/tmp/|/var/tmp/|/Users/[^/]+/(?:Downloads|Library/LaunchAgents)/|['\"]?[^\s]+\.dylib)", re.I)),
+    ("DYLD_INSERT_LIBRARIES targeting system binary",
+     re.compile(r"DYLD_INSERT_LIBRARIES\s*=.*?/(?:Applications|System)/.*?\.app/Contents/MacOS/", re.I)),
+
+    # FileVault / firmware / SIP bypasses
+    ("FileVault disabled",
+     re.compile(r"\bfdesetup\s+disable\b", re.I)),
+    ("Firmware password disabled",
+     re.compile(r"\bfirmwarepasswd\s+-disable-firmware-pw\b", re.I)),
+
+    # Persistence — existing LaunchDaemon plist replaced
+    ("Existing LaunchDaemon plist ProgramArguments replaced",
+     re.compile(r"/Library/LaunchDaemons/[a-z0-9_.\-]+\.plist\b.*?(?:ProgramArguments\s+changed|replaced|overwritten).*?/tmp/", re.I | re.S)),
+    ("periodic script backdoor",
+     re.compile(r"/etc/periodic/(?:daily|weekly|monthly)/[^/]+\b.*?(?:modified|written).*?(?:curl|wget|osascript|bash)", re.I | re.S)),
+    ("Login items plist persistence",
+     re.compile(r"~?/?Library/Preferences/com\.apple\.loginitems\.plist\b.*?(?:new\s+entry|added|written)", re.I | re.S)),
+
+    # sudoers modification on macOS (also caught by Linux but explicit)
+    ("macOS sudoers modification",
+     re.compile(r"(?:echo\s+.*?NOPASSWD.*?>>|>>\s*)/etc/sudoers\b", re.I)),
+
+    # Endpoint Security event exec from Downloads/Applications with no signature
+    ("ES event exec from Downloads with no signature",
+     re.compile(r"ES_EVENT_TYPE_NOTIFY_EXEC.*?/Downloads/.*?[Ss]igned\s*:\s*no", re.I | re.S)),
+    ("ES event exec from tmp with unusual parent",
+     re.compile(r"ES_EVENT_TYPE_NOTIFY_EXEC.*?/(?:tmp|private/tmp)/.*?(?:parent|from)\s*:?\s*sh\b", re.I | re.S)),
+
+    # Authorization DB write to system.privilege.admin
+    ("Authorization DB: system.privilege.admin modified",
+     re.compile(r"authorizationdb\s+write\b.*?system\.privilege\.admin", re.I | re.S)),
 ]
 
 # TIER 2 — corroborating macOS signals.
@@ -772,6 +961,23 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
             _push(tier_1, name, f"matched pattern in raw alert content")
             break
 
+    # Windows AD / Kerberos / CVE exploitation / security-tooling
+    # tampering — TIER 1 verdict-determining Windows attacks.
+    for name, rx in _WIN_AD_TIER1_PATTERNS:
+        m = rx.search(log_text)
+        if m:
+            _push(tier_1, f"Windows: {name}",
+                  f"matched '{m.group(0)[:80]}'")
+            break
+
+    # Extra cloud attack patterns beyond the critical set.
+    for name, rx in _CLOUD_ATTACK_TIER1_EXTRA:
+        m = rx.search(log_text)
+        if m:
+            _push(tier_1, f"Cloud: {name}",
+                  f"matched '{m.group(0)[:80]}'")
+            break
+
     # Linux TIER 1 — reverse shell, container escape, kernel rootkit,
     # LD_PRELOAD, log tampering, passwd/shadow write, cryptominer.
     for name, rx in _LINUX_TIER1_PATTERNS:
@@ -780,6 +986,15 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
             _push(tier_1, f"Linux: {name}",
                   f"matched '{m.group(0)[:80]}'")
             break
+
+    # `curl | bash` / `wget | sh` — download-and-execute of unverified
+    # remote code. Textbook malicious pattern regardless of platform.
+    # Was TIER 2; promoted to TIER 1 because MONITOR verdict from AI
+    # was under-triaging what is unambiguously an execution primitive.
+    if re.search(r"(?:curl|wget)\s+(?:-[a-z]+\s+)*(?:https?://)?[^\s|]+\s*\|\s*(?:bash|sh|zsh|python)",
+                 log_text, re.I):
+        _push(tier_1, "download-and-execute (curl|bash pattern)",
+              "unverified remote code piped to shell")
 
     # macOS TIER 1 — LaunchDaemon/Agent persistence, TCC.db bypass,
     # Gatekeeper bypass, unsigned KEXT load, osascript exec.
@@ -1090,6 +1305,42 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
         r"\bxattr\s+-d\s+com\.apple\.quarantine",
         r"\bcsrutil\s+disable",
         r"\bosascript\s+.*?do\s+shell\s+script",
+        r"\bDYLD_INSERT_LIBRARIES\s*=",
+        r"\bfdesetup\s+disable",
+        r"/etc/periodic/.*(?:modified|written)",
+        # Windows AD attacks
+        r"\bkerberoast",
+        r"\bAS[-_ ]REP\s+roast",
+        r"\bgolden\s+ticket",
+        r"\bDCSync\b",
+        r"\bzerologon\b|\bCVE-2020-1472\b",
+        r"\bprintnightmare\b|\bCVE-2021-34527\b",
+        r"\bfollina\b|\bms-msdt\b",
+        r"\$\{jndi\s*:",
+        r"Set-MpPreference\s+.*?-Disable",
+        r"(?:net\s+stop|Stop-Service)\s+.*?sysmon",
+        r"\bmanage-bde\s+.*?-disable",
+        r"__InstanceModificationEvent",
+        # Linux additions
+        r"authorized_keys\b.*?(?:new\s+ssh\s+key|added)",
+        r"pam_permit\.so",
+        r"/etc/ld\.so\.preload",
+        r"NOPASSWD.*>>\s*/etc/sudoers",
+        r"~?/\.(?:bashrc|profile|zshrc).*?curl",
+        r"\bjournalctl\s+--vacuum",
+        r"rsyslog\.conf.*?\*\.\*\s+@@?\d",
+        r"\bmeterpreter\b",
+        r"\bmetasploit\b",
+        r"\bfind\s+\S+.*?-exec\s+.*?(?:sh|bash)\s+-p",
+        r"docker\s+run\s+.*?--cap-add\s*=?\s*ALL",
+        r"docker\s+run\s+.*?-v\s+/:/host",
+        r"docker\s+run\s+.*?--(?:pid|network|ipc|uts)=host",
+        r"iptables\s+.*?-[AI]\s+(?:OUTPUT|FORWARD).*?-j\s+ACCEPT",
+        # Cloud additions
+        r"GetSecretValue\s+.*?in\s+\d+\s+min",
+        r"Conditional\s+Access\s+policy\s+disabled",
+        r"roles?/(?:owner|editor|iam\.securityAdmin|iam\.roleAdmin)\s+granted",
+        r"O365.*?forwarding\s+rule.*?forward",
     ]
     _text_has_red_flag = any(re.search(p, log_text, re.I | re.S) for p in _text_red_flags)
     if all_clean and checked >= 2 and not tier_1 and not tier_2 and not _text_has_red_flag:
