@@ -832,6 +832,44 @@ _KNOWN_GOOD_VENDOR_PATTERNS = [
     re.compile(r"\bTaniumClient\.exe\b", re.I),
     re.compile(r"\bBigFix\s+agent\b", re.I),
     re.compile(r"\bDatto\s+RMM\b", re.I),   # legit when signed + tenant-managed
+    # Common RMM tools — LOLBAS/vendor process names + install paths.
+    # These are legitimate remote-management platforms that trigger
+    # Defender behavior detections (OpenProcess, remote script exec)
+    # in the course of normal operation. False positives when
+    # observed inside their own install directory.
+    re.compile(r"\\CentraStage\\CagService\.exe", re.I),  # Datto RMM (was CentraStage)
+    re.compile(r"\bCentraStage\b", re.I),
+    re.compile(r"\bCagService\.exe\b", re.I),
+    re.compile(r"\bConnectWise\s+(?:Automate|Control|ScreenConnect)\b", re.I),
+    re.compile(r"\\LabTech\\", re.I),  # ConnectWise Automate old name
+    re.compile(r"\bLTS(?:vcMon|ervice)\.exe\b", re.I),
+    re.compile(r"\bScreenConnect(?:\.exe|\.WindowsClient\.exe|\.WindowsBackstageShell\.exe)?\b", re.I),
+    re.compile(r"\bNinja(?:One|RMM)(?:Agent(?:Patcher)?)?\b", re.I),
+    re.compile(r"\bNinjaRMMAgent\.exe\b", re.I),
+    re.compile(r"\bN-?able\b", re.I),
+    re.compile(r"\bN-?central\b", re.I),
+    re.compile(r"\bWindows_Agent\.exe\b", re.I),   # N-able generic
+    re.compile(r"\bKaseya\s+VSA\b", re.I),
+    re.compile(r"\\Kaseya\\", re.I),
+    re.compile(r"\bAgentMon\.exe\b", re.I),
+    re.compile(r"\bKaVSMB\.exe\b", re.I),
+    re.compile(r"\bAteraAgent\.exe\b", re.I),
+    re.compile(r"\\ATERA Networks\\", re.I),
+    re.compile(r"\bPCMonitor(?:Srv|Manager)?\.exe\b", re.I),   # Pulseway
+    re.compile(r"\bPulseway\b", re.I),
+    re.compile(r"\bITSMAgent\b", re.I),   # ITarian / Comodo One
+    re.compile(r"\bComodo\s+One\b", re.I),
+    re.compile(r"\bSolarWinds\s+(?:RMM|MSP\s+Anywhere|N-central|Take\s+Control)\b", re.I),
+    re.compile(r"\bImmyAgent\b|\bImmyBot\b", re.I),
+    re.compile(r"\bSyncroAgent\.exe\b|\bSyncroMSP\b", re.I),
+    re.compile(r"\bLevel\.io\b|\blevel-service\b", re.I),
+    re.compile(r"\bAction1\s+(?:Corporation|Agent)\b", re.I),
+    re.compile(r"\bAeroAdmin\.exe\b|\bAeroAdmin\b", re.I),
+    re.compile(r"\bTeamViewer(?:_Service)?\.exe\b", re.I),
+    re.compile(r"\bAnyDesk\.exe\b", re.I),
+    re.compile(r"\bLogMeIn\b", re.I),
+    re.compile(r"\bGoToAssist\b", re.I),
+    re.compile(r"\bBomgar\b|\bBeyondTrust\s+Remote\s+Support\b", re.I),
     # Mainstream browsers — process paths + certificate subject lines
     re.compile(r"\\google\\chrome\\application\\chrome\.exe", re.I),
     re.compile(r"\\microsoft\\edge\\application\\msedge\.exe", re.I),
@@ -1306,6 +1344,14 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
     ) or re.search(r"\bAction\s*Status\s*:\s*No\s+additional\s+actions\s+required\b.*?\bError\s+Code\s*:\s*0x0+\b",
                    log_text, re.I | re.S))
 
+    # Vendor + behavior context — computed early so both the family
+    # detection block AND the severity block can consult it. Defender
+    # Behavior:Win32/... detections are notoriously FP-prone on
+    # legitimate management tools (RMM agents, EDRs, backup software).
+    _has_known_good_vendor = any(rx.search(log_text) for rx in _KNOWN_GOOD_VENDOR_PATTERNS)
+    _is_behavior_only = bool(re.search(r"\bName\s*:\s*Behavior\s*:", log_text, re.I))
+    _behavior_fp_context = _has_known_good_vendor and _is_behavior_only
+
     # Defender AV detection — HackTool / PUA / Trojan / failed
     # remediation. The patterns split into three semantic groups; we
     # fire at most ONE signal per group to prevent double-counting on
@@ -1331,6 +1377,19 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
             ("Defender Spyware detection",        r"\bName\s*:\s*Spyware\s*:", ),
             ("HackTool / PUA family name in log", r"\b(?:HackTool|PUA|PUABundler|Backdoor|Ransom|Trojan|Exploit|Adware|Riskware|Worm|Spyware|Behavior)\s*:\s*(?:Script|Win\d\d|MSIL|VBS|JS|HTML|Linux|OSX|MacOS)/", ),
         ]
+        # Defender's heuristic BEHAVIOR detections (Behavior:Win32/...)
+        # are notoriously FP-prone on legitimate management tools —
+        # RMM agents, EDRs, backup software all trigger them via
+        # legit OpenProcess / ReadProcessMemory calls. When the log
+        # ALSO carries a known-good vendor marker (CentraStage, Datto,
+        # ConnectWise, NinjaOne, Kaseya, Atera, ThreatLocker,
+        # CrowdStrike, SentinelOne, etc.), suppress the Behavior
+        # family + severity signals. Real malware behavior detections
+        # without vendor context still fire normally.
+        if _behavior_fp_context:
+            # Skip both the family and severity signals for this event.
+            # Vendor downweight + LLM investigation handles verdict.
+            _det_family_pats = []
         for name, pat in _det_family_pats:
             m = re.search(pat, log_text, re.I)
             if m:
@@ -1359,7 +1418,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                 _push(tier_2, name, f"matched '{m.group(0)[:80]}'")
                 break   # only ONE action-outcome signal fires
 
-    if not _defender_success:
+    if not _defender_success and not _behavior_fp_context:
         _det_severity_pats = [
             ("Defender Severity: Severe detection",
              r"\bSeverity\s*:\s*Severe\b"),
