@@ -886,6 +886,16 @@ _KNOWN_GOOD_VENDOR_PATTERNS = [
     re.compile(r"\bThreat\s+Status\s*:\s*Remediated\b", re.I),
     re.compile(r"\bActionSuccess\s*:\s*true\b", re.I),
     re.compile(r"\bDefender\s+has\s+removed\b", re.I),
+    # Successful Defender remediation event (1117 shape) — Action:
+    # Quarantine + Error Code: 0x00000000 + "The operation completed
+    # successfully". This is Defender confirming it removed the file.
+    re.compile(r"\bError\s+Code\s*:\s*0x0+\b.*?\boperation\s+completed\s+successfully\b", re.I | re.S),
+    re.compile(r"\bAction\s*:\s*Quarantine\b.*?\boperation\s+completed\s+successfully\b", re.I | re.S),
+    # File in RECYCLE.BIN — the artefact is already deleted by the user
+    # or a prior cleanup pass, so a Defender scan finding it there is
+    # low-signal noise (routine trash scanning). Only fires as
+    # downweight; doesn't override a real active-threat marker.
+    re.compile(r"\$RECYCLE\.BIN\\S-1-5-21-\d+-\d+-\d+-\d+\\", re.I),
     # ThreatLocker Ringfencing block — a policy decision, not a compromise
     re.compile(r"\bRingfencing\b", re.I),
     re.compile(r"\bRingfence\s+Policy\b", re.I),
@@ -1023,9 +1033,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
         # TrickBot, etc.). Microsoft's PUA / HackTool / Adware / Tool /
         # Bundler prefixes are unwanted-software categorizations, not
         # traditional malware families — those cases are already caught
-        # at TIER 2 by the Defender detection patterns. Firing TIER 1
-        # on `PUA:Win32/AskToolbar` would over-triage what is a
-        # well-known browser toolbar cleanup.
+        # at TIER 2 by the Defender detection patterns.
         _pua_prefixes = ("pua:", "puabundler:", "hacktool:", "tool:",
                           "adware:", "bundler:", "misleading:", "riskware:")
         _fam_lower = fam.lower()
@@ -1033,8 +1041,17 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
             _push(tier_1, "named malware family attributed",
                   f"family={fam}")
         else:
-            _push(tier_2, "PUA / HackTool family attributed",
-                  f"family={fam}")
+            # Skip the TIER 2 PUA-family-attributed signal if the same
+            # detection is going to fire via the `Name : <prefix>:`
+            # Defender pattern — otherwise a single PUA event fires
+            # both signals and over-triages via the 2-TIER-2 rule.
+            _has_name_prefix_in_log = bool(re.search(
+                r"\bName\s*:\s*(?:HackTool|PUA(?:Bundler)?|Trojan|Backdoor|Ransom|Behavior|Adware|Riskware)\s*:",
+                log_text, re.I,
+            ))
+            if not _has_name_prefix_in_log:
+                _push(tier_2, "PUA / HackTool family attributed",
+                      f"family={fam}")
 
     for rx in _RANSOMWARE_PATTERNS:
         m = rx.search(all_text)
@@ -1276,23 +1293,79 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                   f"matched '{m.group(0)[:80]}'")
             break
 
+    # Defender successful remediation — Error Code: 0x00000000 with
+    # "operation completed successfully" text means Defender caught
+    # AND removed the threat. The severity/family info in the log
+    # represents Defender's PRE-remediation assessment; after
+    # successful quarantine, the file is neutralized. Skip the whole
+    # Defender-detection TIER 2 block so a resolved event doesn't
+    # force ESCALATE via the 2-TIER-2 rule.
+    _defender_success = bool(re.search(
+        r"\bError\s+Code\s*:\s*0x0+\b.*?\boperation\s+completed\s+successfully\b",
+        log_text, re.I | re.S
+    ) or re.search(r"\bAction\s*Status\s*:\s*No\s+additional\s+actions\s+required\b.*?\bError\s+Code\s*:\s*0x0+\b",
+                   log_text, re.I | re.S))
+
     # Defender AV detection — HackTool / PUA / Trojan / failed
-    # remediation. A named-family detection with failed action is a
-    # real signal even when Defender is the source; the file is still
-    # on disk. Two entries fire on this shape (detection + failure)
-    # which promotes verdict_floor to HIGH via the 2-TIER-2 rule.
-    for name, rx in _DEFENDER_DETECTION_TIER2_PATTERNS:
-        m = rx.search(log_text)
-        if m:
-            _push(tier_2, name, f"matched '{m.group(0)[:80]}'")
-            # Deliberately do NOT break here — we want both the
-            # detection-name signal AND the failed-action signal to
-            # both fire if both are present. Two TIER 2 signals give
-            # verdict_floor=HIGH which stops CLEAR misclassification.
-    # Dedup TIER 2 entries in case multiple patterns matched the same
-    # substring — same signal name shouldn't fire twice.
-    _seen = set()
-    tier_2 = [s for s in tier_2 if not (s["signal"] in _seen or _seen.add(s["signal"]))]
+    # remediation. The patterns split into three semantic groups; we
+    # fire at most ONE signal per group to prevent double-counting on
+    # a single detection event (which was over-triaging low-severity
+    # PUAs). Skipped entirely on successful remediation events.
+    #
+    # Group A — the family detection (Name: prefix + generic form
+    #           are two ways to detect the same thing)
+    # Group B — action / remediation outcome
+    # Group C — severity marker
+    if not _defender_success:
+        _det_family_pats = [
+            ("Defender HackTool detection",       r"\bName\s*:\s*HackTool\s*:", ),
+            ("Defender PUA / PUABundler detection", r"\bName\s*:\s*PUA(?:Bundler)?\s*:", ),
+            ("Defender Trojan detection",         r"\bName\s*:\s*Trojan\s*:", ),
+            ("Defender Backdoor detection",       r"\bName\s*:\s*Backdoor\s*:", ),
+            ("Defender Ransom detection",         r"\bName\s*:\s*Ransom\s*:", ),
+            ("Defender Behavior detection",       r"\bName\s*:\s*Behavior\s*:", ),
+            ("HackTool / PUA family name in log", r"\b(?:HackTool|PUA|PUABundler|Backdoor|Ransom|Trojan|Exploit)\s*:\s*(?:Script|Win\d\d|MSIL|VBS|JS|HTML|Linux|OSX|MacOS)/", ),
+        ]
+        for name, pat in _det_family_pats:
+            m = re.search(pat, log_text, re.I)
+            if m:
+                _push(tier_2, name, f"matched '{m.group(0)[:80]}'")
+                break   # only ONE family-detection signal fires
+
+    _det_action_pats = [
+        ("Defender action failed — Error Code present",
+         r"\bAction\s*:\s*Quarantine\b.*?\bError\s+Code\s*:\s*0x[0-9a-f]+"),
+        ("Defender ActionSuccess: false",
+         r"\bActionSuccess\s*:\s*false\b"),
+        ("Defender error 0x800700df (file too large to quarantine)",
+         r"\b0x800700df\b"),
+    ]
+    # Only fire action-failure signals when the error code is NON-zero.
+    # Error Code 0x00000000 = success — the file WAS quarantined and
+    # the log's "Action Status: No additional actions required" is
+    # accurate. This suppresses false ESCALATE on Defender remediated
+    # events (event 1117).
+    _has_success_code = bool(re.search(r"\bError\s+Code\s*:\s*0x0+\b|\bthe\s+operation\s+completed\s+successfully\b",
+                                       log_text, re.I))
+    if not _has_success_code:
+        for name, pat in _det_action_pats:
+            m = re.search(pat, log_text, re.I | re.S)
+            if m:
+                _push(tier_2, name, f"matched '{m.group(0)[:80]}'")
+                break   # only ONE action-outcome signal fires
+
+    if not _defender_success:
+        _det_severity_pats = [
+            ("Defender Severity: Severe detection",
+             r"\bSeverity\s*:\s*Severe\b"),
+            ("Defender Severity: High detection",
+             r"\bSeverity\s*:\s*High\b.*?\b(?:HackTool|PUA|Trojan|Backdoor|Ransom)\s*:"),
+        ]
+        for name, pat in _det_severity_pats:
+            m = re.search(pat, log_text, re.I | re.S)
+            if m:
+                _push(tier_2, name, f"matched '{m.group(0)[:80]}'")
+                break   # only ONE severity signal fires
 
     otx_ge_5 = False
     for _t, ioc, p in _iter_ioc_enrichments(state):
