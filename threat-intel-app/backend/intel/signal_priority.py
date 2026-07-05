@@ -1149,6 +1149,22 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                   f"matched '{m.group(0)[:80]}'")
             break
 
+    # Impacket smbexec / atexec / wmiexec signature — the ADMIN$ share
+    # output redirect with `__<epoch>.<frac>` file naming is unmistakable.
+    # Zero legit Windows admin activity uses this pattern; it's Impacket's
+    # method of capturing command output for remote execution modules.
+    _impacket_patterns = [
+        # cmd.exe /Q /c <cmd> 1> \\<ip>\ADMIN$\__<epoch>.<frac> 2>&1
+        (r"cmd(?:\.exe)?\s+/Q\s+/c\s+.*?1>\s*\\\\[^\\]+\\ADMIN\$\\__\d+\.\d+", "Impacket smbexec/atexec/wmiexec pattern"),
+        (r"\\\\[^\\]+\\ADMIN\$\\__\d+\.\d+", "Impacket ADMIN$ output-capture file"),
+        # Impacket-generated service naming (BTOBTO / atexec)
+        (r"\bImpacket\b.*(?:atexec|smbexec|wmiexec|psexec\.py)", "Impacket toolkit reference"),
+    ]
+    for pat, name in _impacket_patterns:
+        if re.search(pat, log_text, re.I):
+            _push(tier_1, name, f"Impacket signature in raw log")
+            break
+
     # Extra cloud attack patterns beyond the critical set.
     for name, rx in _CLOUD_ATTACK_TIER1_EXTRA:
         m = rx.search(log_text)
@@ -1375,7 +1391,12 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
             ("Defender Exploit detection",        r"\bName\s*:\s*Exploit\s*:", ),
             ("Defender Worm detection",           r"\bName\s*:\s*Worm\s*:", ),
             ("Defender Spyware detection",        r"\bName\s*:\s*Spyware\s*:", ),
-            ("HackTool / PUA family name in log", r"\b(?:HackTool|PUA|PUABundler|Backdoor|Ransom|Trojan|Exploit|Adware|Riskware|Worm|Spyware|Behavior)\s*:\s*(?:Script|Win\d\d|MSIL|VBS|JS|HTML|Linux|OSX|MacOS)/", ),
+            ("Defender VirTool detection",        r"\bName\s*:\s*VirTool\s*:", ),
+            ("Defender Constructor detection",    r"\bName\s*:\s*Constructor\s*:", ),
+            ("Defender DoS detection",            r"\bName\s*:\s*DoS\s*:", ),
+            ("Defender Dropper detection",        r"\bName\s*:\s*(?:Dropper|TrojanDropper)\s*:", ),
+            ("Defender Downloader detection",     r"\bName\s*:\s*(?:Downloader|TrojanDownloader)\s*:", ),
+            ("HackTool / PUA family name in log", r"\b(?:HackTool|PUA|PUABundler|Backdoor|Ransom|Trojan|Exploit|Adware|Riskware|Worm|Spyware|Behavior|VirTool|Constructor|DoS|Dropper|Downloader|TrojanDropper|TrojanDownloader)\s*:\s*(?:Script|Win\d\d|MSIL|VBS|JS|HTML|Linux|OSX|MacOS)/", ),
         ]
         # Defender's heuristic BEHAVIOR detections (Behavior:Win32/...)
         # are notoriously FP-prone on legitimate management tools —
