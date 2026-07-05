@@ -362,6 +362,51 @@ def _deep_context(analysis: Dict, comparative: Optional[Dict] = None) -> Dict:
     }
 
 
+def _coerce_category(raw: str, executive_summary: str = "") -> str:
+    """Coerce whatever the LLM emitted for malware_classification.category
+    into a known label from CLASSIFICATIONS.
+
+    Fixes the "MALICIOUS 100%" bug — the model was sometimes emitting
+    "MALICIOUS" (which is NOT a valid category — it's a verdict) with
+    high confidence while the executive_summary correctly identified
+    the file as legitimate. The frontend then rendered a MALICIOUS pill
+    next to "The file appears to be legitimate" prose.
+
+    Priority:
+      1. If raw exactly matches a known label, use it.
+      2. Fuzzy substring match against CLASSIFICATIONS (like triage
+         phase).
+      3. If raw is "MALICIOUS" / "SUSPICIOUS" but executive_summary
+         reads as benign ("legitimate", "no threat", "clean", "no
+         indicators of malicious"), override to "Clean" — the prose
+         is what the analyst reads and it must win over an
+         inconsistent structured field.
+      4. Otherwise "Unknown Malware".
+    """
+    r = (raw or "").strip()
+    if r in CLASSIFICATIONS:
+        return r
+    r_lower = r.lower()
+    for c in CLASSIFICATIONS:
+        if c.lower() in r_lower or r_lower in c.lower():
+            return c
+    # Handle the "verdict word emitted as category" case explicitly.
+    if r_lower in ("malicious", "suspicious", "likely malicious", "malware"):
+        # Cross-check the executive summary — if the prose says
+        # legitimate/clean/safe, trust the prose. Otherwise map to
+        # "Unknown Malware".
+        summary_lower = (executive_summary or "").lower()
+        benign_markers = ("legitimate", "no threat", "no indicators of malicious",
+                          "poses no security risk", "no malicious content",
+                          "benign", "no further action")
+        if any(m in summary_lower for m in benign_markers):
+            return "Clean"
+        return "Unknown Malware"
+    if r_lower in ("clean", "legitimate", "likely legitimate", "safe", "benign"):
+        return "Clean"
+    return "Unknown Malware"
+
+
 def _safe_normalize_deep(out: Dict) -> Dict:
     """Make sure every field exists and is the right shape — tolerates a model
     that returns slightly off schema."""
@@ -373,13 +418,33 @@ def _safe_normalize_deep(out: Dict) -> Dict:
     actor = out.get("threat_actor")
     if actor and not isinstance(actor, dict):
         actor = {"name": str(actor), "confidence": None}
+    _exec_summary = str(out.get("executive_summary") or "")
+    _raw_category = cls.get("category") or out.get("classification") or "Unknown Malware"
+    _category = _coerce_category(str(_raw_category), _exec_summary)
+    # Confidence sanity: if we flipped MALICIOUS -> Clean because the
+    # prose was benign, cap the confidence at a moderate level so the
+    # UI doesn't render "Clean 100%" from a coerced value. The AI's
+    # original confidence was on the wrong label; using it for the
+    # corrected label would be misleading.
+    _raw_conf = cls.get("confidence")
+    if _raw_conf is None:
+        _confidence = 0.5
+    else:
+        try:
+            _confidence = float(_raw_conf)
+        except (TypeError, ValueError):
+            _confidence = 0.5
+    if str(_raw_category).strip().lower() != _category.strip().lower():
+        # Category was coerced — reset confidence to a neutral value
+        # since the LLM's confidence was tied to the wrong label.
+        _confidence = min(_confidence, 0.6)
     return {
-        "executive_summary":      str(out.get("executive_summary") or ""),
+        "executive_summary":      _exec_summary,
         "technical_summary":      str(out.get("technical_summary") or ""),
         "execution_narrative":    str(out.get("execution_narrative") or ""),
         "malware_classification": {
-            "category":   cls.get("category") or out.get("classification") or "Unknown Malware",
-            "confidence": cls.get("confidence") or 0.5,
+            "category":   _category,
+            "confidence": _confidence,
         },
         "malware_family":         out.get("malware_family"),
         "variant":                out.get("variant"),
