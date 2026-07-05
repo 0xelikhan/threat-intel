@@ -934,6 +934,16 @@ _KNOWN_GOOD_VENDOR_PATTERNS = [
     # low-signal noise (routine trash scanning). Only fires as
     # downweight; doesn't override a real active-threat marker.
     re.compile(r"\$RECYCLE\.BIN\\S-1-5-21-\d+-\d+-\d+-\d+\\", re.I),
+    # Entra IdentityProtection — risk successfully remediated. When
+    # riskState is `remediated` OR the risk was resolved by MFA
+    # ("userPassedMFADrivenByRiskBasedPolicy"), Conditional Access
+    # did its job: risky signin was challenged, user proved identity,
+    # risk is resolved. Analyst has nothing to action.
+    re.compile(r"\brisk[_ -]?state\s*:?\s*remediated\b", re.I),
+    re.compile(r"\buserPassedMFADrivenByRiskBasedPolicy\b", re.I),
+    re.compile(r"\buserPassedMFA\b", re.I),
+    re.compile(r"\brisk[_ -]?state\s*:?\s*dismissed\b", re.I),  # admin-dismissed risk
+    re.compile(r"\brisk[_ -]?state\s*:?\s*confirmedSafe\b", re.I),  # admin-confirmed safe
     # ThreatLocker Ringfencing block — a policy decision, not a compromise
     re.compile(r"\bRingfencing\b", re.I),
     re.compile(r"\bRingfence\s+Policy\b", re.I),
