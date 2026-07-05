@@ -1310,9 +1310,36 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
     # narrative text in Entra/Okta/Azure logs and were slipping through
     # the tier framework because none of them touched enrichment
     # signals or the older behavioural patterns.
+    #
+    # Exception: when the risk was already remediated by MFA
+    # (userPassedMFADrivenByRiskBasedPolicy, riskState: remediated,
+    # riskState: dismissed, riskState: confirmedSafe), skip the
+    # generic T1078 / Unfamiliar / anonymized-IP identity signals —
+    # Entra IdentityProtection already resolved the incident and
+    # firing an identity-attack TIER 2 on a resolved risk introduces
+    # analyst confusion. Strong attack markers (password spray, MFA
+    # fatigue, Global Admin add, service principal, impossible
+    # travel) still fire — the exemption is scoped to weaker
+    # generic MITRE / risk-reason patterns.
+    _risk_remediated = bool(re.search(
+        r"\brisk[_ -]?state\s*:?\s*(?:remediated|dismissed|confirmedSafe)\b"
+        r"|\buserPassedMFA\b",
+        log_text, re.I,
+    ))
+    _weak_identity_patterns = {
+        r"\bT1078(?:\.\d{3})?\b",
+        r"\bmitreTechniques[\"'\s]*[:=][\"'\s]*[\"']?T1078",
+        r"\banonymous\s+ip\s+use\b",
+        r"(?:Unfamiliar(?:ASN|Browser|Device|IP|Location|EASId|TenantIPsubnet|Features)[\"',\s]*){3,}",
+        r"riskReasons.*?Unfamiliar.*?Unfamiliar.*?Unfamiliar",
+    }
     for rx in _IDENTITY_ATTACK_PATTERNS:
         m = rx.search(log_text)
         if m:
+            # If MFA-remediated context and this is only a weak
+            # identity marker, skip it — Entra already resolved this.
+            if _risk_remediated and rx.pattern in _weak_identity_patterns:
+                continue
             _push(tier_2, "identity attack pattern",
                   f"matched '{m.group(0)[:80]}'")
             break
