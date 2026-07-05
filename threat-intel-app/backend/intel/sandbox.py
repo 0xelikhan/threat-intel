@@ -101,9 +101,34 @@ async def submit_hybrid_analysis(file_bytes: bytes, filename: str, api_key: str,
         async with aiohttp.ClientSession() as session:
             async with session.post(url, headers=headers, data=form,
                                     timeout=aiohttp.ClientTimeout(total=60)) as r:
-                data = await r.json()
+                try:
+                    data = await r.json()
+                except Exception:
+                    data = {"raw": await r.text()}
                 if r.status >= 400:
-                    return {"ok": False, "error": data.get("message", f"HTTP {r.status}")}
+                    msg = data.get("message") if isinstance(data, dict) else None
+                    # HA returns HTTP 404 with `message: "Requested URI - Not Found"`
+                    # when the API key doesn't have file-submission permission —
+                    # this is the standard restriction on the free-tier
+                    # "Public API" key. Paid tiers ("Vetted" / "Community
+                    # Contributor" / commercial) can POST /submit/file.
+                    # Translate to a specific, actionable error string so the
+                    # UI can render "sandbox: free-tier key can't submit new
+                    # samples" instead of the generic "Requested URI - Not
+                    # Found" that looks like a broken endpoint.
+                    if r.status == 404 and msg and "Requested URI" in msg:
+                        return {"ok": False,
+                                "error": "free-tier Hybrid Analysis key cannot "
+                                          "submit new samples (paid tier required)",
+                                "error_type": "auth_tier",
+                                "http_status": 404}
+                    if r.status in (401, 403):
+                        return {"ok": False,
+                                "error": f"Hybrid Analysis auth failed (HTTP {r.status})",
+                                "error_type": "auth_failed"}
+                    return {"ok": False,
+                            "error": msg or f"HTTP {r.status}",
+                            "http_status": r.status}
                 return {"ok": True,
                         "job_id":        data.get("job_id"),
                         "submission_id": data.get("submission_id"),

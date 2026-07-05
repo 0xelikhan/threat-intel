@@ -987,12 +987,28 @@ def _p_hybrid(r):
     into MALICIOUS amplifies severity beyond what the source said. HA
     verdicts in the wild: 'no_specific_threat' / 'no specific threat'
     (clean enough), 'suspicious', 'malicious', 'unknown', or empty.
+
+    Response shape: HA v2 /search/hash used to return a bare list of
+    reports. Sometime before 2026-06-19 they wrapped it in
+    {"sha256s": [...], "reports": [...]}. Handle both. Prefer the
+    most recent report in state=SUCCESS over any older/errored one.
     """
     if _is_fail(r):
         return _err("hybrid_analysis", r)
-    if not isinstance(r, list) or not r:
+    # Unwrap the new shape (object with `reports` key) or accept the
+    # legacy bare list.
+    if isinstance(r, dict):
+        reports = r.get("reports") or []
+    elif isinstance(r, list):
+        reports = r
+    else:
+        reports = []
+    if not reports:
         return _err("hybrid_analysis", "no reports")
-    top = r[0]  # most recent
+    # Prefer SUCCESS state over any other (ERROR / IN_PROGRESS / IN_QUEUE).
+    top = next((rep for rep in reports if (rep or {}).get("state") == "SUCCESS"), None)
+    if not top:
+        top = reports[0]
     raw = (top.get("verdict") or "").lower().strip()
     if raw == "malicious":
         verdict = "MALICIOUS"
@@ -1683,11 +1699,17 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
               data=f"sha256_hash={hash_val}" if is_sha256 else f"md5_hash={hash_val}",
               headers={"Content-Type": "application/x-www-form-urlencoded",
                        **_ac_headers}),
-        # Hybrid Analysis — search by hash for prior sandbox detonations
+        # Hybrid Analysis — search by hash for prior sandbox detonations.
+        # HA's v2 /search/hash requires the hash as a QUERY STRING param
+        # (was body-form). Live audit 2026-06-19 confirmed body-form now
+        # returns HTTP 400 "value should not be blank". Also the response
+        # shape changed from a bare list to {"sha256s": [...],
+        # "reports": [...]}. Fix applied in file_correlation.py + sandbox.py
+        # by commit d7dd6b6 but this third call site was missed.
         _post(session, "https://www.hybrid-analysis.com/api/v2/search/hash",
-              data=f"hash={hash_val}",
+              params={"hash": hash_val},
               headers={"api-key": hybrid_key, "user-agent": "Falcon Sandbox",
-                       "Content-Type": "application/x-www-form-urlencoded"}) if hybrid_key
+                       "accept": "application/json"}) if hybrid_key
             else _noop(),
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
