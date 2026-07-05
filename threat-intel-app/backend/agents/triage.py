@@ -787,6 +787,11 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
             (r"\bimpossible\s+travel\b", 0.40),
             (r"\bnew\s+(?:assignment\s+to|role\s+assignment).*Global\s+Administrator", 0.40),
             (r"\bnew\s+service\s+principal\s+created\b.*?(?:Mail\.Read|Files\.ReadWrite|User\.Read\.All|Directory\.ReadWrite)", 0.40),
+            # Entra IdentityProtection risk markers (camelCase / snake_case)
+            (r"\brisk[_ -]?state\s*:?\s*(?:atRisk|confirmedCompromised)", 0.45),
+            (r"\bBAV2ROPC\b", 0.50),
+            (r"(?:Unfamiliar(?:ASN|Browser|Device|IP|Location|EASId|TenantIPsubnet|Features)[\"',\s]*){3,}", 0.45),
+            (r"\bT1078(?:\.\d{3})?\b", 0.40),
             # Cloud attacks
             (r"\bGuardDuty\s+Finding\s*:?\s*(?:UnauthorizedAccess|CredentialAccess|Backdoor|CryptoCurrency|Trojan|Impact)", 0.45),
             (r"\bInstanceCredentialExfiltration\b", 0.45),

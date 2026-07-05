@@ -131,18 +131,25 @@ _TRACKED_ACTOR_PATTERNS = [
 
 # Upstream "High" / "Critical" risk markers common in Defender / Sentinel /
 # Entra ID / Okta / risk-based auth logs.
+# NOTE the `[_ -]?` between compound tokens — Entra emits camelCase
+# (`riskState`, `riskLevel`), Sentinel emits snake_case (`risk_state`),
+# and some SIEMs emit space-separated. Make separators optional so all
+# three shapes match.
 _UPSTREAM_HIGH_RISK_PATTERNS = [
-    re.compile(r"\brisk\s*level\s*:?\s*high\b", re.I),
-    re.compile(r"\brisk\s*level\s*:?\s*critical\b", re.I),
+    re.compile(r"\brisk[_ -]?level\s*:?\s*high\b", re.I),
+    re.compile(r"\brisk[_ -]?level\s*:?\s*critical\b", re.I),
     re.compile(r"\bhigh[- ]risk\s+sign[- ]in\b", re.I),
     re.compile(r"\bhigh[- ]risk\s+user\b", re.I),
-    re.compile(r"\brisk[_ ]state\s*:?\s*(atRisk|confirmedCompromised)\b", re.I),
-    re.compile(r"\brisk[_ ]level[_ ]aggregated\s*:?\s*high\b", re.I),
+    re.compile(r"\brisk[_ -]?state\s*:?\s*(atRisk|confirmedCompromised)\b", re.I),
+    re.compile(r"\brisk[_ -]?level[_ -]?aggregated\s*:?\s*high\b", re.I),
     re.compile(r"\bseverity\s*:?\s*(High|Critical)\b"),
     re.compile(r"\battempted\s+atypical\s+travel\b", re.I),
     re.compile(r"\bsuccessful\s+atypical\s+travel\b", re.I),
     re.compile(r"\bimpossible\s+travel\b", re.I),
     re.compile(r"\bmalicious\s+ip\s+address\b", re.I),
+    # Additional Entra IdentityProtection markers
+    re.compile(r"\bconfirmedCompromised\b", re.I),
+    re.compile(r"\bIdentityProtection\b.*?\batRisk\b", re.I | re.S),
 ]
 
 # Credential-access + MFA-bypass markers from raw log content. Reduces
@@ -202,6 +209,56 @@ _IDENTITY_ATTACK_PATTERNS = [
     re.compile(r"\battack\s+tool\s+detected\b", re.I),  # Entra risk detection
     re.compile(r"\bleaked\s+credentials\b", re.I),
     re.compile(r"\bmalware\s+linked\s+ip\b", re.I),
+    # BAV2ROPC user agent — legacy Basic Auth via Resource Owner
+    # Password Credentials. Almost every credential-stuffing tool
+    # uses this UA. Real users don't. Very high-signal.
+    re.compile(r"\bBAV2ROPC\b"),
+    re.compile(r"\buserAgent[\"'\s]*[:=][\"'\s]*BAV2ROPC\b", re.I),
+    # Multiple Entra IdentityProtection Unfamiliar-* risk reasons
+    # in one event = high-confidence risky sign-in. One Unfamiliar
+    # flag is common (new phone, new IP), 3+ in a single alert
+    # is almost always malicious.
+    re.compile(r"(?:Unfamiliar(?:ASN|Browser|Device|IP|Location|EASId|TenantIPsubnet|Features)[\"',\s]*){3,}", re.I),
+    re.compile(r"riskReasons.*?Unfamiliar.*?Unfamiliar.*?Unfamiliar", re.I | re.S),
+    # MITRE T1078 (Valid Accounts) references — the specific technique
+    # subclasses attackers use for cloud identity compromise
+    re.compile(r"\bT1078(?:\.\d{3})?\b"),
+    re.compile(r"\bmitreTechniques[\"'\s]*[:=][\"'\s]*[\"']?T1078", re.I),
+]
+
+# Windows AV detection patterns — Defender detecting HackTool / PUA
+# variants and Defender action failures. These are TIER 2 corroborating
+# signals: the detection itself is a real signal, and a failed
+# remediation means the artefact is still on disk.
+_DEFENDER_DETECTION_TIER2_PATTERNS = [
+    # HackTool / PUA / PUABundler / Trojan named detections
+    ("Defender HackTool detection",
+     re.compile(r"\bName\s*:\s*HackTool\s*:", re.I)),
+    ("Defender PUA / PUABundler detection",
+     re.compile(r"\bName\s*:\s*PUA(?:Bundler)?\s*:", re.I)),
+    ("Defender Trojan detection",
+     re.compile(r"\bName\s*:\s*Trojan\s*:", re.I)),
+    ("Defender Backdoor detection",
+     re.compile(r"\bName\s*:\s*Backdoor\s*:", re.I)),
+    ("Defender Ransom detection",
+     re.compile(r"\bName\s*:\s*Ransom\s*:", re.I)),
+    ("Defender Behavior detection",
+     re.compile(r"\bName\s*:\s*Behavior\s*:", re.I)),
+    # Any HackTool: / PUA: string in the log (not necessarily prefixed by Name:)
+    ("HackTool / PUA family name in log",
+     re.compile(r"\b(?:HackTool|PUA|PUABundler|Backdoor|Ransom|Trojan|Exploit)\s*:\s*(?:Script|Win\d\d|MSIL|VBS|JS|HTML|Linux|OSX|MacOS)/", re.I)),
+    # Defender action failed — file still on disk
+    ("Defender action failed — Error Code present",
+     re.compile(r"\bAction\s*:\s*Quarantine\b.*?\bError\s+Code\s*:\s*0x[0-9a-f]+", re.I | re.S)),
+    ("Defender ActionSuccess: false",
+     re.compile(r"\bActionSuccess\s*:\s*false\b", re.I)),
+    ("Defender error 0x800700df (file too large to quarantine)",
+     re.compile(r"\b0x800700df\b", re.I)),
+    # High-severity Defender detection
+    ("Defender Severity: High detection",
+     re.compile(r"\bSeverity\s*:\s*High\b.*?\b(?:HackTool|PUA|Trojan|Backdoor|Ransom)\s*:", re.I | re.S)),
+    ("Defender Severity: Severe detection",
+     re.compile(r"\bSeverity\s*:\s*Severe\b", re.I)),
 ]
 
 # Cloud (AWS / Azure / GCP) attack patterns.
@@ -758,9 +815,13 @@ _KNOWN_GOOD_VENDOR_PATTERNS = [
     # Management / EDR agents
     re.compile(r"\bDell\s+SupportAssist\b", re.I),
     re.compile(r"\bHP\s+Support\s+Assistant\b", re.I),
-    re.compile(r"\bMicrosoft\s+Defender\b", re.I),
+    # NOTE: bare "Microsoft Defender" / "Windows Defender Antivirus"
+    # removed as broad downweight patterns — the log source being
+    # Defender doesn't mean the alert is benign. Defender frequently
+    # LOGS threat detections. The specific benign markers
+    # (Threat Status: Remediated, ActionSuccess: true, Defender has
+    # removed) below stay in the list — those are true benign signals.
     re.compile(r"\bWindows\s+Update\b", re.I),
-    re.compile(r"\bWindows\s+Defender\s+Antivirus\b", re.I),
     re.compile(r"\bCrowdStrike\s+Falcon\b", re.I),
     re.compile(r"\bSCCM\s+client\b", re.I),
     re.compile(r"\bIntune\s+agent\b", re.I),
@@ -796,11 +857,13 @@ _KNOWN_GOOD_VENDOR_PATTERNS = [
     # ThreatLocker built-in policy — vetted by the vendor's trust team
     re.compile(r"\bPolicy Name\s*:.*\(Built-In\)", re.I),
     re.compile(r"\(Built-In\)\s*$", re.I | re.M),
-    # Defender routine remediation — malware detection with confirmed removal
-    # is a resolved event, not an active compromise; ThreatLocker/MDE alerts
-    # of this shape ARE benign from a triage standpoint.
+    # Defender routine remediation — malware detection with confirmed
+    # removal is a resolved event, not an active compromise. BUT only
+    # when the action ACTUALLY succeeded — a "Quarantine" line with an
+    # Error Code means the file is still on disk and this is NOT
+    # benign. The downweight list is filtered by the "action failed"
+    # TIER 2 check below so a failed remediation doesn't slip through.
     re.compile(r"\bThreat\s+Status\s*:\s*Remediated\b", re.I),
-    re.compile(r"\bAction\s+Taken\s*:\s*Quarantine\b", re.I),
     re.compile(r"\bActionSuccess\s*:\s*true\b", re.I),
     re.compile(r"\bDefender\s+has\s+removed\b", re.I),
     # ThreatLocker Ringfencing block — a policy decision, not a compromise
@@ -1160,6 +1223,24 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
             _push(tier_2, f"macOS: {name}",
                   f"matched '{m.group(0)[:80]}'")
             break
+
+    # Defender AV detection — HackTool / PUA / Trojan / failed
+    # remediation. A named-family detection with failed action is a
+    # real signal even when Defender is the source; the file is still
+    # on disk. Two entries fire on this shape (detection + failure)
+    # which promotes verdict_floor to HIGH via the 2-TIER-2 rule.
+    for name, rx in _DEFENDER_DETECTION_TIER2_PATTERNS:
+        m = rx.search(log_text)
+        if m:
+            _push(tier_2, name, f"matched '{m.group(0)[:80]}'")
+            # Deliberately do NOT break here — we want both the
+            # detection-name signal AND the failed-action signal to
+            # both fire if both are present. Two TIER 2 signals give
+            # verdict_floor=HIGH which stops CLEAR misclassification.
+    # Dedup TIER 2 entries in case multiple patterns matched the same
+    # substring — same signal name shouldn't fire twice.
+    _seen = set()
+    tier_2 = [s for s in tier_2 if not (s["signal"] in _seen or _seen.add(s["signal"]))]
 
     otx_ge_5 = False
     for _t, ioc, p in _iter_ioc_enrichments(state):
