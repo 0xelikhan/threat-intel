@@ -2026,24 +2026,6 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // Hybrid Analysis — prior sandbox detonation (hashes only). Backend only
-  // writes this key when there's an actual sandbox report, so presence +
-  // no error IS the "found" signal — no .found field to gate on.
-  if (d.hybrid_analysis && !d.hybrid_analysis.error) {
-    const h = d.hybrid_analysis;
-    const score = h.threat_score;
-    const c = score >= 70 ? red : score >= 40 ? orange
-            : (h.verdict || '').toUpperCase() === 'MALICIOUS' ? red : tert;
-    const fam = h.malware_family || h.vx_family;
-    const verdictTxt = (h.verdict || h.verdict_raw || 'analyzed').toLowerCase();
-    out.push({
-      source: 'Hybrid Analysis',
-      label: `${verdictTxt}${score != null ? ` · score ${score}` : ''}${fam ? ` · ${fam}` : ''}`,
-      color: c,
-      why: 'CrowdStrike Falcon Sandbox detonation result. Threat score is a behavioural rating (0-100); ≥70 = malicious behaviour confirmed in sandbox.',
-    });
-  }
-
   // Team Cymru Malware Hash Registry — DNS-based hash reputation. Backend
   // returns first_seen + detection_pct only when MHR has the hash, so
   // presence is the hit signal (no .found field).
@@ -2374,7 +2356,6 @@ function _ocSources(result, ioc, type) {
     urlhaus_payload: 'URLhaus payload', circl_hashlookup: 'CIRCL hashlookup',
     nvd: 'NVD',                          epss: 'EPSS',
     cisa_kev: 'CISA KEV',
-    hybrid_analysis: 'Hybrid Analysis',
     whois: 'WHOIS',                      ipinfo: 'IPInfo',
     censys: 'Censys',
     feodo_tracker: 'Feodo Tracker',

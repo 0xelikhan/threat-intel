@@ -619,8 +619,6 @@ app.add_middleware(
 from bg_utils import BoundedDict as _BoundedDict
 
 _results: dict = _BoundedDict(cap=500)
-# Sandbox job tracker: { job_id: { state, submitted_at, sha256, ... } }
-_sandbox_jobs: dict[str, dict] = _BoundedDict(cap=500)
 # Chat conversations per run: { run_id: [{role, content, timestamp}, ...] }
 _chats: dict[str, list] = _BoundedDict(cap=500)
 _taxii_cache: dict = _BoundedDict(cap=100)
@@ -717,9 +715,7 @@ class HuntPlanRequest(BaseModel):
 # Proof-of-concept split — the rest of main.py is too cross-coupled to
 # move without a deeper refactor, but new routes go in routers/.
 from routers import calibration as _calibration_router
-from routers import sandbox     as _sandbox_router
 app.include_router(_calibration_router.router)
-app.include_router(_sandbox_router.router)
 
 
 # ─── SETTINGS ─────────────────────────────────────────────────────────────────────
@@ -2797,22 +2793,12 @@ async def scan_file(file: UploadFile = File(...)):
         _log.warning("LOLDrivers BYOVD lookup failed for %s: %s",
                      hashes["sha256"][:12], _e)
 
-    # Cloud sandbox lookup — Hybrid Analysis by SHA-256
-    sandbox = {}
-    try:
-        from intel.sandbox import lookup_all
-        sandbox = await lookup_all(hashes["sha256"], config)
-    except Exception as _e:
-        _log.warning("cloud sandbox lookup failed for %s: %s",
-                     hashes["sha256"][:12], _e)
-
     return {
         "filename":       file.filename,
         "size":           len(data),
         "hashes":         hashes,
         "yara_matches":   yara_hits,
         "loldrivers_hit": driver_hit,
-        "sandbox":        sandbox,
     }
 
 
@@ -2859,9 +2845,9 @@ async def scan_file_v2(file: UploadFile = File(...)):
     except Exception:
         pass
 
-    # TI correlation (async) — file_correlation handles VT/MB/HA/AnyRUN
-    # via the hash; enrich_hash adds OTX file, ThreatFox, URLhaus payload,
-    # CIRCL hashlookup, Hybrid Analysis search, Team Cymru MHR, Maltiverse,
+    # TI correlation (async) — file_correlation handles VT/MB via the
+    # hash; enrich_hash adds OTX file, ThreatFox, URLhaus payload,
+    # CIRCL hashlookup, Team Cymru MHR, Maltiverse,
     # OpenCTI, VT graph relationships, MalwareBazaar similar samples,
     # and the deep sandbox aggregator. Run both concurrently so every
     # hash-capable source the platform supports hits the file.
@@ -2876,7 +2862,7 @@ async def scan_file_v2(file: UploadFile = File(...)):
         # Snapshot the keys enrich_hash looks at into a plain dict (same
         # shape the URL-scan endpoint already builds).
         _keys = {k: (config.get(k) or "") for k in (
-            "VIRUSTOTAL_KEY", "OTX_KEY", "HYBRID_ANALYSIS_KEY",
+            "VIRUSTOTAL_KEY", "OTX_KEY",
             "MALWAREBAZAAR_API_KEY", "ABUSECH_AUTH_KEY",
             "MALTIVERSE_KEY",
         )}
@@ -3078,31 +3064,28 @@ async def scan_hash(req: ScanHashRequest):
             connector_owner=False,
             timeout=aiohttp.ClientTimeout(total=30),
         ) as session:
-            from intel.file_correlation import _vt_file, _malwarebazaar, _hybrid_analysis
+            from intel.file_correlation import _vt_file, _malwarebazaar
             # Pass the abuse.ch unified auth key so MalwareBazaar doesn't
             # hit anonymously and get rate-limited. Same fix the broader
             # file_correlation.correlate() path got — this direct
             # /api/scan/hash call site was a separate, parallel use.
             _abusech = (config.get("ABUSECH_AUTH_KEY")
                         or config.get("MALWAREBAZAAR_API_KEY") or "")
-            r_vt, r_mb, r_ha = await asyncio.gather(
+            r_vt, r_mb = await asyncio.gather(
                 _vt_file(session, h, config.get("VIRUSTOTAL_KEY", "")),
                 _malwarebazaar(session, h, _abusech),
-                _hybrid_analysis(session, h, config.get("HYBRID_ANALYSIS_KEY", "")),
                 return_exceptions=True,
             )
             vt = r_vt if isinstance(r_vt, dict) else {}
             mb = r_mb if isinstance(r_mb, dict) else {}
-            ha = r_ha if isinstance(r_ha, dict) else {}
     except Exception as e:
         out["error"] = _clean_exc(e, prefix="hash lookup")
 
-    threat_intel = {"virustotal": vt, "malwarebazaar": mb, "hybrid_analysis": ha}
+    threat_intel = {"virustotal": vt, "malwarebazaar": mb}
     vt_mal = vt.get("malicious") if isinstance(vt.get("malicious"), int) else 0
-    ha_verdict = (ha.get("verdict") or "").lower()
-    if mb.get("found") or vt_mal > 5 or ha_verdict == "malicious":
+    if mb.get("found") or vt_mal > 5:
         verdict = "MALICIOUS"
-    elif vt_mal >= 1 or ha_verdict in {"suspicious", "ambiguous"}:
+    elif vt_mal >= 1:
         verdict = "SUSPICIOUS"
     else:
         verdict = "UNKNOWN"
@@ -3404,8 +3387,8 @@ async def scan_url_endpoint(req: ScanUrlRequest):
     except Exception:
         pass
     # Two parallel correlation passes:
-    #  (1) file_correlation runs hash-based lookups (VT/MalwareBazaar/Hybrid
-    #      Analysis on the downloaded content) and lands under threat_intel.
+    #  (1) file_correlation runs hash-based lookups (VT/MalwareBazaar on
+    #      the downloaded content) and lands under threat_intel.
     #  (2) url_enrichment runs URL + domain reputation (VT URL endpoint,
     #      Maltiverse hostname, AbuseIPDB/Shodan when the
     #      hostname resolves to an IP, etc.) and lands under enrichments.
@@ -3427,7 +3410,7 @@ async def scan_url_endpoint(req: ScanUrlRequest):
             "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
             "PULSEDIVE_KEY", "MALTIVERSE_KEY",
             "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
-            "HYBRID_ANALYSIS_KEY", "MALWAREBAZAAR_API_KEY",
+            "MALWAREBAZAAR_API_KEY",
             "ABUSECH_AUTH_KEY",
             "PROXYCHECK_KEY", "CENSYS_API_KEY",
             "CENSYS_ID", "CENSYS_SECRET", "CRIMINAL_IP_KEY",
@@ -3725,25 +3708,6 @@ async def scan_feedback_list(scan_id: Optional[str] = None):
     return {"feedback": for_scan(scan_id) if scan_id else list_all()}
 
 
-@app.get("/api/sandbox/{sha256}")
-async def sandbox_lookup(sha256: str):
-    """Hash-only lookup against configured cloud sandboxes.
-
-    Consumed by: external tooling. The frontend's File Scanner polls
-    /api/sandbox/result/{sha256} (in routers/sandbox.py) instead — that's
-    the auto-submission status poll, this is the on-demand "do you already
-    have a report for this hash?" probe used by SIEM playbooks before
-    bothering to upload the sample.
-    """
-    if len(sha256) != 64:
-        raise HTTPException(400, "Provide a SHA-256 hash (64 hex chars).")
-    try:
-        from intel.sandbox import lookup_all
-        return {"sha256": sha256, "sandbox": await lookup_all(sha256, config)}
-    except Exception as e:
-        raise HTTPException(503, _clean_exc(e, prefix="sandbox lookup"))
-
-
 _URLSCAN_VISIBILITIES = {"public", "unlisted", "private"}
 # URLScan UUIDs are RFC 4122 — accept either the canonical 8-4-4-4-12
 # hex form or a 32-char dashless form. Anything else is bogus and we
@@ -3794,62 +3758,6 @@ async def urlscan_result(uuid: str):
         return await get_result(uuid, config.get("URLSCAN_KEY", ""))
     except Exception as e:
         raise HTTPException(502, _clean_exc(e, prefix="URLScan poll"))
-
-
-@app.post("/api/sandbox/submit")
-async def sandbox_submit(file: UploadFile = File(...)):
-    """Submit a fresh sample to Hybrid Analysis for detonation. Returns job_id."""
-    api_key = config.get("HYBRID_ANALYSIS_KEY")
-    if not api_key:
-        raise HTTPException(400, "HYBRID_ANALYSIS_KEY not configured")
-    data = await file.read()
-    if not data:
-        raise HTTPException(400, "Empty file")
-    if len(data) > 100 * 1024 * 1024:
-        raise HTTPException(413, "File exceeds 100 MB submission limit")
-    from intel.sandbox import submit_hybrid_analysis
-    result = await submit_hybrid_analysis(data, file.filename or "sample.bin", api_key)
-    if not result.get("ok"):
-        raise HTTPException(502, result.get("error", "submission failed"))
-    job_id = result["job_id"]
-    _sandbox_jobs[job_id] = {
-        "state":         "IN_QUEUE",
-        "filename":      file.filename,
-        "sha256":        result.get("sha256"),
-        "environment":   result.get("environment_id"),
-        "submitted_at":  _ts(),
-    }
-    return {"job_id": job_id, "sha256": result.get("sha256"),
-            "submitted_at": _sandbox_jobs[job_id]["submitted_at"]}
-
-
-@app.get("/api/sandbox/job/{job_id}")
-async def sandbox_job_status(job_id: str):
-    """Poll status for a Hybrid Analysis submission. When SUCCESS, returns summary."""
-    api_key = config.get("HYBRID_ANALYSIS_KEY")
-    if not api_key:
-        raise HTTPException(400, "HYBRID_ANALYSIS_KEY not configured")
-    # Hybrid Analysis job IDs are 24-char hex (their internal mongo
-    # ObjectId-style). Reject anything else so we don't poll upstream
-    # with random analyst-typed strings AND don't pollute _sandbox_jobs
-    # with junk keys.
-    if not job_id or not _re_validate.match(r"^[0-9a-f]{8,64}$", job_id):
-        raise HTTPException(400, "job_id must be a hex token (8-64 chars)")
-    from intel.sandbox import hybrid_analysis_state, hybrid_analysis_summary
-    try:
-        state = await hybrid_analysis_state(job_id, api_key)
-    except Exception as e:
-        raise HTTPException(502, _clean_exc(e, prefix="sandbox poll"))
-    record = _sandbox_jobs.get(job_id, {})
-    record["state"] = state.get("state", "UNKNOWN")
-    record["error"] = state.get("error")
-    if record["state"] == "SUCCESS":
-        try:
-            record["summary"] = await hybrid_analysis_summary(job_id, api_key)
-        except Exception as e:
-            record["error"] = _clean_exc(e, prefix="sandbox summary")
-    _sandbox_jobs[job_id] = record
-    return {"job_id": job_id, **record}
 
 
 # ─── HEALTH + STATUS (spec §11) ──────────────────────────────────────────────────
@@ -3958,7 +3866,7 @@ async def startup_check():
         required = ("OPENAI_API_KEY",)
     optional = ("VIRUSTOTAL_KEY", "ABUSEIPDB_KEY",
                 "OTX_KEY", "URLSCAN_KEY", "PULSEDIVE_KEY", "CENSYS_ID",
-                "CENSYS_SECRET", "HYBRID_ANALYSIS_KEY",
+                "CENSYS_SECRET",
                 "MALTIVERSE_KEY", "OPENCTI_TOKEN", "FRESHRSS_API_KEY")
 
     keys = {}
@@ -4266,10 +4174,10 @@ async def email_compose_ai(req: EmailComposeAIRequest):
     # cfg is a flat dict that compose_ai treats as the API-key bag. It
     # needs AI provider config AND every enrichment-API key compose_ai's
     # _gather_email_enrichment fans out to (VirusTotal, AbuseIPDB,
-    # MalwareBazaar, Hybrid Analysis, etc.). Previously the dict only
+    # MalwareBazaar, etc.). Previously the dict only
     # carried the 7 AI / sender-identity keys and the enrichment helper
     # silently got None for everything else — that's why VT / Spamhaus
-    # / WHOIS / Hybrid Analysis lines never appeared in the prose even
+    # / WHOIS lines never appeared in the prose even
     # though the keys were configured in data/config.json.
     cfg = {
         # AI provider + email-sender identity
@@ -4293,7 +4201,6 @@ async def email_compose_ai(req: EmailComposeAIRequest):
         "IPINFO_TOKEN":       config.get("IPINFO_TOKEN"),
         "WHOISXML_KEY":       config.get("WHOISXML_KEY"),
         "GOOGLE_API_KEY":     config.get("GOOGLE_API_KEY"),
-        "HYBRID_ANALYSIS_KEY": config.get("HYBRID_ANALYSIS_KEY"),
         "MALWAREBAZAAR_API_KEY": config.get("MALWAREBAZAAR_API_KEY"),
         "ABUSECH_AUTH_KEY":   config.get("ABUSECH_AUTH_KEY"),
         # Canonical Censys names — PAT first, legacy v2 pair as fallback.

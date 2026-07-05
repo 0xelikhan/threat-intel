@@ -71,7 +71,7 @@ ENRICHMENT_SOURCES: Tuple[str, ...] = (
     "misp_feeds", "misp_galaxy",
     "feodo_tracker", "tor", "bgp_ranking", "google_safebrowsing",
     "deception", "maltiverse", "opencti", "urlscan", "pulsedive",
-    "malwarebazaar", "threatfox", "hybrid_analysis",
+    "malwarebazaar", "threatfox",
     "deep_instinct", "cybereason", "whois", "dbl",
     "domain_intel", "feed_cache",
 )

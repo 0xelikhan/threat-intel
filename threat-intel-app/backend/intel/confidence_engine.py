@@ -231,12 +231,6 @@ def score_hash(ioc: str, enrichment: Dict, behavioral: Optional[Dict] = None,
                                f"family={(enrichment['threatfox'] or {}).get('malware_family')}",
                                "reputation"))
 
-    ha = enrichment.get("hybrid_analysis") or {}
-    if ha.get("verdict") == "MALICIOUS":
-        factors.append(_factor("Hybrid Analysis sandbox: malicious", 25,
-                               f"score={ha.get('threat_score')} family={ha.get('malware_family')}",
-                               "reputation"))
-
     hl = enrichment.get("circl_hashlookup") or {}
     if hl.get("verdict") == "CLEAN":
         factors.append(_factor("CIRCL hashlookup known-good", -25,

@@ -177,7 +177,7 @@ _REGISTRY: Dict[str, Dict[str, str]] = {
     "SANDBOX_UNAVAILABLE": {
         "detail":    "Sandbox APIs are unavailable.",
         "error_code": "sandbox_unavailable",
-        "fix_hint":  ("Hybrid Analysis or URLScan didn't respond. Static analysis "
+        "fix_hint":  ("URLScan didn't respond. Static analysis "
                       "completed normally; dynamic / sandbox analysis is missing "
                       "from this scan."),
     },

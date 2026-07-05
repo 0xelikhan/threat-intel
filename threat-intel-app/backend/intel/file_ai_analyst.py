@@ -215,7 +215,7 @@ clearly in the executive_summary and set malware_classification.category to
 SOURCE-CITATION RULES (anti-hallucination — analysts have explicitly flagged
 made-up TI sources as the worst possible failure mode):
 1. Only name a threat-intelligence source (VirusTotal, AbuseIPDB, Maltiverse,
-   OTX, URLScan, MalwareBazaar, URLhaus, Hybrid Analysis, Pulsedive,
+   OTX, URLScan, MalwareBazaar, URLhaus, Pulsedive,
    ThreatFox, CIRCL hashlookup, Team Cymru MHR, OpenCTI, MISP feeds,
    Spamhaus, Censys, Criminal IP, ProxyCheck, Feodo Tracker, Google
    Safe Browsing, etc.) when its CORRESPONDING FIELD is present in the
@@ -579,7 +579,7 @@ def gather_comparative_context(analysis: Dict) -> Dict:
     grounding for the deep AI prompt."""
     family  = (((analysis.get("threat_intel") or {}).get("virustotal") or {}).get("malware_family")
                or ((analysis.get("threat_intel") or {}).get("malwarebazaar") or {}).get("malware_family"))
-    actor   = (((analysis.get("threat_intel") or {}).get("hybrid_analysis") or {}).get("malware_family"))
+    actor   = None
 
     similar_files = []
     sh = ((analysis.get("threat_intel") or {}).get("scan_history") or {})

@@ -3389,12 +3389,12 @@ def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
 
 def _fmt_hash_enrichment(h: str, data: Dict) -> str:
     """Client-readable summary for a file hash. Pulls VirusTotal,
-    MalwareBazaar, ThreatFox, URLhaus payload, CIRCL hashlookup, Hybrid
-    Analysis, Team Cymru MHR, and MISP feeds — every hash source the
-    backend writes. Earlier code read vt.family / vt.popular_name /
-    vt.first_submission_date (none of which the parser sets — the right
-    keys are malware_family / first_submission) and ignored every source
-    beyond VT/MB/HA, so hash emails about confirmed malware never
+    MalwareBazaar, ThreatFox, URLhaus payload, CIRCL hashlookup, Team
+    Cymru MHR, and MISP feeds — every hash source the backend writes.
+    Earlier code read vt.family / vt.popular_name / vt.first_submission_date
+    (none of which the parser sets — the right keys are malware_family /
+    first_submission) and ignored every source beyond VT/MB, so hash
+    emails about confirmed malware never
     mentioned URLhaus or ThreatFox even when the indicator was active
     C2 infrastructure.
     """
@@ -3403,7 +3403,6 @@ def _fmt_hash_enrichment(h: str, data: Dict) -> str:
 
     vt = data.get("virustotal") or {}
     mb = data.get("malwarebazaar") or {}
-    ha = data.get("hybrid_analysis") or {}
     tf = data.get("threatfox") or {}
     up = data.get("urlhaus_payload") or {}
     circl = data.get("circl_hashlookup") or {}
@@ -3491,16 +3490,6 @@ def _fmt_hash_enrichment(h: str, data: Dict) -> str:
         if pulses >= 5:
             sentences.append(
                 f"AlienVault OTX lists the hash across {pulses} community threat-intel pulses.")
-
-    # Hybrid Analysis sandbox detonation
-    if ha and not ha.get("error"):
-        v = (ha.get("verdict") or "").strip().lower()
-        score = ha.get("threat_score")
-        if v in ("malicious", "suspicious", "ambiguous"):
-            piece = f"Hybrid Analysis sandboxing rates the verdict as {v}"
-            if score is not None:
-                piece += f" (threat score {score})"
-            sentences.append(piece + ".")
 
     if not sentences:
         return ""
@@ -3932,7 +3921,6 @@ async def _gather_email_enrichment(log_text: str, parsed: Dict,
             "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
             "PULSEDIVE_KEY", "MALTIVERSE_KEY",
             "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
-            "HYBRID_ANALYSIS_KEY",
             "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY",
             # Canonical Censys names — PAT first, legacy v2 pair as fallback.
             "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET",
@@ -4207,7 +4195,7 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "the verification needed before clearing.\n"
         "* Confirmed-malicious — multiple corroborating signals such as\n"
         "    - a hash matching a known malware family (VirusTotal multi-\n"
-        "      engine flag, MalwareBazaar / Hybrid Analysis verdict)\n"
+        "      engine flag, MalwareBazaar verdict)\n"
         "    - an IP that Maltiverse / AbuseIPDB classify as malicious,\n"
         "      especially when it overlaps with Tor exits or known C2\n"
         "      infrastructure\n"

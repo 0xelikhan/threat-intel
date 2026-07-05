@@ -82,7 +82,6 @@ const BUILDERS = {
     domain: v => `https://who.is/whois/${enc(v)}`,
     ip:     v => `https://who.is/whois-ip/ip-address/${enc(v)}`,
   },
-  'Hybrid Analysis': { hash: v => `https://www.hybrid-analysis.com/sample/${enc(v)}` },
   // CIRCL hashlookup serves per-hash JSON at /lookup/{algo}/{hash}. The
   // algorithm is inferred from the hash length (md5=32, sha1=40,
   // sha256=64); other lengths fall through to null so the label stays

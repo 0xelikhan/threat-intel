@@ -312,7 +312,7 @@ export function SkeletonFileScanner() {
           gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
           gap: 1.25,
         }}>
-          {['VirusTotal', 'MalwareBazaar', 'Hybrid Analysis', 'OTX', 'ThreatFox'].map((src, i) => (
+          {['VirusTotal', 'MalwareBazaar', 'OTX', 'ThreatFox'].map((src, i) => (
             <Box key={src} sx={{
               p: 1.25, borderRadius: 1,
               border: `1px solid ${_BORDER}`,

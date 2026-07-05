@@ -68,7 +68,7 @@ def _load_keys() -> Dict[str, str]:
     for k in ("VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
               "PULSEDIVE_KEY", "MALTIVERSE_KEY",
               "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
-              "HYBRID_ANALYSIS_KEY", "MALWAREBAZAAR_API_KEY",
+              "MALWAREBAZAAR_API_KEY",
               "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET",
               "PROXYCHECK_KEY", "OPENAI_API_KEY",
               "OPENAI_BASE_URL", "CRIMINAL_IP_KEY",
@@ -305,15 +305,6 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
         headers={"Content-Type": "application/x-www-form-urlencoded",
                  **({"Auth-Key": KEYS["MALWAREBAZAAR_API_KEY"]}
                     if KEYS.get("MALWAREBAZAAR_API_KEY") else {})}))
-    add(_probe(session, "Hybrid Analysis search", "Hash enrichment",
-        "https://www.hybrid-analysis.com/api/v2/search/hash",
-        method="POST",
-        headers={"api-key": KEYS.get("HYBRID_ANALYSIS_KEY", ""),
-                 "user-agent": "Falcon Sandbox",
-                 "Content-Type": "application/x-www-form-urlencoded"},
-        params={"hash": TEST_HASH},
-        ok_statuses=(200, 201),
-        key_env="HYBRID_ANALYSIS_KEY", key_url="https://www.hybrid-analysis.com/apikeys/info"))
     add(_probe(session, "CIRCL hashlookup", "Hash enrichment",
         f"https://hashlookup.circl.lu/lookup/sha256/{TEST_HASH}",
         ok_statuses=(200, 404)))

@@ -76,7 +76,7 @@ class EnrichIOCSkill(Skill):
             "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "OTX_KEY", "URLSCAN_KEY",
             "PULSEDIVE_KEY", "MALTIVERSE_KEY",
             "IPINFO_TOKEN", "WHOISXML_KEY",
-            "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY", "HYBRID_ANALYSIS_KEY",
+            "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY",
             # Canonical Censys names — PAT first, legacy v2 pair as fallback.
             # Both are registered in config.py.
             "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET",

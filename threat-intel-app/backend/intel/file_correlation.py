@@ -45,7 +45,6 @@ async def correlate(analysis: Dict, config) -> Dict:
 
     keys = {
         "VIRUSTOTAL_KEY":      config.get("VIRUSTOTAL_KEY"),
-        "HYBRID_ANALYSIS_KEY": config.get("HYBRID_ANALYSIS_KEY"),
         # abuse.ch unified Auth-Key — MalwareBazaar / ThreatFox / URLhaus all
         # use the same one. Anonymous requests have been rate-limited /
         # soft-blocked since mid-2024 so file scans were silently hitting
@@ -74,7 +73,6 @@ async def correlate(analysis: Dict, config) -> Dict:
         tasks = {
             "virustotal":      _vt_file(session, sha256, keys["VIRUSTOTAL_KEY"])  if sha256 else _noop(),
             "malwarebazaar":   _malwarebazaar(session, sha256, keys["ABUSECH_AUTH_KEY"]) if sha256 else _noop(),
-            "hybrid_analysis": _hybrid_analysis(session, sha256, keys["HYBRID_ANALYSIS_KEY"]) if sha256 else _noop(),
             "feed_cache":      _feed_cache_for_iocs(iocs),
         }
         # Domain extras run only when we have domains
@@ -89,7 +87,7 @@ async def correlate(analysis: Dict, config) -> Dict:
                 out[name] = result
 
     # Family hint propagation (used by detection content + scoring)
-    for src in ("virustotal", "malwarebazaar", "hybrid_analysis"):
+    for src in ("virustotal", "malwarebazaar"):
         v = out.get(src) or {}
         f = v.get("malware_family")
         if f and not family_hint:
@@ -97,42 +95,6 @@ async def correlate(analysis: Dict, config) -> Dict:
     if family_hint:
         out["malware_family_consensus"] = family_hint
 
-    # Sandbox auto-submit if HA key available + no existing report.
-    # When the analysis dict carries the raw file bytes (the file
-    # analyzer keeps them on _file_bytes until just before persistence),
-    # kick off a fire-and-forget detonation job. The submission +
-    # polling runs in the background and writes the final summary to
-    # the in-memory _sandbox_results dict in intel/sandbox.py, which
-    # the UI fetches via GET /api/sandbox/result/{sha256}. Used to
-    # persist to backend/data/sandbox_results/{sha256}.json but the
-    # no-persistence policy moved it in-process only.
-    if (sha256 and keys["HYBRID_ANALYSIS_KEY"]
-        and not (out.get("hybrid_analysis") and not out["hybrid_analysis"].get("error"))):
-        out["sandbox_submission_eligible"] = True
-        file_bytes = analysis.get("_file_bytes")
-        if file_bytes:
-            try:
-                from intel.sandbox import auto_submit_and_poll
-                filename = (analysis.get("filename")
-                            or (analysis.get("file_name"))
-                            or f"{sha256[:12]}.bin")
-                # Don't await — the polling loop is up to 10 min and the
-                # analyst is waiting on the synchronous response. Register
-                # the task so the GC doesn't collect it mid-flight.
-                # Import from bg_utils directly (instead of main) to avoid
-                # the circular-import risk that historically forced an
-                # `except Exception: asyncio.create_task(...)` fallback
-                # — which created an untracked task and re-introduced the
-                # exact GC-mid-flight bug track_task was built to prevent.
-                from bg_utils import track_task
-                track_task(asyncio.create_task(
-                    auto_submit_and_poll(file_bytes, filename, sha256,
-                                          keys["HYBRID_ANALYSIS_KEY"])
-                ))
-                out["sandbox_auto_submitted"] = True
-                out["sandbox_status_path"] = f"/api/sandbox/result/{sha256}"
-            except Exception as e:
-                out["sandbox_auto_submit_error"] = str(e)
     return out
 
 
@@ -226,58 +188,6 @@ async def _malwarebazaar(session, sha256, auth_key: str = "") -> Optional[Dict]:
         "last_seen":      top.get("last_seen"),
         "delivery_method": top.get("delivery_method"),
         "yara_rules":     [y.get("rule_name") for y in (top.get("yara_rules") or [])][:8],
-    }
-
-
-# ─── Hybrid Analysis (existing report search) ─────────────────────────────────
-async def _hybrid_analysis(session, sha256, key) -> Optional[Dict]:
-    if not key:
-        return {"error": "no HYBRID_ANALYSIS_KEY configured"}
-    # The hash MUST go in the query string. Live audit 2026-06-19 confirmed
-    # HA's v2 /search/hash now rejects body-form `hash=<sha256>` with a
-    # "value should not be blank" 400 — every body-encoding variant
-    # (dict, FormData, hand-encoded urlencoded, JSON) fails identically.
-    # Only `?hash=<sha256>` is accepted. The free-tier key is auth_level=1
-    # restricted and the validation is endpoint-side, not auth-side.
-    headers = {
-        "api-key":    key,
-        "user-agent": "Falcon Sandbox",
-        "accept":     "application/json",
-    }
-    try:
-        async with session.post(
-            "https://www.hybrid-analysis.com/api/v2/search/hash",
-            params={"hash": sha256}, headers=headers,
-        ) as r:
-            if r.status != 200:
-                return {"error": f"HTTP {r.status}"}
-            d = await r.json()
-    except Exception as e:
-        return {"error": str(e)}
-    if not d:
-        return {"found": False}
-    # HA v2 response shape: {"sha256s": [...], "reports": [...]}.
-    # Used to be a bare list of reports — the live audit confirmed they
-    # wrapped it in an object some time before 2026-06-19. Each report
-    # may be in state ERROR (e.g. sandbox couldn't detonate the file —
-    # common for tiny inputs like EICAR) or SUCCESS (real verdict).
-    # Prefer the most recent SUCCESS over the most recent of any state.
-    reports = d.get("reports") if isinstance(d, dict) else (d if isinstance(d, list) else None)
-    if not reports:
-        return {"found": False}
-    top = next((r for r in reports if (r or {}).get("state") == "SUCCESS"), None) or reports[0]
-    return {
-        "found":          True,
-        "verdict":        top.get("verdict"),
-        "threat_score":   top.get("threat_score"),
-        "av_detect":      top.get("av_detect"),
-        "malware_family": top.get("vx_family"),
-        "environment":    top.get("environment_description"),
-        "submit_name":    top.get("submit_name"),
-        "tags":           top.get("tags") or [],
-        "mitre":          [f"{t.get('technique') or ''} - {t.get('name') or ''}"
-                           for t in (top.get("mitre_attcks") or [])][:8],
-        "report_url":     f"https://www.hybrid-analysis.com/sample/{sha256}",
     }
 
 

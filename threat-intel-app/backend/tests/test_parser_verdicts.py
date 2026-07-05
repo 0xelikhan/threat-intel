@@ -1,21 +1,18 @@
 """Regression tests for the verdict-mapping audit pass.
 
-Two bugs found while auditing every _p_* parser in agents/enrichment.py:
+One bug found while auditing every _p_* parser in agents/enrichment.py:
 
   - AbuseIPDB:        score == 50 fell into UNKNOWN (off-by-one between
                       the > 50 SUSPICIOUS branch and the >= 0 catch-all).
-  - Hybrid Analysis:  "suspicious" verdict was being mapped to MALICIOUS,
-                      a severity-amplification bug.
 
 Bucket every threshold here so future tweaks can't silently regress.
 """
 
 from __future__ import annotations
 
-from agents.enrichment import _p_abuse, _p_hybrid
+from agents.enrichment import _p_abuse
 
 
-# ─── AbuseIPDB ──────────────────────────────────────────────────────────────
 def _abuse_blob(score: int, reports: int = 0):
     return {"data": {"abuseConfidenceScore": score, "totalReports": reports}}
 
@@ -60,47 +57,3 @@ def test_abuse_score_low_confidence_range_is_unknown():
     for s in (1, 10, 24):
         out = _p_abuse(_abuse_blob(s, 2))
         assert out["verdict"] == "UNKNOWN", f"score {s} should be UNKNOWN"
-
-
-# ─── Hybrid Analysis ────────────────────────────────────────────────────────
-def _hybrid_blob(verdict_raw: str):
-    return [{"verdict": verdict_raw, "sha256": "a" * 64}]
-
-
-def test_hybrid_malicious_stays_malicious():
-    out = _p_hybrid(_hybrid_blob("malicious"))
-    assert out["verdict"] == "MALICIOUS"
-
-
-def test_hybrid_suspicious_does_not_amplify_to_malicious():
-    """The bug case: HA's 'suspicious' verdict was being mapped to
-    MALICIOUS — a severity-amplification bug."""
-    out = _p_hybrid(_hybrid_blob("suspicious"))
-    assert out["verdict"] == "SUSPICIOUS"
-    assert out["verdict"] != "MALICIOUS"
-
-
-def test_hybrid_no_specific_threat_is_clean():
-    for raw in ("no specific threat", "no_specific_threat", "whitelisted"):
-        out = _p_hybrid(_hybrid_blob(raw))
-        assert out["verdict"] == "CLEAN", f"{raw!r} should be CLEAN"
-
-
-def test_hybrid_unknown_verdict_is_unknown():
-    for raw in ("unknown", "", "informational"):
-        out = _p_hybrid(_hybrid_blob(raw))
-        assert out["verdict"] == "UNKNOWN", f"{raw!r} should be UNKNOWN"
-
-
-def test_hybrid_case_insensitive():
-    out = _p_hybrid(_hybrid_blob("MALICIOUS"))
-    assert out["verdict"] == "MALICIOUS"
-    out = _p_hybrid(_hybrid_blob("Suspicious"))
-    assert out["verdict"] == "SUSPICIOUS"
-
-
-def test_hybrid_preserves_raw_for_audit():
-    """The original verdict string must still be visible on the output
-    so the analyst can audit how we interpreted it."""
-    out = _p_hybrid(_hybrid_blob("suspicious"))
-    assert out["verdict_raw"] == "suspicious"
