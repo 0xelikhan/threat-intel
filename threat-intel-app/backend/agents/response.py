@@ -947,6 +947,8 @@ analyst's UI strips them out, so writing them is wasted tokens."""
             })
             if _blocked:
                 original_reason = analyst_summary.get("disposition_reason", "")
+                original_summary = summary
+                original_threat_level = threat_level
                 analyst_summary["disposition"] = "ESCALATE"
                 analyst_summary["disposition_reason"] = (
                     f"AUTO-OVERRIDE: model recommended CLEAR but "
@@ -954,10 +956,89 @@ analyst's UI strips them out, so writing them is wasted tokens."""
                     f"Model's original reason: {original_reason[:400]}"
                 )
                 analyst_summary["safety_net_override"] = _reason
-                _log.warning("disposition safety net fired: CLEAR → ESCALATE (%s)",
-                             _reason)
+                # Back-propagate the override into the other analyst-facing
+                # fields so the Summary card doesn't render "Routine admin;
+                # no action required" next to an ESCALATE pill. The
+                # investigation stage's summary + threat_level were LLM-
+                # generated before the safety net saw the tier signals;
+                # after override, they must reflect the corrected verdict.
+                _floor = (_tier_signals.get("verdict_floor") or "HIGH").upper()
+                if _floor in ("HIGH", "CRITICAL"):
+                    threat_level = _floor
+                elif threat_level.upper() in ("INFORMATIONAL", "LOW"):
+                    threat_level = "HIGH"
+                # Rewrite summary from disposition_reason so the Summary
+                # card prose aligns with the disposition pill. Use the
+                # tier framework's machine reason as the first sentence,
+                # keep the reader oriented, and note the override lineage.
+                summary = (
+                    f"ESCALATION: {_reason.rstrip('.')}. "
+                    f"Investigation stage returned {original_threat_level} "
+                    f"but was overridden by the tier framework. Refer to "
+                    f"escalation steps for next actions."
+                )[:500]
+                _log.warning("disposition safety net fired: CLEAR → ESCALATE (%s); "
+                             "back-propagated threat_level %s → %s, summary rewritten",
+                             _reason, original_threat_level, threat_level)
     except Exception as _e:
         _log.debug("disposition safety net failed: %s", _e)
+
+    # ── DISPOSITION / THREAT-LEVEL / SUMMARY CONSISTENCY GUARD ──────────
+    # Independent of the CLEAR→ESCALATE safety net: whenever the final
+    # analyst_summary.disposition is ESCALATE or MONITOR but the
+    # investigation stage's threat_level says INFORMATIONAL/LOW and its
+    # summary says something like "routine", we have a UI contradiction.
+    # The Summary card shows "Recommended action: ESCALATE" next to a
+    # summary saying "Routine admin; no action required" — the analyst
+    # can't tell which is authoritative.
+    #
+    # Fix: back-propagate the disposition into threat_level and summary
+    # so the whole Summary card renders coherently. Uses the tier
+    # framework's verdict_floor as the source of truth for threat_level.
+    try:
+        _final_dispo = (analyst_summary.get("disposition") if isinstance(analyst_summary, dict) else "") or ""
+        _floor = (_tier_signals.get("verdict_floor") or "").upper()
+        _tl_upper = (threat_level or "").upper()
+        _summary_lower = (summary or "").lower()
+        _routine_markers = ("routine", "no action required", "informational activity",
+                             "normal admin", "benign", "no threat")
+        _tl_is_low = _tl_upper in ("INFORMATIONAL", "LOW")
+        _summary_is_routine = any(m in _summary_lower for m in _routine_markers)
+        _needs_fix = (
+            _final_dispo in ("ESCALATE", "MONITOR")
+            and (_tl_is_low or _summary_is_routine)
+        )
+        if _needs_fix:
+            # Target threat_level. ESCALATE → HIGH (or the tier floor if higher).
+            # MONITOR → MEDIUM (or verdict_floor if higher).
+            if _final_dispo == "ESCALATE":
+                _target_tl = "HIGH"
+                if _floor in ("CRITICAL",):
+                    _target_tl = _floor
+            else:  # MONITOR
+                _target_tl = "MEDIUM"
+                if _floor in ("HIGH", "CRITICAL"):
+                    _target_tl = _floor
+            _dispo_reason = analyst_summary.get("disposition_reason") if isinstance(analyst_summary, dict) else ""
+            _prev_tl = threat_level
+            _prev_summary = summary
+            threat_level = _target_tl
+            # Rewrite summary from the (LLM-authored) disposition_reason
+            # so the prose aligns with the disposition pill instead of
+            # contradicting it. Cap at 500 chars.
+            if _dispo_reason and isinstance(_dispo_reason, str) and _dispo_reason.strip():
+                summary = _dispo_reason.strip()[:500]
+            else:
+                summary = (
+                    f"Verdict: {_final_dispo}. Investigation stage returned "
+                    f"{_prev_tl} but was reconciled with the final disposition. "
+                    f"Refer to escalation steps for next actions."
+                )[:500]
+            _log.info("consistency guard: disposition=%s, threat_level %s -> %s, "
+                       "summary rewritten (was: %r)",
+                       _final_dispo, _prev_tl, threat_level, _prev_summary[:60])
+    except Exception as _e:
+        _log.debug("consistency guard failed: %s", _e)
 
     # Strip em / en dashes from every prose field the analyst will read in
     # the Summary card. The AI tends to insert " — " between clauses; the
