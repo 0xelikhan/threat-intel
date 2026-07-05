@@ -1324,7 +1324,12 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
             ("Defender Backdoor detection",       r"\bName\s*:\s*Backdoor\s*:", ),
             ("Defender Ransom detection",         r"\bName\s*:\s*Ransom\s*:", ),
             ("Defender Behavior detection",       r"\bName\s*:\s*Behavior\s*:", ),
-            ("HackTool / PUA family name in log", r"\b(?:HackTool|PUA|PUABundler|Backdoor|Ransom|Trojan|Exploit)\s*:\s*(?:Script|Win\d\d|MSIL|VBS|JS|HTML|Linux|OSX|MacOS)/", ),
+            ("Defender Adware detection",         r"\bName\s*:\s*Adware\s*:", ),
+            ("Defender Riskware detection",       r"\bName\s*:\s*Riskware\s*:", ),
+            ("Defender Exploit detection",        r"\bName\s*:\s*Exploit\s*:", ),
+            ("Defender Worm detection",           r"\bName\s*:\s*Worm\s*:", ),
+            ("Defender Spyware detection",        r"\bName\s*:\s*Spyware\s*:", ),
+            ("HackTool / PUA family name in log", r"\b(?:HackTool|PUA|PUABundler|Backdoor|Ransom|Trojan|Exploit|Adware|Riskware|Worm|Spyware|Behavior)\s*:\s*(?:Script|Win\d\d|MSIL|VBS|JS|HTML|Linux|OSX|MacOS)/", ),
         ]
         for name, pat in _det_family_pats:
             m = re.search(pat, log_text, re.I)
@@ -1359,7 +1364,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
             ("Defender Severity: Severe detection",
              r"\bSeverity\s*:\s*Severe\b"),
             ("Defender Severity: High detection",
-             r"\bSeverity\s*:\s*High\b.*?\b(?:HackTool|PUA|Trojan|Backdoor|Ransom)\s*:"),
+             r"\bSeverity\s*:\s*High\b.*?\b(?:HackTool|PUA|PUABundler|Trojan|Backdoor|Ransom|Adware|Riskware|Worm|Spyware|Exploit|Behavior)\s*:"),
         ]
         for name, pat in _det_severity_pats:
             m = re.search(pat, log_text, re.I | re.S)
