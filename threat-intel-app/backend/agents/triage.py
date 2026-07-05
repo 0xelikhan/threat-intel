@@ -850,6 +850,10 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
             (r"\bproxy(?:shell|logon)\b", 0.55),
             # Security tooling tampered
             (r"Set-MpPreference\s+.*?-Disable", 0.50),
+            (r"netsh(?:\.exe)?\s+.*?advfirewall\s+.*?set\s+(?:all|current|public|domain|private)profile[s]?\s+state\s+off", 0.55),
+            (r"netsh(?:\.exe)?\s+.*?firewall\s+set\s+opmode\s+.*?disable", 0.55),
+            (r"Set-NetFirewallProfile\s+.*?-Enabled\s+(?:False|\$false)", 0.55),
+            (r"(?:net\s+stop|Stop-Service|sc\s+stop)\s+.*?(?:MpsSvc|BFE|WinDefend)", 0.55),
             (r"Add-MpPreference\s+.*?-Exclusion", 0.40),
             (r"(?:net\s+stop|Stop-Service)\s+.*?sysmon", 0.50),
             (r"(?:net\s+stop|Stop-Service)\s+.*?(?:CrowdStrike|CSFalcon|SentinelOne|SentinelAgent|MsSense)", 0.55),

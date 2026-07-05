@@ -330,6 +330,27 @@ _WIN_AD_TIER1_PATTERNS = [
     # Security tooling disabled — high-signal ATT&CK T1562
     ("Windows Defender AV disabled",
      re.compile(r"Set-MpPreference\s+.*?-Disable(?:RealtimeMonitoring|BehaviorMonitoring|IntrusionPreventionSystem|IOAVProtection|ScriptScanning)\s+\$?true", re.I)),
+    # Firewall disable — MITRE T1562.004 Impair Defenses. Unambiguously
+    # malicious in nearly all contexts; even legitimate admin firewall
+    # changes usually target specific rules, not disable all profiles.
+    # ThreatLocker vendor cert on the parent is a LOGGING ARTIFACT
+    # (their agent shows on system binaries it monitors) — must not
+    # downweight this signal.
+    ("Firewall disabled — netsh advfirewall set allprofiles state off",
+     re.compile(r"netsh(?:\.exe)?\s+.*?advfirewall\s+.*?set\s+allprofiles\s+state\s+off", re.I)),
+    ("Firewall disabled — netsh set profile state off",
+     re.compile(r"netsh(?:\.exe)?\s+.*?advfirewall\s+.*?set\s+(?:currentprofile|publicprofile|domainprofile|privateprofile)\s+state\s+off", re.I)),
+    ("Firewall disabled — legacy netsh firewall set opmode disable",
+     re.compile(r"netsh(?:\.exe)?\s+.*?firewall\s+set\s+opmode\s+(?:mode\s*=)?\s*disable", re.I)),
+    ("Firewall disabled — Set-NetFirewallProfile -Enabled False",
+     re.compile(r"Set-NetFirewallProfile\s+.*?-Enabled\s+(?:False|\$false)", re.I)),
+    ("Firewall registry policy disabled",
+     re.compile(r"HKLM\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy.*?EnableFirewall\s*.*?(?:0x0|dword:0)", re.I | re.S)),
+    ("Firewall registry policy disabled — reg add",
+     re.compile(r"reg(?:\.exe)?\s+add\s+.*?FirewallPolicy.*?EnableFirewall\s+/t\s+REG_DWORD\s+/d\s+0", re.I)),
+    # WFP / IPsec-based firewall bypass
+    ("Firewall service stopped",
+     re.compile(r"(?:net\s+stop|Stop-Service|sc\s+stop)\s+.*?(?:MpsSvc|BFE|WinDefend)", re.I)),
     ("Defender exclusion added",
      re.compile(r"Add-MpPreference\s+.*?-Exclusion(?:Path|Extension|Process)\b", re.I)),
     ("Sysmon service stopped",
