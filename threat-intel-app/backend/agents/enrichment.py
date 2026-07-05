@@ -2116,6 +2116,175 @@ def _summarize_ioc(per_source: dict) -> dict:
     return {"overall": overall, "counts": counts, "sources": sources}
 
 
+async def enrich_email(session, email: str, keys: dict) -> dict:
+    """Enrich an email IOC. Two lookups:
+      • OFAC SDN — vendored offline; sanctioned addresses (BEC / OFAC hits).
+      • HIBP breach-by-domain — unauth /api/v3/breaches?domain=<...>; lists
+        every public breach affecting the mail domain. Signals credential
+        exposure risk for the user without needing the paid per-account
+        endpoint. HIBP's own docs mark this endpoint as free and
+        unauthenticated.
+    """
+    ck = _ck("email", email)
+    if ck in _cache:
+        return {**_cache[ck], "cached": True}
+
+    if not isinstance(email, str) or "@" not in email:
+        data = {"error": "invalid email", "_summary": None}
+        _cache[ck] = data
+        return data
+
+    domain = email.rsplit("@", 1)[-1].lower().strip().rstrip(".")
+    data: dict = {}
+
+    try:
+        from intel.ofac_sdn import lookup_email as _ofac_email
+        hit = _ofac_email(email)
+        if hit:
+            data["ofac_sdn"] = {
+                "source":   "OFAC SDN",
+                "found":    True,
+                "verdict":  "MALICIOUS",
+                "entity":   hit.get("entity"),
+                "programs": hit.get("programs") or [],
+                "list_type": hit.get("list_type"),
+                "summary":  (f"Sanctioned entity: {hit.get('entity')} "
+                             f"({', '.join(hit.get('programs') or []) or 'OFAC'})"),
+            }
+    except Exception as e:
+        _log.warning("OFAC email lookup failed for %s: %s", email, e)
+
+    # HIBP breaches by domain — free/unauth endpoint. Skip for well-known
+    # public mail domains where "yes it's been breached" adds nothing
+    # (gmail / hotmail / yahoo have LinkedIn / Adobe / etc. attached to
+    # every address on the internet).
+    _skip_hibp = {"gmail.com", "googlemail.com", "hotmail.com", "outlook.com",
+                  "live.com", "yahoo.com", "icloud.com", "me.com", "aol.com",
+                  "proton.me", "protonmail.com", "pm.me", "gmx.com",
+                  "yandex.com", "yandex.ru", "mail.ru", "qq.com", "163.com",
+                  "126.com", "sina.com", "zoho.com"}
+    if domain and domain not in _skip_hibp:
+        try:
+            hibp_raw = await _get(
+                session,
+                f"https://haveibeenpwned.com/api/v3/breaches?domain={domain}",
+                headers={"User-Agent": "RECON-ThreatIntel/1.0"},
+            )
+            if isinstance(hibp_raw, list) and hibp_raw:
+                # Sort by breach date desc, keep top 5 for the summary.
+                breaches = sorted(hibp_raw,
+                                  key=lambda b: (b.get("BreachDate") or ""),
+                                  reverse=True)[:5]
+                names = [b.get("Name") for b in breaches if b.get("Name")]
+                # Any breach >= 100k accounts, or a Verified breach in the
+                # last 3 years, is enough to call the address SUSPICIOUS —
+                # the user's password is likely already public.
+                big = any(int(b.get("PwnCount") or 0) >= 100_000
+                          for b in hibp_raw)
+                data["hibp_breaches"] = {
+                    "source":       "HIBP",
+                    "found":        True,
+                    "verdict":      "SUSPICIOUS" if big else "UNKNOWN",
+                    "breach_count": len(hibp_raw),
+                    "top_breaches": names,
+                    "summary":      (f"Mail domain {domain} in "
+                                     f"{len(hibp_raw)} public breach(es): "
+                                     f"{', '.join(names[:3])}"
+                                     f"{'…' if len(names) > 3 else ''}"),
+                }
+            elif isinstance(hibp_raw, list):
+                data["hibp_breaches"] = {
+                    "source":  "HIBP",
+                    "found":   False,
+                    "summary": f"Mail domain {domain}: no public breaches on record.",
+                }
+            elif isinstance(hibp_raw, dict) and hibp_raw.get("statusCode"):
+                data["hibp_breaches"] = {
+                    "source":     "HIBP",
+                    "error":      f"HTTP {hibp_raw.get('statusCode')}",
+                    "error_type": "rate_limited",
+                }
+        except Exception as e:
+            data["hibp_breaches"] = {"source": "HIBP",
+                                     "error": str(e)[:120],
+                                     "error_type": "unreachable"}
+
+    _cache[ck] = data
+    return data
+
+
+async def enrich_crypto(session, address: str, keys: dict) -> dict:
+    """Enrich a cryptocurrency address. Two offline lookups:
+      • ransomwhe.re — crowd-sourced payment-address tracker; maps addr
+        → ransomware family.
+      • OFAC SDN — US Treasury sanctions list; addr → sanctioned entity.
+
+    Chain is inferred from address shape (BTC / ETH / XMR).
+    """
+    address = str(address or "").strip()
+
+    # Cheap chain classifier — matches the regexes triage uses.
+    if address.startswith(("bc1",)):
+        chain = "btc"
+    elif address.startswith(("1", "3")) and len(address) in range(26, 36):
+        chain = "btc"
+    elif address.startswith("0x") and len(address) == 42:
+        chain = "eth"
+    elif address.startswith("4") and len(address) >= 95:
+        chain = "xmr"
+    else:
+        chain = ""
+
+    ck = _ck("crypto", address)
+    if ck in _cache:
+        return {**_cache[ck], "cached": True}
+
+    if not address:
+        data = {"error": "invalid address"}
+        _cache[ck] = data
+        return data
+
+    data: dict = {"chain": chain} if chain else {}
+
+    try:
+        from intel.ransomwhere import lookup as _rw_lookup
+        hit = _rw_lookup(address)
+        if hit:
+            data["ransomwhere"] = {
+                "source":     "Ransomwhe.re",
+                "found":      True,
+                "verdict":    "MALICIOUS",
+                "family":     hit.get("family"),
+                "first_seen": hit.get("first_seen"),
+                "last_seen":  hit.get("last_seen"),
+                "blockchain": hit.get("blockchain") or chain,
+                "summary":    (f"Ransomware payment address: "
+                                f"{hit.get('family')}"),
+            }
+    except Exception as e:
+        _log.warning("Ransomwhere lookup failed for %s: %s", address, e)
+
+    try:
+        from intel.ofac_sdn import lookup_crypto as _ofac_crypto
+        hit = _ofac_crypto(address)
+        if hit:
+            data["ofac_sdn"] = {
+                "source":    "OFAC SDN",
+                "found":     True,
+                "verdict":   "MALICIOUS",
+                "entity":    hit.get("entity"),
+                "programs":  hit.get("programs") or [],
+                "list_type": hit.get("list_type"),
+                "summary":   (f"Sanctioned crypto address ({hit.get('entity')}): "
+                              f"{', '.join(hit.get('programs') or []) or 'OFAC'}"),
+            }
+    except Exception as e:
+        _log.warning("OFAC crypto lookup failed for %s: %s", address, e)
+
+    _cache[ck] = data
+    return data
+
+
 async def run_enrichment(state: dict, on_partial=None) -> dict:
     from config import config
 
@@ -2153,7 +2322,7 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
     # (via on_partial) instead of waiting for the slowest type to land everything
     # at once. The final `enrichments` dict is identical either way.
     enrichments = {"ips": {}, "domains": {}, "hashes": {}, "urls": {},
-                   "cves": {}}
+                   "cves": {}, "emails": {}, "crypto": {}}
     type_iocs = {
         "ips":     iocs.get("ips", [])[:10],
         "domains": iocs.get("domains", [])[:10],
@@ -2163,10 +2332,17 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
         # live CISA KEV check. KEV catalog is downloaded once per run
         # via the cve_enrichment._kev_cache singleton.
         "cves":    iocs.get("cves", [])[:8],
+        # Email enrichment — OFAC SDN sanctioned-address lookup + HIBP
+        # breach-by-domain (both offline / free-tier).
+        "emails":  iocs.get("emails", [])[:10],
+        # Crypto address enrichment — ransomwhe.re + OFAC SDN. Triage
+        # emits either raw strings or {chain, address} dicts.
+        "crypto":  iocs.get("crypto", [])[:10],
     }
     _enrichers = {"ips": enrich_ip, "domains": enrich_domain,
                   "hashes": enrich_hash, "urls": enrich_url,
-                  "cves": enrich_cve}
+                  "cves": enrich_cve, "emails": enrich_email,
+                  "crypto": enrich_crypto}
 
     # Share the process-wide TCP/DNS pool. connector_owner=False keeps the
     # connector alive after this session closes so the next investigation
@@ -2242,7 +2418,10 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
         "summary": (f"Enriched {summary['totals']['ips']} IPs, "
                     f"{summary['totals']['domains']} domains, "
                     f"{summary['totals']['hashes']} hashes, "
-                    f"{summary['totals']['urls']} URLs in {elapsed:.1f}s. "
+                    f"{summary['totals']['urls']} URLs, "
+                    f"{summary['totals'].get('emails', 0)} emails, "
+                    f"{summary['totals'].get('crypto', 0)} crypto in "
+                    f"{elapsed:.1f}s. "
                     f"{overall['MALICIOUS']} malicious, {overall['SUSPICIOUS']} suspicious."),
         "iteration": iteration + 1,
         "elapsed_ms": int(elapsed * 1000),

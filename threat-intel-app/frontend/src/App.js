@@ -1680,6 +1680,7 @@ function _ocSources(result, ioc, type) {
     : type === 'url'    ? enr.urls
     : type === 'email'  ? enr.emails
     : type === 'cve'    ? enr.cves
+    : type === 'crypto' ? enr.crypto
     : null;
   const d = bucket?.[ioc] || {};
   const out = [];
@@ -2333,6 +2334,47 @@ function _ocSources(result, ioc, type) {
     }
   }
 
+  // OFAC SDN — sanctioned crypto address / email / entity. Applies to
+  // both email and crypto buckets.
+  if (d.ofac_sdn && !d.ofac_sdn.error && d.ofac_sdn.found) {
+    const o = d.ofac_sdn;
+    const progs = (o.programs || []).slice(0, 3).join(', ');
+    out.push({
+      source: 'OFAC SDN',
+      label:  `${o.entity || 'sanctioned entity'}${progs ? ` · ${progs}` : ''}`,
+      color:  red,
+      why:    o.summary || 'US Treasury OFAC Specially Designated Nationals list — sanctioned identifier. Any interaction may violate US sanctions.',
+    });
+  }
+
+  // Ransomwhe.re — crypto payment-address family attribution.
+  if (d.ransomwhere && !d.ransomwhere.error && d.ransomwhere.found) {
+    const rw = d.ransomwhere;
+    const seen = rw.first_seen ? ` · first seen ${String(rw.first_seen).slice(0, 10)}` : '';
+    out.push({
+      source: 'Ransomwhe.re',
+      label:  `${rw.family || 'ransomware payment address'}${seen}`,
+      color:  red,
+      why:    rw.summary || 'Crowd-sourced ransomware payment-address tracker (Jack Cable). A hit means this address has received extortion payments attributed to the named family.',
+    });
+  }
+
+  // HIBP breach-by-domain — email-only. Exposure signal without needing
+  // the paid per-account endpoint.
+  if (d.hibp_breaches && !d.hibp_breaches.error) {
+    const h = d.hibp_breaches;
+    if (h.found) {
+      const c = h.verdict === 'SUSPICIOUS' ? orange : yellow;
+      const top = (h.top_breaches || []).slice(0, 3).join(', ');
+      out.push({
+        source: 'HIBP',
+        label:  `${h.breach_count} public breach(es)${top ? ` · ${top}` : ''}`,
+        color:  c,
+        why:    h.summary || 'Have I Been Pwned public breach index for this mail domain. Higher counts / bigger recent breaches raise the odds the user\'s credentials are already public.',
+      });
+    }
+  }
+
   // ─── SOURCE STATUS PASS ────────────────────────────────────────────────
   // The blocks above only push a row when a source returned USEFUL data
   // (no error AND non-empty). That meant a source which returned an
@@ -2375,6 +2417,10 @@ function _ocSources(result, ioc, type) {
     // Round-15 (cti-expert): M365 tenant recon + admin endpoint classifier.
     m365_tenant:         'M365 tenant',
     admin_endpoint:      'Admin endpoint',
+    // Round-16: email + crypto enrichers.
+    ofac_sdn:            'OFAC SDN',
+    ransomwhere:         'Ransomwhe.re',
+    hibp_breaches:       'HIBP',
   };
   const _surfaced = new Set(out.map(r => r.source));
   for (const [key, blob] of Object.entries(d || {})) {
@@ -2444,6 +2490,7 @@ function PerIndicatorList({ sorted, result }) {
       : iocType === 'domain' ? result?.enrichments?.domains
       : iocType === 'url'    ? result?.enrichments?.urls
       : iocType === 'email'  ? result?.enrichments?.emails
+      : iocType === 'crypto' ? result?.enrichments?.crypto
       :                         null;
     const enrData = enrBucket?.[ioc] || {};
     const urlScreenshot = enrData?.urlscan_screenshot;

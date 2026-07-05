@@ -112,10 +112,11 @@ const IOC_TYPE_COLOR = {
   hashes:  '#B286FF',  // ai purple
   urls:    '#E6700F',  // high orange
   emails:  '#F14337',  // error red
+  crypto:  '#E1B823',  // warning yellow — crypto payment address (BTC/ETH/XMR)
 };
 const IOC_TYPE_LABEL = {
   ips: 'ip', domains: 'domain', hashes: 'hash', urls: 'url', emails: 'email',
-  files: 'file', paths: 'path',
+  files: 'file', paths: 'path', crypto: 'crypto',
 };
 export const TypeTag = ({ type }) => (
   <Tag

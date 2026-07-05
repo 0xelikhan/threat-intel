@@ -346,7 +346,8 @@ def extract_iocs(text: str) -> dict:
     pass to pick up forms our regex misses (rare; mostly edge IPv6).
     """
     iocs = {"ips": set(), "domains": set(), "urls": set(), "hashes": set(),
-            "emails": set(), "files": set(), "paths": set(), "cves": set()}
+            "emails": set(), "files": set(), "paths": set(), "cves": set(),
+            "crypto": set()}
 
     # Refang + scrub in one step. Order is load-bearing: refang runs
     # FIRST so the strip patterns (AV/AS/NIS Defender versions, "Source
@@ -490,6 +491,17 @@ def extract_iocs(text: str) -> dict:
     except Exception:
         pass
 
+    # Cryptocurrency addresses — BTC / ETH / XMR / etc. Routes through
+    # enrich_crypto → ransomwhe.re + OFAC SDN. Critical for ransomware
+    # note triage and BEC / sanctions attribution.
+    try:
+        from intel.ransomwhere import extract_addresses as _xaddr
+        for _chain, _hits in _xaddr(text or "").items():
+            for _a in _hits:
+                iocs["crypto"].add(_a)
+    except Exception:
+        pass
+
     return {k: list(v) for k, v in iocs.items()}
 
 
@@ -501,6 +513,8 @@ def score_iocs(iocs: dict) -> float:
     score += min(len(iocs.get("urls", [])) * 0.10, 0.20)
     score += min(len(iocs.get("emails", [])) * 0.05, 0.10)
     score += min(len(iocs.get("files", [])) * 0.08, 0.24)
+    # Crypto addresses are a strong ransomware / sanctions signal.
+    score += min(len(iocs.get("crypto", [])) * 0.30, 0.60)
     return min(score, 1.0)
 
 
@@ -517,6 +531,8 @@ def derive_alert_type(iocs: dict, cross_refs: dict) -> str:
             return "ransomware"
         return "exploitation"
     if cross_refs.get("rmm_abuse"):
+        return "ransomware"
+    if iocs.get("crypto"):
         return "ransomware"
     if cross_refs.get("loldrivers"):
         return "malware"
