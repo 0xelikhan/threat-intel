@@ -224,14 +224,6 @@ API_KEY_DEFINITIONS = {
         "placeholder": "Project Honeypot HTTP:BL key",
         "group": "API Keys"
     },
-    "HYBRID_ANALYSIS_KEY": {
-        "label": "Hybrid Analysis API Key",
-        "description": "Sandboxed malware behavior reports. Free tier.",
-        "required": False,
-        "url": "https://hybrid-analysis.com",
-        "placeholder": "Hybrid Analysis API key",
-        "group": "API Keys"
-    },
     "PROXYCHECK_KEY": {
         "label": "Proxycheck API Key",
         "description": "VPN, proxy, and Tor exit node detection. Free: 1,000/day.",

@@ -64,10 +64,10 @@ TOOL_SCHEMAS = [
                 "Get full reputation for a file hash (MD5 / SHA-1 / SHA-256): VirusTotal, "
                 "MalwareBazaar malware family + tags, ThreatFox malware/confidence, OTX, "
                 "URLhaus payload tracking, CIRCL hashlookup (NSRL known-good vs known-bad), "
-                "Team Cymru MHR (free DNS-based first-seen + detection %), Hybrid Analysis "
-                "sandbox report (if SHA-256), Maltiverse, OpenCTI, MISP community feeds, "
-                "LOLDrivers BYOVD catalog match. Use when you have a hash and want to know "
-                "malware family, first-seen date, sandbox verdict, or BYOVD status."
+                "Team Cymru MHR (free DNS-based first-seen + detection %), Maltiverse, "
+                "OpenCTI, MISP community feeds, LOLDrivers BYOVD catalog match. Use "
+                "when you have a hash and want to know malware family, first-seen "
+                "date, or BYOVD status."
             ),
             "parameters": {
                 "type": "object",
@@ -323,7 +323,7 @@ def _all_keys(config) -> dict:
     return {k: config.get(k) for k in (
         "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "IPINFO_TOKEN",
         "OTX_KEY", "URLSCAN_KEY", "PULSEDIVE_KEY",
-        "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY", "HYBRID_ANALYSIS_KEY",
+        "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY",
         # Censys: PAT-first, legacy v2 ID/Secret pair as the configured
         # fallback. Both are registered in config.py — the previously-used
         # CENSYS_API_ID / CENSYS_API_SECRET / CENSYS_PERSONAL_ACCESS_TOKEN

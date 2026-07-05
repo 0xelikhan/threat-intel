@@ -92,7 +92,7 @@ def _mcp_keys(cfg) -> dict:
     return {k: cfg.get(k) for k in (
         "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "IPINFO_TOKEN",
         "OTX_KEY", "URLSCAN_KEY", "PULSEDIVE_KEY",
-        "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY", "HYBRID_ANALYSIS_KEY",
+        "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY",
         # Canonical Censys names — PAT first, legacy v2 pair as fallback.
         # Both are registered in config.py.
         "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET",
@@ -138,22 +138,19 @@ async def lookup_domain(domain: str) -> dict:
 
 @mcp.tool()
 async def lookup_hash(file_hash: str) -> dict:
-    """Comprehensive file-hash reputation + sandbox lookup.
+    """Comprehensive file-hash reputation lookup.
 
     Accepts MD5, SHA-1, or SHA-256. Queries: VirusTotal, MalwareBazaar,
     ThreatFox, OTX, Team Cymru MHR (free, DNS-based), Maltiverse, URLhaus
-    payload, CIRCL hashlookup, Hybrid Analysis cloud sandbox (if SHA-256),
-    OpenCTI, MISP feeds, LOLDrivers BYOVD catalog.
+    payload, CIRCL hashlookup, OpenCTI, MISP feeds, LOLDrivers BYOVD
+    catalog.
     """
     from config import config as _cfg
     from agents.enrichment import enrich_hash
-    from intel.sandbox import lookup_all as sandbox_lookup
     from intel.loldrivers import lookup_hash as drv_lookup
     import aiohttp
     async with aiohttp.ClientSession() as session:
         base = await enrich_hash(session, file_hash, _mcp_keys(_cfg))
-    if len(file_hash) == 64:
-        base["sandbox"] = await sandbox_lookup(file_hash, _cfg)
     base["loldrivers"] = drv_lookup(file_hash)
     return base
 
@@ -243,19 +240,6 @@ async def scan_url_live(url: str) -> dict:
     from config import config as _cfg
     from intel.urlscan import submit_url
     return await submit_url(url, _cfg.get("URLSCAN_KEY", ""), visibility="unlisted")
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# File / sandbox
-# ═══════════════════════════════════════════════════════════════════════════════
-@mcp.tool()
-async def sandbox_hash_lookup(sha256: str) -> dict:
-    """Query Hybrid Analysis cloud sandbox for an existing detonation report
-    on this SHA-256 hash. Returns verdict, threat score, malware family,
-    MITRE techniques observed in sandbox, and a link to the full report."""
-    from config import config as _cfg
-    from intel.sandbox import lookup_all
-    return {"sha256": sha256, "sandbox": await lookup_all(sha256, _cfg)}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

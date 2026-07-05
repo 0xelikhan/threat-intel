@@ -88,7 +88,6 @@ _SLOW_HOSTS: "dict[str, tuple[aiohttp.ClientTimeout, float]]" = {
     # timeout, not the outer safety. Both bumped.
     "otx.alienvault.com":      (aiohttp.ClientTimeout(total=90),  90.0),
     "www.virustotal.com":      (aiohttp.ClientTimeout(total=20),  20.0),
-    "www.hybrid-analysis.com": (aiohttp.ClientTimeout(total=20),  20.0),
 }
 
 
@@ -930,7 +929,7 @@ def _p_feodo(ip: str) -> dict:
     return {}
 
 
-# ─── Authenticated sources (Censys / Hybrid Analysis) ─────────────────────────
+# ─── Authenticated sources (Censys) ─────────────────────────
 def _p_censys(r):
     """Censys host view — handles BOTH the legacy search.censys.io/v2
     response shape and the new api.platform.censys.io/v3 shape.
@@ -977,63 +976,6 @@ def _p_censys(r):
         "os":          _safe(res, "operating_system", "product"),
     }
     return out
-
-
-def _p_hybrid(r):
-    """Hybrid Analysis sandbox report (search by hash) → behavioral summary.
-
-    Verdict mapping respects HA's own taxonomy — they distinguish
-    'malicious' from 'suspicious' deliberately, and collapsing the two
-    into MALICIOUS amplifies severity beyond what the source said. HA
-    verdicts in the wild: 'no_specific_threat' / 'no specific threat'
-    (clean enough), 'suspicious', 'malicious', 'unknown', or empty.
-
-    Response shape: HA v2 /search/hash used to return a bare list of
-    reports. Sometime before 2026-06-19 they wrapped it in
-    {"sha256s": [...], "reports": [...]}. Handle both. Prefer the
-    most recent report in state=SUCCESS over any older/errored one.
-    """
-    if _is_fail(r):
-        return _err("hybrid_analysis", r)
-    # Unwrap the new shape (object with `reports` key) or accept the
-    # legacy bare list.
-    if isinstance(r, dict):
-        reports = r.get("reports") or []
-    elif isinstance(r, list):
-        reports = r
-    else:
-        reports = []
-    if not reports:
-        return _err("hybrid_analysis", "no reports")
-    # Prefer SUCCESS state over any other (ERROR / IN_PROGRESS / IN_QUEUE).
-    top = next((rep for rep in reports if (rep or {}).get("state") == "SUCCESS"), None)
-    if not top:
-        top = reports[0]
-    raw = (top.get("verdict") or "").lower().strip()
-    if raw == "malicious":
-        verdict = "MALICIOUS"
-    elif raw == "suspicious":
-        verdict = "SUSPICIOUS"
-    elif raw in ("no specific threat", "no_specific_threat", "whitelisted"):
-        verdict = "CLEAN"
-    else:
-        verdict = "UNKNOWN"
-    return {
-        "verdict_raw":     top.get("verdict"),
-        "threat_score":    top.get("threat_score"),
-        "av_detect":       top.get("av_detect"),
-        "malware_family":  top.get("vx_family"),
-        "type":            top.get("type"),
-        "submit_name":     top.get("submit_name"),
-        "environment":     top.get("environment_description"),
-        "mitre":           [t.get("technique") + " " + t.get("name", "") for t in (top.get("mitre_attcks") or [])][:6],
-        "tags":            top.get("tags") or [],
-        "processes":       [p.get("name") for p in (top.get("processes") or [])][:8],
-        "network_hosts":   [(h.get("address") or h.get("name")) for h in (top.get("hosts") or [])][:8],
-        "dropped_count":   len(top.get("extracted_files") or []),
-        "report_url":      f"https://www.hybrid-analysis.com/sample/{top.get('sha256')}" if top.get("sha256") else None,
-        "verdict":         verdict,
-    }
 
 
 # ─── ENRICHMENT FUNCTIONS ─────────────────────────────────────────────────────────
@@ -1642,7 +1584,6 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
     if ck in _cache:
         return {**_cache[ck], "cached": True}
 
-    hybrid_key = keys.get("HYBRID_ANALYSIS_KEY", "")
     abusech_key = keys.get("ABUSECH_AUTH_KEY", "") or keys.get("MALWAREBAZAAR_API_KEY", "")
     is_sha256 = len(hash_val) == 64
 
@@ -1699,18 +1640,6 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
               data=f"sha256_hash={hash_val}" if is_sha256 else f"md5_hash={hash_val}",
               headers={"Content-Type": "application/x-www-form-urlencoded",
                        **_ac_headers}),
-        # Hybrid Analysis — search by hash for prior sandbox detonations.
-        # HA's v2 /search/hash requires the hash as a QUERY STRING param
-        # (was body-form). Live audit 2026-06-19 confirmed body-form now
-        # returns HTTP 400 "value should not be blank". Also the response
-        # shape changed from a bare list to {"sha256s": [...],
-        # "reports": [...]}. Fix applied in file_correlation.py + sandbox.py
-        # by commit d7dd6b6 but this third call site was missed.
-        _post(session, "https://www.hybrid-analysis.com/api/v2/search/hash",
-              params={"hash": hash_val},
-              headers={"api-key": hybrid_key, "user-agent": "Falcon Sandbox",
-                       "accept": "application/json"}) if hybrid_key
-            else _noop(),
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -1754,12 +1683,6 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
             "known_malicious": known_malicious,
             "verdict":         "MALICIOUS" if known_malicious else None,
         }
-    # Hybrid Analysis (index shifted to 5 after URLhaus payload insertion)
-    if hybrid_key and not isinstance(results[5], Exception):
-        ha = _p_hybrid(results[5])
-        if "error" not in ha:
-            data["hybrid_analysis"] = ha
-
     # MalwareBazaar (abuse.ch) — free hash-to-family lookup. Same
     # operator (abuse.ch) as Feodo/ThreatFox/URLhaus, so the access
     # pattern + reliability are the same. Returns named family, tags,
@@ -1838,21 +1761,11 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         _mb_co = malwarebazaar_similar(session, family, abusech_key) if family else _skip()
     except Exception:
         _vt_co, _mb_co = _skip(), _skip()
-    if len(hash_val) == 64:
-        try:
-            from intel.sandbox_deep import fetch_deep_report
-            _deep_co = fetch_deep_report(hash_val,
-                                         hybrid_key=keys.get("HYBRID_ANALYSIS_KEY", ""))
-        except Exception:
-            _deep_co = _skip()
-    else:
-        _deep_co = _skip()
-
-    cy_r, mv_r, oc_r, vt_r, mb_r, deep_r = await asyncio.gather(
+    cy_r, mv_r, oc_r, vt_r, mb_r = await asyncio.gather(
         _cy_co,
         _maltiverse_lookup("hash", hash_val, _cfg),
         _opencti_lookup(hash_val, _cfg),
-        _vt_co, _mb_co, _deep_co,
+        _vt_co, _mb_co,
         return_exceptions=True,
     )
 
@@ -1874,9 +1787,6 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         osint["mb_similar"] = sim
     if osint:
         data["osint"] = osint
-    deep = _ok_dict(deep_r)
-    if deep:
-        data["sandbox_deep"] = deep
     _cache[ck] = data
     return data
 
@@ -2224,7 +2134,6 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
         "CENSYS_API_KEY":      config.get("CENSYS_API_KEY"),
         "CENSYS_ID":           config.get("CENSYS_ID"),
         "CENSYS_SECRET":       config.get("CENSYS_SECRET"),
-        "HYBRID_ANALYSIS_KEY": config.get("HYBRID_ANALYSIS_KEY"),
         "GOOGLE_API_KEY":      config.get("GOOGLE_API_KEY"),
         "HONEYPOT_KEY":        config.get("HONEYPOT_KEY"),
         "CRIMINAL_IP_KEY":     config.get("CRIMINAL_IP_KEY"),

@@ -69,7 +69,7 @@ def _src_flagged_malicious(src_name: str, payload: Any) -> bool:
         return int(p.get("abuseScore") or 0) >= 50
     if s == "otx":
         return int(p.get("pulseCount") or 0) >= 1
-    if s in ("malwarebazaar", "threatfox", "hybrid_analysis"):
+    if s in ("malwarebazaar", "threatfox"):
         # Any hit on these is a malicious verdict (they're malware-specific dbs)
         return bool(p.get("found") or p.get("malware_family") or p.get("malwareName"))
     if s == "pulsedive":
@@ -303,8 +303,7 @@ MALWARE / EDR-DETECTION FOCUS — weight these signals heaviest
 ═══════════════════════════════════════════════════════════════════════════════════
 Priority signals (check in this order):
   1. File-hash reputation (VirusTotal detection count + named malware family)
-  2. Sandbox verdict (Hybrid Analysis if available)
-  3. LOLBAS / RMM tool references in process name or command line
+  2. LOLBAS / RMM tool references in process name or command line
   4. LOLDrivers BYOVD catalog match (kernel-level compromise)
   5. Suspicious file paths (\\Users\\Public, \\Windows\\SystemTemp, \\AppData\\Roaming\\…)
   6. Parent-process anomalies (cmd.exe spawning powershell.exe from Office, etc.)
@@ -792,12 +791,12 @@ KNOWN_GOOD_MATCHES  (pre-analysis match against curated patterns for legitimate
 {known_good_matches}
 
 ENRICHED IOC DATA   (TI sources: VirusTotal, AbuseIPDB, OTX, URLScan, Pulsedive,
-                     MalwareBazaar, ThreatFox, URLhaus, CIRCL hashlookup, Hybrid
-                     Analysis sandbox, Team Cymru MHR, Maltiverse, OpenCTI,
-                     Censys, Criminal IP, ProxyCheck, Feodo Tracker, Spamhaus
-                     DBL, Google Safe Browsing, MISP feeds, plus offline IP
-                     blocklists + phishing-domain feeds; may be EMPTY if the
-                     log contains no IPs/domains/hashes — that is OK, reason
+                     MalwareBazaar, ThreatFox, URLhaus, CIRCL hashlookup, Team
+                     Cymru MHR, Maltiverse, OpenCTI, Censys, Criminal IP,
+                     ProxyCheck, Feodo Tracker, Spamhaus DBL, Google Safe
+                     Browsing, MISP feeds, plus offline IP blocklists +
+                     phishing-domain feeds; may be EMPTY if the log contains
+                     no IPs/domains/hashes — that is OK, reason
                      on the log):
 {enrichments}
 
