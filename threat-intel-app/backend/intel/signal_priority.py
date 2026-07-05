@@ -1556,6 +1556,26 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                   f"IOC={ioc}, probability={d.get('probability')}")
             break
 
+    # RDP authentication success events (Event 1149 / 4624 with
+    # RDP-specific fields). Alone these are noise — every remote
+    # worker generates them — but they're worth surfacing as TIER 3
+    # context so the analyst summary describes what actually happened
+    # instead of falling through to a generic "routine admin
+    # maintenance" phrase. Correlation with impossible travel or
+    # bad-geo signals in the same window is what makes them
+    # actionable.
+    _rdp_patterns = [
+        (r"\bEvent(?:Log)?\s+Source\s+ID\s*:?\s*1149\b.*?Remote\s+Desktop\s+Services", "RDP authentication event (1149)"),
+        (r"\bRemote\s+Desktop\s+Services\s*:\s*User\s+authentication\s+succeeded", "RDP auth success"),
+        (r"\bTerminalServices-RemoteConnectionManager\b", "RDP RemoteConnectionManager event"),
+        # 4624 with LogonType 10 = RemoteInteractive (RDP)
+        (r"\bEvent\s+ID\s*:?\s*4624\b.*?\bLogonType\s*:?\s*10\b", "Windows 4624 RDP interactive login"),
+    ]
+    for pat, name in _rdp_patterns:
+        if re.search(pat, log_text, re.I | re.S):
+            _push(tier_3, name, "correlate with anomaly signals in the same window")
+            break
+
     # ── DOWNWEIGHT ────────────────────────────────────────────────────
     sup = state.get("suppressed_iocs") or {}
     if isinstance(sup, dict) and any(sup.values()):
