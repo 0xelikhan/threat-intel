@@ -208,3 +208,39 @@ def test_actor_detection_ignores_ai_generated_summary():
     t = extract_tier_signals(state)
     # No TIER 1 actor fires because the raw log is clean.
     assert not any("actor" in s["signal"] for s in t["tier_1"])
+
+
+def test_pua_family_is_tier2_not_tier1():
+    """Regression guard: `malware_family` values prefixed with PUA:,
+    PUABundler:, HackTool:, Tool:, Adware:, Bundler:, Misleading:,
+    Riskware: must NOT fire the TIER 1 `named malware family
+    attributed` signal — those are Microsoft's unwanted-software
+    categorizations, not traditional malware families. They should
+    fire as TIER 2 `PUA / HackTool family attributed` instead."""
+    from intel.signal_priority import extract_tier_signals
+    for fam in ("PUA:Win32/AskToolbar", "PUABundler:Win32/OfferCore",
+                 "HackTool:Script/AutoKMS!AMTB", "Adware:Win32/InstallCore",
+                 "Riskware:Win32/CoinMiner"):
+        state = {"raw_input": f"Defender detected {fam}",
+                  "malware_family": fam}
+        t = extract_tier_signals(state)
+        # Must NOT be in TIER 1
+        assert not any("named malware family" in s["signal"] for s in t["tier_1"]), \
+            f"{fam} incorrectly fired TIER 1 malware family"
+        # MUST be in TIER 2
+        assert any("PUA / HackTool family" in s["signal"] for s in t["tier_2"]), \
+            f"{fam} should fire TIER 2 PUA / HackTool family"
+
+
+def test_real_malware_family_still_fires_tier1():
+    """Regression guard: real malware family names (LockBit, Emotet,
+    TrickBot, etc.) must still fire the TIER 1 signal. Only the
+    Microsoft PUA/HackTool prefixes are gated out."""
+    from intel.signal_priority import extract_tier_signals
+    for fam in ("LockBit", "Emotet", "TrickBot", "Cobalt Strike beacon",
+                 "BlackCat", "Conti"):
+        state = {"raw_input": f"Confirmed {fam} activity",
+                  "malware_family": fam}
+        t = extract_tier_signals(state)
+        assert any("named malware family" in s["signal"] for s in t["tier_1"]), \
+            f"{fam} should still fire TIER 1"

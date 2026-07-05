@@ -981,8 +981,22 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
 
     fam = (rs.get("malware_family") or state.get("malware_family") or "").strip()
     if fam:
-        _push(tier_1, "named malware family attributed",
-              f"family={fam}")
+        # Only fire TIER 1 for real malware families (LockBit, Emotet,
+        # TrickBot, etc.). Microsoft's PUA / HackTool / Adware / Tool /
+        # Bundler prefixes are unwanted-software categorizations, not
+        # traditional malware families — those cases are already caught
+        # at TIER 2 by the Defender detection patterns. Firing TIER 1
+        # on `PUA:Win32/AskToolbar` would over-triage what is a
+        # well-known browser toolbar cleanup.
+        _pua_prefixes = ("pua:", "puabundler:", "hacktool:", "tool:",
+                          "adware:", "bundler:", "misleading:", "riskware:")
+        _fam_lower = fam.lower()
+        if not any(_fam_lower.startswith(p) for p in _pua_prefixes):
+            _push(tier_1, "named malware family attributed",
+                  f"family={fam}")
+        else:
+            _push(tier_2, "PUA / HackTool family attributed",
+                  f"family={fam}")
 
     for rx in _RANSOMWARE_PATTERNS:
         m = rx.search(all_text)
