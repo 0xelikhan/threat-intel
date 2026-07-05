@@ -784,6 +784,15 @@ _KNOWN_GOOD_VENDOR_PATTERNS = [
     re.compile(r"cn=zoom video communications,", re.I),
     re.compile(r"cn=slack technologies,", re.I),
     re.compile(r"cn=dropbox,", re.I),
+    # Security vendor signing certs
+    re.compile(r"o=threatlocker\s+inc\b", re.I),
+    re.compile(r"cn=windows\s+core,\s+o=threatlocker", re.I),
+    re.compile(r"cn=crowdstrike\s+holdings", re.I),
+    re.compile(r"o=sentinelone\s+inc\b", re.I),
+    re.compile(r"o=carbon\s+black\b", re.I),
+    re.compile(r"o=vmware,?\s+inc\b", re.I),
+    re.compile(r"o=cisco\s+systems", re.I),
+    re.compile(r"o=palo\s+alto\s+networks", re.I),
     # ThreatLocker built-in policy — vetted by the vendor's trust team
     re.compile(r"\bPolicy Name\s*:.*\(Built-In\)", re.I),
     re.compile(r"\(Built-In\)\s*$", re.I | re.M),
@@ -1161,9 +1170,14 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
             otx_ge_5 = True
             break
 
+    # LOLBAS binary-name hit alone is TIER 3 context, NOT abuse — reg.exe /
+    # rundll32 / mshta ARE frequently used legitimately by admin tools and
+    # signed vendor agents. The actual abuse signature (mshta javascript:,
+    # regsvr32 /i:http, rundll32 javascript:, certutil -urlcache, etc.) is
+    # handled by _LOLBAS_ABUSE_PATTERNS above with proper TIER 2 semantics.
     if (cross.get("lolbas") or []):
-        _push(tier_2, "LOLBAS abuse detected",
-              f"{len(cross['lolbas'])} LOLBins matched")
+        _push(tier_3, "LOLBAS binary invoked (context only)",
+              f"{len(cross['lolbas'])} LOLBins present in raw text")
     if (cross.get("loldrivers") or []):
         _push(tier_2, "BYOVD LOLDrivers hash match",
               f"{len(cross['loldrivers'])} known-vulnerable drivers")
