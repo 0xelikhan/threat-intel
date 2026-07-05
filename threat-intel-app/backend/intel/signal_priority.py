@@ -854,6 +854,26 @@ _KNOWN_GOOD_VENDOR_PATTERNS = [
     re.compile(r"o=vmware,?\s+inc\b", re.I),
     re.compile(r"o=cisco\s+systems", re.I),
     re.compile(r"o=palo\s+alto\s+networks", re.I),
+    # Breach and Attack Simulation (BAS) platforms — vendor tools that
+    # legitimately drop and execute simulated malware on customer
+    # endpoints to test detection efficacy. Defender catching the
+    # simulated payload is the TEST SUCCEEDING, not a real threat.
+    re.compile(r"\bPicus\s+(?:Security|Simulator|Simulation\s+Agent)\b", re.I),
+    re.compile(r"\bAttackIQ\b", re.I),
+    re.compile(r"\bSafeBreach\b", re.I),
+    re.compile(r"\bCymulate\b", re.I),
+    re.compile(r"\bXM\s+Cyber\b", re.I),
+    re.compile(r"\bRandori\s+(?:Attack|Recon)\b", re.I),
+    re.compile(r"\bMandiant\s+Security\s+Validation\b", re.I),
+    re.compile(r"\bVerodin\b", re.I),
+    re.compile(r"\bPentera\b", re.I),
+    re.compile(r"\bAtomicRedTeam\b|\batomic-red-team\b", re.I),
+    # Simulation path markers — combined with a BAS vendor these
+    # strongly signal authorized testing.
+    re.compile(r"\\Picus\s+Security\\", re.I),
+    re.compile(r"\\Simulations?\\Simulation_\d+", re.I),
+    re.compile(r"\\BAS\s+Agent\\|/BAS/Agent/", re.I),
+    re.compile(r"\\Attack\s+Simulation\\", re.I),
     # ThreatLocker built-in policy — vetted by the vendor's trust team
     re.compile(r"\bPolicy Name\s*:.*\(Built-In\)", re.I),
     re.compile(r"\(Built-In\)\s*$", re.I | re.M),
@@ -980,7 +1000,25 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
             break
 
     fam = (rs.get("malware_family") or state.get("malware_family") or "").strip()
-    if fam:
+    # BAS simulation detection: when the raw log contains a BAS vendor
+    # + simulation path (Picus, AttackIQ, SafeBreach, Cymulate, XM
+    # Cyber, Randori, etc.), any malware family detected IS the
+    # simulation target. Defender catching it is a test-success signal,
+    # not a real incident. Skip the TIER 1 malware-family attribution
+    # in this context — the LLM investigation will still note the
+    # detection, and the BAS pattern already fires as a downweight.
+    _bas_markers = [
+        r"\bPicus\s+(?:Security|Simulator|Simulation\s+Agent)\b",
+        r"\bAttackIQ\b", r"\bSafeBreach\b", r"\bCymulate\b",
+        r"\bXM\s+Cyber\b", r"\bRandori\s+(?:Attack|Recon)\b",
+        r"\bMandiant\s+Security\s+Validation\b", r"\bVerodin\b",
+        r"\bPentera\b", r"\bAtomicRedTeam\b|\batomic-red-team\b",
+        r"\\Simulations?\\Simulation_\d+",
+        r"\\BAS\s+Agent\\|/BAS/Agent/",
+        r"\\Attack\s+Simulation\\",
+    ]
+    _is_bas_sim = any(re.search(p, log_text, re.I) for p in _bas_markers)
+    if fam and not _is_bas_sim:
         # Only fire TIER 1 for real malware families (LockBit, Emotet,
         # TrickBot, etc.). Microsoft's PUA / HackTool / Adware / Tool /
         # Bundler prefixes are unwanted-software categorizations, not
