@@ -49,7 +49,6 @@ threat-intel-app/
 │   │   ├── circuit_breaker.py
 │   │   ├── observability.py # request IDs + structured logging + envelope
 │   │   ├── redactor.py      # Fail-closed secret redaction
-│   │   ├── identity_hash.py # Tenant-scoped HMAC
 │   │   ├── warninglist_filter.py
 │   │   ├── mitre_data.py    # MITRE ATT&CK loader
 │   │   ├── misp_feeds.py    # CIRCL/DigitalSide/Botvrij flat hash dumps
@@ -204,8 +203,6 @@ Stats are surfaced at `/api/status` under the `cache` and
 * **Fail-closed redactor** (`intel/redactor.py`) — typed placeholders
   for PEM keys, AWS/Azure/OpenAI/Anthropic keys, JWTs, credentials,
   emails, IPs, MAC, UNC paths, hostnames, hex blobs. Confidence-scored.
-* **Tenant-scoped HMAC** (`intel/identity_hash.py`) — per-tenant key
-  precedence, normalised inputs, `HMAC(key, tenant || kind || normalized)`.
 * **Auth** — bcrypt password hash + signed HTTP-only cookie
   (SameSite=Strict, 12 h max age). `AuthGateMiddleware` walls off every
   `/api/*` route except `/api/auth/*`, `/api/health`, `/api/docs`.
