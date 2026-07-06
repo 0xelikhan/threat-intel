@@ -1102,6 +1102,21 @@ analyst's UI strips them out, so writing them is wasted tokens."""
     except Exception:
         pass
 
+    # JARM known-bad server-side TLS fingerprints. Same shape as
+    # ja_fingerprints but scoped to server-side (survives C2 IP
+    # rotation because the operator's TLS stack is fixed).
+    jarm_fingerprints = []
+    try:
+        from intel.jarm import (
+            get_for_alert_type as _jarm_alert,
+            get_for_mitre as _jarm_mitre,
+        )
+        jarm_fingerprints = _jarm_alert(alert_type) or _jarm_mitre(mitre)
+        # Cap at 5 to keep the response compact.
+        jarm_fingerprints = jarm_fingerprints[:5]
+    except Exception:
+        pass
+
     response_summary = {
         "threat_level":        threat_level,
         "confidence":          state.get("confidence", 0.0),
@@ -1165,6 +1180,7 @@ analyst's UI strips them out, so writing them is wasted tokens."""
         "siem_queries":        siem_queries or {},
         "analyst_summary":     analyst_summary or {},
         "ja_fingerprints":     ja_fingerprints,
+        "jarm_fingerprints":   jarm_fingerprints,
         "ja_sigma_snippet":    ja_sigma_snippet,
         "ja_kql_snippet":      ja_kql_snippet,
         # Defender 1116/1117 structured parse — gives the UI authoritative
