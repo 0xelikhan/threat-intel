@@ -1427,6 +1427,21 @@ function SignalBanners({ result }) {
     });
   }
 
+  // Ransomware.live — the named group posted victims in the last 30 days.
+  // Freshness signal — the group is operating right now, not archived.
+  const rl = result?.response_summary?.ransomware_live
+          || result?.ransomware_live;
+  if (rl && rl.group && rl.victims_30d > 0) {
+    const sample = (rl.sample || []).slice(0, 2)
+                    .map(v => v.victim).filter(Boolean).join(', ');
+    banners.push({
+      kind:  'critical',
+      title: `${rl.group} is active — ${rl.victims_30d} new victim${rl.victims_30d === 1 ? '' : 's'} in last 30 days`,
+      text:  (`Leak site posted latest ${rl.latest || ''}${sample ? ` · recent victims: ${sample}` : ''}. `
+             + `Treat as an in-progress campaign, not a legacy threat.`),
+    });
+  }
+
   if (!banners.length) return null;
 
   return (
@@ -2375,6 +2390,85 @@ function _ocSources(result, ioc, type) {
     }
   }
 
+  // crt.sh Certificate Transparency — domain-only. Recent cert bursts +
+  // unrelated SANs signal phishing infra prep. Verdict comes from the
+  // backend (SUSPICIOUS when >= 20 in 30d or >= 5 unrelated SANs).
+  if (d.crt_sh && !d.crt_sh.error && d.crt_sh.found) {
+    const c = d.crt_sh;
+    const cvColor = c.verdict === 'SUSPICIOUS' ? orange : tert;
+    const bits = [`${c.cert_count} certs`];
+    if (c.recent_30d) bits.push(`${c.recent_30d} in 30d`);
+    if (c.notable_sans?.length) bits.push(`${c.notable_sans.length} pivots`);
+    out.push({
+      source: 'crt.sh',
+      label:  bits.join(' · '),
+      color:  cvColor,
+      why:    c.summary || 'Certificate Transparency history from crt.sh. Recent cert bursts or unrelated SANs sharing the cert indicate phishing infrastructure prep.',
+    });
+  }
+
+  // abuse.ch SSLBL — IP or cert-fingerprint match against the active
+  // C2 SSL blocklist. Confirmed malware C2 destination.
+  if (d.sslbl && !d.sslbl.error && d.sslbl.found) {
+    const s = d.sslbl;
+    const listed = s.listed ? ` · listed ${String(s.listed).slice(0, 10)}` : '';
+    out.push({
+      source: 'SSLBL',
+      label:  `${s.family || 'C2 SSL match'} (${s.matched_on})${listed}`,
+      color:  red,
+      why:    s.summary || 'abuse.ch SSL Blacklist — this IP or its cert fingerprint is a known malware C2 destination.',
+    });
+  }
+
+  // CIRCL CVE-Search failover — CVE-only. Only surfaces when NVD was
+  // thin/unavailable; the row is otherwise identical to the NVD one so
+  // the analyst still sees a CVSS score + description.
+  if (d.cve_search && !d.cve_search.error && d.cve_search.cve_id) {
+    const cs = d.cve_search;
+    if (cs.cvss_v3_score != null) {
+      const sev = (cs.cvss_v3_severity || '').toUpperCase();
+      const c = sev === 'CRITICAL' ? red
+              : sev === 'HIGH'     ? orange
+              : sev === 'MEDIUM'   ? yellow : tert;
+      out.push({
+        source: 'CIRCL CVE-Search',
+        label:  `CVSS ${cs.cvss_v3_score} ${sev}`,
+        color:  c,
+        why:    'CIRCL CVE-Search — NVD failover. NVD was slow/unavailable, this is the same CVE record from a mirror.',
+      });
+    }
+  }
+
+  // CISA Vulnrichment ADP — CVE-only. CWE + refined CVSS + SSVC decision
+  // when CISA has enriched the record. SSVC 'Act' outranks anything the
+  // CNA scored.
+  if (d.vulnrichment && !d.vulnrichment.error) {
+    const v = d.vulnrichment;
+    const opts = v.ssvc?.options || {};
+    const expl = opts.Exploitation || opts.exploitation || '';
+    const c = expl === 'active' ? red
+            : expl === 'poc'    ? orange : tert;
+    out.push({
+      source: 'CISA Vulnrichment',
+      label:  v.summary || 'CISA ADP record',
+      color:  c,
+      why:    'CISA Vulnrichment ADP — CWE mapping + refined CVSS + SSVC decision. SSVC Exploitation=active means confirmed in-the-wild.',
+    });
+  }
+
+  // OpenSanctions — superset of OFAC. Only fires when OFAC didn't hit
+  // (backend suppresses it otherwise). Same visual weight as OFAC.
+  if (d.opensanctions && !d.opensanctions.error && d.opensanctions.found) {
+    const os = d.opensanctions;
+    const progs = (os.programs || []).slice(0, 3).join(', ');
+    out.push({
+      source: 'OpenSanctions',
+      label:  `${os.entity || 'sanctioned entity'}${progs ? ` · ${progs}` : ''}`,
+      color:  red,
+      why:    os.summary || 'OpenSanctions — aggregate of 40+ sanctions bodies (UN / EU / UK / national). Matched when OFAC did not.',
+    });
+  }
+
   // ─── SOURCE STATUS PASS ────────────────────────────────────────────────
   // The blocks above only push a row when a source returned USEFUL data
   // (no error AND non-empty). That meant a source which returned an
@@ -2421,6 +2515,12 @@ function _ocSources(result, ioc, type) {
     ofac_sdn:            'OFAC SDN',
     ransomwhere:         'Ransomwhe.re',
     hibp_breaches:       'HIBP',
+    // Round-16 free/no-key TI additions.
+    crt_sh:              'crt.sh',
+    sslbl:               'SSLBL',
+    cve_search:          'CIRCL CVE-Search',
+    vulnrichment:        'CISA Vulnrichment',
+    opensanctions:       'OpenSanctions',
   };
   const _surfaced = new Set(out.map(r => r.source));
   for (const [key, blob] of Object.entries(d || {})) {

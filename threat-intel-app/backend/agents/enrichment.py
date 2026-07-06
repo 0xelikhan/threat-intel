@@ -1339,6 +1339,42 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
                 data["proxycheck"] = pc
         except Exception as e:
             data["proxycheck"] = {"error": _humanise_exc(e), "error_type": "unreachable"}
+
+    # abuse.ch SSLBL — free, no key. Cross-reference the IP against the
+    # active SSL C2 blacklist. If Censys returned a cert fingerprint,
+    # also check that against SSLBL's SHA1 list so we catch cases where
+    # the IP rotated but the operator's cert is still known-bad.
+    try:
+        from intel.sslbl import lookup_ip as _sslbl_ip, lookup_sha1 as _sslbl_sha1
+        sslbl_hit = _sslbl_ip(ip)
+        censys_cert_sha1 = None
+        cs = data.get("censys") or {}
+        cert = cs.get("ssl_cert") or {}
+        # Censys v3 exposes sha256 as leaf fingerprint. SSLBL is SHA1-keyed
+        # so this only fires when Censys happened to include it or when a
+        # future path adds sha1. Left in place so future cert-source
+        # additions inherit the cross-ref for free.
+        for k in ("sha1", "fingerprint_sha1"):
+            if isinstance(cert.get(k), str):
+                censys_cert_sha1 = cert[k]
+                break
+        cert_hit = _sslbl_sha1(censys_cert_sha1) if censys_cert_sha1 else None
+        if sslbl_hit or cert_hit:
+            best = sslbl_hit or cert_hit or {}
+            data["sslbl"] = {
+                "source":  "abuse.ch SSLBL",
+                "found":   True,
+                "verdict": "MALICIOUS",
+                "family":  best.get("family"),
+                "listing_reason": best.get("listing_reason"),
+                "matched_on":     "ip" if sslbl_hit else "cert_sha1",
+                "listed":         best.get("listed") or best.get("first_seen"),
+                "summary":        (f"SSLBL match — {best.get('family') or best.get('listing_reason')} "
+                                    f"({'IP' if sslbl_hit else 'cert SHA1'})"),
+            }
+    except Exception as _e:
+        _log.debug("SSLBL lookup failed for %s: %s", ip, _e)
+
     _cache[ck] = data
     return data
 
@@ -1426,6 +1462,17 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
                 data["m365_tenant"] = m365
     except Exception as _e:
         _log.debug("m365 tenant recon failed for %s: %s", domain, _e)
+    # crt.sh Certificate Transparency — free, no key. Every cert issued
+    # for the domain or a subdomain. Recent bursts / SANs pointing at
+    # unrelated brands = phishing-infra prep signal.
+    try:
+        from intel.crt_sh import enrich as _crtsh_enrich
+        crt = await _crtsh_enrich(session, domain)
+        if crt and (crt.get("found") or crt.get("error")):
+            data["crt_sh"] = crt
+    except Exception as _e:
+        _log.debug("crt.sh enrichment failed for %s: %s", domain, _e)
+
     # Phishing.Database — synchronous in-memory lookup against the hourly
     # active feed warmed by the lifespan handler. Adds {"hit": True, ...}
     # when the domain is on the active phishing list.
@@ -1855,6 +1902,32 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
     if ms:
         data["msrc"] = ms
 
+    # CIRCL CVE-Search failover — only fires when the primary NVD call
+    # didn't yield real record data (no score + no description). NVD's
+    # own uptime is unreliable, so this catches the "CVE exists but NVD
+    # is 5xx or awaiting analysis" case.
+    nvd_thin = (not nvd) or (
+        not nvd.get("cvss_v3_score") and not (nvd.get("description") or "").strip()
+    )
+    if nvd_thin:
+        try:
+            from intel.cve_search import lookup as _circl_lookup
+            circl = await _circl_lookup(session, cve_id)
+            if circl and (circl.get("summary") or circl.get("cvss_v3_score") is not None):
+                data["cve_search"] = circl
+        except Exception as _e:
+            _log.debug("CIRCL CVE-Search failover failed for %s: %s", cve_id, _e)
+
+    # CISA Vulnrichment — ADP records that add CWE + refined CVSS + SSVC
+    # when NVD/CNA data is thin. Free MITRE endpoint, no key.
+    try:
+        from intel.vulnrichment import lookup as _adp_lookup
+        adp = await _adp_lookup(session, cve_id)
+        if adp:
+            data["vulnrichment"] = adp
+    except Exception as _e:
+        _log.debug("Vulnrichment lookup failed for %s: %s", cve_id, _e)
+
     # ProjectDiscovery nuclei-templates: how many public detection
     # templates target this CVE. "X templates exist" is a more concrete
     # exploitation-tooling signal than CVSS alone — closes the gap
@@ -2154,6 +2227,25 @@ async def enrich_email(session, email: str, keys: dict) -> dict:
     except Exception as e:
         _log.warning("OFAC email lookup failed for %s: %s", email, e)
 
+    # OpenSanctions — superset of OFAC (adds UN / EU / UK / CH / national
+    # lists). Skip when OFAC already hit; a match there is authoritative
+    # for US sanctions purposes and OpenSanctions would just repeat it.
+    if not data.get("ofac_sdn"):
+        try:
+            from intel.opensanctions import lookup_email as _os_email
+            os_hit = await _os_email(session, email)
+            if os_hit:
+                data["opensanctions"] = {
+                    **os_hit,
+                    "found":   True,
+                    "verdict": "MALICIOUS",
+                    "summary": (f"Sanctioned entity (OpenSanctions): "
+                                f"{os_hit.get('entity')} — "
+                                f"{', '.join(os_hit.get('programs') or []) or 'multi-list'}"),
+                }
+        except Exception as e:
+            _log.debug("OpenSanctions email lookup failed for %s: %s", email, e)
+
     # HIBP breaches by domain — free/unauth endpoint. Skip for well-known
     # public mail domains where "yes it's been breached" adds nothing
     # (gmail / hotmail / yahoo have LinkedIn / Adobe / etc. attached to
@@ -2280,6 +2372,24 @@ async def enrich_crypto(session, address: str, keys: dict) -> dict:
             }
     except Exception as e:
         _log.warning("OFAC crypto lookup failed for %s: %s", address, e)
+
+    # OpenSanctions — broader coverage (UN / EU / UK / national bodies).
+    # Only run when OFAC + Ransomwhere both missed, otherwise a single
+    # authoritative hit is enough.
+    if not data.get("ofac_sdn") and not data.get("ransomwhere"):
+        try:
+            from intel.opensanctions import lookup_crypto as _os_crypto
+            os_hit = await _os_crypto(session, address)
+            if os_hit:
+                data["opensanctions"] = {
+                    **os_hit,
+                    "found":   True,
+                    "verdict": "MALICIOUS",
+                    "summary": (f"Sanctioned crypto address (OpenSanctions): "
+                                f"{os_hit.get('entity')}"),
+                }
+        except Exception as e:
+            _log.debug("OpenSanctions crypto lookup failed for %s: %s", address, e)
 
     _cache[ck] = data
     return data

@@ -74,21 +74,25 @@ def test_enrich_email_rejects_non_email_input():
 def test_enrich_email_skips_hibp_on_public_mail_provider():
     """Free HIBP breach-by-domain adds noise for public providers —
     every gmail / yahoo / hotmail address 'is in' every breach on the
-    internet. Provider list is hardcoded; the request should not fire."""
+    internet. Provider list is hardcoded; the HIBP request should not
+    fire (other free lookups like OpenSanctions can still run)."""
     async def _run():
         async with _null_session() as s:
-            called = {"n": 0}
+            hibp_calls = {"n": 0}
 
-            async def _fail(*_a, **_k):
-                called["n"] += 1
-                raise AssertionError("HIBP should not be called for gmail.com")
+            async def _capture(_session, url, **_k):
+                if "haveibeenpwned.com" in url:
+                    hibp_calls["n"] += 1
+                # Return an empty list — safe default that maps to
+                # 'no breaches' / 'no sanctions'.
+                return []
 
-            with patch("agents.enrichment._get", new=_fail), \
+            with patch("agents.enrichment._get", new=_capture), \
                  patch("intel.ofac_sdn.lookup_email", return_value=None):
                 out = await enrich_email(s, "user@gmail.com", {})
-            return out, called
-    out, called = asyncio.run(_run())
-    assert called["n"] == 0
+            return out, hibp_calls
+    out, hibp_calls = asyncio.run(_run())
+    assert hibp_calls["n"] == 0
     assert "hibp_breaches" not in out
 
 
