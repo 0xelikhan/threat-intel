@@ -55,22 +55,57 @@ async def dns_records(session: aiohttp.ClientSession, domain: str) -> Dict:
 
 # ─── BGP ranking (CIRCL — no key) ──────────────────────────────────────────────
 async def bgp_ranking(session: aiohttp.ClientSession, ip: str) -> Dict:
-    """https://bgpranking.circl.lu/json?ip=IP — ASN reputation score."""
+    """CIRCL BGP Ranking — ASN reputation score. Two-call flow:
+      1. POST /ipasn_history/  {"ip": X}  →  {"response": {"<ts>": {"asn": X, "prefix": X}}}
+      2. POST /json/asn        {"asn": X} →  {"response": {"asn_description": X,
+                                                            "ranking": {"rank": F, "position": N,
+                                                                         "total_known_asns": N}}}
+
+    CIRCL retired the old bgpranking-ng.circl.lu/json?ip=X endpoint. The
+    module previously pointed there so this call had been silently 404ing
+    on every enrich_ip run. Rank scoring: HIGHER rank = worse reputation
+    (more indicators seen on that ASN). Position is where this ASN sits
+    in a badness-sorted list, so position=1 is the single worst ASN."""
     try:
-        async with session.get(
-            "https://bgpranking-ng.circl.lu/json",
-            params={"ip": ip}, timeout=_TIMEOUT,
+        async with session.post(
+            "https://bgpranking.circl.lu/ipasn_history/",
+            json={"ip": ip}, timeout=_TIMEOUT,
         ) as r:
             if r.status != 200:
-                return {"error": f"HTTP {r.status}", "source": "bgp_ranking"}
-            d = await r.json()
-            return {
-                "asn":          d.get("asn"),
-                "asn_description": d.get("asn_description"),
-                "rank":         d.get("ranking"),  # smaller = worse
-                "ranking_position": d.get("ranking_position"),
-                "country":      d.get("country"),
-            }
+                return {"error": f"HTTP {r.status} (ipasn_history)",
+                        "source": "bgp_ranking"}
+            step1 = await r.json()
+
+        resp = step1.get("response") or {}
+        # response is a dict keyed by timestamp. Take the most recent one.
+        latest_ts = max(resp.keys()) if resp else ""
+        latest    = resp.get(latest_ts) or {}
+        asn       = str(latest.get("asn") or "")
+        prefix    = latest.get("prefix") or ""
+        if not asn:
+            return {"error": "no ASN found for IP", "source": "bgp_ranking"}
+
+        async with session.post(
+            "https://bgpranking.circl.lu/json/asn",
+            json={"asn": asn}, timeout=_TIMEOUT,
+        ) as r:
+            if r.status != 200:
+                return {"error": f"HTTP {r.status} (asn rank)",
+                        "source": "bgp_ranking"}
+            step2 = await r.json()
+
+        r2       = step2.get("response") or {}
+        ranking  = r2.get("ranking") or {}
+        return {
+            "source":            "CIRCL BGP Ranking",
+            "asn":               asn,
+            "asn_description":   r2.get("asn_description") or "",
+            "prefix":            prefix,
+            "rank":              ranking.get("rank"),
+            "ranking_position":  ranking.get("position"),
+            "total_known_asns":  ranking.get("total_known_asns"),
+            "observed_at":       latest_ts,
+        }
     except Exception as e:
         return {"error": str(e), "source": "bgp_ranking"}
 

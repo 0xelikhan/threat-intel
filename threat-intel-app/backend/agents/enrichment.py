@@ -1346,6 +1346,46 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         except Exception as e:
             data["proxycheck"] = {"error": _humanise_exc(e), "error_type": "unreachable"}
 
+    # StopForumSpam — free, no key. Community spam-source reputation.
+    # Complements AbuseIPDB with a fresher, forum-specific abuse signal
+    # and reports Tor-exit status independently of intel.deception.
+    try:
+        from intel.stopforumspam import lookup_ip as _sfs_ip
+        sfs = await _sfs_ip(session, ip)
+        if sfs and (sfs.get("found") or sfs.get("error")):
+            data["stopforumspam"] = sfs
+    except Exception as _e:
+        _log.debug("StopForumSpam IP lookup failed for %s: %s", ip, _e)
+
+    # JARM known-bad fingerprint cross-ref. Only fires when Censys / a
+    # future source attached a `jarm` field to this IP's enrichment. The
+    # static list covers ~15 C2 frameworks + commodity malware families
+    # whose TLS stack persists across IP rotation.
+    try:
+        from intel.jarm import lookup as _jarm_lookup
+        jarm_val = None
+        cs = data.get("censys") or {}
+        for k in ("jarm", "jarm_fingerprint"):
+            if isinstance(cs.get(k), str):
+                jarm_val = cs[k]
+                break
+        # Also check any direct 'jarm' field a future source might attach
+        if not jarm_val and isinstance(data.get("jarm"), str):
+            jarm_val = data["jarm"]
+        if jarm_val:
+            hit = _jarm_lookup(jarm_val)
+            if hit:
+                data["jarm_match"] = {
+                    "source":    "JARM curated list",
+                    "found":     True,
+                    "verdict":   "MALICIOUS",
+                    "framework": hit.get("framework"),
+                    "jarm":      jarm_val,
+                    "summary":   f"JARM matches {hit.get('framework')} — {hit.get('notes')[:100]}",
+                }
+    except Exception as _e:
+        _log.debug("JARM lookup failed for %s: %s", ip, _e)
+
     # abuse.ch SSLBL — free, no key. Cross-reference the IP against the
     # active SSL C2 blacklist. If Censys returned a cert fingerprint,
     # also check that against SSLBL's SHA1 list so we catch cases where
@@ -2232,6 +2272,17 @@ async def enrich_email(session, email: str, keys: dict) -> dict:
             }
     except Exception as e:
         _log.warning("OFAC email lookup failed for %s: %s", email, e)
+
+    # StopForumSpam — free, no key. Community spam-source reputation
+    # keyed by email. Complements HIBP: HIBP tells you if the address is
+    # in a breach, SFS tells you if it's actively used to send spam.
+    try:
+        from intel.stopforumspam import lookup_email as _sfs_email
+        sfs = await _sfs_email(session, email)
+        if sfs and (sfs.get("found") or sfs.get("error")):
+            data["stopforumspam"] = sfs
+    except Exception as _e:
+        _log.debug("StopForumSpam email lookup failed for %s: %s", email, _e)
 
     # OpenSanctions — superset of OFAC (adds UN / EU / UK / CH / national
     # lists). Skip when OFAC already hit; a match there is authoritative

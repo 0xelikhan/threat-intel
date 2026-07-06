@@ -2456,6 +2456,34 @@ function _ocSources(result, ioc, type) {
     });
   }
 
+  // StopForumSpam — IP + email spam-source reputation. Independent of
+  // AbuseIPDB (which is IPS-focused). SFS's `torexit` flag is a
+  // secondary Tor signal alongside intel.deception.
+  if (d.stopforumspam && !d.stopforumspam.error && d.stopforumspam.found) {
+    const sfs = d.stopforumspam;
+    const c = sfs.verdict === 'MALICIOUS' ? red
+            : sfs.verdict === 'SUSPICIOUS' ? orange : yellow;
+    out.push({
+      source: 'StopForumSpam',
+      label:  sfs.summary,
+      color:  c,
+      why:    'StopForumSpam — community-maintained spam-source database. `appears=1` means a real user report; `confidence` is SFS\'s own model estimate.',
+    });
+  }
+
+  // JARM known-bad — server-side TLS fingerprint match. Confirmed C2
+  // framework even if the IP has rotated (operator can\'t easily
+  // change their TLS stack).
+  if (d.jarm_match && !d.jarm_match.error && d.jarm_match.found) {
+    const j = d.jarm_match;
+    out.push({
+      source: 'JARM',
+      label:  j.framework || 'known-bad JARM',
+      color:  red,
+      why:    j.summary || 'JARM server-side TLS fingerprint matches a known-bad C2 framework. Survives IP rotation — the operator would have to swap their TLS library to defeat this.',
+    });
+  }
+
   // OpenSanctions — superset of OFAC. Only fires when OFAC didn't hit
   // (backend suppresses it otherwise). Same visual weight as OFAC.
   if (d.opensanctions && !d.opensanctions.error && d.opensanctions.found) {
@@ -2521,6 +2549,9 @@ function _ocSources(result, ioc, type) {
     cve_search:          'CIRCL CVE-Search',
     vulnrichment:        'CISA Vulnrichment',
     opensanctions:       'OpenSanctions',
+    // Round-17 free/no-key TI additions.
+    stopforumspam:       'StopForumSpam',
+    jarm_match:          'JARM',
   };
   const _surfaced = new Set(out.map(r => r.source));
   for (const [key, blob] of Object.entries(d || {})) {
