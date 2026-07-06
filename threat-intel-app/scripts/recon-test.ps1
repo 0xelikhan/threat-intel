@@ -118,7 +118,7 @@ if ($rs.matched_actors) {
 }
 
 # Per-IOC source breakdown — surfaces which keys the backend populated
-# so I can tell whether (e.g.) hybrid_analysis is missing because no
+# so I can tell whether (e.g.) malwarebazaar is missing because no
 # hit or because the parser dropped it.
 $buckets = @{
     'ip'     = $r.enrichments.ips
