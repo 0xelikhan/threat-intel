@@ -54,16 +54,64 @@ def test_crt_sh_flags_recent_cert_burst_as_suspicious():
 
 def test_crt_sh_degrades_gracefully_on_502():
     """crt.sh 502s frequently under load. The failure surfaces as an
-    error row instead of blowing up domain enrichment."""
+    error row instead of blowing up domain enrichment. Both attempts
+    must return the same transient error before we give up."""
     async def _run():
         async with _null_session() as s:
             with patch("agents.enrichment._get",
                        return_value={"error": "server error (HTTP 502)",
-                                     "error_type": "http_error"}):
+                                     "error_type": "http_error"}), \
+                 patch("asyncio.sleep", new=_noop_sleep):
                 return await crt_sh.enrich(s, "example.com")
     r = asyncio.run(_run())
     assert r.get("error") is not None
     assert r.get("error_type") == "http_error"
+
+
+def test_crt_sh_retries_once_on_transient_and_succeeds():
+    """The core reason the retry exists — a 502 from the nginx front
+    followed by a successful second attempt. We should return the
+    parsed success payload, not the first-attempt error."""
+    calls = {"n": 0}
+    async def _flaky(_session, _url, **_k):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return {"error": "server error (HTTP 502)",
+                    "error_type": "http_error"}
+        return [{"issuer_name": "C=US, O=Let's Encrypt",
+                 "not_before":  "2026-06-15T00:00:00",
+                 "name_value":  "example.com"}]
+    async def _run():
+        async with _null_session() as s:
+            with patch("agents.enrichment._get", new=_flaky), \
+                 patch("asyncio.sleep", new=_noop_sleep):
+                return await crt_sh.enrich(s, "example.com")
+    r = asyncio.run(_run())
+    assert calls["n"] == 2
+    assert r["found"] is True
+    assert r["cert_count"] == 1
+
+
+def test_crt_sh_does_not_retry_non_transient_errors():
+    """auth_failed / rate_limited / circuit_open aren't going to resolve
+    on a retry — the second attempt would just burn the safety window."""
+    calls = {"n": 0}
+    async def _rate_limited(_session, _url, **_k):
+        calls["n"] += 1
+        return {"error": "rate limited", "error_type": "rate_limited"}
+    async def _run():
+        async with _null_session() as s:
+            with patch("agents.enrichment._get", new=_rate_limited), \
+                 patch("asyncio.sleep", new=_noop_sleep):
+                return await crt_sh.enrich(s, "example.com")
+    r = asyncio.run(_run())
+    assert calls["n"] == 1   # single attempt, no retry
+    assert r.get("error_type") == "rate_limited"
+
+
+async def _noop_sleep(_secs):
+    """Skip the backoff wait in tests so they run in <1 ms."""
+    return None
 
 
 # ─── SSLBL ────────────────────────────────────────────────────────────────

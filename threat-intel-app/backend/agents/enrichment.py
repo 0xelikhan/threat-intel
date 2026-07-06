@@ -88,6 +88,12 @@ _SLOW_HOSTS: "dict[str, tuple[aiohttp.ClientTimeout, float]]" = {
     # timeout, not the outer safety. Both bumped.
     "otx.alienvault.com":      (aiohttp.ClientTimeout(total=90),  90.0),
     "www.virustotal.com":      (aiohttp.ClientTimeout(total=20),  20.0),
+    # crt.sh runs one Postgres node behind an nginx front. The front
+    # 502s under load and the query itself can take 20-30 s on popular
+    # domains (large SAN sets, big result pages). Both timeouts bumped
+    # so the FIRST attempt has enough runway. intel/crt_sh.py adds a
+    # single retry on top for the residual 502s.
+    "crt.sh":                  (aiohttp.ClientTimeout(total=40),  40.0),
 }
 
 
