@@ -98,8 +98,18 @@ async def lookup(session, cve_id: str) -> Dict[str, Any]:
                                  f"({refined_cvss.get('score')})")
     if ssvc:
         opts = ssvc.get("options") or {}
-        act = opts.get("Automatable") or opts.get("Exploitation")
-        if act: bits.append(f"SSVC: {act}")
+        # Exploitation is the decision-driver ('active' / 'poc' / 'none').
+        # Automatable is a modifier ('yes' / 'no'). Both are useful; show
+        # Exploitation first so 'SSVC: no' doesn't get mistaken for "no
+        # exploitation" when the field is actually Automatable=no.
+        expl = opts.get("Exploitation")
+        auto = opts.get("Automatable")
+        if expl and auto:
+            bits.append(f"SSVC Exploitation={expl}, Automatable={auto}")
+        elif expl:
+            bits.append(f"SSVC Exploitation={expl}")
+        elif auto:
+            bits.append(f"SSVC Automatable={auto}")
 
     return {
         "source":        "CISA Vulnrichment",

@@ -1,15 +1,18 @@
 """
 abuse.ch SSL Blacklist (SSLBL) — free, no key.
 
-Three feeds:
-  - sslipblacklist.csv       IP + port + malware family
-  - sslblacklist.csv         Cert SHA1 + malware family
-  - ja3_fingerprints.csv     JA3 hash + malware family
+Three feeds. Note: abuse.ch deprecated the IP feed on 2025-01-03; it
+still fetches (returning the deprecation header + no rows) so the
+loader keeps working, but the IP index will be empty on modern loads.
+The SHA1 and JA3 feeds are still actively maintained:
 
-The IP list is the cheapest cross-ref — every alert with an IP gets it
-for free once the CSV is in memory. The SHA1 and JA3 lists match when
-Censys / Shodan return cert or TLS metadata for the IP under
-investigation.
+  - sslipblacklist.csv       IP + port    [deprecated 2025-01-03]
+  - sslblacklist.csv         Cert SHA1 + malware family  (~10k entries)
+  - ja3_fingerprints.csv     JA3 hash + malware family   (~100 entries)
+
+The primary cross-reference vector is now cert SHA1 — matched against
+whatever cert fingerprints upstream sources (Censys / Shodan) return
+for the IP under investigation.
 
 Feeds refresh multiple times per day. We reload every 6h in the
 lifespan warm loop; between reloads the in-memory index is authoritative.
