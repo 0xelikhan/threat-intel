@@ -255,13 +255,19 @@ def filter_iocs(iocs: dict) -> Tuple[dict, dict]:
     """
     load_warninglists()
 
+    # Filterable buckets are built explicitly below. Non-filterable
+    # buckets (emails / cves / crypto / files / paths) pass through
+    # unchanged — there's no MISP warninglist for these types, and
+    # dropping them here was silently losing CVE + crypto IOCs before
+    # the enrichment fan-out.
     filtered = {
         "ips":     [],
         "domains": [],
         "hashes":  [],
         "urls":    [],
-        "emails":  list(iocs.get("emails", [])),  # never filtered
     }
+    for pass_through in ("emails", "cves", "crypto", "files", "paths"):
+        filtered[pass_through] = list(iocs.get(pass_through, []))
     removed = {"ips": [], "domains": [], "hashes": [], "urls": []}
 
     for ip in iocs.get("ips", []):
