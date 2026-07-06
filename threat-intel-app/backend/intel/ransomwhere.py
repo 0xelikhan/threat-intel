@@ -65,6 +65,11 @@ def _build_index() -> None:
     by_addr: Dict[str, Dict[str, Any]] = {}
     families: set = set()
 
+    # The API's /export endpoint wraps records under {"result": [...]}.
+    # Unwrap so the list-shape branch below handles it uniformly.
+    if isinstance(payload, dict) and isinstance(payload.get("result"), list):
+        payload = payload["result"]
+
     # Accept either {addr: meta} dict OR list-of-records shape.
     if isinstance(payload, dict):
         for addr, meta in payload.items():
