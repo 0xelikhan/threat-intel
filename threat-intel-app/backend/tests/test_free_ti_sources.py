@@ -1,7 +1,6 @@
-"""Coverage for the six free / no-key TI additions:
+"""Coverage for the five free / no-key TI additions:
 
   - crt.sh Certificate Transparency        (intel/crt_sh.py)
-  - abuse.ch SSLBL blocklist               (intel/sslbl.py)
   - CIRCL CVE-Search failover              (intel/cve_search.py)
   - CISA Vulnrichment via MITRE Awg        (intel/vulnrichment.py)
   - OpenSanctions superset of OFAC         (intel/opensanctions.py)
@@ -19,7 +18,7 @@ import asyncio
 from unittest.mock import patch
 
 from intel import (
-    crt_sh, cve_search, vulnrichment, opensanctions, ransomware_live, sslbl,
+    crt_sh, cve_search, vulnrichment, opensanctions, ransomware_live,
 )
 
 
@@ -112,45 +111,6 @@ def test_crt_sh_does_not_retry_non_transient_errors():
 async def _noop_sleep(_secs):
     """Skip the backoff wait in tests so they run in <1 ms."""
     return None
-
-
-# ─── SSLBL ────────────────────────────────────────────────────────────────
-def test_sslbl_ip_parser_extracts_family_from_listing_reason():
-    csv_text = (
-        "# DstIP,DstPort,Listing_date,Listing_reason\n"
-        "1.2.3.4,443,2026-06-01 12:00:00,Emotet C2\n"
-        "5.6.7.8,80,2026-06-15 09:00:00,Cobalt Strike C2\n"
-    )
-    parsed = sslbl._parse_ip_csv(csv_text)
-    assert parsed["1.2.3.4:443"]["family"] == "Emotet"
-    assert parsed["5.6.7.8:80"]["family"] == "Cobalt"
-    assert "C2" in parsed["1.2.3.4:443"]["listing_reason"]
-
-
-def test_sslbl_ja3_parser_rejects_non_md5_length():
-    csv_text = (
-        "# ja3_md5,Firstseen,Lastseen,Listingreason\n"
-        "72a589da586844d7f0818ce684948eea,2020-01-01,2026-06-01,Cobalt Strike\n"
-        "notavalidhash,2020-01-01,2026-06-01,Junk row\n"
-    )
-    parsed = sslbl._parse_ja3_csv(csv_text)
-    assert "72a589da586844d7f0818ce684948eea" in parsed
-    assert "notavalidhash" not in parsed
-
-
-def test_sslbl_lookup_ip_prefers_port_specific_over_any():
-    """A row indexed by ip:port is the more specific hit and should win
-    when the caller supplies the port."""
-    sslbl._state.update({
-        "loaded_at":  __import__("time").time(),   # inside TTL — skip network
-        "by_ip":      {"1.2.3.4:443": {"family": "Emotet"}},
-        "by_ip_any":  {"1.2.3.4": {"family": "Emotet"}},
-        "by_sha1":    {}, "by_ja3": {},
-    })
-    hit = sslbl.lookup_ip("1.2.3.4", port=443)
-    assert hit["family"] == "Emotet"
-    # And with no port arg, still returns the any-port row.
-    assert sslbl.lookup_ip("1.2.3.4")["family"] == "Emotet"
 
 
 # ─── CIRCL CVE-Search ─────────────────────────────────────────────────────

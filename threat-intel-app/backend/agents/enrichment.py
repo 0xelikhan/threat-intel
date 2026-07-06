@@ -1357,70 +1357,6 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("StopForumSpam IP lookup failed for %s: %s", ip, _e)
 
-    # JARM known-bad fingerprint cross-ref. Only fires when Censys / a
-    # future source attached a `jarm` field to this IP's enrichment. The
-    # static list covers ~15 C2 frameworks + commodity malware families
-    # whose TLS stack persists across IP rotation.
-    try:
-        from intel.jarm import lookup as _jarm_lookup
-        jarm_val = None
-        cs = data.get("censys") or {}
-        for k in ("jarm", "jarm_fingerprint"):
-            if isinstance(cs.get(k), str):
-                jarm_val = cs[k]
-                break
-        # Also check any direct 'jarm' field a future source might attach
-        if not jarm_val and isinstance(data.get("jarm"), str):
-            jarm_val = data["jarm"]
-        if jarm_val:
-            hit = _jarm_lookup(jarm_val)
-            if hit:
-                data["jarm_match"] = {
-                    "source":    "JARM curated list",
-                    "found":     True,
-                    "verdict":   "MALICIOUS",
-                    "framework": hit.get("framework"),
-                    "jarm":      jarm_val,
-                    "summary":   f"JARM matches {hit.get('framework')} — {hit.get('notes')[:100]}",
-                }
-    except Exception as _e:
-        _log.debug("JARM lookup failed for %s: %s", ip, _e)
-
-    # abuse.ch SSLBL — free, no key. Cross-reference the IP against the
-    # active SSL C2 blacklist. If Censys returned a cert fingerprint,
-    # also check that against SSLBL's SHA1 list so we catch cases where
-    # the IP rotated but the operator's cert is still known-bad.
-    try:
-        from intel.sslbl import lookup_ip as _sslbl_ip, lookup_sha1 as _sslbl_sha1
-        sslbl_hit = _sslbl_ip(ip)
-        censys_cert_sha1 = None
-        cs = data.get("censys") or {}
-        cert = cs.get("ssl_cert") or {}
-        # Censys v3 exposes sha256 as leaf fingerprint. SSLBL is SHA1-keyed
-        # so this only fires when Censys happened to include it or when a
-        # future path adds sha1. Left in place so future cert-source
-        # additions inherit the cross-ref for free.
-        for k in ("sha1", "fingerprint_sha1"):
-            if isinstance(cert.get(k), str):
-                censys_cert_sha1 = cert[k]
-                break
-        cert_hit = _sslbl_sha1(censys_cert_sha1) if censys_cert_sha1 else None
-        if sslbl_hit or cert_hit:
-            best = sslbl_hit or cert_hit or {}
-            data["sslbl"] = {
-                "source":  "abuse.ch SSLBL",
-                "found":   True,
-                "verdict": "MALICIOUS",
-                "family":  best.get("family"),
-                "listing_reason": best.get("listing_reason"),
-                "matched_on":     "ip" if sslbl_hit else "cert_sha1",
-                "listed":         best.get("listed") or best.get("first_seen"),
-                "summary":        (f"SSLBL match — {best.get('family') or best.get('listing_reason')} "
-                                    f"({'IP' if sslbl_hit else 'cert SHA1'})"),
-            }
-    except Exception as _e:
-        _log.debug("SSLBL lookup failed for %s: %s", ip, _e)
-
     _cache[ck] = data
     return data
 
@@ -2586,6 +2522,7 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
                     f"{summary['totals']['domains']} domains, "
                     f"{summary['totals']['hashes']} hashes, "
                     f"{summary['totals']['urls']} URLs, "
+                    f"{summary['totals'].get('cves', 0)} CVEs, "
                     f"{summary['totals'].get('emails', 0)} emails, "
                     f"{summary['totals'].get('crypto', 0)} crypto in "
                     f"{elapsed:.1f}s. "

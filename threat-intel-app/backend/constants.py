@@ -79,7 +79,7 @@ ENRICHMENT_SOURCES: Tuple[str, ...] = (
 
 # ─── cache + ops ──────────────────────────────────────────────────────────────
 CACHE_NAMESPACES: Tuple[str, ...] = (
-    "mitre", "warninglists", "feodo", "sslbl", "kev",
+    "mitre", "warninglists", "feodo", "kev",
     "lolbas", "loldrivers", "enrich",
 )
 
