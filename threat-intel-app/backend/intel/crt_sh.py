@@ -48,19 +48,42 @@ def _issuer_short(dn: str) -> str:
 async def enrich(session, domain: str) -> Dict[str, Any]:
     if not isinstance(domain, str) or "." not in domain:
         return {"error": "invalid domain"}
+    import asyncio
     from agents.enrichment import _get
 
     # `?q=%.<domain>` matches the domain and all subdomains. exclude=expired
-    # trims dead history so noise stays low; wildcard= expands SANs.
-    raw = await _get(
-        session,
-        f"https://crt.sh/?q=%25.{domain}&output=json&exclude=expired",
-        headers={"User-Agent": "RECON-ThreatIntel/1.0",
-                 "Accept": "application/json"},
-    )
+    # trims dead history so noise stays low.
+    url = f"https://crt.sh/?q=%25.{domain}&output=json&exclude=expired"
+    hdrs = {"User-Agent": "RECON-ThreatIntel/1.0",
+            "Accept": "application/json"}
+
+    # crt.sh's nginx front 502s under load and their Postgres node
+    # occasionally times out on popular queries. Both are transient —
+    # one retry after a short backoff clears most of them. Anything
+    # else (auth_failed, rate_limited, circuit_open) stops immediately
+    # since retrying wouldn't change the outcome.
+    _RETRY_TYPES = {"http_error", "timed_out", "unreachable"}
+    raw = None
+    last_err: Dict[str, Any] = {}
+    for attempt in range(2):
+        if attempt > 0:
+            await asyncio.sleep(1.5)   # short backoff
+        raw = await _get(session, url, headers=hdrs)
+        if isinstance(raw, list):
+            break   # success — even [] is fine, means "no certs"
+        if isinstance(raw, dict) and raw.get("error"):
+            last_err = raw
+            if raw.get("error_type") not in _RETRY_TYPES:
+                break   # non-transient — retrying won't help
+        else:
+            break
+
     if not isinstance(raw, list) or not raw:
         # crt.sh returns `[]` when nothing, or a dict with `error`/`raw` on
         # HTTP problems. _get maps 5xx/timeout to {"error": ..., "error_type": ...}.
+        if last_err:
+            return {"source": "crt.sh", "error": last_err.get("error"),
+                    "error_type": last_err.get("error_type", "unreachable")}
         if isinstance(raw, dict) and raw.get("error"):
             return {"source": "crt.sh", "error": raw.get("error"),
                     "error_type": raw.get("error_type", "unreachable")}
