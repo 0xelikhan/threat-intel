@@ -2207,6 +2207,35 @@ Tool-budget tips:
     except Exception as _e:
         _log.debug("misp_galaxy augmentation failed: %s", _e)
 
+    # Ransomware.live — active-actor freshness. If the named actor or
+    # family has posted victims in the last 30 days, surface that so
+    # the analyst response reflects "this group is operating right now"
+    # instead of citing the static galaxy record alone.
+    try:
+        from intel.ransomware_live import lookup_group as _rw_group
+        ta = result.get("threat_actor")
+        mf = result.get("malware_family")
+        for name in filter(None, [
+            (ta or {}).get("name") if isinstance(ta, dict) else None,
+            mf if isinstance(mf, str) else None,
+        ]):
+            hit = _rw_group(name)
+            if hit and hit.get("victims_30d", 0) > 0:
+                result["ransomware_live"] = {
+                    "source":      "Ransomware.live",
+                    "group":       hit.get("group"),
+                    "victims_30d": hit.get("victims_30d"),
+                    "latest":      hit.get("latest"),
+                    "sample":      hit.get("sample") or [],
+                    "verdict":     "MALICIOUS",
+                    "summary":     (f"{hit.get('group')} — {hit.get('victims_30d')} "
+                                    f"victim(s) posted in last 30 days "
+                                    f"(latest {hit.get('latest')})."),
+                }
+                break
+    except Exception as _e:
+        _log.debug("ransomware.live augmentation failed: %s", _e)
+
     # Belt-and-braces: even with the OUTPUT STYLE rule in every prompt,
     # the LLM occasionally still emits em-dashes in key_findings /
     # summary / threat_level_reasoning. Walk every string in `result`

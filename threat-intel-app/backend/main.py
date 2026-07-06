@@ -113,6 +113,11 @@ async def _lifespan(app):
             ("IP blocklists",  "intel.feeds_loader",        "malicious_ips",   None),
             ("Phishing domains","intel.feeds_loader",       "phishing_domains",None),
             ("Feodo Tracker",  "intel.feeds_loader",        "refresh_feodo_now", None),
+            # abuse.ch SSLBL — ~3 free CSVs pulled from the network on
+            # first call. Pre-warm so the first analyze doesn't pay it.
+            ("SSLBL",          "intel.sslbl",               "_refresh_sync",   None),
+            # Ransomware.live recent-victims feed. Refreshed hourly.
+            ("Ransomware.live","intel.ransomware_live",     "_refresh_sync",   None),
             ("Warning lists",  "intel.warninglist_filter",  "load_warninglists", None),
             ("YARA rules",     "intel.yara_scanner",        "_ruleset",        None),
             # Round-14 ML — sklearn LogisticRegression / GradientBoosting.
