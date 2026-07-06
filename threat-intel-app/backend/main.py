@@ -2849,10 +2849,10 @@ async def scan_file_v2(file: UploadFile = File(...)):
 
     # TI correlation (async) — file_correlation handles VT/MB via the
     # hash; enrich_hash adds OTX file, ThreatFox, URLhaus payload,
-    # CIRCL hashlookup, Team Cymru MHR, Maltiverse,
-    # OpenCTI, VT graph relationships, MalwareBazaar similar samples,
-    # and the deep sandbox aggregator. Run both concurrently so every
-    # hash-capable source the platform supports hits the file.
+    # CIRCL hashlookup, Team Cymru MHR, Maltiverse, OpenCTI, VT graph
+    # relationships, and MalwareBazaar similar samples. Run both
+    # concurrently so every hash-capable source the platform supports
+    # hits the file.
     sha256 = (analysis.get("hashes") or {}).get("sha256")
     md5    = (analysis.get("hashes") or {}).get("md5")
     sha1   = (analysis.get("hashes") or {}).get("sha1")

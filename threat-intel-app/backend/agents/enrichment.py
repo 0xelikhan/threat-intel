@@ -1774,8 +1774,8 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("misp_feeds hash lookup failed: %s", _e)
     # ── Secondary lookups — independent, run concurrently (Team Cymru MHR,
-    #    Maltiverse, OpenCTI, VT graph, MalwareBazaar pivot, deep sandbox). The
-    #    family pivot + deep sandbox depend only on data already collected above. ─
+    #    Maltiverse, OpenCTI, VT graph, MalwareBazaar pivot). The family
+    #    pivot depends only on data already collected above. ─
     from config import config as _cfg
     try:
         from intel.team_cymru import lookup as cymru_lookup

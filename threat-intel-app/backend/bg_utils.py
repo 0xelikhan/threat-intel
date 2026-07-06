@@ -4,8 +4,8 @@ exercise them without paying the full main.py import cost.
 
   - BoundedDict: insertion-order dict with LRU eviction; the standard
     pattern for module-level caches that would otherwise grow forever.
-    Replaces the per-investigation `_results` / `_chats` / `_sandbox_jobs`
-    stores in main.py.
+    Replaces the per-investigation `_results` / `_chats` stores in
+    main.py.
 
   - track_task: registers a fire-and-forget asyncio.Task in a strong-ref
     set + a done-callback that removes it on completion. Without this,

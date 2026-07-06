@@ -40,7 +40,6 @@ DEFAULT_TTL_BY_NAMESPACE: Dict[str, int] = {
     "mitre":         86400,
     "warninglists":  86400,
     "feodo":         86400,
-    "sslbl":         86400,
     "kev":           86400,
     "lolbas":        86400,
     "loldrivers":    86400,

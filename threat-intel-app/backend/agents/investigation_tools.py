@@ -375,8 +375,6 @@ async def _t_lookup_hash(args, config):
         return {"error": "file_hash required"}
     async with _tool_session() as session:
         result = await enrich_hash(session, h, _all_keys(config))
-    # NOTE: enrich_hash already runs the deep sandbox lookup for SHA-256, so we
-    # don't make a second (slow) sandbox call here.
     drv = drv_lookup(h)
     if drv:
         result["loldrivers"] = drv
