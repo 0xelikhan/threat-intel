@@ -96,14 +96,56 @@ async def bgp_ranking(session: aiohttp.ClientSession, ip: str) -> Dict:
 
         r2       = step2.get("response") or {}
         ranking  = r2.get("ranking") or {}
+        rank     = ranking.get("rank")
+        position = ranking.get("position")
+        total    = ranking.get("total_known_asns")
+        desc     = r2.get("asn_description") or ""
+
+        # Derived verdict + human-readable summary. The AI analyst was
+        # reading the raw `rank: 1.82e-06` and calling it "poor" — the
+        # opposite of what a low rank actually means. Emitting a plain
+        # verdict + summary makes the semantics impossible to invert.
+        #
+        # Position is the primary tier signal — it's normalised against
+        # the total ASN count, so it survives CIRCL rebalancing better
+        # than raw rank thresholds. Position=1 is the SINGLE WORST ASN
+        # (most abuse indicators observed on it that day).
+        verdict = "UNKNOWN"
+        rep_word = "unranked"
+        percentile_clean = None
+        if isinstance(position, int) and isinstance(total, int) and total > 0:
+            percentile_clean = round((position / total) * 100, 1)
+            if position <= 200:
+                verdict, rep_word = "MALICIOUS", "very poor"
+            elif position <= 1000:
+                verdict, rep_word = "SUSPICIOUS", "poor"
+            elif position <= 4000:
+                verdict, rep_word = "UNKNOWN", "mixed"
+            else:
+                verdict, rep_word = "CLEAN", "clean"
+
+        summary_bits = [f"AS{asn}"]
+        if desc: summary_bits.append(desc)
+        summary_bits.append(f"{rep_word} reputation")
+        if isinstance(position, int) and isinstance(total, int):
+            summary_bits.append(f"position {position:,}/{total:,} in CIRCL badness index")
+            summary_bits.append(f"cleaner than {percentile_clean}% of ASNs")
+        summary = " · ".join(summary_bits)
+
         return {
             "source":            "CIRCL BGP Ranking",
             "asn":               asn,
-            "asn_description":   r2.get("asn_description") or "",
+            "asn_description":   desc,
             "prefix":            prefix,
-            "rank":              ranking.get("rank"),
-            "ranking_position":  ranking.get("position"),
-            "total_known_asns":  ranking.get("total_known_asns"),
+            "rank":              rank,
+            "ranking_position":  position,
+            "total_known_asns":  total,
+            "percentile_clean":  percentile_clean,
+            "verdict":           verdict,
+            "summary":           summary,
+            "note":              ("CIRCL BGP Ranking: LOWER rank + HIGHER position = "
+                                   "cleaner ASN. position=1 is the single worst ASN "
+                                   "(most abuse indicators)."),
             "observed_at":       latest_ts,
         }
     except Exception as e:

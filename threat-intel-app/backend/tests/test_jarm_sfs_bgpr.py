@@ -166,6 +166,48 @@ def test_bgp_ranking_walks_ipasn_then_asn_rank():
     assert r["asn_description"] == "GOOGLE, US"
     assert r["ranking_position"] == 8984
     assert r["total_known_asns"] == 13677
+    # Verdict + summary are load-bearing: earlier commits let the raw
+    # rank leak into the AI analyst report, which then called an ASN
+    # with rank=0.00017 "poor reputation" — the inverse of the truth.
+    # Assert both the verdict tier AND the summary phrasing so the
+    # regression can't reappear.
+    assert r["verdict"] == "CLEAN"
+    assert "clean reputation" in r["summary"]
+    assert "8,984" in r["summary"] or "8984" in r["summary"]
+    assert r["percentile_clean"] == 65.7   # 8984 / 13677 * 100
+
+
+def test_bgp_ranking_flags_top_ranked_asn_as_malicious():
+    """An ASN at position <= 200 in CIRCL's badness index is in the
+    dirtiest ~1.5% globally. That must map to MALICIOUS so the email
+    composer's verdict gate actually surfaces it."""
+    step1 = {"response": {"2026-07-06T12:00:00": {"asn": "60729",
+                                                     "prefix": "185.220.101.0/24"}}}
+    step2 = {"response": {
+        "asn_description": "TORSERVERS-NET, DE",
+        "ranking": {"rank": 0.089, "position": 105, "total_known_asns": 13886},
+    }}
+
+    class _fake_ctx:
+        def __init__(self, payload):
+            self._payload = payload; self.status = 200
+        async def __aenter__(self): return self
+        async def __aexit__(self, *_a): return False
+        async def json(self): return self._payload
+        async def text(self): return ""
+
+    class _fake_session:
+        def __init__(self): self.calls = 0
+        def post(self, url, **kw):
+            self.calls += 1
+            return _fake_ctx(step1 if self.calls == 1 else step2)
+
+    async def _run():
+        return await bgp_ranking(_fake_session(), "185.220.101.24")
+    r = asyncio.run(_run())
+    assert r["verdict"] == "MALICIOUS"
+    assert "very poor reputation" in r["summary"]
+    assert "0.8" in r["summary"]   # cleaner than 0.8% of ASNs
 
 
 def test_bgp_ranking_surfaces_error_on_no_asn_for_ip():
