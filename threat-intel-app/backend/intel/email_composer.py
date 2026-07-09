@@ -3134,13 +3134,31 @@ def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
             piece += f" (first observed {first_seen[:10]})"
         reputation_bits.append(piece + ".")
 
-    # BGP Ranking (CIRCL) — ASN-level reputation rank. Lower rank = worse
-    # standing. Only mention when the rank is meaningfully bad.
+    # BGP Ranking (CIRCL) — ASN-level reputation. HIGHER rank + LOWER
+    # position = worse reputation (more abuse indicators). Position=1
+    # is the single worst ASN. Only emit the sentence when the derived
+    # verdict is SUSPICIOUS or MALICIOUS — a CLEAN ASN is baseline
+    # signal and adds noise to the client-facing email.
+    #
+    # Historical bug: comment said "Lower rank = worse" (inverted) and
+    # the gate was `rank < 5` — every CIRCL rank is < 5, so every IP
+    # got labelled "poor reputation" including Google DNS. The
+    # analyst-visible summary now uses the module's own verdict field
+    # so there's no way to invert it.
     if bgp and not bgp.get("error"):
-        rank = bgp.get("rank")
-        if rank is not None and isinstance(rank, (int, float)) and rank < 5:
-            asn_desc = bgp.get("asn_description") or ""
-            piece = f"BGP Ranking flags the hosting ASN ({asn_desc or 'unknown'}) with a poor reputation rank of {rank}"
+        verdict = (bgp.get("verdict") or "").upper()
+        if verdict in ("MALICIOUS", "SUSPICIOUS"):
+            asn_desc  = bgp.get("asn_description") or ""
+            position  = bgp.get("ranking_position")
+            total     = bgp.get("total_known_asns")
+            pct       = bgp.get("percentile_clean")
+            tier_word = "very poor" if verdict == "MALICIOUS" else "poor"
+            piece = (f"BGP Ranking flags the hosting ASN "
+                     f"({asn_desc or 'unknown'}) with a {tier_word} "
+                     f"reputation")
+            if isinstance(position, int) and isinstance(total, int):
+                piece += (f" — position {position:,}/{total:,} in the CIRCL "
+                          f"badness index (cleaner than only {pct}% of ASNs)")
             reputation_bits.append(piece + ".")
 
     # Censys — observed open services + TLS cert when present.
