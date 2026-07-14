@@ -1455,6 +1455,19 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("crt.sh enrichment failed for %s: %s", domain, _e)
 
+    # DNSTwister — free, no key. The local `typosquat` check flags a
+    # domain when it's Levenshtein-1 away from a known brand; DNSTwister
+    # tells us which of the algorithmically-generated permutations
+    # someone has actually gone and registered. That's the actionable
+    # phishing-infra signal.
+    try:
+        from intel.dnstwister import enrich as _dnst_enrich
+        dnst = await _dnst_enrich(session, domain)
+        if dnst and (dnst.get("found") or dnst.get("error")):
+            data["dnstwister"] = dnst
+    except Exception as _e:
+        _log.debug("DNSTwister enrichment failed for %s: %s", domain, _e)
+
     # Phishing.Database — synchronous in-memory lookup against the hourly
     # active feed warmed by the lifespan handler. Adds {"hit": True, ...}
     # when the domain is on the active phishing list.

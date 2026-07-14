@@ -415,7 +415,18 @@ def extract_iocs(text: str) -> dict:
             for h in iocextract.extract_hashes(norm):
                 iocs["hashes"].add(h.lower())
             for e in iocextract.extract_emails(norm, refang=True):
-                iocs["emails"].add(e.lower())
+                e = e.lower().strip()
+                # iocextract's email extractor sometimes glues a
+                # preceding token onto the local-part — 'email from
+                # ceo-support@x.com' comes back as 'fromceo-support@x.com'.
+                # Validate that the extracted address actually appears at
+                # a word boundary in the source before accepting it.
+                # Character class is the RFC-close-enough local-part
+                # chars; `[^\w.\-+]` = any non-local-part char.
+                boundary = re.compile(
+                    r"(?:^|[^\w.\-+])" + re.escape(e), re.IGNORECASE)
+                if boundary.search(norm):
+                    iocs["emails"].add(e)
         except ImportError:
             pass
 
