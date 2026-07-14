@@ -819,27 +819,37 @@ function InfrastructureIntel({ result, bare, hideUrlscan = false, hideGeopolitic
               wordBreak: 'break-all' }}>{ioc}</Box>
           </Stack>
 
-          {osint.bgp_ranking && (
-            <MuiPaper elevation={0} sx={{
-              backgroundColor: '#0C1524',
-              border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
-              borderRadius: '4px', p: '8px 12px', mb: 0.75,
-            }}>
-              <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
-                textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.5 }}>
-                BGP ranking · CIRCL
-              </Typography>
-              <Typography sx={{ fontSize: 12, color: 'text.primary' }}>
-                AS{osint.bgp_ranking.asn} — {osint.bgp_ranking.asn_description}
-                {osint.bgp_ranking.country && <> · {osint.bgp_ranking.country}</>}
-              </Typography>
-              {osint.bgp_ranking.rank != null && (
-                <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
-                  rank {osint.bgp_ranking.rank} (lower = worse reputation)
+          {osint.bgp_ranking && !osint.bgp_ranking.error && (() => {
+            const bgp = osint.bgp_ranking;
+            // Verdict tier drives the accent so an analyst can see
+            // clean vs dirty ASN reputation at a glance.
+            const accent = bgp.verdict === 'MALICIOUS' ? '#F14337'
+                         : bgp.verdict === 'SUSPICIOUS' ? '#E6700F'
+                         : bgp.verdict === 'CLEAN'      ? '#17AB1F'
+                         :                                 muiAlpha('#ffffff', 0.12);
+            return (
+              <MuiPaper elevation={0} sx={{
+                backgroundColor: '#0C1524',
+                border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
+                borderLeft: `2px solid ${accent}`,
+                borderRadius: '4px', p: '8px 12px', mb: 0.75,
+              }}>
+                <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
+                  textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.5 }}>
+                  BGP ranking · CIRCL
                 </Typography>
-              )}
-            </MuiPaper>
-          )}
+                <Typography sx={{ fontSize: 12, color: 'text.primary' }}>
+                  {bgp.summary || `AS${bgp.asn} — ${bgp.asn_description}`}
+                </Typography>
+                {bgp.rank != null && (
+                  <Typography sx={{ fontSize: 10, color: 'text.disabled', mt: 0.375 }}>
+                    raw rank {bgp.rank} · position {bgp.ranking_position}/{bgp.total_known_asns}
+                    · higher rank = worse (position 1 = single most abused ASN)
+                  </Typography>
+                )}
+              </MuiPaper>
+            );
+          })()}
 
           {osint.dns_records && (
             <MuiPaper elevation={0} sx={{
@@ -2258,6 +2268,18 @@ function _ocSources(result, ioc, type) {
     });
   }
 
+  // DNSTwister — domain-only. Which of the algorithmic typo permutations
+  // are currently registered (someone owns the lookalike right now).
+  if (d.dnstwister && !d.dnstwister.error && d.dnstwister.found) {
+    const t = d.dnstwister;
+    out.push({
+      source: 'DNSTwister',
+      label:  t.summary,
+      color:  orange,
+      why:    'DNSTwister generated typo permutations of this domain; local DNS resolution confirmed these are currently registered. High-confidence phishing-infra prep signal.',
+    });
+  }
+
   // StopForumSpam — IP + email spam-source reputation. Independent of
   // AbuseIPDB (which is IPS-focused). SFS's `torexit` flag is a
   // secondary Tor signal alongside intel.deception.
@@ -2339,6 +2361,8 @@ function _ocSources(result, ioc, type) {
     opensanctions:       'OpenSanctions',
     // Round-17 free/no-key TI additions.
     stopforumspam:       'StopForumSpam',
+    // Round-18: DNSTwister live typo-permutation registration check.
+    dnstwister:          'DNSTwister',
   };
   const _surfaced = new Set(out.map(r => r.source));
   for (const [key, blob] of Object.entries(d || {})) {
