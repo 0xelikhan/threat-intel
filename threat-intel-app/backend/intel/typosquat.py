@@ -17,6 +17,60 @@ COMMON_BRANDS = [
     "cloudflare", "fastmail", "protonmail", "fedex", "ups", "dhl", "usps",
 ]
 
+# First-party brand-owned domains whose SLD label contains a brand
+# substring — these must NOT be flagged as typosquats. Every M365
+# tenant lives at `<tenant>.onmicrosoft.com`, every OAuth flow round-
+# trips `login.microsoftonline.com`, GCP objects live at
+# `storage.googleapis.com`, etc. Bug that surfaced this list: forwarding-
+# rule log analysis kept labelling `onmicrosoft.com` as a Microsoft
+# lookalike because "microsoft" is a proper substring of "onmicrosoft".
+#
+# Values are the eTLD+1 form (SLD + TLD). Loose subdomain check below.
+LEGIT_BRAND_DOMAINS = frozenset({
+    # Microsoft / M365 / Azure
+    "onmicrosoft.com", "microsoftonline.com", "microsoft365.com",
+    "office.com", "office365.com", "sharepoint.com",
+    "windows.com", "windowsazure.com", "azurewebsites.net",
+    "azureedge.net", "azurecr.io", "azure-api.net", "azurefd.net",
+    "live.com", "hotmail.com", "outlook.com", "office.net",
+    "microsoft.net",
+    # Google
+    "googlemail.com", "googleusercontent.com", "googleapis.com",
+    "gstatic.com", "googletagmanager.com", "googleadservices.com",
+    "google-analytics.com", "googlesyndication.com", "youtube.com",
+    "gmail.com",
+    # Apple
+    "icloud.com", "apple.com", "me.com", "mac.com",
+    # Meta / Facebook
+    "facebook.com", "fbcdn.net", "instagram.com", "whatsapp.com",
+    "messenger.com",
+    # Amazon / AWS
+    "amazonaws.com", "amazon.com", "cloudfront.net", "awsstatic.com",
+    # Other tier-1
+    "linkedin.com", "github.com", "githubusercontent.com",
+    "gitlab.com", "stripe.com", "stripe.network", "paypal.com",
+    "salesforce.com", "force.com", "okta.com", "oktapreview.com",
+    "duosecurity.com", "cloudflare.com", "cloudflareinsights.com",
+    "dropbox.com", "dropboxusercontent.com", "docusign.com",
+    "docusign.net", "slack.com", "slack-edge.com", "zoom.us",
+})
+
+
+def _is_legit_brand_domain(domain: str) -> bool:
+    """True if the domain (or any parent up to eTLD+1) is a first-party
+    brand-owned domain that legitimately contains a brand substring."""
+    d = _normalize(domain)
+    if not d:
+        return False
+    if d in LEGIT_BRAND_DOMAINS:
+        return True
+    # Match any subdomain of a legit brand domain — e.g.
+    # `contoso.onmicrosoft.com` matches `onmicrosoft.com`.
+    for legit in LEGIT_BRAND_DOMAINS:
+        if d.endswith("." + legit):
+            return True
+    return False
+
 
 def _normalize(domain: str) -> str:
     d = (domain or "").lower().strip().lstrip(".")
@@ -80,6 +134,12 @@ _BRAND_SIMILARITY_THRESHOLD = 0.85
 
 def looks_like_brand(domain: str) -> dict | None:
     """Heuristic brand-impersonation check — fast, no DNS lookups."""
+    # First-party brand domains (onmicrosoft.com, microsoftonline.com,
+    # googleusercontent.com, etc.) short-circuit before the substring
+    # matcher — otherwise "microsoft" would flag inside "onmicrosoft"
+    # and every M365 tenant would show as a typosquat.
+    if _is_legit_brand_domain(domain):
+        return None
     label = _root_label(domain)
     if not label or len(label) < 4:
         return None

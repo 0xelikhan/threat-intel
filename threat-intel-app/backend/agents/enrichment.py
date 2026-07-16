@@ -1117,8 +1117,36 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
 
     abuse_data  = _p_abuse(results[0])
     ipinfo_data = _p_ipinfo(results[1])
+    # Onionoo authoritative Tor Exit lookup (offline, no key). Falls
+    # back to the legacy _tor list-only check when the module is
+    # unavailable so the shape stays stable for downstream readers.
+    try:
+        from intel.tor_exits import lookup as _onionoo_lookup
+        _tor_hit = _onionoo_lookup(ip)
+    except Exception:
+        _tor_hit = None
+    if _tor_hit:
+        _tor_blob = {
+            "isExitNode":         True,
+            "source":             "Onionoo (Tor Project)",
+            "fingerprint":        _tor_hit.get("fingerprint"),
+            "as_number":          _tor_hit.get("as_number"),
+            "as_name":            _tor_hit.get("as_name"),
+            "country":            _tor_hit.get("country"),
+            "verified_host_names": _tor_hit.get("verified_host_names") or [],
+            "last_seen":          _tor_hit.get("last_seen"),
+            "matched_field":      _tor_hit.get("matched_field"),
+            "verdict":            "SUSPICIOUS",
+            "summary":            (f"Tor exit relay {(_tor_hit.get('fingerprint') or '')[:12]}… "
+                                    f"in AS{_tor_hit.get('as_number') or '?'} "
+                                    f"({_tor_hit.get('as_name') or '?'}, "
+                                    f"{(_tor_hit.get('country') or '').upper()}) "
+                                    f"— last seen {_tor_hit.get('last_seen') or 'unknown'}"),
+        }
+    else:
+        _tor_blob = {"isExitNode": ip in tor_nodes}
     data = {
-        "tor":         {"isExitNode": ip in tor_nodes},
+        "tor":         _tor_blob,
         "abuseipdb":   abuse_data,
         "ipinfo":      ipinfo_data,
         "virustotal":  _p_vt_ip(results[2]),
@@ -1356,6 +1384,28 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
             data["stopforumspam"] = sfs
     except Exception as _e:
         _log.debug("StopForumSpam IP lookup failed for %s: %s", ip, _e)
+
+    # ThreatView.io — high-confidence Cobalt Strike team-server IPs.
+    # Offline lookup, free, no key. Adds a framework tag the abuse.ch
+    # trio can't provide (they're family/dropper focused).
+    try:
+        from intel.threatview_c2 import lookup as _tv_lookup
+        tv = _tv_lookup(ip)
+        if tv:
+            data["threatview_c2"] = tv
+    except Exception as _e:
+        _log.debug("ThreatView C2 lookup failed for %s: %s", ip, _e)
+
+    # ViriBack Tracker — malware C2 panel index with family attribution.
+    # Free CSV, no key. Adds per-IP malware family tags where Feodo /
+    # ThreatFox / URLhaus don't always carry one.
+    try:
+        from intel.viriback import lookup_ip as _vb_ip
+        vb = _vb_ip(ip)
+        if vb:
+            data["viriback"] = vb
+    except Exception as _e:
+        _log.debug("ViriBack IP lookup failed for %s: %s", ip, _e)
 
     _cache[ck] = data
     return data
@@ -2149,6 +2199,17 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
             data["admin_endpoint"] = admin_result
     except Exception:
         pass
+
+    # ViriBack — malware C2 panel index with family attribution. Free
+    # offline lookup after warm; complements URLhaus (which flags
+    # payload-hosting URLs) by covering C2 admin / login endpoints.
+    try:
+        from intel.viriback import lookup_url as _vb_url
+        vb = _vb_url(url)
+        if vb:
+            data["viriback"] = vb
+    except Exception as _e:
+        _log.debug("ViriBack URL lookup failed for %s: %s", url, _e)
 
     _cache[ck] = data
     return data

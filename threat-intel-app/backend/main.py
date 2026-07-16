@@ -115,6 +115,12 @@ async def _lifespan(app):
             ("Feodo Tracker",  "intel.feeds_loader",        "refresh_feodo_now", None),
             # Ransomware.live recent-victims feed. Refreshed hourly.
             ("Ransomware.live","intel.ransomware_live",     "_refresh_sync",   None),
+            # Tor Project Onionoo exit-relay index. Refreshed 6h.
+            ("Tor exits (Onionoo)", "intel.tor_exits",      "_refresh_sync",   None),
+            # ThreatView high-confidence Cobalt Strike C2 IPs.
+            ("ThreatView CS C2",    "intel.threatview_c2",  "_refresh_sync",   None),
+            # ViriBack malware C2 panel index (family attribution).
+            ("ViriBack Tracker",    "intel.viriback",       "_refresh_sync",   None),
             ("Warning lists",  "intel.warninglist_filter",  "load_warninglists", None),
             ("YARA rules",     "intel.yara_scanner",        "_ruleset",        None),
             # Round-14 ML — sklearn LogisticRegression / GradientBoosting.
