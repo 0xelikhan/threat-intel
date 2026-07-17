@@ -43,6 +43,10 @@ vendor/
 scratch/
 *.local.md
 
+# /run drive artefacts — Chrome screenshots + user-data-dir profile.
+# Regenerated on every run; never durable.
+**/_shots/
+
 # OS
 .DS_Store
 .vscode/
