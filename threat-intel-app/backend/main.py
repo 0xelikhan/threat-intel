@@ -121,6 +121,10 @@ async def _lifespan(app):
             ("ThreatView CS C2",    "intel.threatview_c2",  "_refresh_sync",   None),
             # ViriBack malware C2 panel index (family attribution).
             ("ViriBack Tracker",    "intel.viriback",       "_refresh_sync",   None),
+            # Wiz cloud-threat slug index (actors + tools + techniques + incidents).
+            ("Wiz cloud threats",   "intel.wiz_cloud_threats", "_refresh_sync", None),
+            # DFIQ — curated forensic questions catalog (Google).
+            ("DFIQ questions",      "intel.dfiq",           "_refresh_sync",   None),
             ("Warning lists",  "intel.warninglist_filter",  "load_warninglists", None),
             ("YARA rules",     "intel.yara_scanner",        "_ruleset",        None),
             # Round-14 ML — sklearn LogisticRegression / GradientBoosting.

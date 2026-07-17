@@ -1612,6 +1612,30 @@ Tool-budget tips:
                         "## Baseline enrichment summary (do NOT re-query these IPs/domains/hashes)\n"
                         + json.dumps(compressed, separators=(",", ":"))[:2200]
                     )
+                # DFIQ (Google Digital Forensics Investigative Questions) —
+                # curated forensic starter questions relevant to this alert
+                # type. Seeds the AI's probing_questions with practitioner-
+                # authored material instead of pure LLM inference. Bounded
+                # to top-5 by keyword overlap.
+                try:
+                    from intel.dfiq import get_questions as _dfiq_get
+                    _dfiq = _dfiq_get(alert_type=alert_type,
+                                       raw_text=(state.get("raw_input") or "")[:2000],
+                                       max_results=5)
+                    if _dfiq:
+                        _dfiq_lines = "\n".join(
+                            f"  - [{q['id']}] {q['name']}" for q in _dfiq
+                        )
+                        _sections.append(
+                            "## Reference DFIQ questions (Google's Digital Forensics "
+                            "Investigative Questions catalog — curated by DF/IR "
+                            "practitioners, matched to this alert)\n" + _dfiq_lines +
+                            "\nUse these as seeds when crafting probing_questions. "
+                            "Adapt the phrasing to the specific IOCs in this alert; "
+                            "don't just quote them verbatim."
+                        )
+                except Exception as _e:
+                    _log.debug("DFIQ injection failed: %s", _e)
                 _sections.append(
                     "Investigate this alert. Use tools as needed to fill gaps. "
                     "When done, produce the final JSON assessment."
@@ -2206,6 +2230,40 @@ Tool-budget tips:
                 result["malware_family_galaxy"] = gx
     except Exception as _e:
         _log.debug("misp_galaxy augmentation failed: %s", _e)
+
+    # Wiz Threat Landscape — cloud-specific actors / tools / techniques
+    # / incidents. Complements the on-prem-focused MISP galaxy. When
+    # the AI names an actor or family that matches a Wiz slug, tag the
+    # alert as cloud-tracked with a link to the Wiz page.
+    try:
+        from intel.wiz_cloud_threats import lookup as _wiz_lookup
+        wiz_hits: dict = {}
+        ta = result.get("threat_actor")
+        mf = result.get("malware_family")
+        for name in filter(None, [
+            (ta or {}).get("name") if isinstance(ta, dict) else None,
+            mf if isinstance(mf, str) else None,
+        ]):
+            hit = _wiz_lookup(name)
+            if hit:
+                wiz_hits[name] = {
+                    "category": hit.get("category"),
+                    "url":      hit.get("url"),
+                    "slug":     hit.get("slug"),
+                    "match":    hit.get("match"),
+                }
+        if wiz_hits:
+            _pretty = ", ".join(
+                f"{name} ({rec['category']})"
+                for name, rec in wiz_hits.items()
+            )
+            result["wiz_cloud_threats"] = {
+                "source":  "Wiz Threat Landscape",
+                "matches": wiz_hits,
+                "summary": f"Wiz cloud-threat catalog matched: {_pretty}",
+            }
+    except Exception as _e:
+        _log.debug("Wiz threat augmentation failed: %s", _e)
 
     # Ransomware.live — active-actor freshness. If the named actor or
     # family has posted victims in the last 30 days, surface that so
