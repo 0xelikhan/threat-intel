@@ -2280,6 +2280,30 @@ function _ocSources(result, ioc, type) {
     });
   }
 
+  // ThreatView.io — high-confidence Cobalt Strike team-server IPs.
+  // Framework-specific attribution the abuse.ch trio doesn't provide.
+  if (d.threatview_c2 && !d.threatview_c2.error && d.threatview_c2.found) {
+    const tv = d.threatview_c2;
+    out.push({
+      source: 'ThreatView CS C2',
+      label:  `${tv.framework || 'Cobalt Strike'} team server`,
+      color:  red,
+      why:    tv.summary || 'ThreatView.io Proactive Hunter — high-confidence Cobalt Strike team-server IP. Framework identification beyond the abuse.ch trio.',
+    });
+  }
+
+  // ViriBack — malware C2 panel index with family attribution. Adds
+  // per-IOC family tags when Feodo/ThreatFox/URLhaus lack them.
+  if (d.viriback && !d.viriback.error && d.viriback.found) {
+    const vb = d.viriback;
+    out.push({
+      source: 'ViriBack',
+      label:  vb.summary,
+      color:  red,
+      why:    'ViriBack Tracker — malware C2 panel index. Provides family attribution (RedLine / Lumma / Amadey / StealC / Vidar / MetaStealer / etc.) for IPs and URLs where abuse.ch just says \'malicious\'.',
+    });
+  }
+
   // StopForumSpam — IP + email spam-source reputation. Independent of
   // AbuseIPDB (which is IPS-focused). SFS's `torexit` flag is a
   // secondary Tor signal alongside intel.deception.
@@ -2363,6 +2387,9 @@ function _ocSources(result, ioc, type) {
     stopforumspam:       'StopForumSpam',
     // Round-18: DNSTwister live typo-permutation registration check.
     dnstwister:          'DNSTwister',
+    // Round-18 Yeti-mined sources.
+    threatview_c2:       'ThreatView CS C2',
+    viriback:            'ViriBack',
   };
   const _surfaced = new Set(out.map(r => r.source));
   for (const [key, blob] of Object.entries(d || {})) {
