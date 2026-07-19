@@ -213,6 +213,18 @@ def reset_network_timings() -> None:
     _network_timings.clear()
 
 
+def _is_abusech_host(host: str) -> bool:
+    """abuse.ch runs mb-api / threatfox-api / urlhaus-api under a shared
+    Auth-Key quota. Their infra returns HTTP 401 when the quota is
+    hot-spiked from concurrent fan-out calls even though the key is
+    valid — the 401 self-heals in <1s. Treating a single 401 as an
+    auth-failure trips the circuit breaker's 5-minute cooldown and
+    knocks out ALL three subdomains together (they share the host root
+    for breaker purposes). Retry once + short delay to ride out the
+    burst before recording failure."""
+    return isinstance(host, str) and host.endswith(".abuse.ch")
+
+
 async def _get(session, url, **kw):
     """Issue one GET inside the global semaphore, bounded by the per-source
     safety timeout, gated by the per-host circuit breaker. Never raises —
@@ -239,6 +251,10 @@ async def _get(session, url, **kw):
     try:
         async with _SEMAPHORE:
             status, payload = await asyncio.wait_for(_do(), timeout=safety)
+            # abuse.ch: silent-retry on 401 before recording a failure.
+            if status in (401, 403) and _is_abusech_host(host):
+                await asyncio.sleep(1.0)
+                status, payload = await asyncio.wait_for(_do(), timeout=safety)
         _record_timing(host, (time.perf_counter() - _t0) * 1000.0,
                         ok=True, status=status)
         # Tag categorical failures so the frontend can render them
@@ -291,6 +307,10 @@ async def _post(session, url, **kw):
     try:
         async with _SEMAPHORE:
             status, payload = await asyncio.wait_for(_do(), timeout=safety)
+            # abuse.ch: silent-retry on 401. See _is_abusech_host docstring.
+            if status in (401, 403) and _is_abusech_host(host):
+                await asyncio.sleep(1.0)
+                status, payload = await asyncio.wait_for(_do(), timeout=safety)
         if status in (401, 403):
             if host: breaker.record_failure(host)
             return {"error": f"auth failed (HTTP {status})", "error_type": "auth_failed"}
