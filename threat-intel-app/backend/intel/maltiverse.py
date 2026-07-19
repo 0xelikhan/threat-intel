@@ -42,12 +42,27 @@ async def lookup(ioc_type: str, value: str, api_key: str = "") -> dict | None:
     if not d:
         return None
     classification = (d.get("classification") or "").lower()
+    # Historical-noise gate: Maltiverse aggregates ~40 feeds, so even
+    # 8.8.8.8 accumulates a 44-entry `blacklist` array (DNS reflection
+    # attacks TARGET public DNS, so those feeds list 8.8.8.8 as an
+    # associated address). Same story with `tag` — Google DNS carries
+    # "asyncrat, c2, backdoor" tags derived from historical reflection
+    # incidents. When the AI investigation prompt reads that raw blob
+    # it writes prose like "Maltiverse associates this IP with AsyncRAT"
+    # even though the definitive `classification` field says whitelist.
+    #
+    # Only surface the noisy arrays when Maltiverse's own verdict is
+    # malicious/suspicious. For whitelist / neutral IPs, callers see
+    # just the classification + benign metadata (ASN, country) and
+    # don't get anchored on stale reflection-attack labels.
+    is_flagged = classification in ("malicious", "suspicious")
     return {
         "source":         "Maltiverse",
         "classification": classification or "neutral",
-        "hit":            classification in ("malicious", "suspicious"),
-        "blacklist":      [b.get("description") for b in (d.get("blacklist") or [])][:5],
-        "tag":            d.get("tag", [])[:8],
+        "hit":            is_flagged,
+        "blacklist":      ([b.get("description") for b in (d.get("blacklist") or [])][:5]
+                             if is_flagged else []),
+        "tag":            (d.get("tag", [])[:8] if is_flagged else []),
         "first_seen":     d.get("first_seen"),
         "last_seen":      d.get("last_seen"),
         "asn_name":       d.get("asn_name"),
