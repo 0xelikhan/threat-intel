@@ -42,7 +42,9 @@ _TTL_SECONDS = 24 * 3600
 # Matches `/all-actors/0ktapus`, `/all-tools/4l4md4r-loader-and-stager`, etc.
 _SLUG_RE = re.compile(r'"/all-([a-z]+)/([a-z0-9][a-z0-9\-]{1,120})"')
 
-_lock = threading.Lock()
+_lock = threading.RLock()  # reentrant: _ensure_loaded holds it, then
+                            # _refresh_sync re-acquires — a plain Lock
+                            # deadlocks; RLock is a drop-in fix.
 _state: Dict[str, Any] = {
     "loaded_at":     0.0,
     "by_slug":       {},      # {"0ktapus": {"category": "actors", "url": ...}}

@@ -29,7 +29,9 @@ _log = logging.getLogger("recon.intel.viriback")
 _URL = "https://tracker.viriback.com/dump.php"
 _TTL_SECONDS = 12 * 3600
 
-_lock = threading.Lock()
+_lock = threading.RLock()  # reentrant: _ensure_loaded holds it, then
+                            # _refresh_sync re-acquires — a plain Lock
+                            # deadlocks; RLock is a drop-in fix.
 _state: Dict[str, Any] = {
     "loaded_at":   0.0,
     "by_ip":       {},   # {"1.2.3.4": [{"family": "Amadey", ...}, ...]}
