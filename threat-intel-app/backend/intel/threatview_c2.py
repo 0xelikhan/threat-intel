@@ -25,7 +25,9 @@ _log = logging.getLogger("recon.intel.threatview_c2")
 _URL = "https://threatview.io/Downloads/High-Confidence-CobaltstrikeC2_IP_feed.txt"
 _TTL_SECONDS = 12 * 3600
 
-_lock = threading.Lock()
+_lock = threading.RLock()  # reentrant: _ensure_loaded holds it, then
+                            # _refresh_sync re-acquires — a plain Lock
+                            # deadlocks; RLock is a drop-in fix.
 _state: Dict[str, Any] = {
     "loaded_at": 0.0,
     "ips":       set(),   # {str}

@@ -52,7 +52,9 @@ _STOPWORDS = frozenset({
     "computer","system","device","file","data","log","logs",
 })
 
-_lock = threading.Lock()
+_lock = threading.RLock()  # reentrant: _ensure_loaded holds it, then
+                            # _refresh_sync re-acquires — a plain Lock
+                            # deadlocks; RLock is a drop-in fix.
 _state: Dict[str, Any] = {
     "loaded_at":  0.0,
     "questions":  [],   # [{id, name, facet_ids, keywords}, ...]

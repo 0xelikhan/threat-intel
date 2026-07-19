@@ -31,7 +31,9 @@ _URLS = {
     "groups":       "https://api.ransomware.live/v2/groups",
 }
 
-_lock = threading.Lock()
+_lock = threading.RLock()  # reentrant: _ensure_loaded holds it, then
+                            # _refresh_sync re-acquires — a plain Lock
+                            # deadlocks; RLock is a drop-in fix.
 _state: Dict[str, Any] = {
     "loaded_at":    0.0,
     "by_group":     {},   # {group_name lower: {"latest": iso, "count_30d": int, "recent": [...]}}
