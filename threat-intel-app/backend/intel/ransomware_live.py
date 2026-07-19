@@ -55,12 +55,14 @@ def _refresh_sync() -> None:
     except Exception as e:
         _log.warning("ransomware.live recent-victims fetch failed: %s", e)
         _state["error"] = str(e)[:200]
-        _state["loaded_at"] = time.time()
+        # Short backoff — retry in ~60s, not the full 1h TTL. See
+        # threatview_c2.py for the same pattern + rationale.
+        _state["loaded_at"] = time.time() - _TTL_SECONDS + 60
         return
 
     if not isinstance(recent, list):
         _state["error"] = "unexpected recent-victims shape"
-        _state["loaded_at"] = time.time()
+        _state["loaded_at"] = time.time() - _TTL_SECONDS + 60
         return
 
     by_group: Dict[str, Dict[str, Any]] = {}
@@ -117,7 +119,7 @@ def _ensure_loaded() -> None:
             _refresh_sync()
         except Exception as e:
             _state["error"] = str(e)[:200]
-            _state["loaded_at"] = time.time()   # backoff
+            _state["loaded_at"] = time.time() - _TTL_SECONDS + 60
 
 
 def lookup_group(name: str) -> Optional[Dict[str, Any]]:

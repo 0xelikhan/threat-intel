@@ -144,7 +144,8 @@ def _refresh_sync() -> None:
     except Exception as e:
         with _lock:
             _state["error"] = str(e)[:200]
-            _state["loaded_at"] = time.time()
+            # Short backoff on failure; see threatview_c2.py rationale.
+            _state["loaded_at"] = time.time() - _TTL_SECONDS + 60
         _log.warning("DFIQ refresh failed: %s", e)
         return
     with _lock:
@@ -164,7 +165,7 @@ def _ensure_loaded() -> None:
             _refresh_sync()
         except Exception as e:
             _state["error"] = str(e)[:200]
-            _state["loaded_at"] = time.time()
+            _state["loaded_at"] = time.time() - _TTL_SECONDS + 60
 
 
 def get_questions(alert_type: str = "", raw_text: str = "",

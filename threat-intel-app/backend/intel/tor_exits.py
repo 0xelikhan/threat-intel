@@ -79,7 +79,10 @@ def _refresh_sync() -> None:
     except Exception as e:
         with _lock:
             _state["error"] = str(e)[:200]
-            _state["loaded_at"] = time.time()   # backoff
+            # Short backoff — retry in ~60s instead of stalling for
+            # the full 6h TTL. See threatview_c2.py for the same
+            # pattern + rationale.
+            _state["loaded_at"] = time.time() - _TTL_SECONDS + 60
         _log.warning("Onionoo fetch failed: %s", e)
         return
 
@@ -123,7 +126,7 @@ def _ensure_loaded() -> None:
             _refresh_sync()
         except Exception as e:
             _state["error"] = str(e)[:200]
-            _state["loaded_at"] = time.time()   # backoff
+            _state["loaded_at"] = time.time() - _TTL_SECONDS + 60
 
 
 def lookup(ip: str) -> Optional[Dict[str, Any]]:

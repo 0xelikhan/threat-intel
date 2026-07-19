@@ -49,7 +49,8 @@ def _refresh_sync() -> None:
     except Exception as e:
         with _lock:
             _state["error"] = str(e)[:200]
-            _state["loaded_at"] = time.time()
+            # Short backoff on failure; see threatview_c2.py rationale.
+            _state["loaded_at"] = time.time() - _TTL_SECONDS + 60
         _log.warning("ViriBack fetch failed: %s", e)
         return
 
@@ -95,7 +96,7 @@ def _ensure_loaded() -> None:
             _refresh_sync()
         except Exception as e:
             _state["error"] = str(e)[:200]
-            _state["loaded_at"] = time.time()
+            _state["loaded_at"] = time.time() - _TTL_SECONDS + 60
 
 
 def _pack(records: list, ip: str = "", url: str = "") -> Dict[str, Any]:
