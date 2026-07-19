@@ -2211,21 +2211,32 @@ Tool-budget tips:
     # may still emit. The submitted input is treated as a single alert.
     _log_correlation = None
 
+    # Actor + family names the AI structured out of the alert. Every
+    # attribution-style augmentation below iterates the same list, so
+    # extracting once avoids three copies of the filter/isinstance dance.
+    _named_entities: list = []
+    _ta = result.get("threat_actor")
+    if isinstance(_ta, dict) and _ta.get("name"):
+        _named_entities.append(_ta["name"])
+    _mf = result.get("malware_family")
+    if isinstance(_mf, str) and _mf:
+        _named_entities.append(_mf)
+
     # MISP galaxy augmentation — when the AI named a threat_actor or
     # malware_family, look it up in the bundled galaxy clusters and
     # attach the canonical record (aliases, country, sectors, refs) so
     # the analyst has cross-referenced context, not just the AI's loose
-    # naming. Fully optional: missing galaxies just mean None matches.
+    # naming. Attachment shape is bespoke (galaxy embeds INSIDE the
+    # threat_actor dict for actors, sits at malware_family_galaxy for
+    # families) — kept separate for that reason.
     try:
         from intel.misp_galaxies import lookup_actor, lookup_malware
-        ta = result.get("threat_actor")
-        if isinstance(ta, dict) and ta.get("name"):
-            gx = lookup_actor(ta["name"])
+        if isinstance(_ta, dict) and _ta.get("name"):
+            gx = lookup_actor(_ta["name"])
             if gx:
-                ta["misp_galaxy"] = gx
-        mf = result.get("malware_family")
-        if isinstance(mf, str) and mf:
-            gx = lookup_malware(mf)
+                _ta["misp_galaxy"] = gx
+        if isinstance(_mf, str) and _mf:
+            gx = lookup_malware(_mf)
             if gx:
                 result["malware_family_galaxy"] = gx
     except Exception as _e:
@@ -2238,12 +2249,7 @@ Tool-budget tips:
     try:
         from intel.wiz_cloud_threats import lookup as _wiz_lookup
         wiz_hits: dict = {}
-        ta = result.get("threat_actor")
-        mf = result.get("malware_family")
-        for name in filter(None, [
-            (ta or {}).get("name") if isinstance(ta, dict) else None,
-            mf if isinstance(mf, str) else None,
-        ]):
+        for name in _named_entities:
             hit = _wiz_lookup(name)
             if hit:
                 wiz_hits[name] = {
@@ -2268,15 +2274,12 @@ Tool-budget tips:
     # Ransomware.live — active-actor freshness. If the named actor or
     # family has posted victims in the last 30 days, surface that so
     # the analyst response reflects "this group is operating right now"
-    # instead of citing the static galaxy record alone.
+    # instead of citing the static galaxy record alone. Stops at the
+    # first hit — surfacing multiple active groups on the same alert
+    # is noise for the recommended-action banner.
     try:
         from intel.ransomware_live import lookup_group as _rw_group
-        ta = result.get("threat_actor")
-        mf = result.get("malware_family")
-        for name in filter(None, [
-            (ta or {}).get("name") if isinstance(ta, dict) else None,
-            mf if isinstance(mf, str) else None,
-        ]):
+        for name in _named_entities:
             hit = _rw_group(name)
             if hit and hit.get("victims_30d", 0) > 0:
                 result["ransomware_live"] = {

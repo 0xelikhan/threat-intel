@@ -127,7 +127,7 @@ async def bgp_ranking(session: aiohttp.ClientSession, ip: str) -> Dict:
         summary_bits = [f"AS{asn}"]
         if desc: summary_bits.append(desc)
         summary_bits.append(f"{rep_word} reputation")
-        if isinstance(position, int) and isinstance(total, int):
+        if isinstance(position, int) and isinstance(total, int) and total > 0:
             summary_bits.append(f"position {position:,}/{total:,} in CIRCL badness index")
             summary_bits.append(f"cleaner than {percentile_clean}% of ASNs")
         summary = " · ".join(summary_bits)

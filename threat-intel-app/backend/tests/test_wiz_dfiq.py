@@ -8,10 +8,28 @@ Every test stubs the network so the suite stays offline.
 
 from __future__ import annotations
 
+import copy
 import time
 from unittest.mock import patch
 
+import pytest
+
 from intel import wiz_cloud_threats, dfiq
+
+
+@pytest.fixture(autouse=True)
+def _snapshot_module_state():
+    """Same rationale as test_round18_sources.py: tests write to
+    module-level `_state` directly, restore original values after each
+    test so ordering can't leak fixtures across tests."""
+    saved = {
+        wiz_cloud_threats: copy.deepcopy(wiz_cloud_threats._state),
+        dfiq:              copy.deepcopy(dfiq._state),
+    }
+    yield
+    for mod, snapshot in saved.items():
+        mod._state.clear()
+        mod._state.update(snapshot)
 
 
 # ─── Wiz cloud threats ───────────────────────────────────────────────

@@ -61,12 +61,9 @@ def _slug_to_display(slug: str) -> str:
 
 
 def _fetch_page(path: str) -> str:
-    req = urllib.request.Request(f"{_BASE}{path}", headers={
-        "User-Agent": "RECON-ThreatIntel/1.0",
-        "Accept":     "text/html",
-    })
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return r.read().decode("utf-8", errors="ignore")
+    from intel._http import fetch_bytes
+    return fetch_bytes(f"{_BASE}{path}", timeout=30, accept="text/html")\
+        .decode("utf-8", errors="ignore")
 
 
 def _refresh_sync() -> None:
@@ -151,26 +148,30 @@ def lookup(name: str) -> Optional[Dict[str, Any]]:
     q = _normalise_query(name)
     if not q:
         return None
-    by_name = _state.get("by_name") or {}
-    # Exact match after normalisation
-    if q in by_name:
-        rec = by_name[q]
-        return {**rec, "match": "exact"}
-    # Loose containment — either direction — but only when the shorter
-    # side is >= 4 chars so a 3-letter query like "apt" doesn't match
-    # every APT slug.
-    if len(q) >= 4:
-        for k, rec in by_name.items():
-            if len(k) >= 4 and (q in k or k in q):
-                return {**rec, "match": "loose"}
-    return None
+    # Read under the same lock _refresh_sync writes under. Prevents
+    # `dictionary changed size during iteration` when a lookup lands
+    # in the middle of a refresh cycle.
+    with _lock:
+        by_name = _state.get("by_name") or {}
+        # Exact match after normalisation
+        if q in by_name:
+            return {**by_name[q], "match": "exact"}
+        # Loose containment — either direction — but only when the shorter
+        # side is >= 4 chars so a 3-letter query like "apt" doesn't match
+        # every APT slug.
+        if len(q) >= 4:
+            for k, rec in by_name.items():
+                if len(k) >= 4 and (q in k or k in q):
+                    return {**rec, "match": "loose"}
+        return None
 
 
 def stats() -> Dict[str, Any]:
     _ensure_loaded()
-    return {
-        "loaded_at":    _state.get("loaded_at"),
-        "total_slugs":  len(_state.get("by_slug") or {}),
-        "count_by_cat": _state.get("count_by_cat") or {},
-        "error":        _state.get("error"),
-    }
+    with _lock:
+        return {
+            "loaded_at":    _state.get("loaded_at"),
+            "total_slugs":  len(_state.get("by_slug") or {}),
+            "count_by_cat": _state.get("count_by_cat") or {},
+            "error":        _state.get("error"),
+        }

@@ -42,13 +42,10 @@ _state: Dict[str, Any] = {
 
 
 def _refresh_sync() -> None:
-    req = urllib.request.Request(_URL, headers={
-        "User-Agent": "RECON-ThreatIntel/1.0",
-        "Accept":     "text/csv",
-    })
+    from intel._http import fetch_bytes
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            text = r.read().decode("utf-8", errors="ignore")
+        text = fetch_bytes(_URL, timeout=30, accept="text/csv")\
+            .decode("utf-8", errors="ignore")
     except Exception as e:
         with _lock:
             _state["error"] = str(e)[:200]
@@ -135,7 +132,10 @@ def lookup_ip(ip: str) -> Optional[Dict[str, Any]]:
     _ensure_loaded()
     if not isinstance(ip, str) or not ip:
         return None
-    recs = (_state.get("by_ip") or {}).get(ip.strip())
+    # Read under lock — _refresh_sync rebuilds by_ip and by_url in
+    # separate assignments; unlocked reads can catch a mid-refresh state.
+    with _lock:
+        recs = (_state.get("by_ip") or {}).get(ip.strip())
     return _pack(recs, ip=ip) if recs else None
 
 
@@ -143,16 +143,18 @@ def lookup_url(url: str) -> Optional[Dict[str, Any]]:
     _ensure_loaded()
     if not isinstance(url, str) or not url:
         return None
-    rec = (_state.get("by_url") or {}).get(url.strip())
+    with _lock:
+        rec = (_state.get("by_url") or {}).get(url.strip())
     return _pack([rec], url=url) if rec else None
 
 
 def stats() -> Dict[str, Any]:
     _ensure_loaded()
-    return {
-        "loaded_at": _state.get("loaded_at"),
-        "ip_count":  len(_state.get("by_ip") or {}),
-        "url_count": len(_state.get("by_url") or {}),
-        "families":  len(_state.get("family_counts") or {}),
-        "error":     _state.get("error"),
-    }
+    with _lock:
+        return {
+            "loaded_at": _state.get("loaded_at"),
+            "ip_count":  len(_state.get("by_ip") or {}),
+            "url_count": len(_state.get("by_url") or {}),
+            "families":  len(_state.get("family_counts") or {}),
+            "error":     _state.get("error"),
+        }

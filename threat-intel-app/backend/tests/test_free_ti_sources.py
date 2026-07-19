@@ -15,11 +15,24 @@ into the right slot.
 from __future__ import annotations
 
 import asyncio
+import copy
 from unittest.mock import patch
+
+import pytest
 
 from intel import (
     crt_sh, cve_search, vulnrichment, opensanctions, ransomware_live,
 )
+
+
+@pytest.fixture(autouse=True)
+def _snapshot_ransomware_live_state():
+    """test_ransomware_live_* mutate module-level `_state`; restore
+    it after each test so ordering can't leak fixtures."""
+    saved = copy.deepcopy(ransomware_live._state)
+    yield
+    ransomware_live._state.clear()
+    ransomware_live._state.update(saved)
 
 
 class _null_session:
