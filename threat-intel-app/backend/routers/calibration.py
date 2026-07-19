@@ -40,8 +40,7 @@ class CalibrationOverrideRequest(BaseModel):
 async def calibration_override(req: CalibrationOverrideRequest):
     """Record an analyst override of the AI verdict. Returns the stored
     record (with computed input_hash + prompt_version) so the UI can
-    confirm. The JSONL log is consumed by scripts/eval_prompts.py for
-    A/B testing prompt changes against historical analyst judgement."""
+    confirm."""
     from intel.calibration_log import record_override
     rec = record_override(
         raw_input            = req.raw_input,
