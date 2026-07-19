@@ -37,13 +37,10 @@ _state: Dict[str, Any] = {
 
 
 def _refresh_sync() -> None:
-    req = urllib.request.Request(_URL, headers={
-        "User-Agent": "RECON-ThreatIntel/1.0",
-        "Accept":     "text/plain",
-    })
+    from intel._http import fetch_bytes
     try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            text = r.read().decode("utf-8", errors="ignore")
+        text = fetch_bytes(_URL, timeout=20, accept="text/plain")\
+            .decode("utf-8", errors="ignore")
     except Exception as e:
         with _lock:
             _state["error"] = str(e)[:200]
@@ -93,22 +90,27 @@ def lookup(ip: str) -> Optional[Dict[str, Any]]:
     _ensure_loaded()
     if not isinstance(ip, str) or not ip:
         return None
-    if ip.strip() not in (_state.get("ips") or set()):
-        return None
+    # Read the ips set + note under lock — _refresh_sync replaces both
+    # atomically per key but 'in' + subsequent .get() are separate ops.
+    with _lock:
+        if ip.strip() not in (_state.get("ips") or set()):
+            return None
+        note = (_state.get("generated_note", "") or "")[:80]
     return {
         "source":       "ThreatView.io CS C2",
         "found":        True,
         "verdict":      "MALICIOUS",
         "framework":    "Cobalt Strike",
         "summary":      (f"IP is on ThreatView's high-confidence Cobalt Strike "
-                          f"team-server list ({_state.get('generated_note', '')[:80]})"),
+                          f"team-server list ({note})"),
     }
 
 
 def stats() -> Dict[str, Any]:
     _ensure_loaded()
-    return {
-        "loaded_at": _state.get("loaded_at"),
-        "ip_count":  len(_state.get("ips") or set()),
-        "error":     _state.get("error"),
-    }
+    with _lock:
+        return {
+            "loaded_at": _state.get("loaded_at"),
+            "ip_count":  len(_state.get("ips") or set()),
+            "error":     _state.get("error"),
+        }

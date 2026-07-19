@@ -73,13 +73,9 @@ def _valid_ip(addr: str) -> bool:
 def _refresh_sync() -> None:
     """Blocking Onionoo fetch. Called from lifespan warm loop via
     to_thread; also self-refreshes via _ensure_loaded on lookup."""
-    req = urllib.request.Request(_URL, headers={
-        "User-Agent": "RECON-ThreatIntel/1.0",
-        "Accept":     "application/json",
-    })
+    from intel._http import fetch_json
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            payload = json.loads(r.read().decode("utf-8", errors="ignore"))
+        payload = fetch_json(_URL, timeout=30)
     except Exception as e:
         with _lock:
             _state["error"] = str(e)[:200]
@@ -136,14 +132,19 @@ def lookup(ip: str) -> Optional[Dict[str, Any]]:
     _ensure_loaded()
     if not isinstance(ip, str) or not ip:
         return None
-    return (_state.get("by_ip") or {}).get(ip.strip())
+    # Read under lock — _refresh_sync replaces the entire by_ip dict
+    # atomically but the .get() would return a stale reference if we
+    # dereferenced between assignment and the actual read.
+    with _lock:
+        return (_state.get("by_ip") or {}).get(ip.strip())
 
 
 def stats() -> Dict[str, Any]:
     _ensure_loaded()
-    return {
-        "loaded_at":    _state.get("loaded_at"),
-        "total_relays": _state.get("total_relays"),
-        "unique_ips":   len(_state.get("by_ip") or {}),
-        "error":        _state.get("error"),
-    }
+    with _lock:
+        return {
+            "loaded_at":    _state.get("loaded_at"),
+            "total_relays": _state.get("total_relays"),
+            "unique_ips":   len(_state.get("by_ip") or {}),
+            "error":        _state.get("error"),
+        }

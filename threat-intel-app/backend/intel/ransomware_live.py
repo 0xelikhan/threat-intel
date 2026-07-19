@@ -44,12 +44,8 @@ _state: Dict[str, Any] = {
 
 
 def _http_json(url: str) -> Any:
-    req = urllib.request.Request(url, headers={
-        "User-Agent": "RECON-ThreatIntel/1.0",
-        "Accept": "application/json",
-    })
-    with urllib.request.urlopen(req, timeout=15) as r:
-        return json.loads(r.read().decode("utf-8", errors="ignore"))
+    from intel._http import fetch_json
+    return fetch_json(url, timeout=15)
 
 
 def _refresh_sync() -> None:
@@ -132,27 +128,34 @@ def lookup_group(name: str) -> Optional[Dict[str, Any]]:
     if not isinstance(name, str) or not name:
         return None
     key = name.strip().lower()
-    hit = (_state.get("by_group") or {}).get(key)
-    if hit:
-        return hit
-    # Loose match — many families have suffix variants ('LockBit3', 'lockbit-3').
-    for g, row in (_state.get("by_group") or {}).items():
-        if key in g or g in key:
-            return row
-    return None
+    # Read under lock — iterating by_group.items() while _refresh_sync
+    # replaces the dict would raise RuntimeError.
+    with _lock:
+        by_group = _state.get("by_group") or {}
+        hit = by_group.get(key)
+        if hit:
+            return hit
+        # Loose match — many families have suffix variants
+        # ('LockBit3', 'lockbit-3').
+        for g, row in by_group.items():
+            if key in g or g in key:
+                return row
+        return None
 
 
 def active_groups(limit: int = 15) -> List[str]:
     _ensure_loaded()
-    return list((_state.get("active_groups") or [])[:limit])
+    with _lock:
+        return list((_state.get("active_groups") or [])[:limit])
 
 
 def stats() -> Dict[str, Any]:
     _ensure_loaded()
-    return {
-        "loaded_at":     _state.get("loaded_at"),
-        "total_victims": _state.get("total_victims"),
-        "groups":        len(_state.get("by_group") or {}),
-        "active_30d":    len(_state.get("active_groups") or []),
-        "error":         _state.get("error"),
-    }
+    with _lock:
+        return {
+            "loaded_at":     _state.get("loaded_at"),
+            "total_victims": _state.get("total_victims"),
+            "groups":        len(_state.get("by_group") or {}),
+            "active_30d":    len(_state.get("active_groups") or []),
+            "error":         _state.get("error"),
+        }

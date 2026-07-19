@@ -96,12 +96,8 @@ def _tokenise(text: str) -> set:
 
 def _fetch_questions() -> List[Dict[str, Any]]:
     """One-time enumerate + fetch of all question YAMLs."""
-    req = urllib.request.Request(_TREE_URL, headers={
-        "User-Agent": "RECON-ThreatIntel/1.0",
-        "Accept":     "application/json",
-    })
-    with urllib.request.urlopen(req, timeout=30) as r:
-        tree = json.loads(r.read())
+    from intel._http import fetch_json, fetch_bytes
+    tree = fetch_json(_TREE_URL, timeout=30)
     paths = [t["path"] for t in tree.get("tree", [])
              if t.get("type") == "blob"
              and t["path"].startswith("dfiq/data/questions/")
@@ -112,28 +108,33 @@ def _fetch_questions() -> List[Dict[str, Any]]:
     # broken PyYAML install doesn't take down this module at import time.
     import yaml   # type: ignore
 
-    questions: List[Dict[str, Any]] = []
-    for path in paths:
+    def _fetch_one(path: str) -> Optional[Dict[str, Any]]:
         try:
-            req = urllib.request.Request(_RAW_BASE + path, headers={
-                "User-Agent": "RECON-ThreatIntel/1.0",
-            })
-            with urllib.request.urlopen(req, timeout=15) as r:
-                doc = yaml.safe_load(r.read())
+            doc = yaml.safe_load(fetch_bytes(_RAW_BASE + path, timeout=15))
             if not isinstance(doc, dict) or doc.get("type") != "question":
-                continue
+                return None
             name = (doc.get("name") or "").strip()
             qid  = doc.get("id") or ""
             if not name or not qid:
-                continue
-            questions.append({
+                return None
+            return {
                 "id":         qid,
                 "name":       name,
                 "facet_ids":  doc.get("parent_ids") or [],
                 "keywords":   _tokenise(name),
-            })
+            }
         except Exception as e:
             _log.debug("DFIQ fetch %s failed: %s", path, e)
+            return None
+
+    # 90 GitHub raw fetches in serial takes 30-60s; a small worker pool
+    # cuts it to ~5-8s without hammering the API.
+    from concurrent.futures import ThreadPoolExecutor
+    questions: List[Dict[str, Any]] = []
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for res in pool.map(_fetch_one, paths):
+            if res:
+                questions.append(res)
     return questions
 
 
@@ -174,7 +175,10 @@ def get_questions(alert_type: str = "", raw_text: str = "",
     question's tokenised name. Alert-type seed keywords are added to
     the query so a category-only ask still returns useful matches."""
     _ensure_loaded()
-    qs = _state.get("questions") or []
+    # Snapshot the question list under lock so a concurrent refresh
+    # can't swap `qs` out from under our iteration.
+    with _lock:
+        qs = list(_state.get("questions") or [])
     if not qs:
         return []
     query = _tokenise(raw_text)
@@ -198,8 +202,9 @@ def get_questions(alert_type: str = "", raw_text: str = "",
 
 def stats() -> Dict[str, Any]:
     _ensure_loaded()
-    return {
-        "loaded_at":     _state.get("loaded_at"),
-        "question_count": len(_state.get("questions") or []),
-        "error":         _state.get("error"),
-    }
+    with _lock:
+        return {
+            "loaded_at":     _state.get("loaded_at"),
+            "question_count": len(_state.get("questions") or []),
+            "error":         _state.get("error"),
+        }

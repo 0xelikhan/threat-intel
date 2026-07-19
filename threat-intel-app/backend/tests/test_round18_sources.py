@@ -12,8 +12,32 @@ Every test stubs the network / disk path so nothing hits the internet.
 
 from __future__ import annotations
 
+import copy
 import time
+
+import pytest
+
 from intel import tor_exits, threatview_c2, viriback, typosquat
+
+
+@pytest.fixture(autouse=True)
+def _snapshot_module_state():
+    """Snapshot + restore module-level `_state` on every test in this
+    file. Tests mutate _state directly to inject fixture data; without
+    the restore they leak into whatever test runs next (order-dependent
+    failures under pytest-randomly + parallel runs)."""
+    saved = {
+        tor_exits:     copy.deepcopy(tor_exits._state),
+        threatview_c2: copy.deepcopy(threatview_c2._state),
+        viriback:      copy.deepcopy(viriback._state),
+    }
+    yield
+    for mod, snapshot in saved.items():
+        mod._state.clear()
+        mod._state.update(snapshot)
+    # typosquat uses lru_cache — clear so an allowlist test result
+    # can't linger and mask a subsequent negative test.
+    typosquat.check_domain.cache_clear()
 
 
 # ─── Tor exit index ─────────────────────────────────────────────────
