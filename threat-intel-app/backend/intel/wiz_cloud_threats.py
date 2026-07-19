@@ -103,7 +103,8 @@ def _refresh_sync() -> None:
     if not by_slug and errs:
         with _lock:
             _state["error"] = "; ".join(errs)[:200]
-            _state["loaded_at"] = time.time()
+            # Short backoff on failure; see threatview_c2.py rationale.
+            _state["loaded_at"] = time.time() - _TTL_SECONDS + 60
         _log.warning("Wiz fetch failed for all categories: %s", errs)
         return
 
@@ -126,7 +127,7 @@ def _ensure_loaded() -> None:
             _refresh_sync()
         except Exception as e:
             _state["error"] = str(e)[:200]
-            _state["loaded_at"] = time.time()
+            _state["loaded_at"] = time.time() - _TTL_SECONDS + 60
 
 
 def _normalise_query(name: str) -> str:
