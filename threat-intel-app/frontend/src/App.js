@@ -984,7 +984,9 @@ const _AI_FALLBACK_ACTIONS = new Set([
 
 // Senior-analyst context paragraph. Stored as a string on rs.analyst_notes
 // per investigation.py:865 — render as a soft prose block, not a textarea.
-function AnalystNotes({ rs, bare }) {
+// Named `AnalystContext` to avoid colliding with the `AnalystNotes` panel
+// that renders the analysis / gap / caveat bullets in the Summary card.
+function AnalystContext({ rs, bare }) {
   const notes = (rs?.analyst_notes || '').trim();
   if (!notes) return null;
   const body = (
@@ -994,7 +996,7 @@ function AnalystNotes({ rs, bare }) {
     }}>{notes}</Typography>
   );
   if (bare) return body;
-  return <Card title="Analyst notes" accent="#0fbcff">{body}</Card>;
+  return <Card title="Analyst context" accent="#0fbcff">{body}</Card>;
 }
 
 /* ─── suppressed IOCs (MISP warninglist matches) ─────────────────────────────
@@ -1079,7 +1081,7 @@ function Triage({ result, rs }) {
       <Section show={hasSup}      label="Filtered as benign · MISP warninglists">
         <SuppressedIOCs result={result} bare/></Section>
       <Section show={hasNotes}    label="Analyst notes">
-        <AnalystNotes rs={rs} bare/></Section>
+        <AnalystContext rs={rs} bare/></Section>
     </Card>
   );
 }
@@ -3284,31 +3286,38 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
         onComplete={onFeedbackComplete}
       />
 
-      {/* FINDINGS — one consolidated block combining what used to be
-          four separately-stacked blocks:
-            * Confirmed facts (evidence-backed, from investigation)
-            * Analysis (AI inference, distinct from fact)
-            * Intelligence gaps (what we don't know yet)
-            * Analyst caveats (methodology / scope disclaimers)
-          Cross-field de-dup: drops analysis sentences whose tokens
-          overlap the already-rendered prose paragraph by >= 50%. */}
+      {/* FINDINGS — evidence-backed facts only. Prose overlap is
+          dropped so a fact already stated in the summary paragraph
+          doesn't repeat as a bullet below it.
+
+          ANALYST NOTES — interpretation on top of the facts:
+            ○ Analysis  (inference)   — dropped when it overlaps the
+                                        prose or a confirmed fact
+            ? Gap       (unknown)     — kept as-is; gaps rarely dup
+            ! Caveat    (disclaimer)  — kept as-is; caveats rarely dup
+       */}
       {(() => {
-        const confirmed = asArray(rs?.confirmed_facts).filter(Boolean);
+        const _proseCorpus = [combined, _dispReason, dispReason]
+                              .filter(Boolean).join(' ');
+        const confirmed = asArray(rs?.confirmed_facts).filter(s => {
+          if (!s || typeof s !== 'string') return false;
+          // Drop confirmed facts already told by the prose paragraph.
+          return _overlap(s, _proseCorpus) < 0.5;
+        });
         const analysis_ = asArray(rs?.analysis_assessment).filter(s => {
           if (!s) return false;
-          const compareAgainst = [combined, _dispReason, dispReason,
-                                  ...confirmed].filter(Boolean).join(' ');
+          const compareAgainst = [_proseCorpus, ...confirmed]
+                                   .filter(Boolean).join(' ');
           return _overlap(s, compareAgainst) < 0.5;
         });
         const gaps    = asArray(a?.intelligence_gaps).filter(Boolean);
         const caveats = asArray(a?.analyst_caveats).filter(Boolean);
-        if (!confirmed.length && !analysis_.length
-            && !gaps.length && !caveats.length) return null;
-        return <ConfirmedVsAnalysis
-                  confirmed={confirmed}
-                  analysis={analysis_}
-                  gaps={gaps}
-                  caveats={caveats} />;
+        return (
+          <>
+            <Findings items={confirmed} />
+            <AnalystNotes analysis={analysis_} gaps={gaps} caveats={caveats} />
+          </>
+        );
       })()}
 
       {/* Calibration: every analyst override is a training signal. */}
@@ -3443,33 +3452,57 @@ function VerdictOverride({ result, rs }) {
 // conveys the rating in plain English via the AI's summary + the
 // recommended-disposition tail.
 
-/* ─── Confirmed vs Analysis — PRINCIPLE 7 two-tier split
-       Confirmed = statements directly traceable to enrichment data
-       Analysis  = analyst inferences clearly labeled as assessment
-       Rendered as two visually distinct sections so analysts know exactly
-       what is evidence and what is interpretation.                       */
-function ConfirmedVsAnalysis({ confirmed, analysis, gaps, caveats }) {
-  // Consolidated Findings block. Replaces four separately-stacked
-  // labeled blocks (Confirmed, Analysis, Intelligence gaps, Analyst
-  // caveats) with a single bordered box + one bullet per finding.
-  // Each bullet gets a small colored kind-marker + one-word kind
-  // label so the semantic distinction survives the consolidation:
-  //    ● Confirmed  — green, evidence-backed
-  //    ○ Analysis   — yellow, AI inference
-  //    ? Gap        — grey, unknown / to-investigate
-  //    ! Caveat     — orange, methodology disclaimer
-  const _conf  = (Array.isArray(confirmed) ? confirmed : []).filter(Boolean);
-  const _anly  = (Array.isArray(analysis)  ? analysis  : []).filter(Boolean);
-  const _gaps  = (Array.isArray(gaps)      ? gaps      : []).filter(Boolean);
-  const _cavs  = (Array.isArray(caveats)   ? caveats   : []).filter(Boolean);
+/* ─── Findings + Analyst notes — two visually separated blocks
+       Findings      = evidence-backed facts (every row is confirmed by
+                       enrichment; no per-row label since the header
+                       already says "Findings").
+       Analyst notes = interpretation the AI added on top of the facts.
+                       Kind markers survive here because the mix is
+                       heterogeneous:
+                         ○ Analysis  — inference from the evidence
+                         ? Gap       — unknown / needs telemetry
+                         ! Caveat    — methodology disclaimer            */
+function Findings({ items }) {
+  const rows = (Array.isArray(items) ? items : []).filter(Boolean);
+  if (!rows.length) return null;
+  return (
+    <Box sx={{ mt: 2, mb: 1.5, p: '10px 14px', borderRadius: '4px',
+      backgroundColor: muiAlpha('#17AB1F', 0.05),
+      border: `1px solid ${muiAlpha('#17AB1F', 0.22)}`,
+      borderLeft: `3px solid ${muiAlpha('#17AB1F', 0.55)}` }}>
+      <Typography sx={{ fontSize: 10.5, fontWeight: 700,
+        color: 'text.tertiary', textTransform: 'uppercase',
+        letterSpacing: '0.08em', mb: 0.75 }}>
+        Findings
+      </Typography>
+      <Stack spacing={0.5} component="ul" sx={{ m: 0, pl: 0, listStyle: 'none' }}>
+        {rows.map((r, i) => (
+          <Box component="li" key={i} sx={{
+            display: 'flex', alignItems: 'baseline', gap: 1,
+            fontSize: 12.5, color: 'text.primary', lineHeight: 1.55,
+          }}>
+            <Box component="span" sx={{ color: '#17AB1F', fontWeight: 700,
+              minWidth: 12, textAlign: 'center' }}>
+              ●
+            </Box>
+            <Box component="span" sx={{ flex: 1 }}>{String(r)}</Box>
+          </Box>
+        ))}
+      </Stack>
+    </Box>
+  );
+}
+
+function AnalystNotes({ analysis, gaps, caveats }) {
+  const _anly  = (Array.isArray(analysis) ? analysis : []).filter(Boolean);
+  const _gaps  = (Array.isArray(gaps)     ? gaps     : []).filter(Boolean);
+  const _cavs  = (Array.isArray(caveats)  ? caveats  : []).filter(Boolean);
   const rows = [
-    ..._conf.map(s => ({ kind: 'Confirmed', color: '#17AB1F', marker: '●', text: String(s) })),
-    ..._anly.map(s => ({ kind: 'Analysis',  color: '#E1B823', marker: '○', text: String(s) })),
-    ..._gaps.map(s => ({ kind: 'Gap',       color: '#8892A6', marker: '?', text: String(s) })),
-    ..._cavs.map(s => ({ kind: 'Caveat',    color: '#E6700F', marker: '!', text: String(s) })),
+    ..._anly.map(s => ({ kind: 'Analysis', color: '#E1B823', marker: '○', text: String(s) })),
+    ..._gaps.map(s => ({ kind: 'Gap',      color: '#8892A6', marker: '?', text: String(s) })),
+    ..._cavs.map(s => ({ kind: 'Caveat',   color: '#E6700F', marker: '!', text: String(s) })),
   ];
   if (!rows.length) return null;
-
   return (
     <Box sx={{ mt: 2, mb: 1.5, p: '10px 14px', borderRadius: '4px',
       backgroundColor: muiAlpha('#8892A6', 0.05),
@@ -3478,7 +3511,7 @@ function ConfirmedVsAnalysis({ confirmed, analysis, gaps, caveats }) {
       <Typography sx={{ fontSize: 10.5, fontWeight: 700,
         color: 'text.tertiary', textTransform: 'uppercase',
         letterSpacing: '0.08em', mb: 0.75 }}>
-        Findings
+        Analyst notes
       </Typography>
       <Stack spacing={0.5} component="ul" sx={{ m: 0, pl: 0, listStyle: 'none' }}>
         {rows.map((r, i) => (
@@ -3492,7 +3525,7 @@ function ConfirmedVsAnalysis({ confirmed, analysis, gaps, caveats }) {
             </Box>
             <Box component="span" sx={{ color: r.color, fontSize: 10,
               fontWeight: 700, textTransform: 'uppercase',
-              letterSpacing: '0.05em', minWidth: 62 }}>
+              letterSpacing: '0.05em', minWidth: 54 }}>
               {r.kind}
             </Box>
             <Box component="span" sx={{ flex: 1 }}>{r.text}</Box>
