@@ -100,6 +100,25 @@ async def _lifespan(app):
             _log.warning("pre-warm %s: skip (%s)", name, e)
 
     async def _warm_all():
+        # Eagerly import sklearn ONCE, serially, before the parallel
+        # pre-warm gather kicks off _build_model on the two ML classifiers.
+        # Under concurrent import from separate threads, sklearn.base
+        # occasionally hits a partial-init race ("cannot import name
+        # 'clone' from partially initialized module 'sklearn.base'")
+        # which silently disables both classifiers. Pre-importing here
+        # forces the sklearn side of the graph fully loaded before any
+        # thread contends for it. No cost when sklearn is installed;
+        # ignored when it isn't.
+        try:
+            await asyncio.to_thread(lambda: (
+                __import__("sklearn.base"),
+                __import__("sklearn.feature_extraction.text"),
+                __import__("sklearn.linear_model"),
+                __import__("sklearn.ensemble"),
+                __import__("sklearn.preprocessing"),
+            ))
+        except Exception as _e:
+            _log.debug("sklearn eager import skipped: %s", _e)
         light = [
             ("KEV",            "intel.kev",                 "_index",          None),
             ("EPSS",           "intel.epss",                "_index",          None),
