@@ -419,6 +419,22 @@ _kev_cache: Dict[str, Any] = {"fetched_at": 0.0, "by_cve": {}}
 _kev_lock = asyncio.Lock()
 
 
+def _kev_prewarm_sync() -> None:
+    """Sync entrypoint for the lifespan pre-warm loop. Wraps the async
+    _ensure_kev_loaded in a fresh event loop + aiohttp session so the
+    first CVE enrichment call after boot doesn't pay the ~1 MB KEV
+    download cost inline. Safe to call from a thread (main.py's
+    _warm_one runs sync entrypoints via asyncio.to_thread)."""
+    import aiohttp
+    async def _run():
+        async with aiohttp.ClientSession() as session:
+            await _ensure_kev_loaded(session)
+    try:
+        asyncio.run(_run())
+    except Exception as e:
+        _log.warning("KEV pre-warm refresh failed: %s", e)
+
+
 async def _ensure_kev_loaded(session) -> Dict[str, Any]:
     """Idempotent loader. First call this run fetches; the rest reuse the
     in-memory dict until the TTL expires."""
