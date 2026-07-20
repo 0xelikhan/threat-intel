@@ -125,6 +125,14 @@ async def _lifespan(app):
             ("Wiz cloud threats",   "intel.wiz_cloud_threats", "_refresh_sync", None),
             # DFIQ — curated forensic questions catalog (Google).
             ("DFIQ questions",      "intel.dfiq",           "_refresh_sync",   None),
+            # MISP hashes.csv feeds (CIRCL / DigitalSide / Botvrij).
+            # Fetching three multi-MB CSVs costs ~20-30 s on cold start;
+            # without this pre-warm, the first hash lookup after boot
+            # blocked the enrichment fan-out for the full download.
+            # lookup_hash now schedules a background refresh instead of
+            # awaiting, but this primes the index so the very first
+            # analyst hits warm data.
+            ("MISP feeds",          "intel.misp_feeds",     "_refresh_sync",   None),
             ("Warning lists",  "intel.warninglist_filter",  "load_warninglists", None),
             ("YARA rules",     "intel.yara_scanner",        "_ruleset",        None),
             # Round-14 ML — sklearn LogisticRegression / GradientBoosting.
