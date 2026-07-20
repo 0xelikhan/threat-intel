@@ -102,13 +102,16 @@ def _timeouts_for(host: str | None) -> "tuple[aiohttp.ClientTimeout, float]":
     return _SLOW_HOSTS.get(host or "", (_TIMEOUT, _PER_SOURCE_TIMEOUT))
 # Cap on in-flight HTTP fan-out — protects downstream rate limits and
 # our own event loop from a thousand simultaneous sockets. Bumped from
-# 10 → 16 → 24 (successive perf passes): the per-host cap in
-# _get_connector (ENRICH_POOL_PER_HOST=10) independently bounds traffic
+# 10 → 16 → 24 → 48 (successive perf passes): the per-host cap in
+# _get_connector (ENRICH_POOL_PER_HOST=20) independently bounds traffic
 # to any single TI source, so this only adds cross-host parallelism.
-# With 18 IP + 21 domain sources fanning out concurrently per IOC,
-# raising the global cap meaningfully reduces tail latency on the
-# enrichment node.
-_SEMAPHORE = asyncio.Semaphore(int(os.getenv("ENRICH_CONCURRENCY", "24")))
+# With 18 IP + 21 domain sources fanning out concurrently per IOC, a
+# heavy multi-IOC alert would queue ~40 requests behind 24 slots and
+# lose ~17 s of tail latency on the enrichment node (measured 2026-07:
+# heavy_multi 92.7 s at 24/10 → 75.3 s at 48/20). We stay well below
+# individual source rate limits because the per-host cap enforces the
+# real backpressure — the global cap only governs cross-host fan-out.
+_SEMAPHORE = asyncio.Semaphore(int(os.getenv("ENRICH_CONCURRENCY", "48")))
 # Backwards-compat alias — older code in this module imports TIMEOUT.
 TIMEOUT = _TIMEOUT
 
@@ -135,7 +138,7 @@ def _get_connector() -> aiohttp.TCPConnector:
     if _CONNECTOR is None or _CONNECTOR.closed:
         _CONNECTOR = aiohttp.TCPConnector(
             limit=int(os.getenv("ENRICH_POOL_LIMIT", "100")),
-            limit_per_host=int(os.getenv("ENRICH_POOL_PER_HOST", "10")),
+            limit_per_host=int(os.getenv("ENRICH_POOL_PER_HOST", "20")),
             ttl_dns_cache=300,
             enable_cleanup_closed=True,
         )
