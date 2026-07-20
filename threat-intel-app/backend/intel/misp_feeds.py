@@ -126,14 +126,28 @@ async def _fetch_one(session: aiohttp.ClientSession,
 def _refresh_sync() -> None:
     """Sync entrypoint the pre-warm loop can call from a thread.
     Wraps _refresh_if_stale in a fresh event loop so the async fetch
-    runs synchronously from the caller's perspective."""
+    runs synchronously from the caller's perspective.
+
+    If a loop is already running in the caller's thread (e.g. a test
+    calls this directly from an async coroutine), fall back to
+    scheduling the refresh — the caller should await it themselves,
+    but at least we don't raise."""
     _ensure_state()
     if not any(_stale(_state[n]) for n, _ in _FEEDS):
         return
     try:
-        asyncio.run(_refresh_if_stale())
-    except Exception as e:
-        _log.warning("misp_feeds pre-warm refresh failed: %s", e)
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop — fresh loop is safe.
+        try:
+            asyncio.run(_refresh_if_stale())
+        except Exception as e:
+            _log.warning("misp_feeds pre-warm refresh failed: %s", e)
+        return
+    # Loop already running: schedule and return; caller can't block
+    # here without deadlocking. This keeps _refresh_sync callable
+    # from async contexts (tests, dev shells) without raising.
+    _schedule_bg_refresh_if_stale()
 
 
 def _schedule_bg_refresh_if_stale() -> None:
