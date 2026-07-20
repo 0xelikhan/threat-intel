@@ -1080,7 +1080,7 @@ function Triage({ result, rs }) {
         <InfrastructureIntel result={result} bare hideUrlscan/></Section>
       <Section show={hasSup}      label="Filtered as benign · MISP warninglists">
         <SuppressedIOCs result={result} bare/></Section>
-      <Section show={hasNotes}    label="Analyst notes">
+      <Section show={hasNotes}    label="Analyst context">
         <AnalystContext rs={rs} bare/></Section>
     </Card>
   );

@@ -1102,9 +1102,12 @@ function KeyFindings({ result }) {
   const anomalies = (deep.anomalies || []).map(a => ({
     kind: 'anomaly',
     title: a.observation || (typeof a === 'string' ? a : 'Anomaly'),
-    body: [a.expected && `expected: ${a.expected}`,
-           a.implication && `→ ${a.implication}`]
-          .filter(Boolean).join('  ·  '),
+    // Render each anomaly sub-field on its own line so the reader
+    // doesn't have to parse a middot-and-arrow chain. Old join looked
+    // like "expected: X  ·  → Y" and the "· →" clash read as garbage.
+    body: [a.expected && `Expected: ${a.expected}`,
+           a.implication && `Implication: ${a.implication}`]
+          .filter(Boolean).join('\n'),
   }));
   const items = [...findings, ...anomalies];
   if (!items.length && !result.ai_analyst) return null;
@@ -1133,17 +1136,23 @@ function KeyFindings({ result }) {
           )}
           <Box>
             <Typography sx={{ fontSize: 13, color: 'text.primary', fontWeight: 600,
-              mb: f.body ? 0.5 : 0 }}>
-              {f.title}
+              mb: f.body ? 0.5 : 0,
+              display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 1 }}>
+              <Box component="span">{f.title}</Box>
               {f.kind === 'anomaly' && (
                 <Box component="span" sx={{
-                  ml: 1, fontSize: 9, fontWeight: 600, color: '#E6700F',
+                  fontSize: 9, fontWeight: 700, color: '#E6700F',
                   textTransform: 'uppercase', letterSpacing: '0.07em',
+                  border: `1px solid ${muiAlpha('#E6700F', 0.35)}`,
+                  backgroundColor: muiAlpha('#E6700F', 0.10),
+                  borderRadius: '3px', px: 0.75, py: '1px',
+                  lineHeight: 1.35, whiteSpace: 'nowrap',
                 }}>anomaly</Box>
               )}
             </Typography>
             {f.body && (
-              <Typography sx={{ fontSize: 12, color: 'text.tertiary', lineHeight: 1.6 }}>
+              <Typography sx={{ fontSize: 12, color: 'text.tertiary', lineHeight: 1.6,
+                whiteSpace: 'pre-line' }}>
                 {f.body}
               </Typography>
             )}
