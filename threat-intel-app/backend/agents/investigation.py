@@ -1602,6 +1602,50 @@ Tool-budget tips:
                             "decode in the raw input. Do NOT claim the alert contains "
                             "base64/hex/encoded content or invent decoded results."
                         )
+                # ── Tier framework signals (spec §3 signal_priority) ─────
+                # The deterministic tier extractor already classified this
+                # alert's signals into TIER 1 (verdict-determining), TIER 2
+                # (corroborating), and DOWNWEIGHT (benign vendor patterns).
+                # Anchoring the LLM on the framework's verdict_floor here
+                # prevents the recurring "AI returns INFORMATIONAL for an
+                # obvious HIGH" failure the consistency guard used to
+                # rescue post-hoc. The safety net in response.py still
+                # runs, but it fires much less often when the LLM sees
+                # the tier assessment inline.
+                if _tiers_early and (
+                    _tiers_early.get("tier_1") or _tiers_early.get("tier_2")
+                    or _tiers_early.get("downweight")
+                ):
+                    _t1 = [s.get("signal") if isinstance(s, dict) else str(s)
+                             for s in (_tiers_early.get("tier_1") or [])[:6]]
+                    _t2 = [s.get("signal") if isinstance(s, dict) else str(s)
+                             for s in (_tiers_early.get("tier_2") or [])[:6]]
+                    _dw = [s.get("signal") if isinstance(s, dict) else str(s)
+                             for s in (_tiers_early.get("downweight") or [])[:4]]
+                    _vf = (_tiers_early.get("verdict_floor") or "").upper()
+                    _tier_block = [
+                        "## TIER SIGNAL ASSESSMENT (deterministic — spec §3)",
+                        f"verdict_floor: {_vf or 'unset'}",
+                    ]
+                    if _t1:
+                        _tier_block.append("TIER 1 (verdict-determining, HIGH/CRITICAL):")
+                        _tier_block.extend(f"  - {s}" for s in _t1)
+                    if _t2:
+                        _tier_block.append("TIER 2 (corroborating, MEDIUM+):")
+                        _tier_block.extend(f"  - {s}" for s in _t2)
+                    if _dw:
+                        _tier_block.append("DOWNWEIGHT (benign patterns present):")
+                        _tier_block.extend(f"  - {s}" for s in _dw)
+                    _tier_block.append(
+                        "HARD RULE: your threat_level MUST be >= verdict_floor. "
+                        "If any TIER 1 signal fired above, threat_level MUST be "
+                        "HIGH or CRITICAL — the deterministic framework has "
+                        "already decided this signal warrants escalation. Your "
+                        "job in this alert is to enrich the reasoning, not to "
+                        "second-guess the framework's floor."
+                    )
+                    _sections.append("\n".join(_tier_block))
+
                 _conf_scores = state.get("confidence_scores") or {}
                 if _conf_scores:
                     # Trim: keep top-3 factors per IOC (was 4) — the LLM
@@ -1841,9 +1885,17 @@ Tool-budget tips:
                     f"{answers_block}"
                     "Now output PART 1 of your final assessment as strict JSON — the verdict and "
                     "narrative. Apply the EVIDENCE STANDARD from the system prompt:\n\n"
+                    "  • FLOOR RULE (overrides everything below): if the TIER SIGNAL\n"
+                    "    ASSESSMENT section above lists a verdict_floor, your threat_level\n"
+                    "    MUST be at least that level. If any TIER 1 signal fired,\n"
+                    "    threat_level MUST be HIGH or CRITICAL. The deterministic tier\n"
+                    "    framework already ruled the signal warrants escalation — you\n"
+                    "    are NOT authorised to downgrade it.\n"
                     "  • HIGH or CRITICAL requires AT LEAST ONE concrete malicious-evidence point\n"
                     "    (known-bad hash, named malware family, lateral movement, credential\n"
-                    "    access, confirmed unauthorized access, malicious infrastructure callout).\n"
+                    "    access, confirmed unauthorized access, malicious infrastructure callout,\n"
+                    "    KEV CVE, high-EPSS CVE with matching exploit signature, or any TIER 1\n"
+                    "    signal from the framework above).\n"
                     "  • If the enrichment_summary above says '0 sources flagged any IOC as\n"
                     "    malicious', the DEFAULT-BENIGN RULE from PRINCIPLE 3 applies — you may\n"
                     "    note patterns and recommend monitoring, but you may NOT call the activity\n"

@@ -16,6 +16,8 @@ used as a fallback if vendor/ isn't checked out.
 import ipaddress
 import json
 import logging
+import pickle
+import time
 from pathlib import Path
 from typing import Set, List, Tuple, Optional
 
@@ -48,6 +50,91 @@ def _pick_dir() -> Optional[Path]:
     return None
 
 
+# Pickle cache — parsing 123 warninglist JSON files + constructing
+# ~61k ipaddress.ip_network objects costs ~3.5 s per process cold-start.
+# The parsed structure includes ip_network objects and per-octet CIDR
+# buckets, which don't round-trip through JSON but pickle cleanly.
+# Cache is invalidated when the newest .json in the source dir is
+# newer than the pickle file.
+_CACHE_PKL = Path(__file__).parent / "warninglist_filter.cache.pkl"
+_CACHE_VERSION = 1   # bump if the cached structure shape changes
+
+
+def _source_dir_mtime(base: Path) -> float:
+    try:
+        return max((f.stat().st_mtime
+                    for d in base.iterdir()
+                    for f in [d / "list.json"]
+                    if f.exists()),
+                    default=0.0)
+    except Exception:
+        return 0.0
+
+
+def _load_from_cache(base: Path) -> bool:
+    """Populate all module-level stores from the pickle cache when it
+    exists AND is at least as new as the newest source list.json.
+    Returns True on hit.
+
+    Perf: for 1 M-entry sets, .update() from a fresh set of the same
+    size adds ~1.5 s of copy overhead vs replacing the module-level
+    reference directly. We rebind via `global` here because the module
+    is only loaded once and every caller (is_benign_ip/domain/hash)
+    resolves the name lazily each call, picking up the new binding
+    transparently."""
+    global _STATS_CACHE
+    global _benign_ips, _benign_cidrs, _benign_domains
+    global _benign_md5, _benign_sha1, _benign_sha256
+    global _benign_urls, _list_sources
+    global _benign_cidrs_by_octet, _benign_cidrs_v6
+    try:
+        if not _CACHE_PKL.exists():
+            return False
+        if _CACHE_PKL.stat().st_mtime < _source_dir_mtime(base):
+            return False
+        with open(_CACHE_PKL, "rb") as f:
+            payload = pickle.load(f)
+        if not isinstance(payload, dict) or payload.get("version") != _CACHE_VERSION:
+            return False
+        _benign_ips             = payload["benign_ips"]
+        _benign_cidrs           = payload["benign_cidrs"]
+        _benign_domains         = payload["benign_domains"]
+        _benign_md5             = payload["benign_md5"]
+        _benign_sha1            = payload["benign_sha1"]
+        _benign_sha256          = payload["benign_sha256"]
+        _benign_urls            = payload["benign_urls"]
+        _list_sources           = payload["list_sources"]
+        _benign_cidrs_by_octet  = payload.get("cidrs_by_octet") or {}
+        _benign_cidrs_v6        = payload.get("cidrs_v6") or []
+        _STATS_CACHE            = payload.get("stats")
+        return True
+    except Exception as e:
+        _log.debug("warninglist cache load failed: %s", e)
+        return False
+
+
+def _write_cache() -> None:
+    try:
+        payload = {
+            "version":           _CACHE_VERSION,
+            "benign_ips":        _benign_ips,
+            "benign_cidrs":      _benign_cidrs,
+            "benign_domains":    _benign_domains,
+            "benign_md5":        _benign_md5,
+            "benign_sha1":       _benign_sha1,
+            "benign_sha256":     _benign_sha256,
+            "benign_urls":       _benign_urls,
+            "list_sources":      _list_sources,
+            "cidrs_by_octet":    _benign_cidrs_by_octet,
+            "cidrs_v6":          _benign_cidrs_v6,
+            "stats":             _STATS_CACHE,
+        }
+        with open(_CACHE_PKL, "wb") as f:
+            pickle.dump(payload, f, protocol=pickle.HIGHEST_PROTOCOL)
+    except Exception as e:
+        _log.debug("warninglist cache write failed: %s", e)
+
+
 def load_warninglists() -> dict:
     """Idempotent loader. Returns a dict of counts per type.
 
@@ -71,6 +158,19 @@ def load_warninglists() -> dict:
         _loaded = True
         return _stats()
 
+    # Try the pickle cache first — saves ~3.5 s of JSON parse + ip_network
+    # construction on process cold-start.
+    _t0 = time.perf_counter()
+    if _load_from_cache(base):
+        _loaded = True
+        _log.info("loaded from pickle cache: %d IPs, %d CIDR ranges, %d domains, "
+                  "%d+%d+%d hashes, %d URLs from %d lists (%.2fs)",
+                  _STATS_CACHE['ips'], _STATS_CACHE['cidrs'], _STATS_CACHE['domains'],
+                  _STATS_CACHE['md5'], _STATS_CACHE['sha1'], _STATS_CACHE['sha256'],
+                  _STATS_CACHE['urls'], _STATS_CACHE['lists'],
+                  time.perf_counter() - _t0)
+        return _STATS_CACHE
+
     for list_dir in sorted(base.iterdir()):
         list_file = list_dir / "list.json"
         if not list_file.exists():
@@ -87,11 +187,13 @@ def load_warninglists() -> dict:
 
     _loaded = True
     _STATS_CACHE = _stats()
+    _write_cache()
     _log.info("loaded: %d IPs, %d CIDR ranges, %d domains, %d+%d+%d hashes, "
-              "%d URLs from %d lists",
+              "%d URLs from %d lists (%.2fs; cache written)",
               _STATS_CACHE['ips'], _STATS_CACHE['cidrs'], _STATS_CACHE['domains'],
               _STATS_CACHE['md5'], _STATS_CACHE['sha1'], _STATS_CACHE['sha256'],
-              _STATS_CACHE['urls'], _STATS_CACHE['lists'])
+              _STATS_CACHE['urls'], _STATS_CACHE['lists'],
+              time.perf_counter() - _t0)
     return _STATS_CACHE
 
 

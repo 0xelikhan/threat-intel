@@ -173,6 +173,10 @@ async def _lifespan(app):
             ("OFAC SDN",          "intel.ofac_sdn",           "_build_index",   None),
             ("HSTS preload",      "intel.hsts_preload",       "_build_index",   None),
             ("MISP galaxies (all)","intel.misp_galaxies",     "_load_all",      None),
+            # cve_enrichment maintains its own KEV cache (separate from
+            # intel.kev._index); the ~1 MB catalog download used to fire
+            # inline on the first CVE per run.
+            ("KEV live catalog",  "intel.cve_enrichment",     "_kev_prewarm_sync", None),
         ]
         await asyncio.gather(*[_warm_one(*m) for m in light + heavy])
         # Semantic search index — depends on all 11 corpora being warm.
