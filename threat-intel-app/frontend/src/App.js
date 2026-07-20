@@ -5401,14 +5401,18 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
             AgentPipeline button detects a bare URL and routes to
             /api/scan/url, otherwise it runs the log-analysis pipeline. */}
 
-        {/* Analyzing UX — the main panel keeps the "Analyzing" placeholder
-            for the full pipeline duration, so onPartial is intentionally a
-            no-op here. analyzing stays true until onComplete fires after
-            all four agents (triage → enrichment → investigation → response)
-            have run, preventing the half-rendered streaming view. */}
+        {/* Progressive rendering — each pipeline stage emits a
+            partial_result over the SSE stream and mergePartial (up in
+            the parent) shallow-merges it into `result`, which flips the
+            main panel from Skeleton to the real cards as data lands.
+            Individual card components already null-guard missing sub-
+            fields so an early partial (e.g. triage only) renders what
+            it has and skips the rest. `analyzing` stays true through
+            onComplete so the pipeline strip keeps pulsing while cards
+            fill in behind it. */}
         <AgentPipeline logText={logText} label=""
           onComplete={(r) => { onAnalyzing?.(false); onResult(r); }}
-          onPartial={() => {}}
+          onPartial={onPartialResult}
           onStart={() => { onResult(null); onAnalyzing?.(true); }}
           onScanUrl={(url) => { onScanUrl?.(url); setLogText(''); }}/>
 
