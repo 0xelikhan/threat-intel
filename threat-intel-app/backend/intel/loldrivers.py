@@ -5,21 +5,78 @@ Bring-Your-Own-Vulnerable-Driver (BYOVD) attacks.
 Two lookup paths:
   - by hash (when an analyst pastes a sample hash, match against 600+ known driver hashes)
   - by filename (e.g. an alert mentions "driver_xxx.sys", flag known vulnerable drivers)
+
+Perf: the upstream feed ships as ~623 separate YAML files. Parsing them
+with pyyaml costs ~38 s per process cold-start (see cProfile scan
+2026-07). That warm-up serialises pipeline startup and pays the cost
+again on every fresh dev process. We cache the parsed catalog to a
+JSON side-file next to the YAML dir on first build; subsequent starts
+read the JSON in ~50 ms. The JSON is invalidated whenever the source
+directory's mtime is newer.
 """
+import json
+import logging
 import re
+import time
 from pathlib import Path
 from functools import lru_cache
 
+_log = logging.getLogger("recon.intel.loldrivers")
+
 VENDOR = Path(__file__).parent.parent.parent / "vendor" / "loldrivers"
 YAML_DIR = VENDOR / "yaml"
+CACHE_JSON = VENDOR / "catalog.cache.json"
+
+
+def _dir_mtime(p: Path) -> float:
+    try:
+        return max((f.stat().st_mtime for f in p.glob("*.yaml")), default=0.0)
+    except Exception:
+        return 0.0
+
+
+def _load_from_json() -> dict | None:
+    """Return the cached catalog if the JSON file exists AND is at least
+    as new as the newest YAML source. None otherwise."""
+    try:
+        if not CACHE_JSON.exists():
+            return None
+        if CACHE_JSON.stat().st_mtime < _dir_mtime(YAML_DIR):
+            return None
+        out = json.loads(CACHE_JSON.read_text(encoding="utf-8"))
+        if not isinstance(out, dict) or "by_hash" not in out:
+            return None
+        return out
+    except Exception as e:
+        _log.debug("loldrivers JSON cache load failed: %s", e)
+        return None
+
+
+def _write_json_cache(catalog: dict) -> None:
+    try:
+        CACHE_JSON.write_text(json.dumps(catalog, separators=(",", ":")),
+                              encoding="utf-8")
+    except Exception as e:
+        _log.debug("loldrivers JSON cache write failed: %s", e)
 
 
 @lru_cache(maxsize=1)
 def _catalog() -> dict:
-    """Build dual-indexed catalog: by filename + by hash."""
+    """Build dual-indexed catalog: by filename + by hash.
+    Prefers the pre-built JSON cache when available."""
     out = {"by_name": {}, "by_hash": {}, "all": []}
     if not YAML_DIR.exists():
         return out
+
+    _t0 = time.perf_counter()
+    cached = _load_from_json()
+    if cached is not None:
+        _log.info("loldrivers loaded from JSON cache: %d hashes, %d names (%.2fs)",
+                  len(cached.get("by_hash") or {}),
+                  len(cached.get("by_name") or {}),
+                  time.perf_counter() - _t0)
+        return cached
+
     try:
         import yaml
     except ImportError:
@@ -52,6 +109,10 @@ def _catalog() -> dict:
                 h = sample.get(hkey)
                 if h and isinstance(h, str) and h.strip():
                     out["by_hash"][h.lower().strip()] = compact
+    _write_json_cache(out)
+    _log.info("loldrivers built from %d YAMLs: %d hashes, %d names (%.2fs; cache written)",
+              len(out["all"]), len(out["by_hash"]), len(out["by_name"]),
+              time.perf_counter() - _t0)
     return out
 
 
