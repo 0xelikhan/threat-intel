@@ -269,7 +269,7 @@ _STRUCTURED_SCHEMA = """Output STRICT JSON ONLY with this exact schema (every fi
 {
   "objectives":              [{"objective": "<plain English>", "evidence": "<what supports this>", "confidence": 0.0-1.0}, ...],
   "key_findings":            [{"title": "<short title>", "explanation": "<why this matters, what it reveals about attacker intent — NOT a restatement of tool output>"}, ...],
-  "anomalies":               [{"observation": "<what's unusual>", "expected": "<what would normally be here>", "implication": "<what this tells us>"}, ...],
+  "anomalies":               [{"observation": "<what's unusual — MUST be a specific concrete fact from THIS file's analysis (a bytes region, a specific string, a header value, a section, etc.). Do NOT invent anomalies about file formats the file isn't in (e.g. don't say 'unusual for a JSON file' when the file is not JSON). Prefer omitting the field to filling it with generic speculation.>", "expected": "<what would normally be here, referencing the file's ACTUAL detected type, not a different one>", "implication": "<what this tells us>"}, ...],
   "evasion_techniques":      [{"technique": "<specific name>", "explanation": "<plain English how it works>"}, ...],
   "persistence_mechanisms":  [{"mechanism": "<specific name>", "explanation": "..."}, ...],
   "c2_assessment":           {"protocol": "<HTTP|HTTPS|DNS|TCP raw|...>", "shared_or_dedicated": "shared|dedicated|unknown", "notes": "..."},
@@ -407,9 +407,64 @@ def _coerce_category(raw: str, executive_summary: str = "") -> str:
     return "Unknown Malware"
 
 
-def _safe_normalize_deep(out: Dict) -> Dict:
+_FILETYPE_TOKENS = {
+    "json":     ("json",),
+    "xml":      ("xml",),
+    "html":     ("html", "xhtml"),
+    "pdf":      ("pdf",),
+    "pe":       ("pe file", "pe executable", "portable executable"),
+    "elf":      ("elf",),
+    "macho":    ("mach-o", "macho"),
+    "office":   ("docx", "xlsx", "pptx", "office document", "microsoft office"),
+    "archive":  ("zip archive", "rar archive", "7-zip", "tar archive"),
+    "script":   ("javascript", "powershell", "bash script", "shell script", "python script"),
+    "text":     ("plain text", "text file", "text/plain"),
+}
+
+
+def _detected_type_tokens(analysis: Optional[Dict]) -> set:
+    """Return the set of _FILETYPE_TOKENS keys that describe the detected
+    file. E.g. a .txt file returns {'text'}; a PE returns {'pe'}. Empty
+    set means we can't confidently classify."""
+    if not isinstance(analysis, dict):
+        return set()
+    t = analysis.get("type") or {}
+    mime = (t.get("detected_mime") or "").lower()
+    desc = (t.get("detected_desc") or "").lower()
+    hay = f"{mime} {desc}"
+    hits: set = set()
+    for key, tokens in _FILETYPE_TOKENS.items():
+        if any(tok in hay for tok in tokens):
+            hits.add(key)
+    # Fall back to 'text' when the mime says text/* and nothing else matched.
+    if not hits and mime.startswith("text/"):
+        hits.add("text")
+    return hits
+
+
+def _anomaly_mentions_wrong_type(anomaly: Dict, detected: set) -> bool:
+    """True when the anomaly's observation/expected references a file
+    format the file isn't. Guards against LLM hallucinations like
+    'unusual for a JSON file' on a plain-text file. When we can't
+    confidently classify the file, we skip the filter (return False)."""
+    if not detected or not isinstance(anomaly, dict):
+        return False
+    haystack = " ".join(
+        str(anomaly.get(k) or "") for k in ("observation", "expected", "implication")
+    ).lower()
+    for key, tokens in _FILETYPE_TOKENS.items():
+        if key in detected:
+            continue
+        if any(tok in haystack for tok in tokens):
+            return True
+    return False
+
+
+def _safe_normalize_deep(out: Dict, analysis: Optional[Dict] = None) -> Dict:
     """Make sure every field exists and is the right shape — tolerates a model
-    that returns slightly off schema."""
+    that returns slightly off schema. When `analysis` is supplied, also drops
+    LLM-hallucinated anomalies that reference file formats the file isn't
+    (e.g. 'unusual for a JSON file' when the file is text/plain)."""
     def _list(x): return x if isinstance(x, list) else ([] if x is None else [x])
     def _dict(x): return x if isinstance(x, dict) else {}
     cls = _dict(out.get("malware_classification"))
@@ -458,7 +513,10 @@ def _safe_normalize_deep(out: Dict) -> Dict:
         "assessment_basis":       _list(out.get("assessment_basis")),
         "objectives":             _list(out.get("objectives")),
         "key_findings":           _list(out.get("key_findings")),
-        "anomalies":              _list(out.get("anomalies")),
+        "anomalies":              [
+            a for a in _list(out.get("anomalies"))
+            if not _anomaly_mentions_wrong_type(a, _detected_type_tokens(analysis))
+        ],
         "evasion_techniques":     _list(out.get("evasion_techniques")),
         "persistence_mechanisms": _list(out.get("persistence_mechanisms")),
         "c2_assessment":          _dict(out.get("c2_assessment")),
@@ -548,7 +606,7 @@ async def analyze_deep(analysis: Dict, config,
             merged.update(out)
             if on_partial:
                 try:
-                    snap = _safe_normalize_deep(dict(merged))
+                    snap = _safe_normalize_deep(dict(merged), analysis)
                     snap["_partial"] = label
                     await on_partial(snap)
                 except Exception:
@@ -569,7 +627,7 @@ async def analyze_deep(analysis: Dict, config,
             merged.update(part)
     if not merged:
         return {"error": "AI failed to produce valid JSON"}
-    return _safe_normalize_deep(merged)
+    return _safe_normalize_deep(merged, analysis)
 
 
 # ─── Comparative context (case history + similar files + MITRE profile) ───────
