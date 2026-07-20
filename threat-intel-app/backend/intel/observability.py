@@ -111,6 +111,18 @@ def configure_logging(level: Optional[str] = None) -> None:
     lvl_name = (level or os.environ.get("LOG_LEVEL") or "INFO").upper()
     lvl = getattr(logging, lvl_name, logging.INFO)
 
+    # Windows consoles default to cp1252, which rejects the Unicode
+    # glyphs some modules use in log messages (✓ / ✗ / ↔ / —). Reconfigure
+    # stdout to UTF-8 up-front so no log line can crash the handler with
+    # UnicodeEncodeError. No-op on platforms where stdout is already UTF-8.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        # Older Python or already-detached stream — fall back to
+        # errors="replace" via the handler so glyphs render as '?'
+        # instead of raising.
+        pass
+
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(_ReconFormatter())
 
