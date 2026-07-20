@@ -1561,7 +1561,13 @@ Tool-budget tips:
                 if _iocs_dump.strip() not in ("", "{}"):
                     _sections.append(f"## Extracted IOCs\n{_iocs_dump}")
                 if cross_ctx and cross_ctx.strip() and cross_ctx.strip() != "(none)":
-                    _sections.append(f"## Baseline cross-references already collected (do NOT re-query these)\n{cross_ctx[:2000]}")
+                    # Trim: cross_ctx summarises deterministic hits the LLM
+                    # doesn't need in full — the ENRICHMENT SUMMARY line above
+                    # already carries the counts. 1200-char cap covers the top
+                    # 6-8 cross-references, which is enough for the model to
+                    # reason from without wasting tokens on the tail. Trimmed
+                    # from 2000 -> 1200 (2026-07 perf pass).
+                    _sections.append(f"## Baseline cross-references already collected (do NOT re-query these)\n{cross_ctx[:1200]}")
                 if multi_log_block and multi_log_block.strip():
                     _sections.append(multi_log_block)
                 if defender_block and defender_block.strip():
@@ -1598,19 +1604,32 @@ Tool-budget tips:
                         )
                 _conf_scores = state.get("confidence_scores") or {}
                 if _conf_scores:
+                    # Trim: keep top-3 factors per IOC (was 4) — the LLM
+                    # bases its verdict on the top signal not the tail —
+                    # and cap the section at 1100 chars (was 1600). Trimmed
+                    # 2026-07 perf pass; the top-factor list is denser
+                    # than most other sections so 1100 still holds several
+                    # IOCs' worth of scoring context.
                     _sections.append(
                         "## Deterministic confidence scores per IOC (spec §2 — independent of your assessment)\n"
                         + json.dumps(
                             {k: {"score": v.get("score"), "verdict": v.get("verdict"),
-                                 "top_factors": [(f["factor"], f["points"]) for f in (v.get("factors") or [])[:4]]}
+                                 "top_factors": [(f["factor"], f["points"]) for f in (v.get("factors") or [])[:3]]}
                              for k, v in _conf_scores.items()},
                             separators=(",", ":"),
-                        )[:1600]
+                        )[:1100]
                     )
                 if compressed:
+                    # Trim: compressed already strips each source to its
+                    # key verdict fields (abuse_score / vt_malicious /
+                    # otx_pulses / etc.). 1500 chars covers ~5-6 IOCs at
+                    # ~250 chars each. Trimmed from 2200 -> 1500
+                    # (2026-07 perf pass) — the synth-half prompts each
+                    # reference this section, so the saving compounds
+                    # across the tool-loop + 3 parallel synth calls.
                     _sections.append(
                         "## Baseline enrichment summary (do NOT re-query these IPs/domains/hashes)\n"
-                        + json.dumps(compressed, separators=(",", ":"))[:2200]
+                        + json.dumps(compressed, separators=(",", ":"))[:1500]
                     )
                 # DFIQ (Google Digital Forensics Investigative Questions) —
                 # curated forensic starter questions relevant to this alert
@@ -1652,6 +1671,39 @@ Tool-budget tips:
                 # the baseline already enriched every IOC; tools just fill small gaps,
                 # and the final synthesis runs regardless after the loop.
                 max_iterations = 2
+
+                # Pre-loop skip: when the baseline enrichment fan-out already
+                # collected >= 4 non-error sources per IOC on average, the
+                # tool-loop's job (fill missing enrichment gaps) is done. Every
+                # extra roundtrip is ~5-8 s of LLM time buying nothing the
+                # synth phase can't reason from directly. Skip straight to
+                # synthesis when the data's already there.
+                def _enrichment_is_comprehensive() -> bool:
+                    if not enrichments:
+                        return False
+                    total_iocs = 0
+                    total_sources = 0
+                    for typ in ("ips", "domains", "hashes", "urls", "cves",
+                                 "emails", "crypto"):
+                        for _ioc, sources in (enrichments.get(typ) or {}).items():
+                            total_iocs += 1
+                            if not isinstance(sources, dict):
+                                continue
+                            for _src, data in sources.items():
+                                if isinstance(data, dict) and not data.get("error"):
+                                    total_sources += 1
+                    if total_iocs == 0:
+                        return False
+                    return (total_sources / total_iocs) >= 4
+
+                if _enrichment_is_comprehensive():
+                    _log.info("investigation.skip_tool_loop: baseline enrichment "
+                                "already >= 4 sources/IOC on average — synth-only")
+                    tool_call_log.append({
+                        "tool":    "_skip_tool_loop",
+                        "summary": "Skipped tool-loop: baseline enrichment already comprehensive",
+                    })
+                    max_iterations = 0
                 for iteration in range(max_iterations):
                     resp = await provider.complete(
                         model=fast_model,   # tool-selection roundtrip → fast tier
