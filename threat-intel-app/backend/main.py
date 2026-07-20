@@ -1205,7 +1205,27 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
         # so the analyst watches the investigation reason live, instead of seeing
         # the whole multi-roundtrip stage land at once when it finally returns.
         inv_q: asyncio.Queue = asyncio.Queue()
-        async def _on_inv_event(entry, _q=inv_q):
+        async def _on_inv_event(entry, _q=inv_q, _state=state):
+            # `investigation_partial` events fire as each of the 3-way synth
+            # halves (verdict / findings / probing) completes. Fold the delta
+            # into the existing response_summary (which holds the provisional
+            # verdict from enrichment) and push as a partial_result so the
+            # frontend paints the verdict / findings / probing sections as
+            # soon as each half lands, instead of waiting for the slowest.
+            if entry.get("type") == "investigation_partial":
+                delta = entry.get("delta") or {}
+                existing_rs = _state.get("response_summary") or {}
+                merged_rs = {**existing_rs}
+                for k, v in delta.items():
+                    if v in (None, "", [], {}):
+                        continue
+                    merged_rs[k] = v
+                merged_rs["timestamp"] = _ts()
+                # Keep the provisional flag off — once the AI has said
+                # anything, we're no longer a pure enrichment guess.
+                merged_rs.pop("provisional", None)
+                await _q.put(("partial", {"response_summary": merged_rs}))
+                return
             await _q.put(("trace", entry))
         inv_task = asyncio.create_task(run_investigation(state, on_event=_on_inv_event))
         _bg_tasks.append(inv_task)

@@ -1996,36 +1996,64 @@ Tool-budget tips:
                 # natural end-of-JSON regardless of cap, so this only trims
                 # cap-hitting outputs (rare) but shaves ~1-2s off the wall-time
                 # when it does.
-                part_a, part_b, part_c = await asyncio.gather(
-                    _synth(verdict_instr, 1000),
-                    _synth(findings_instr, 1500),
-                    _synth(probing_instr, 800, temperature=0.1),
-                    return_exceptions=True,
-                )
-                # Log partial failures — a single half throwing used to
-                # leave the result silently incomplete (e.g. verdict +
-                # questions present, key_findings empty) with no breadcrumb.
-                _parts_labels = ("verdict", "findings", "probing")
+                #
+                # Streamed completion: each half is a separate task and its
+                # fields are folded into `result` the moment it returns.
+                # Emitting `investigation_partial` on each completion lets
+                # the orchestrator push a fresh response_summary so the
+                # verdict / findings / probing sections paint in the UI as
+                # soon as each half lands — instead of waiting for the
+                # slowest half (usually findings @ 1500 tokens). Overall
+                # stage duration is unchanged; perceived latency drops by
+                # the gap between the fastest and slowest half (~5-10s).
+                _parts_labels = ["verdict", "findings", "probing"]
+                _synth_tasks = {
+                    "verdict":  asyncio.create_task(_synth(verdict_instr, 1000)),
+                    "findings": asyncio.create_task(_synth(findings_instr, 1500)),
+                    "probing":  asyncio.create_task(_synth(probing_instr, 800,
+                                                             temperature=0.1)),
+                }
+                _task_to_name = {v: k for k, v in _synth_tasks.items()}
+                _pending = set(_synth_tasks.values())
+                _part_results: dict[str, object] = {n: None for n in _synth_tasks}
+                result = {}
+                while _pending:
+                    _done, _pending = await asyncio.wait(
+                        _pending, return_when=asyncio.FIRST_COMPLETED)
+                    for _t in _done:
+                        _name = _task_to_name[_t]
+                        try:
+                            _part = _t.result()
+                        except Exception as _e:
+                            _part = _e
+                        _part_results[_name] = _part
+                        if isinstance(_part, dict) and _part:
+                            result.update(_part)
+                            # Push what we have so far. Copy so downstream
+                            # mutations don't race the queue reader.
+                            await _emit({
+                                "type":  "investigation_partial",
+                                "delta": dict(result),
+                                "half":  _name,
+                            })
                 _failed_parts = [
-                    lab for lab, p in zip(_parts_labels, (part_a, part_b, part_c))
-                    if isinstance(p, Exception) or not isinstance(p, dict) or not p
+                    lab for lab in _parts_labels
+                    if isinstance(_part_results[lab], Exception)
+                    or not isinstance(_part_results[lab], dict)
+                    or not _part_results[lab]
                 ]
                 if _failed_parts:
                     _log.warning(
-                        "investigation synth partial failure (%s): %r / %r / %r",
-                        ",".join(_failed_parts), part_a, part_b, part_c,
+                        "investigation synth partial failure (%s): %r",
+                        ",".join(_failed_parts), _part_results,
                     )
                     tool_call_log.append({
                         "tool": "_synth_partial_fail",
                         "summary": f"synthesis halves failed: {', '.join(_failed_parts)}",
                     })
-                result = {}
-                for part in (part_a, part_b, part_c):
-                    if isinstance(part, dict):
-                        result.update(part)
                 if not result:
                     # All halves failed → surface to the single-shot fallback below
-                    raise RuntimeError(f"synthesis failed: {part_a!r} / {part_b!r} / {part_c!r}")
+                    raise RuntimeError(f"synthesis failed: {_part_results!r}")
                 # Always set needs_more_enrichment so the router gate
                 # downstream sees an explicit boolean even if the
                 # specific half that owned this key failed.
