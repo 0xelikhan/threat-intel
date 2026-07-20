@@ -35,6 +35,10 @@ vendor/
 **/backend/intel/sigma/
 **/backend/intel/warninglists/
 
+# Auto-built parse caches (rebuilt on first process start when the source
+# mtime is newer). Derived state, not source of truth.
+**/backend/intel/warninglist_filter.cache.pkl
+
 # Email composer templates — auto-seeded from _DEFAULT_TEMPLATES on first run.
 # Per-deployment cache that analysts can customize via the UI; not source.
 **/backend/intel/email_templates/
