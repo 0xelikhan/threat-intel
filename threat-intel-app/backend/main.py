@@ -166,6 +166,13 @@ async def _lifespan(app):
             ("ETW providers",     "intel.etw_providers",      "stats",          None),
             ("Forensic artifacts","intel.forensic_artifacts", "stats",          None),
             ("Emulation plans",   "intel.emulation_plans",    "stats",          None),
+            # Modules that used to lazy-load on the first alert that hit them
+            # (2026-07 telemetry — measured ~15 s of in-line warming during
+            # the first heavy_multi analyze after boot). Adding them to
+            # pre-warm means the first analyst hits a truly warm backend.
+            ("OFAC SDN",          "intel.ofac_sdn",           "_build_index",   None),
+            ("HSTS preload",      "intel.hsts_preload",       "_build_index",   None),
+            ("MISP galaxies (all)","intel.misp_galaxies",     "_load_all",      None),
         ]
         await asyncio.gather(*[_warm_one(*m) for m in light + heavy])
         # Semantic search index — depends on all 11 corpora being warm.
