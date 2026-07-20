@@ -116,14 +116,14 @@ def test_semantic_search_skill_registered():
 
 def test_semantic_search_skill_returns_envelope():
     from skills import run_skill
-    loop = asyncio.new_event_loop()
-    try:
-        out = loop.run_until_complete(
-            run_skill("semantic_search_detections",
-                      {"query": "lateral movement", "top_k": 3})
-        )
-    finally:
-        loop.close()
+    # asyncio.run manages the loop lifecycle (create, run, drain, close)
+    # correctly — the earlier hand-rolled loop.close() left aiohttp
+    # transports pending, which surfaced as ResourceWarning during test
+    # collection.
+    out = asyncio.run(
+        run_skill("semantic_search_detections",
+                  {"query": "lateral movement", "top_k": 3})
+    )
     assert "query" in out
     assert "results" in out
     assert "total" in out

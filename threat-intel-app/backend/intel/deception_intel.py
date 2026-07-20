@@ -152,7 +152,7 @@ async def _project_honeypot(session, ip: str, key: str) -> Dict:
         import socket as _s
         reversed_ip = ".".join(reversed(ip.split(".")))
         query = f"{key}.{reversed_ip}.dnsbl.httpbl.org"
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             res = await loop.run_in_executor(None, _s.gethostbyname, query)
         except _s.gaierror:
