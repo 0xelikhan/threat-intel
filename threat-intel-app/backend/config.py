@@ -285,6 +285,62 @@ API_KEY_DEFINITIONS = {
         "placeholder": "Hunter.io API key",
         "group": "API Keys"
     },
+    "POLYSWARM_KEY": {
+        "label": "Polyswarm API Key",
+        "description": "Multi-engine microengine assertions + polyscore for hashes; known-host search for IPs/domains. Free tier: 5k events/month.",
+        "required": False,
+        "url": "https://polyswarm.io/",
+        "placeholder": "Polyswarm API key",
+        "group": "API Keys"
+    },
+    "INTEZER_KEY": {
+        "label": "Intezer Analyze API Key",
+        "description": "Code-reuse analysis + malware family attribution for hashes. Free tier available.",
+        "required": False,
+        "url": "https://analyze.intezer.com/account-details",
+        "placeholder": "Intezer API key",
+        "group": "API Keys"
+    },
+    "HYBRID_ANALYSIS_KEY": {
+        "label": "Hybrid Analysis API Key",
+        "description": "CrowdStrike Falcon Sandbox: hash overview with threat_score, MITRE ATT&CK mapping, signatures. Also URL/host search.",
+        "required": False,
+        "url": "https://www.hybrid-analysis.com/apikeys/info",
+        "placeholder": "Hybrid Analysis API key",
+        "group": "API Keys"
+    },
+    "TRIAGE_KEY": {
+        "label": "Hatching Triage API Key",
+        "description": "tria.ge cloud sandbox report corpus. Score-based verdict + malware family tags.",
+        "required": False,
+        "url": "https://tria.ge/account/api",
+        "placeholder": "Triage API key",
+        "group": "API Keys"
+    },
+    "KOODOUS_KEY": {
+        "label": "Koodous API Key",
+        "description": "Android APK samples with static analysis + crowd-sourced tags. Hash lookup (SHA256).",
+        "required": False,
+        "url": "https://koodous.com/settings/profile",
+        "placeholder": "Koodous API key",
+        "group": "API Keys"
+    },
+    "FILESCAN_KEY": {
+        "label": "FileScan.io API Key",
+        "description": "OPSWAT MetaDefender community sandbox. Searches hash / URL / IP / domain across public reports.",
+        "required": False,
+        "url": "https://www.filescan.io/api",
+        "placeholder": "FileScan API key",
+        "group": "API Keys"
+    },
+    "MWDB_KEY": {
+        "label": "MWDB (CERT.pl) API Key",
+        "description": "CERT Polska's malware repository with YARA matches, config extraction, family tags. Free account required.",
+        "required": False,
+        "url": "https://mwdb.cert.pl/profile/user",
+        "placeholder": "MWDB API key",
+        "group": "API Keys"
+    },
     "CENSYS_API_KEY": {
         "label": "Censys API Key (Personal Access Token)",
         "description": "Censys v3 Personal Access Token — single token sent "
