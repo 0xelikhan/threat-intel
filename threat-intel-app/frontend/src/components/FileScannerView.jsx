@@ -64,7 +64,7 @@ const SECTIONS = [
   { id: 'detect',      label: 'Detection Content' },
 ];
 
-const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
+const monoSx = { fontFamily: '"JetBrains Mono", monospace' };
 
 
 // ─── tiny utilities ───────────────────────────────────────────────────────────
@@ -226,7 +226,7 @@ function ReportField({ label, value, mono = false, color }) {
       <Typography sx={{
         fontSize: 12, color: color || 'text.primary',
         wordBreak: 'break-all', lineHeight: 1.4,
-        fontFamily: mono ? '"IBM Plex Mono", monospace' : undefined,
+        fontFamily: mono ? '"JetBrains Mono", monospace' : undefined,
       }}>{value}</Typography>
     </Box>
   );
@@ -410,7 +410,7 @@ function UrlReputationReport({ result }) {
       return { status: data?.error ? 'error' : 'no data', color: '#848592' };
     if (malicious === true)  return { status: 'malicious', color: '#EE3838' };
     if (malicious === false) return { status: 'clean',     color: '#16AD34' };
-    return { status: 'ok', color: '#0fbcff' };
+    return { status: 'ok', color: '#00b4d8' };
   };
 
   // ── render ──────────────────────────────────────────────────────────────
@@ -516,7 +516,7 @@ function UrlReputationReport({ result }) {
       </SectionCard>
 
       <SectionCard id="url-reputation" label="Reputation"
-        accent="#0fbcff" defaultOpen={true}
+        accent="#00b4d8" defaultOpen={true}
         summary={`${repCount} source${repCount === 1 ? '' : 's'}`}>
       <Stack spacing={1.25}>
         {/* VirusTotal */}
@@ -663,7 +663,7 @@ function UrlReputationReport({ result }) {
       </SectionCard>
 
       <SectionCard id="url-identity-sources" label="Identity"
-        accent="#0fbcff" defaultOpen={true}
+        accent="#00b4d8" defaultOpen={true}
         summary={`${idCount} source${idCount === 1 ? '' : 's'}`}>
       <Stack spacing={1.25}>
         {/* WHOIS — the big one. */}
@@ -729,7 +729,7 @@ function UrlReputationReport({ result }) {
         {crt && (
           <CollapsibleSource title="Certificate Transparency"
             status={`${crt.totalCerts || 0} cert${(crt.totalCerts || 0) === 1 ? '' : 's'}`}
-            statusColor="#0fbcff"
+            statusColor="#00b4d8"
             count={crt.subdomains?.length ? `${crt.subdomains.length} subdomains` : null}>
             {crt.subdomains?.length > 0 && (
               <Box>
@@ -764,7 +764,7 @@ function UrlReputationReport({ result }) {
         {dnsRecords?.total_records > 0 && (
           <CollapsibleSource title="DNS Records"
             status={`${dnsRecords.total_records} record${dnsRecords.total_records === 1 ? '' : 's'}`}
-            statusColor="#0fbcff">
+            statusColor="#00b4d8">
             {Object.entries(dnsRecords.records || {}).slice(0, 6).map(([rt, vals]) => (
               <ReportField key={rt} label={rt} value={(vals || []).join(', ')} mono/>
             ))}
@@ -794,13 +794,13 @@ function UrlReputationReport({ result }) {
 
       {(urlscan || bgp) && (
         <SectionCard id="url-infrastructure" label="Infrastructure"
-          accent="#0fbcff" defaultOpen={true}
+          accent="#00b4d8" defaultOpen={true}
           summary={`${infraCount} source${infraCount === 1 ? '' : 's'}`}>
           <Stack spacing={1.25}>
             {urlscan && (
               <CollapsibleSource title="URLScan.io"
                 status={urlscan.total ? `${urlscan.total} scans` : 'no scans'}
-                statusColor={urlscan.total ? '#0fbcff' : '#848592'}>
+                statusColor={urlscan.total ? '#00b4d8' : '#848592'}>
                 {urlscan.total ? (
                   <Box>
                     {urlscan.last_scan_date && (
@@ -825,7 +825,7 @@ function UrlReputationReport({ result }) {
             {bgp && (
               <CollapsibleSource title="BGP / ASN (CIRCL)"
                 status={bgp.rank != null ? `rank ${bgp.rank}` : 'ok'}
-                statusColor="#0fbcff">
+                statusColor="#00b4d8">
                 {bgp.asn && <ReportField label="ASN" value={`AS${bgp.asn} · ${bgp.asn_description || ''}`}/>}
                 {bgp.country && <ReportField label="Country" value={bgp.country} mono/>}
                 {bgp.rank != null && (
@@ -1045,7 +1045,7 @@ function TechnicalAssessment({ result }) {
                     Infection vector
                   </Typography>
                   <Stack direction="row" alignItems="center" spacing={1}>
-                    <ArrowUpRight size={13} color="#0fbcff"/>
+                    <ArrowUpRight size={13} color="#00b4d8"/>
                     <Typography sx={{ fontSize: 13, color: 'text.primary' }}>{vec}</Typography>
                   </Stack>
                 </Box>
@@ -1220,7 +1220,7 @@ function FileIdentity({ result }) {
         </Box>
       </Box>
 
-      {/* Hashes — all in IBM Plex Mono with copy buttons */}
+      {/* Hashes — all in JetBrains Mono with copy buttons */}
       <Box sx={{ mt: 2, pt: 1.5,
         borderTop: `1px solid ${muiAlpha('#ffffff', 0.06)}` }}>
         <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
@@ -2023,8 +2023,8 @@ function HuntingLeads({ result }) {
             </Typography>
             {h.data_source && (
               <MuiChip label={h.data_source} size="small" sx={{ height: 18, fontSize: 9,
-                ...monoSx, backgroundColor: muiAlpha('#0fbcff', 0.18),
-                color: 'primary.main', fontFamily: '"IBM Plex Mono", monospace',
+                ...monoSx, backgroundColor: muiAlpha('#00b4d8', 0.18),
+                color: 'primary.main', fontFamily: '"JetBrains Mono", monospace',
               }}/>
             )}
           </Stack>
@@ -2233,7 +2233,7 @@ function StickyHeader({ result, scanning }) {
           <MuiChip label={cls} size="small" sx={{
             ...monoSx, height: 22, fontSize: 11,
             backgroundColor: muiAlpha(c, 0.18), color: c, fontWeight: 600,
-            fontFamily: '"IBM Plex Mono", monospace',
+            fontFamily: '"JetBrains Mono", monospace',
           }}/>
         )}
         <MuiChip label={v} size="small" sx={{
@@ -2592,7 +2592,7 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
 
                   {_topFactoids.length > 0 && (
                     <SectionCard id="url-identity" label="URL Identity"
-                      accent="#0fbcff" defaultOpen={true}
+                      accent="#00b4d8" defaultOpen={true}
                       summary={_host || ''}>
                       <Box sx={{ display: 'grid',
                         gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' },
@@ -2618,7 +2618,7 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
                   )}
 
                   <SectionCard id="url-detonation" label="Live URL Scan"
-                    accent="#0fbcff" defaultOpen={true} summary="URLScan.io">
+                    accent="#00b4d8" defaultOpen={true} summary="URLScan.io">
                     <URLScanLive result={result} urls={[result.source_url]} bare/>
                   </SectionCard>
 

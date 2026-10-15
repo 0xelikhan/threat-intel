@@ -131,13 +131,13 @@ export default function MapTab({ result }) {
           box-shadow: 0 0 12px ${color}66, 0 0 4px ${color};
           display: flex; align-items: center; justify-content: center;
           font-size: 10px; font-weight: bold; color: white;
-          font-family: Courier New;
+          font-family: JetBrains Mono;
         ">${verdict[0]}</div>`;
 
       const icon = L.divIcon({ html: markerHtml, className: '', iconSize: [24, 24], iconAnchor: [12, 12] });
 
       const popupContent = `
-        <div style="background:#0d1526;border:1px solid #1e3a5f;border-radius:6px;padding:12px;min-width:200px;font-family:Courier New;font-size:12px;color:#c8d6e5">
+        <div style="background:#0d1526;border:1px solid #1e3a5f;border-radius:6px;padding:12px;min-width:200px;font-family:JetBrains Mono;font-size:12px;color:#c8d6e5">
           <div style="font-size:14px;color:#e2e8f0;margin-bottom:8px;font-weight:bold">${ip}</div>
           <div style="display:inline-block;background:${color}22;border:1px solid ${color}66;color:${color};padding:2px 8px;border-radius:3px;font-size:10px;letter-spacing:1px;margin-bottom:8px">${verdict}</div>
           ${details.city ? `<div style="color:#718096">${details.city}, ${details.country}</div>` : `<div style="color:#718096">${details.country}</div>`}
@@ -217,7 +217,7 @@ export default function MapTab({ result }) {
                 const c = VERDICT_COLORS[verdict];
                 return (
                   <tr key={ip} style={{ borderBottom: '1px solid #0d1a30', background: i % 2 === 0 ? 'transparent' : '#060d1a' }}>
-                    <td style={{ padding: '8px 10px', fontFamily: 'Courier New', color: '#4a9eff' }}>{ip}</td>
+                    <td style={{ padding: '8px 10px', fontFamily: 'JetBrains Mono', color: '#4a9eff' }}>{ip}</td>
                     <td style={{ padding: '8px 10px', color: '#c8d6e5' }}>{d.country || '—'}</td>
                     <td style={{ padding: '8px 10px', color: '#718096', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.org || '—'}</td>
                     <td style={{ padding: '8px 10px' }}>

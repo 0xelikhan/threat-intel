@@ -141,7 +141,7 @@ class ErrorBoundary extends React.Component {
     if (!this.state.error) return this.props.children;
 
     const isChunk = _isChunkLoadError(this.state.error);
-    const accent = isChunk ? '#0fbcff' : '#ff8c00';   // cyan for "stale build", orange for real crash
+    const accent = isChunk ? '#00b4d8' : '#ff8c00';   // cyan for "stale build", orange for real crash
     const label  = this.props.label || 'this section';
     const msg    = this.state.error?.message || String(this.state.error);
 
@@ -175,7 +175,7 @@ class ErrorBoundary extends React.Component {
             </Typography>
             <Typography sx={{ fontSize: 11, color: 'text.tertiary',
               lineHeight: 1.5, mb: 1.5,
-              fontFamily: '"IBM Plex Mono", monospace' }}>
+              fontFamily: '"JetBrains Mono", monospace' }}>
               {msg}
             </Typography>
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
@@ -198,7 +198,7 @@ class ErrorBoundary extends React.Component {
         ) : (
           <>
             <Typography sx={{ fontSize: 13, color: 'text.primary',
-              lineHeight: 1.55, mb: 1, fontFamily: '"IBM Plex Mono", monospace' }}>
+              lineHeight: 1.55, mb: 1, fontFamily: '"JetBrains Mono", monospace' }}>
               {msg}
             </Typography>
             <Typography sx={{ fontSize: 12, color: 'text.tertiary',

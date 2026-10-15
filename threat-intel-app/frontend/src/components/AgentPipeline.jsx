@@ -168,7 +168,7 @@ function AgentPipeline({ logText, label, onComplete, onStart, onPartial, onScanU
               const dropped = tr?.status === 'dropped';
               const color   = dropped ? '#F14337'
                              : ok      ? '#17AB1F'
-                             : active  ? '#0fbcff'
+                             : active  ? '#00b4d8'
                              :           '#75829A';
               const Icon    = agent.icon;
               return (
@@ -214,9 +214,9 @@ function AgentPipeline({ logText, label, onComplete, onStart, onPartial, onScanU
                       borderTop: i > 0 ? `1px solid ${alpha('#ffffff', 0.06)}` : 'none',
                     }}>
                       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>
-                        <Wrench size={10} color="#0fbcff" style={{ flexShrink: 0, marginTop: 3 }}/>
+                        <Wrench size={10} color="#00b4d8" style={{ flexShrink: 0, marginTop: 3 }}/>
                         <Box sx={{
-                          fontFamily: '"IBM Plex Mono", monospace',
+                          fontFamily: '"JetBrains Mono", monospace',
                           color: 'primary.main',
                           fontSize: 10.5,
                           wordBreak: 'break-all', overflowWrap: 'anywhere',

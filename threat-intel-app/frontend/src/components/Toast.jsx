@@ -95,7 +95,7 @@ export default function ToastHost() {
                 )}
                 {t.requestId && (
                   <Typography sx={{ fontSize: 10.5, color: 'text.tertiary',
-                    fontFamily: '"IBM Plex Mono", monospace', mt: 0.75,
+                    fontFamily: '"JetBrains Mono", monospace', mt: 0.75,
                     opacity: 0.7 }}>
                     rid: {t.requestId.slice(0, 12)}
                   </Typography>

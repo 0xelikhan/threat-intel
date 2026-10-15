@@ -27,7 +27,7 @@ import { alpha as muiAlpha } from '@mui/material/styles';
 // ─── one-time shimmer keyframe injection ─────────────────────────────────────
 const _SHIMMER_NAME    = 'recon-skel-shimmer';
 const _PULSE_NAME      = 'recon-skel-pulse';
-const _ACCENT          = '#0fbcff';
+const _ACCENT          = '#00b4d8';
 const _DARK_BG         = '#09253d';
 const _BORDER          = 'rgba(255,255,255,0.10)';
 
@@ -240,7 +240,7 @@ export function SkeletonAnalyze() {
       <SkelCard accent="#17AB1F">
         <Skeleton width="40%" height={12} sx={{ mb: 1.5 }}/>
         <Box sx={{
-          backgroundColor: '#070d19',
+          backgroundColor: '#060b1c',
           border: `1px solid ${muiAlpha('#ffffff', 0.05)}`,
           borderRadius: 1, p: 1.25,
         }}>

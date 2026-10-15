@@ -23,7 +23,7 @@ import { Mail, Copy, Check, Eye, RefreshCcw, AlertCircle, Sparkles, Zap, Wand2, 
 import DOMPurify from 'dompurify';
 import { cookieFetch } from '../utils/api';
 
-const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
+const monoSx = { fontFamily: '"JetBrains Mono", monospace' };
 
 // HTML sanitizer config for the rendered-email preview. The backend
 // compose pipeline builds HTML from f-string templates that interpolate
@@ -185,7 +185,7 @@ const REM_SECTIONS = [
    analyzer's SectionCard pattern: header click toggles open/closed,
    chevron rotates 90° when expanded, optional right-aligned summary
    indicator next to the title. State is local per card.            */
-function PanelCard({ title, accent = '#0fbcff', badge, summary,
+function PanelCard({ title, accent = '#00b4d8', badge, summary,
                      defaultOpen = false, children }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -511,7 +511,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
     }}>
       {/* Header */}
       <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2.5 }}>
-        <Mail size={20} color="#0fbcff"/>
+        <Mail size={20} color="#00b4d8"/>
         <Typography sx={{ fontSize: 18, fontWeight: 600, color: 'text.primary' }}>
           Email Composer
         </Typography>
@@ -536,7 +536,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
         />
         {detected && (
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 1.25 }} flexWrap="wrap" useFlexGap>
-            <Zap size={12} color="#0fbcff"/>
+            <Zap size={12} color="#00b4d8"/>
             <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
               Detected · template will match
             </Typography>
@@ -545,8 +545,8 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
               size="small"
               sx={{
                 height: 20, fontSize: 11,
-                backgroundColor: muiAlpha('#0fbcff', 0.16),
-                color: '#0fbcff', fontWeight: 500,
+                backgroundColor: muiAlpha('#00b4d8', 0.16),
+                color: '#00b4d8', fontWeight: 500,
                 borderRadius: '3px',
               }}
             />
@@ -692,10 +692,10 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
                   <Box key={cat} sx={{
                     p: '8px 12px', borderRadius: '4px',
                     backgroundColor: on
-                      ? muiAlpha('#0fbcff', 0.08)
+                      ? muiAlpha('#00b4d8', 0.08)
                       : muiAlpha('#ffffff', 0.02),
                     border: `1px solid ${on
-                      ? muiAlpha('#0fbcff', 0.35)
+                      ? muiAlpha('#00b4d8', 0.35)
                       : muiAlpha('#ffffff', 0.08)}`,
                   }}>
                     <Box sx={{
@@ -708,8 +708,8 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
                         onClick={() => toggleCategory(cat)}
                         sx={{
                           width: 14, height: 14, borderRadius: '3px',
-                          border: `1px solid ${on ? '#0fbcff' : muiAlpha('#ffffff', 0.3)}`,
-                          backgroundColor: on ? '#0fbcff' : 'transparent',
+                          border: `1px solid ${on ? '#00b4d8' : muiAlpha('#ffffff', 0.3)}`,
+                          backgroundColor: on ? '#00b4d8' : 'transparent',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           flexShrink: 0, cursor: 'pointer',
                         }}>
@@ -862,12 +862,12 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
           return (
             <Box key={s.key} sx={{
               mt: 1.25, p: 1.25, borderRadius: '4px',
-              backgroundColor: muiAlpha('#0fbcff', 0.05),
-              border: `1px solid ${muiAlpha('#0fbcff', 0.18)}`,
-              borderLeft: `3px solid ${muiAlpha('#0fbcff', 0.6)}`,
+              backgroundColor: muiAlpha('#00b4d8', 0.05),
+              border: `1px solid ${muiAlpha('#00b4d8', 0.18)}`,
+              borderLeft: `3px solid ${muiAlpha('#00b4d8', 0.6)}`,
             }}>
               <Typography sx={{ mb: 0.75, fontSize: 11, fontWeight: 600,
-                color: '#0fbcff', textTransform: 'uppercase',
+                color: '#00b4d8', textTransform: 'uppercase',
                 letterSpacing: '0.06em' }}>
                 {s.label}
               </Typography>
@@ -876,7 +876,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
                   {v.map((item, i) => (
                     <Stack key={i} direction="row" spacing={1} alignItems="flex-start">
                       <Box sx={{ width: 4, height: 4, borderRadius: 99,
-                        backgroundColor: '#0fbcff', mt: '7px', flexShrink: 0 }}/>
+                        backgroundColor: '#00b4d8', mt: '7px', flexShrink: 0 }}/>
                       <Box>
                         {typeof item === 'string' ? (
                           <Typography sx={{ fontSize: 12.5, color: 'text.primary',
@@ -951,7 +951,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
           {previewMode === 'html' && (
             <Box component="pre" sx={{
               ...monoSx, fontSize: 11, color: 'text.primary',
-              backgroundColor: '#070d19',
+              backgroundColor: '#060b1c',
               border: `1px solid ${muiAlpha('#ffffff', 0.08)}`,
               borderRadius: '4px', p: '12px 14px', m: 0,
               whiteSpace: 'pre-wrap', wordBreak: 'break-word',
@@ -961,7 +961,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
           {previewMode === 'text' && (
             <Box component="pre" sx={{
               ...monoSx, fontSize: 12, color: 'text.primary',
-              backgroundColor: '#070d19',
+              backgroundColor: '#060b1c',
               border: `1px solid ${muiAlpha('#ffffff', 0.08)}`,
               borderRadius: '4px', p: '12px 14px', m: 0,
               whiteSpace: 'pre-wrap', wordBreak: 'break-word',
