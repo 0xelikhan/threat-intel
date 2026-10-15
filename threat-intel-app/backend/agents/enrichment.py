@@ -2083,6 +2083,83 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
     except Exception:
         pass
 
+    # Polyswarm — multi-engine assertions + polyscore
+    ps_key = keys.get("POLYSWARM_KEY", "")
+    if ps_key:
+        try:
+            from intel.polyswarm import lookup_hash as _ps_h
+            ps = await _ps_h(session, hash_val, ps_key)
+            if ps and ps.get("found"):
+                data["polyswarm"] = ps
+        except Exception as _e:
+            _log.debug("Polyswarm hash lookup failed: %s", _e)
+
+    # Intezer — code-reuse family attribution
+    iz_key = keys.get("INTEZER_KEY", "")
+    if iz_key:
+        try:
+            from intel.intezer import lookup_hash as _iz_h
+            iz = await _iz_h(session, hash_val, iz_key)
+            if iz and iz.get("found"):
+                data["intezer"] = iz
+        except Exception as _e:
+            _log.debug("Intezer hash lookup failed: %s", _e)
+
+    # Hybrid Analysis — Falcon Sandbox overview + MITRE + signatures
+    ha_key = keys.get("HYBRID_ANALYSIS_KEY", "")
+    if ha_key:
+        try:
+            from intel.hybrid_analysis import lookup_hash as _ha_h
+            ha = await _ha_h(session, hash_val, ha_key)
+            if ha and ha.get("found"):
+                data["hybrid_analysis"] = ha
+        except Exception as _e:
+            _log.debug("Hybrid Analysis hash lookup failed: %s", _e)
+
+    # Hatching Triage — cloud sandbox report corpus
+    tri_key = keys.get("TRIAGE_KEY", "")
+    if tri_key:
+        try:
+            from intel.triage import lookup_hash as _tri_h
+            tri = await _tri_h(session, hash_val, tri_key)
+            if tri and tri.get("found"):
+                data["triage"] = tri
+        except Exception as _e:
+            _log.debug("Triage hash lookup failed: %s", _e)
+
+    # Koodous — Android APK samples
+    koo_key = keys.get("KOODOUS_KEY", "")
+    if koo_key:
+        try:
+            from intel.koodous import lookup_hash as _koo_h
+            koo = await _koo_h(session, hash_val, koo_key)
+            if koo and koo.get("found"):
+                data["koodous"] = koo
+        except Exception as _e:
+            _log.debug("Koodous hash lookup failed: %s", _e)
+
+    # FileScan.io (OPSWAT MetaDefender community)
+    fs_key = keys.get("FILESCAN_KEY", "")
+    if fs_key:
+        try:
+            from intel.filescan import lookup_hash as _fs_h
+            fs = await _fs_h(session, hash_val, fs_key)
+            if fs and fs.get("found"):
+                data["filescan"] = fs
+        except Exception as _e:
+            _log.debug("FileScan hash lookup failed: %s", _e)
+
+    # MWDB (CERT.pl malware repository)
+    mw_key = keys.get("MWDB_KEY", "")
+    if mw_key:
+        try:
+            from intel.mwdb import lookup_hash as _mw_h
+            mw = await _mw_h(session, hash_val, mw_key)
+            if mw and mw.get("found"):
+                data["mwdb"] = mw
+        except Exception as _e:
+            _log.debug("MWDB hash lookup failed: %s", _e)
+
     # HIBP Pwned Passwords — k-anonymity API for SHA-1 input. We never
     # send the password / full hash; only the first 5 chars of the SHA-1
     # prefix leave the box. RECON's hash IOC extractor surfaces SHA-1s
