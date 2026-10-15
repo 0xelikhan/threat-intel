@@ -23,6 +23,10 @@ itsdangerous>=2.0.0
 # dnstwist powers the domain_permutations skill (typosquat / homoglyph
 # enumeration for URL-input alerts). MIT-licensed, pure Python.
 dnstwist>=20240819
+# phonenumbers powers intel/phunter.py — pure Python phone-number parse,
+# validate, carrier / timezone / line-type extraction. Google-maintained,
+# Apache-2.0, no network dependencies.
+phonenumbers>=8.13.0
 # flare-capa is OPTIONAL — opt-in via RECON_ENABLE_CAPA=1. Pulls ~150 MB
 # of transitive deps (vivisect, viv-utils, etc.) and spends 5-30s per
 # real PE. The rules-based intel/file_capability_map.py still produces

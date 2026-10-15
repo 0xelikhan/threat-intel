@@ -2160,6 +2160,17 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("MWDB hash lookup failed: %s", _e)
 
+    # Joe Sandbox Cloud — commercial sandbox with free Basic tier.
+    jsb_key = keys.get("JOESANDBOX_KEY", "")
+    if jsb_key:
+        try:
+            from intel.joesandbox import lookup_hash as _jsb_h
+            jsb = await _jsb_h(session, hash_val, jsb_key)
+            if jsb and jsb.get("found"):
+                data["joesandbox"] = jsb
+        except Exception as _e:
+            _log.debug("JoeSandbox hash lookup failed: %s", _e)
+
     # HIBP Pwned Passwords — k-anonymity API for SHA-1 input. We never
     # send the password / full hash; only the first 5 chars of the SHA-1
     # prefix leave the box. RECON's hash IOC extractor surfaces SHA-1s
@@ -2645,6 +2656,59 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("URLdna URL lookup failed for %s: %s", url, _e)
 
+    # Joe Sandbox Cloud — URL sandbox analyses
+    jsb_key = keys.get("JOESANDBOX_KEY", "")
+    if jsb_key:
+        try:
+            from intel.joesandbox import lookup_url as _jsb_url
+            jsb = await _jsb_url(session, url, jsb_key)
+            if jsb and jsb.get("found"):
+                data["joesandbox"] = jsb
+        except Exception as _e:
+            _log.debug("JoeSandbox URL lookup failed for %s: %s", url, _e)
+
+    _cache[ck] = data
+    return data
+
+
+# ─── Phone number enrichment ───────────────────────────────────────────────
+async def enrich_phone(session, phone: str, keys: dict) -> dict:
+    """Enrich a phone number IOC. Native-Python Phunter (parse +
+    validate + carrier + line-type, no network) + optional Phoneinfoga
+    via NumVerify (second-opinion carrier/location data, keyed).
+    """
+    phone = (phone or "").strip()
+    ck = _ck("phone", phone)
+    if ck in _cache:
+        return {**_cache[ck], "cached": True}
+
+    if not phone:
+        data = {"error": "invalid phone"}
+        _cache[ck] = data
+        return data
+
+    data: dict = {}
+
+    # Phunter (local, no network, no key)
+    try:
+        from intel.phunter import lookup as _ph_lookup
+        ph = await _ph_lookup(session, phone)
+        if ph and (ph.get("found") or ph.get("error")):
+            data["phunter"] = ph
+    except Exception as _e:
+        _log.debug("Phunter lookup failed for %s: %s", phone, _e)
+
+    # Phoneinfoga (NumVerify backend — keyed)
+    nv_key = keys.get("NUMVERIFY_KEY", "")
+    if nv_key:
+        try:
+            from intel.phoneinfoga import lookup as _pf_lookup
+            pf = await _pf_lookup(session, phone, nv_key)
+            if pf and pf.get("found"):
+                data["phoneinfoga"] = pf
+        except Exception as _e:
+            _log.debug("Phoneinfoga lookup failed for %s: %s", phone, _e)
+
     _cache[ck] = data
     return data
 
@@ -2958,7 +3022,7 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
     # (via on_partial) instead of waiting for the slowest type to land everything
     # at once. The final `enrichments` dict is identical either way.
     enrichments = {"ips": {}, "domains": {}, "hashes": {}, "urls": {},
-                   "cves": {}, "emails": {}, "crypto": {}}
+                   "cves": {}, "emails": {}, "crypto": {}, "phones": {}}
     type_iocs = {
         "ips":     iocs.get("ips", [])[:10],
         "domains": iocs.get("domains", [])[:10],
@@ -2974,11 +3038,14 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
         # Crypto address enrichment — ransomwhe.re + OFAC SDN. Triage
         # emits either raw strings or {chain, address} dicts.
         "crypto":  iocs.get("crypto", [])[:10],
+        # Phone number enrichment — Phunter (local, no key) +
+        # Phoneinfoga (NumVerify backend, keyed).
+        "phones":  iocs.get("phones", [])[:10],
     }
     _enrichers = {"ips": enrich_ip, "domains": enrich_domain,
                   "hashes": enrich_hash, "urls": enrich_url,
                   "cves": enrich_cve, "emails": enrich_email,
-                  "crypto": enrich_crypto}
+                  "crypto": enrich_crypto, "phones": enrich_phone}
 
     # Share the process-wide TCP/DNS pool. connector_owner=False keeps the
     # connector alive after this session closes so the next investigation
