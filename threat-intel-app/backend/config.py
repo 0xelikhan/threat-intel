@@ -341,6 +341,22 @@ API_KEY_DEFINITIONS = {
         "placeholder": "MWDB API key",
         "group": "API Keys"
     },
+    "JOESANDBOX_KEY": {
+        "label": "Joe Sandbox Cloud API Key",
+        "description": "Joe Sandbox hash + URL analysis search. Free Basic tier available.",
+        "required": False,
+        "url": "https://jbxcloud.joesecurity.org/",
+        "placeholder": "Joe Sandbox API key",
+        "group": "API Keys"
+    },
+    "NUMVERIFY_KEY": {
+        "label": "NumVerify API Key",
+        "description": "Phone number validation + carrier + location (Phoneinfoga backend). Free tier: 100 req/month.",
+        "required": False,
+        "url": "https://numverify.com/",
+        "placeholder": "NumVerify access_key",
+        "group": "API Keys"
+    },
     "CENSYS_API_KEY": {
         "label": "Censys API Key (Personal Access Token)",
         "description": "Censys v3 Personal Access Token — single token sent "
