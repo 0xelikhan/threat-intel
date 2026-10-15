@@ -1430,6 +1430,17 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("ViriBack IP lookup failed for %s: %s", ip, _e)
 
+    # Robtex — free, no-key passive DNS + ASN + reverse DNS. Historical
+    # resolution context that complements VT's passive_dns and the
+    # live DoH chain (which only sees current state).
+    try:
+        from intel.robtex import lookup_ip as _robtex_ip
+        rbx = await _robtex_ip(session, ip)
+        if rbx and rbx.get("found"):
+            data["robtex"] = rbx
+    except Exception as _e:
+        _log.debug("Robtex IP lookup failed for %s: %s", ip, _e)
+
     _cache[ck] = data
     return data
 
@@ -1690,6 +1701,16 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     if osint:
         data["osint"] = osint
 
+    # Robtex — free, no-key passive DNS. Historical A/AAAA/MX records
+    # that complement the live DoH resolver and VT's passive_dns window.
+    try:
+        from intel.robtex import lookup_domain as _robtex_domain
+        rbx = await _robtex_domain(session, domain)
+        if rbx and rbx.get("found"):
+            data["robtex"] = rbx
+    except Exception as _e:
+        _log.debug("Robtex domain lookup failed for %s: %s", domain, _e)
+
     _cache[ck] = data
     return data
 
@@ -1806,6 +1827,18 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         mb = await _malware_bazaar(session, hash_val)
         if mb and not mb.get("error"):
             data["malware_bazaar"] = mb
+    except Exception:
+        pass
+
+    # YARAify (abuse.ch) — YARA + ClamAV scan results for the sample.
+    # Shares the abuse.ch Auth-Key with MB/ThreatFox/URLhaus. Returns
+    # YARA rule names, authors, descriptions + ClamAV detection names
+    # — directly actionable for detection engineering.
+    try:
+        from intel.yaraify import lookup as _yaraify_lookup
+        yr = await _yaraify_lookup(session, hash_val, abusech_key)
+        if yr and yr.get("found"):
+            data["yaraify"] = yr
     except Exception:
         pass
 
@@ -2015,6 +2048,19 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
     except Exception:
         # Nuclei lookup is additive — never break CVE enrichment.
         pass
+
+    # Vulners — cross-references NVD CVEs against ExploitDB, PacketStorm,
+    # 0day.today, exploit packs, and flags wild-exploitation. Widens
+    # exploit-source coverage beyond cve_pocs + KEV.
+    vulners_key = keys.get("VULNERS_KEY", "")
+    if vulners_key:
+        try:
+            from intel.vulners import lookup as _vulners_lookup
+            vln = await _vulners_lookup(session, cve_id, vulners_key)
+            if vln and vln.get("found"):
+                data["vulners"] = vln
+        except Exception as _e:
+            _log.debug("Vulners lookup failed for %s: %s", cve_id, _e)
 
     # GitHub Security Advisories — editorial-curated package-ecosystem
     # advisories. Same upstream as OSV.dev but with cleaner summaries +

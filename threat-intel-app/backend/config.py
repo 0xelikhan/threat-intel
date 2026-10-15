@@ -165,6 +165,14 @@ API_KEY_DEFINITIONS = {
         "placeholder": "at_... key",
         "group": "API Keys"
     },
+    "VULNERS_KEY": {
+        "label": "Vulners API Key",
+        "description": "CVE / exploit database cross-reference. Flags CVEs with public exploits (ExploitDB, PacketStorm, 0day.today) and wild-exploitation. Free tier covers moderate daily use.",
+        "required": False,
+        "url": "https://vulners.com/userinfo",
+        "placeholder": "Vulners API key",
+        "group": "API Keys"
+    },
     "CENSYS_API_KEY": {
         "label": "Censys API Key (Personal Access Token)",
         "description": "Censys v3 Personal Access Token — single token sent "
