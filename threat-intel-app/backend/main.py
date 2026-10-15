@@ -768,6 +768,71 @@ from routers import calibration as _calibration_router
 app.include_router(_calibration_router.router)
 
 
+# ─── PLUGINS (plugin framework catalog + registry) ────────────────────────────────
+@app.get("/api/plugins")
+async def list_plugins():
+    """Return every registered plugin (analyzers, connectors, pivots,
+    visualizers, ingestors, playbooks). Powers the frontend's plugin
+    catalog panel + lets external tooling discover what RECON can do."""
+    try:
+        from plugins import registry as _plugin_registry
+        catalog = _plugin_registry.descriptors()
+        return {
+            "count": len(catalog),
+            "by_kind": {
+                "analyzer":   len([p for p in catalog if p.kind == "analyzer"]),
+                "connector":  len([p for p in catalog if p.kind == "connector"]),
+                "pivot":      len([p for p in catalog if p.kind == "pivot"]),
+                "visualizer": len([p for p in catalog if p.kind == "visualizer"]),
+                "ingestor":   len([p for p in catalog if p.kind == "ingestor"]),
+                "playbook":   len([p for p in catalog if p.kind == "playbook"]),
+            },
+            "plugins": [p.model_dump() for p in catalog],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"plugin registry failed: {e}")
+
+
+@app.get("/api/plugins/{name}")
+async def get_plugin(name: str):
+    """Lookup one plugin's full descriptor."""
+    try:
+        from plugins import registry as _plugin_registry
+        p = _plugin_registry.get(name)
+        if not p:
+            raise HTTPException(status_code=404, detail=f"plugin {name!r} not registered")
+        return p.descriptor().model_dump()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"plugin lookup failed: {e}")
+
+
+@app.post("/api/playbooks/{name}/run")
+async def run_playbook(name: str, req: Request):
+    """Execute a Playbook plugin against a provided IOC."""
+    try:
+        from plugins import Artifact, registry as _plugin_registry
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"plugin framework unavailable: {e}")
+    plugin = _plugin_registry.get(name)
+    if plugin is None or plugin.kind != "playbook":
+        raise HTTPException(status_code=404, detail=f"playbook {name!r} not registered")
+    body = await req.json()
+    ioc_value = body.get("ioc") or body.get("value")
+    ioc_type = body.get("type")
+    if not ioc_value or not ioc_type:
+        raise HTTPException(status_code=400,
+                              detail="required: {'ioc': value, 'type': 'ipv4'|...}")
+    import hashlib
+    artifact_id = hashlib.sha256(f"{ioc_type}:{ioc_value}".encode()).hexdigest()
+    artifact = Artifact(id=artifact_id, type=ioc_type, value=ioc_value)
+    import aiohttp
+    async with aiohttp.ClientSession() as session:
+        result = await plugin.execute(session, artifact, dict(config.get_all()))
+    return result
+
+
 # ─── SETTINGS ─────────────────────────────────────────────────────────────────────
 @app.get("/api/settings")
 async def get_settings():
