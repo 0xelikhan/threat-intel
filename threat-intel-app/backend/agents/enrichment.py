@@ -1461,6 +1461,94 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("Stalkphish IP lookup failed for %s: %s", ip, _e)
 
+    # SecurityTrails — IP neighbors (co-hosted IPs on the same block)
+    st_key = keys.get("SECURITYTRAILS_KEY", "")
+    if st_key:
+        try:
+            from intel.securitytrails import lookup_ip as _st_ip
+            st = await _st_ip(session, ip, st_key)
+            if st and st.get("found"):
+                data["securitytrails"] = st
+        except Exception as _e:
+            _log.debug("SecurityTrails IP lookup failed for %s: %s", ip, _e)
+
+    # LeakIX — exposed services, data leaks, config exposures per host.
+    lx_key = keys.get("LEAKIX_KEY", "")
+    if lx_key:
+        try:
+            from intel.leakix import lookup_ip as _lx_ip
+            lx = await _lx_ip(session, ip, lx_key)
+            if lx and lx.get("found"):
+                data["leakix"] = lx
+        except Exception as _e:
+            _log.debug("LeakIX IP lookup failed for %s: %s", ip, _e)
+
+    # Netlas — IP whois (CIDR, net name, org, abuse contacts)
+    nl_key = keys.get("NETLAS_KEY", "")
+    if nl_key:
+        try:
+            from intel.netlas import lookup_ip as _nl_ip
+            nl = await _nl_ip(session, ip, nl_key)
+            if nl and nl.get("found"):
+                data["netlas"] = nl
+        except Exception as _e:
+            _log.debug("Netlas IP lookup failed for %s: %s", ip, _e)
+
+    # Onyphe — summary across resolver/datascan/vulnscan categories
+    on_key = keys.get("ONYPHE_KEY", "")
+    if on_key:
+        try:
+            from intel.onyphe import lookup_ip as _on_ip
+            on = await _on_ip(session, ip, on_key)
+            if on and on.get("found"):
+                data["onyphe"] = on
+        except Exception as _e:
+            _log.debug("Onyphe IP lookup failed for %s: %s", ip, _e)
+
+    # Hunter.how — Chinese internet-scan engine (ports + fingerprints)
+    hh_key = keys.get("HUNTER_HOW_KEY", "")
+    if hh_key:
+        try:
+            from intel.hunter_how import lookup_ip as _hh_ip
+            hh = await _hh_ip(session, ip, hh_key)
+            if hh and hh.get("found"):
+                data["hunter_how"] = hh
+        except Exception as _e:
+            _log.debug("Hunter.how IP lookup failed for %s: %s", ip, _e)
+
+    # BinaryEdge — scan dataset (ports, services, SSL)
+    be_key = keys.get("BINARYEDGE_KEY", "")
+    if be_key:
+        try:
+            from intel.binaryedge import lookup_ip as _be_ip
+            be = await _be_ip(session, ip, be_key)
+            if be and be.get("found"):
+                data["binaryedge"] = be
+        except Exception as _e:
+            _log.debug("BinaryEdge IP lookup failed for %s: %s", ip, _e)
+
+    # ZoomEye — host search alternative (broad fingerprint coverage)
+    ze_key = keys.get("ZOOMEYE_KEY", "")
+    if ze_key:
+        try:
+            from intel.zoomeye import lookup_ip as _ze_ip
+            ze = await _ze_ip(session, ip, ze_key)
+            if ze and ze.get("found"):
+                data["zoomeye"] = ze
+        except Exception as _e:
+            _log.debug("ZoomEye IP lookup failed for %s: %s", ip, _e)
+
+    # Validin — historical DNS pivots (what else resolved here)
+    val_key = keys.get("VALIDIN_KEY", "")
+    if val_key:
+        try:
+            from intel.validin import lookup_ip as _val_ip
+            val = await _val_ip(session, ip, val_key)
+            if val and val.get("found"):
+                data["validin"] = val
+        except Exception as _e:
+            _log.debug("Validin IP lookup failed for %s: %s", ip, _e)
+
     _cache[ck] = data
     return data
 
@@ -1761,6 +1849,72 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
                 data["urldna"] = ud
         except Exception as _e:
             _log.debug("URLdna domain lookup failed for %s: %s", domain, _e)
+
+    # SecurityTrails — subdomain enumeration + current DNS.
+    st_key = keys.get("SECURITYTRAILS_KEY", "")
+    if st_key:
+        try:
+            from intel.securitytrails import lookup_domain as _st_dom
+            st = await _st_dom(session, domain, st_key)
+            if st and st.get("found"):
+                data["securitytrails"] = st
+        except Exception as _e:
+            _log.debug("SecurityTrails domain lookup failed for %s: %s", domain, _e)
+
+    # Onyphe — domain summary across scan categories.
+    on_key = keys.get("ONYPHE_KEY", "")
+    if on_key:
+        try:
+            from intel.onyphe import lookup_domain as _on_dom
+            on = await _on_dom(session, domain, on_key)
+            if on and on.get("found"):
+                data["onyphe"] = on
+        except Exception as _e:
+            _log.debug("Onyphe domain lookup failed for %s: %s", domain, _e)
+
+    # Hunter.how — domain search (ports, services, resolved IPs).
+    hh_key = keys.get("HUNTER_HOW_KEY", "")
+    if hh_key:
+        try:
+            from intel.hunter_how import lookup_domain as _hh_dom
+            hh = await _hh_dom(session, domain, hh_key)
+            if hh and hh.get("found"):
+                data["hunter_how"] = hh
+        except Exception as _e:
+            _log.debug("Hunter.how domain lookup failed for %s: %s", domain, _e)
+
+    # BinaryEdge — subdomain enumeration.
+    be_key = keys.get("BINARYEDGE_KEY", "")
+    if be_key:
+        try:
+            from intel.binaryedge import lookup_domain as _be_dom
+            be = await _be_dom(session, domain, be_key)
+            if be and be.get("found"):
+                data["binaryedge"] = be
+        except Exception as _e:
+            _log.debug("BinaryEdge domain lookup failed for %s: %s", domain, _e)
+
+    # ZoomEye — hostname search.
+    ze_key = keys.get("ZOOMEYE_KEY", "")
+    if ze_key:
+        try:
+            from intel.zoomeye import lookup_domain as _ze_dom
+            ze = await _ze_dom(session, domain, ze_key)
+            if ze and ze.get("found"):
+                data["zoomeye"] = ze
+        except Exception as _e:
+            _log.debug("ZoomEye domain lookup failed for %s: %s", domain, _e)
+
+    # Validin — domain → historical IPs.
+    val_key = keys.get("VALIDIN_KEY", "")
+    if val_key:
+        try:
+            from intel.validin import lookup_domain as _val_dom
+            val = await _val_dom(session, domain, val_key)
+            if val and val.get("found"):
+                data["validin"] = val
+        except Exception as _e:
+            _log.debug("Validin domain lookup failed for %s: %s", domain, _e)
 
     _cache[ck] = data
     return data

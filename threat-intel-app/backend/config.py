@@ -197,6 +197,70 @@ API_KEY_DEFINITIONS = {
         "placeholder": "URLdna API key",
         "group": "API Keys"
     },
+    "SECURITYTRAILS_KEY": {
+        "label": "SecurityTrails API Key",
+        "description": "Current DNS + historical WHOIS + subdomain enumeration + IP neighbors. Free tier: 50 req/month.",
+        "required": False,
+        "url": "https://securitytrails.com/corp/api",
+        "placeholder": "SecurityTrails API key",
+        "group": "API Keys"
+    },
+    "LEAKIX_KEY": {
+        "label": "LeakIX API Key",
+        "description": "Exposed services + data leaks + config exposures per host (S3/Elasticsearch/MongoDB/web app configs).",
+        "required": False,
+        "url": "https://leakix.net/",
+        "placeholder": "LeakIX API key",
+        "group": "API Keys"
+    },
+    "NETLAS_KEY": {
+        "label": "Netlas API Key",
+        "description": "IP whois + CIDR + abuse contacts. Internet-scan dataset. Free tier: 50 queries/day.",
+        "required": False,
+        "url": "https://netlas.io/",
+        "placeholder": "Netlas API key",
+        "group": "API Keys"
+    },
+    "ONYPHE_KEY": {
+        "label": "Onyphe API Key",
+        "description": "Internet-scan + passive summary (open ports, DNS, SSL certs, vulnerabilities) for IPs / domains / hostnames.",
+        "required": False,
+        "url": "https://www.onyphe.io/",
+        "placeholder": "Onyphe API key",
+        "group": "API Keys"
+    },
+    "HUNTER_HOW_KEY": {
+        "label": "Hunter.how API Key",
+        "description": "Internet-scan + fingerprint search (Shodan/ZoomEye-style). Free trial tier.",
+        "required": False,
+        "url": "https://hunter.how/",
+        "placeholder": "Hunter.how API key",
+        "group": "API Keys"
+    },
+    "BINARYEDGE_KEY": {
+        "label": "BinaryEdge API Key",
+        "description": "Commercial scan dataset: ports, services, SSL certs, torrents, DNS. Free trial tier.",
+        "required": False,
+        "url": "https://www.binaryedge.io/",
+        "placeholder": "BinaryEdge API key",
+        "group": "API Keys"
+    },
+    "ZOOMEYE_KEY": {
+        "label": "ZoomEye API Key",
+        "description": "Chinese internet-scan engine (Shodan alternative) with broad fingerprint coverage.",
+        "required": False,
+        "url": "https://www.zoomeye.org/",
+        "placeholder": "ZoomEye API key",
+        "group": "API Keys"
+    },
+    "VALIDIN_KEY": {
+        "label": "Validin API Key",
+        "description": "Historical passive DNS pivots — IP ↔ domain over time. Strong for infrastructure clustering.",
+        "required": False,
+        "url": "https://app.validin.com/",
+        "placeholder": "Validin API key",
+        "group": "API Keys"
+    },
     "CENSYS_API_KEY": {
         "label": "Censys API Key (Personal Access Token)",
         "description": "Censys v3 Personal Access Token — single token sent "
