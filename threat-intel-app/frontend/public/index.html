@@ -3,27 +3,26 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0a0e16" />
+    <meta name="theme-color" content="#060b1c" />
     <title>RECON</title>
     <link rel="icon" type="image/png" href="/logo.png" />
-    <!-- Fonts now bundled via @fontsource/ibm-plex-sans + @fontsource/ibm-plex-mono in index.js -->
-    <!-- (no Google Fonts CDN — adapted from OpenCTI design system) -->
+    <!-- Fonts bundled via @fontsource/inter + @fontsource/jetbrains-mono in index.js -->
     <style>
+      /* First-paint styles. The React app replaces these via MUI CssBaseline
+         + index.css; these just prevent a white flash before React mounts. */
       *,*::before,*::after { box-sizing: border-box; }
       html,body { margin: 0; padding: 0; }
-      /* Body styles now driven by MUI CssBaseline (theme.js MuiCssBaseline override).
-         These leftover values keep the very-first paint before React mounts looking
-         correct so the page never flashes light-mode. */
       body {
-        background: #070d19;
-        color: #F2F2F3;
-        font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        background: linear-gradient(#060b1c 0%, #0a1628 40%, #0d1b2a 100%);
+        min-height: 100vh;
+        color: #e6edf3;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
       }
-      code,pre,kbd { font-family: 'IBM Plex Mono', ui-monospace, 'SF Mono', Consolas, monospace; }
+      code,pre,kbd { font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, 'SF Mono', Consolas, monospace; }
       #root { min-height: 100vh; }
-      ::selection { background: rgba(15,188,255,0.25); color: #fff; }
+      ::selection { background: rgba(0,229,255,0.28); color: #fff; }
     </style>
   </head>
   <body>

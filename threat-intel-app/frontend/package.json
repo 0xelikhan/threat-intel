@@ -9,6 +9,8 @@
     "@emotion/styled": "^11.14.1",
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fontsource/ibm-plex-sans": "^5.2.8",
+    "@fontsource/inter": "^5.2.7",
+    "@fontsource/jetbrains-mono": "^5.2.7",
     "@mui/icons-material": "^9.0.1",
     "@mui/material": "^9.0.1",
     "axios": "^1.16.1",

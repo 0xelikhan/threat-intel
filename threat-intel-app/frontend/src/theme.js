@@ -27,16 +27,18 @@ const hexToRGB = (hex, opacity = 1) => {
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 };
 
-// ─── Exact colour tokens copied from ThemeDark.ts ───────────────────────────
-export const THEME_DARK_DEFAULT_BACKGROUND = '#070d19';
-export const THEME_DARK_DEFAULT_PRIMARY    = '#0fbcff';
-export const THEME_DARK_DEFAULT_SECONDARY  = '#00f18d';
-export const THEME_DARK_DEFAULT_ACCENT     = '#0f1e38';
-export const THEME_DARK_DEFAULT_PAPER      = '#09101e';
-export const THEME_DARK_DEFAULT_TEXT       = '#F2F2F3';
-export const THEME_DARK_DEFAULT_NAV        = '#070d19';
-export const THEME_DARK_DIALOG_BACKGROUND  = '#0F1D34';
-const EE_COLOR = '#00f18d';
+// ─── Palette tokens — Nucleon Cyber aesthetic (cybercure.ai) ─────────────────
+// Shifts OpenCTI's dark theme toward Nucleon's navy-cyan + matrix-green scheme.
+// MUI component overrides below are unchanged; only the token values moved.
+export const THEME_DARK_DEFAULT_BACKGROUND = '#060b1c';  // deep navy, page bg
+export const THEME_DARK_DEFAULT_PRIMARY    = '#00b4d8';  // mid-cyan accent
+export const THEME_DARK_DEFAULT_SECONDARY  = '#00ff41';  // matrix green — status/live
+export const THEME_DARK_DEFAULT_ACCENT     = '#0a1628';  // card inset / grid overlay
+export const THEME_DARK_DEFAULT_PAPER      = '#0a1120';  // card background
+export const THEME_DARK_DEFAULT_TEXT       = '#e6edf3';  // body text
+export const THEME_DARK_DEFAULT_NAV        = '#060b1c';  // left bar / top bar
+export const THEME_DARK_DIALOG_BACKGROUND  = '#0d1b2a';  // modal panels
+const EE_COLOR = '#00ff41';
 
 const background = THEME_DARK_DEFAULT_BACKGROUND;
 const paper      = THEME_DARK_DEFAULT_PAPER;
@@ -114,17 +116,17 @@ const theme = createTheme({
     },
   },
 
-  // Typography — IBM Plex Sans body, fallbacks for headings (we don't ship Geologica)
+  // Typography — Inter for UI, JetBrains Mono for data (overridden via class)
   typography: {
-    fontFamily: '"IBM Plex Sans", -apple-system, BlinkMacSystemFont, sans-serif',
-    body1:    { fontSize: '0.9rem', color: text_color },
-    body2:    { fontSize: '0.8rem', lineHeight: '1.2rem', color: text_color },
-    overline: { fontWeight: 500, color: text_color },
-    h1: { margin: '0 0 10px 0', padding: 0, fontWeight: 400, fontSize: 22, color: text_color },
-    h2: { margin: '0 0 10px 0', padding: 0, fontWeight: 500, fontSize: 16, color: text_color },
-    h3: { margin: '0 0 10px 0', padding: 0, fontWeight: 400, fontSize: 13, color: text_color },
-    h4: { height: 15, margin: '0 0 10px 0', padding: 0, fontSize: 12, fontWeight: 500, color: text_color },
-    h5: { fontWeight: 700, fontSize: 16, color: text_color },
+    fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "IBM Plex Sans", sans-serif',
+    body1:    { fontSize: '0.9rem', color: text_color, letterSpacing: '0.005em' },
+    body2:    { fontSize: '0.8rem', lineHeight: '1.2rem', color: text_color, letterSpacing: '0.005em' },
+    overline: { fontWeight: 500, color: text_color, letterSpacing: '0.08em', textTransform: 'uppercase' },
+    h1: { margin: '0 0 10px 0', padding: 0, fontWeight: 500, fontSize: 22, color: text_color, letterSpacing: '-0.01em' },
+    h2: { margin: '0 0 10px 0', padding: 0, fontWeight: 500, fontSize: 16, color: text_color, letterSpacing: '-0.005em' },
+    h3: { margin: '0 0 10px 0', padding: 0, fontWeight: 500, fontSize: 13, color: text_color },
+    h4: { height: 15, margin: '0 0 10px 0', padding: 0, fontSize: 12, fontWeight: 500, color: text_color, textTransform: 'uppercase', letterSpacing: '0.06em' },
+    h5: { fontWeight: 600, fontSize: 16, color: text_color },
     h6: { fontWeight: 600, fontSize: 14, color: text_color },
     subtitle2: { fontWeight: 400, fontSize: 18, color: text_color },
   },
@@ -466,21 +468,29 @@ const theme = createTheme({
           backgroundColor: background,
         },
         body: {
-          background: `linear-gradient(100deg, ${background} 0%, #08101D 100%)`,
+          // Nucleon-style layered background: core gradient + 1px cyan micro-grid
+          // + CRT scanline. index.css applies the same stack for the no-React
+          // first paint; this one wins once React mounts.
+          background: [
+            'linear-gradient(0deg, rgba(0,0,0,0.04) 0 1px, transparent 1px 3px)',
+            'linear-gradient(90deg, rgba(87,212,219,0.012) 1px, transparent 1px) 0 0 / 24px 24px',
+            'linear-gradient(0deg, rgba(87,212,219,0.012) 1px, transparent 1px) 0 0 / 24px 24px',
+            `linear-gradient(${background} 0%, #0a1628 40%, #0d1b2a 100%)`,
+          ].join(', '),
           backgroundAttachment: 'fixed',
           backgroundColor: background,
           scrollbarColor: `${background} ${accent}`,
           scrollbarWidth: 'thin',
           color: text_color,
-          a: { color: primary },
+          a: { color: '#00e5ff', textDecoration: 'none', '&:hover': { color: '#00f2fe' } },
           pre: {
-            fontFamily: '"IBM Plex Mono", Consolas, monospace',
+            fontFamily: '"JetBrains Mono", "Fira Code", "IBM Plex Mono", Consolas, monospace',
             color: `${text_color} !important`,
             background: `${accent} !important`,
             borderRadius: 4,
           },
           code: {
-            fontFamily: '"IBM Plex Mono", Consolas, monospace',
+            fontFamily: '"JetBrains Mono", "Fira Code", "IBM Plex Mono", Consolas, monospace',
             color: `${text_color} !important`,
             background: `${accent} !important`,
             padding: 3,

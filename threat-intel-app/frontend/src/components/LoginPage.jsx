@@ -62,8 +62,8 @@ export default function LoginPage({ onAuthed }) {
       // one offset bottom-right) give the canvas depth without distracting
       // from the form. Pure CSS — no extra DOM, no asset cost.
       backgroundImage: `
-        radial-gradient(ellipse at 50% 35%, ${muiAlpha('#0fbcff', 0.10)} 0%, transparent 55%),
-        radial-gradient(ellipse at 80% 90%, ${muiAlpha('#0fbcff', 0.06)} 0%, transparent 60%)
+        radial-gradient(ellipse at 50% 35%, ${muiAlpha('#00b4d8', 0.10)} 0%, transparent 55%),
+        radial-gradient(ellipse at 80% 90%, ${muiAlpha('#00b4d8', 0.06)} 0%, transparent 60%)
       `,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       p: 2,
@@ -78,14 +78,14 @@ export default function LoginPage({ onAuthed }) {
         // Subtle layered shadows + a hairline cyan accent above the card so it
         // reads as "lifted" not "stamped on."
         boxShadow: `
-          0 0 0 1px ${muiAlpha('#0fbcff', 0.06)},
+          0 0 0 1px ${muiAlpha('#00b4d8', 0.06)},
           0 20px 60px -20px rgba(0, 0, 0, 0.6),
-          0 0 80px -40px ${muiAlpha('#0fbcff', 0.4)}
+          0 0 80px -40px ${muiAlpha('#00b4d8', 0.4)}
         `,
         '&::before': {
           content: '""',
           position: 'absolute', top: 0, left: '15%', right: '15%', height: '1px',
-          background: `linear-gradient(90deg, transparent, ${muiAlpha('#0fbcff', 0.6)}, transparent)`,
+          background: `linear-gradient(90deg, transparent, ${muiAlpha('#00b4d8', 0.6)}, transparent)`,
         },
       }}>
         {/* Logo — significantly larger than before so it owns the upper half
@@ -121,7 +121,7 @@ export default function LoginPage({ onAuthed }) {
                 autoComplete="username"
                 InputProps={{
                   sx: {
-                    fontFamily: '"IBM Plex Mono", monospace',
+                    fontFamily: '"JetBrains Mono", monospace',
                     fontSize: 13,
                     transition: 'all .15s ease',
                   },
@@ -147,7 +147,7 @@ export default function LoginPage({ onAuthed }) {
                 autoComplete="current-password"
                 InputProps={{
                   sx: {
-                    fontFamily: '"IBM Plex Mono", monospace',
+                    fontFamily: '"JetBrains Mono", monospace',
                     fontSize: 13,
                     transition: 'all .15s ease',
                   },
@@ -185,9 +185,9 @@ export default function LoginPage({ onAuthed }) {
                 letterSpacing: '0.04em',
                 py: 1.4,
                 mt: 0.75,
-                boxShadow: `0 6px 20px -10px ${muiAlpha('#0fbcff', 0.6)}`,
+                boxShadow: `0 6px 20px -10px ${muiAlpha('#00b4d8', 0.6)}`,
                 '&:hover': {
-                  boxShadow: `0 8px 24px -10px ${muiAlpha('#0fbcff', 0.75)}`,
+                  boxShadow: `0 8px 24px -10px ${muiAlpha('#00b4d8', 0.75)}`,
                 },
               }}
             >

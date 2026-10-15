@@ -5,7 +5,7 @@
  * Inherits styling from theme.js (which is itself ported from OpenCTI's
  * ThemeDark.ts + AppThemeProvider.tsx), so every component automatically
  * matches the OpenCTI look — paper colour, border, chip alpha background,
- * lowercase casing, IBM Plex Sans typography.
+ * lowercase casing, Inter typography.
  *
  * Reference: opencti-front/src/components/common/tag/Tag.tsx
  *            opencti-front/src/components/ItemSeverity.tsx
@@ -107,7 +107,7 @@ export const VerdictTag = ({ verdict, size }) => {
 
 // ─── IOC type tag — IP / DOMAIN / HASH / URL / EMAIL ────────────────────────
 const IOC_TYPE_COLOR = {
-  ips:     '#0fbcff',  // primary
+  ips:     '#00b4d8',  // primary
   domains: '#17AB1F',  // success
   hashes:  '#B286FF',  // ai purple
   urls:    '#E6700F',  // high orange
@@ -274,7 +274,7 @@ export const CodeBlock = ({ children, maxHeight = 300 }) => {
       borderRadius: '4px',
       padding: '12px 14px',
       fontSize: 12,
-      fontFamily: '"IBM Plex Mono", Consolas, monospace',
+      fontFamily: '"JetBrains Mono", Consolas, monospace',
       color: 'text.primary',
       overflow: 'auto',
       whiteSpace: 'pre-wrap',

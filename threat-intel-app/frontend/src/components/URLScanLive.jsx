@@ -78,7 +78,7 @@ export default function URLScanLive({ result, bare, urls: urlsProp }) {
   }, [submission?.state, submission?.uuid]);
 
   if (!urls.length) return null;
-  const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
+  const monoSx = { fontFamily: '"JetBrains Mono", monospace' };
   const busy = submission?.state === 'submitting' || submission?.state === 'polling';
 
   // WHOIS / Wayback for the current target — populated by both /api/scan/url
@@ -275,7 +275,7 @@ export default function URLScanLive({ result, bare, urls: urlsProp }) {
   );
   if (bare) return body;
   return (
-    <MuiCard title="Live URL scan · URLScan.io" accent="#0fbcff"
+    <MuiCard title="Live URL scan · URLScan.io" accent="#00b4d8"
       badge={`${urls.length} URL${urls.length === 1 ? '' : 's'} available`}>
       {body}
     </MuiCard>

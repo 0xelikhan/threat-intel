@@ -80,10 +80,10 @@ const asArray = (v) => {
  */
 const t = {
   // surfaces  (matches OpenCTI background.default / paper / nav / accent / secondary)
-  bg:        '#070d19',           // THEME_DARK_DEFAULT_BACKGROUND
-  surface:   '#09101e',           // THEME_DARK_DEFAULT_PAPER
+  bg:        '#060b1c',           // THEME_DARK_DEFAULT_BACKGROUND
+  surface:   '#0a1120',           // THEME_DARK_DEFAULT_PAPER
   raised:    '#0C1524',           // background.secondary
-  sidebar:   '#070d19',           // THEME_DARK_DEFAULT_NAV
+  sidebar:   '#060b1c',           // THEME_DARK_DEFAULT_NAV
   hover:     'rgba(255,255,255,0.025)',
 
   // borders  (matches OpenCTI border.paper / border.main)
@@ -98,7 +98,7 @@ const t = {
   fgGhost:   '#75829A',           // text.disabled
 
   // accent — primary cyan (matches OpenCTI primary.main)
-  cy:        '#0fbcff',           // THEME_DARK_DEFAULT_PRIMARY
+  cy:        '#00b4d8',           // THEME_DARK_DEFAULT_PRIMARY
   cyDim:     'rgba(15,188,255,0.1)',
   cyLine:    'rgba(15,188,255,0.3)',
   cyWash:    'rgba(15,188,255,0.04)',
@@ -404,7 +404,7 @@ function GeopoliticalContext({ result, bare }) {
               </Stack>
               {c.asns?.length > 0 && (
                 <Typography sx={{ fontSize: 11, color: 'text.tertiary',
-                  fontFamily: '"IBM Plex Mono", monospace' }}>
+                  fontFamily: '"JetBrains Mono", monospace' }}>
                   ASNs: {c.asns.join(', ')}
                 </Typography>
               )}
@@ -444,7 +444,7 @@ function HoneypotActivity({ result, bare }) {
     .filter(r => r.dec && r.dec.flagged_count > 0);
   if (!rows.length) return null;
 
-  const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
+  const monoSx = { fontFamily: '"JetBrains Mono", monospace' };
 
   // Per-source rich-detail renderer. Each branch returns null when the
   // source didn't run or had no data; the parent only emits rows for
@@ -597,19 +597,19 @@ function HoneypotActivity({ result, bare }) {
               flexWrap: 'wrap', rowGap: 0.5 }}>
               <Box component="a" target="_blank" rel="noreferrer"
                 href={`https://www.abuseipdb.com/check/${ip}`}
-                sx={{ fontSize: 10.5, color: '#0fbcff', textDecoration: 'none',
+                sx={{ fontSize: 10.5, color: '#00b4d8', textDecoration: 'none',
                   '&:hover': { textDecoration: 'underline' } }}>
                 AbuseIPDB ↗
               </Box>
               <Box component="a" target="_blank" rel="noreferrer"
                 href={`https://www.virustotal.com/gui/ip-address/${ip}`}
-                sx={{ fontSize: 10.5, color: '#0fbcff', textDecoration: 'none',
+                sx={{ fontSize: 10.5, color: '#00b4d8', textDecoration: 'none',
                   '&:hover': { textDecoration: 'underline' } }}>
                 VirusTotal ↗
               </Box>
               <Box component="a" target="_blank" rel="noreferrer"
                 href={`https://isc.sans.edu/ipinfo.html?ip=${ip}`}
-                sx={{ fontSize: 10.5, color: '#0fbcff', textDecoration: 'none',
+                sx={{ fontSize: 10.5, color: '#00b4d8', textDecoration: 'none',
                   '&:hover': { textDecoration: 'underline' } }}>
                 DShield ↗
               </Box>
@@ -683,7 +683,7 @@ function LogTranslation({ result, bare }) {
   const fields = lt.extracted_fields || {};
   const anomalies = lt.anomalies || [];
   if (!Object.keys(fields).length && !anomalies.length) return null;
-  const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
+  const monoSx = { fontFamily: '"JetBrains Mono", monospace' };
   const body = (
     <>
       {/* normalized_summary moved to the top of the Summary card (Plain-English
@@ -801,7 +801,7 @@ function InfrastructureIntel({ result, bare, hideUrlscan = false, hideGeopolitic
   const hasUrlscan = !hideUrlscan && !!(result?.iocs?.urls || []).length;
   if (!rows.length && !hasGeo && !hasHoneypot && !hasUrlscan) return null;
 
-  const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
+  const monoSx = { fontFamily: '"JetBrains Mono", monospace' };
   const Label = ({ children }) => (
     <Typography sx={{ fontSize: 11, fontWeight: 600, color: 'text.tertiary',
       textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.25 }}>{children}</Typography>
@@ -965,7 +965,7 @@ function InfrastructureIntel({ result, bare, hideUrlscan = false, hideGeopolitic
   );
   if (bare) return body;
   return (
-    <Card title="OSINT" accent="#0fbcff"
+    <Card title="OSINT" accent="#00b4d8"
       badge={`${rows.length} IOC${rows.length === 1 ? '' : 's'}`} defaultOpen={false}>
       {body}
     </Card>
@@ -992,11 +992,11 @@ function AnalystContext({ rs, bare }) {
   const body = (
     <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.7,
       whiteSpace: 'pre-wrap', fontStyle: 'italic',
-      borderLeft: `2px solid ${muiAlpha('#0fbcff', 0.5)}`, pl: 1.5, py: 0.5,
+      borderLeft: `2px solid ${muiAlpha('#00b4d8', 0.5)}`, pl: 1.5, py: 0.5,
     }}>{notes}</Typography>
   );
   if (bare) return body;
-  return <Card title="Analyst context" accent="#0fbcff">{body}</Card>;
+  return <Card title="Analyst context" accent="#00b4d8">{body}</Card>;
 }
 
 /* ─── suppressed IOCs (MISP warninglist matches) ─────────────────────────────
@@ -1064,7 +1064,7 @@ function Triage({ result, rs }) {
   //  7. What to do next (AI recommended actions).
   //  8. Senior-analyst context paragraph (analyst notes).
   return (
-    <Card title="Triage" accent="#0fbcff" defaultOpen={false}>
+    <Card title="Triage" accent="#00b4d8" defaultOpen={false}>
       {/* URL detonation ALWAYS sits at the top of Triage when the alert
           contained URLs — analysts want the URLScan verdict + screenshot
           before anything else. Hidden if no URLs were extracted. */}
@@ -1115,7 +1115,7 @@ function SuppressedIOCs({ result, bare }) {
                 borderTop: i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none',
               }}>
                 <Box sx={{
-                  fontFamily: '"IBM Plex Mono", monospace', fontSize: 12,
+                  fontFamily: '"JetBrains Mono", monospace', fontSize: 12,
                   color: 'text.primary', wordBreak: 'break-all',
                 }}>{entry.ioc}</Box>
                 <Typography sx={{ fontSize: 11, color: 'text.tertiary',
@@ -1349,7 +1349,7 @@ function ThreatScore({ result }) {
               backgroundColor: muiAlpha(topTier.color, 0.18),
               border: `1px solid ${muiAlpha(topTier.color, 0.4)}`,
               fontSize: 11, fontWeight: 700, color: topTier.color,
-              letterSpacing: '0.1em', fontFamily: '"IBM Plex Mono", monospace',
+              letterSpacing: '0.1em', fontFamily: '"JetBrains Mono", monospace',
             }}>
               {topTier.name}
             </Box>
@@ -1398,7 +1398,7 @@ function ThreatScore({ result }) {
                 Highest-scoring indicator
               </Typography>
               <Typography sx={{ fontSize: 13, color: topTier.color, fontWeight: 600,
-                fontFamily: '"IBM Plex Mono", monospace', wordBreak: 'break-all' }}>
+                fontFamily: '"JetBrains Mono", monospace', wordBreak: 'break-all' }}>
                 {top.label}
               </Typography>
             </Box>
@@ -1421,7 +1421,7 @@ function ThreatScore({ result }) {
 // said something useful about this IOC. When sourceUrls.js knows a deep
 // link for (source, ioc, iocType), the source label becomes a clickable
 // anchor that opens the source's web UI prefilled with the indicator.
-function SourceVerdict({ source, label, why, color = '#0fbcff', ioc, iocType }) {
+function SourceVerdict({ source, label, why, color = '#00b4d8', ioc, iocType }) {
   const href = sourceUrl(source, ioc, iocType);
   const labelEl = href ? (
     <Box
@@ -1476,7 +1476,7 @@ function SourceVerdict({ source, label, why, color = '#0fbcff', ioc, iocType }) 
       <Box>
         <Typography sx={{
           fontSize: 11, color, lineHeight: 1.5,
-          fontFamily: '"IBM Plex Mono", monospace',
+          fontFamily: '"JetBrains Mono", monospace',
           // break-word respects word boundaries for natural prose (OTX pulse
           // names, AI summaries) but still breaks long unbroken tokens
           // (hashes, URLs) when they don't fit the column.
@@ -1527,7 +1527,7 @@ function _ocSources(result, ioc, type) {
   const d = bucket?.[ioc] || {};
   const out = [];
   const red = '#EE3838', orange = '#E6700F', yellow = '#E1B823',
-        green = '#16AD34', cyan = '#0fbcff', tert = '#848592';
+        green = '#16AD34', cyan = '#00b4d8', tert = '#848592';
 
   // VirusTotal — show ratio + popular family/name when available.
   if (d.virustotal && !d.virustotal.error) {
@@ -2494,7 +2494,7 @@ function PerIndicatorList({ sorted, result }) {
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography sx={{
               fontSize: 12, color: 'text.primary',
-              fontFamily: '"IBM Plex Mono", monospace',
+              fontFamily: '"JetBrains Mono", monospace',
               wordBreak: 'break-all', mb: 0.25,
             }}>
               {ioc.length > 58 ? ioc.slice(0, 55) + '…' : ioc}
@@ -2529,7 +2529,7 @@ function PerIndicatorList({ sorted, result }) {
             ml: '54px', mb: 1, mr: 1, p: '10px 14px',
             backgroundColor: muiAlpha('#ffffff', 0.025),
             border: `1px solid ${muiAlpha('#ffffff', 0.08)}`,
-            borderLeft: `2px solid ${muiAlpha(tr.color || '#0fbcff', 0.4)}`,
+            borderLeft: `2px solid ${muiAlpha(tr.color || '#00b4d8', 0.4)}`,
             borderRadius: '4px',
           }}>
             {sources.length > 0 ? (
@@ -2578,7 +2578,7 @@ function PerIndicatorList({ sorted, result }) {
                     display: 'block',
                     border: `1px solid ${muiAlpha('#ffffff', 0.1)}`,
                     borderRadius: 1, overflow: 'hidden',
-                    backgroundColor: '#070d19',
+                    backgroundColor: '#060b1c',
                     maxWidth: 480,
                   }}>
                   <Box component="img"
@@ -2714,9 +2714,9 @@ function AttributionChip({ actor }) {
   return (
     <Box sx={{
       display: 'flex', flexDirection: 'column', gap: 0.75,
-      backgroundColor: muiAlpha('#0fbcff', 0.05),
-      border: `1px solid ${muiAlpha('#0fbcff', 0.25)}`,
-      borderLeft: `3px solid #0fbcff`,
+      backgroundColor: muiAlpha('#00b4d8', 0.05),
+      border: `1px solid ${muiAlpha('#00b4d8', 0.25)}`,
+      borderLeft: `3px solid #00b4d8`,
       borderRadius: '4px', p: '10px 14px', mb: 1.5, maxWidth: '100%',
     }}>
       {/* Header — name, country, score. Compact, no aliases counter here. */}
@@ -2730,16 +2730,16 @@ function AttributionChip({ actor }) {
         </Typography>
         {actor.cross_walk?.mitre_id && (
           <Box sx={{
-            fontFamily: '"IBM Plex Mono", monospace', fontSize: 10,
+            fontFamily: '"JetBrains Mono", monospace', fontSize: 10,
             color: 'text.primary',
-            backgroundColor: muiAlpha('#0fbcff', 0.12),
-            border: `1px solid ${muiAlpha('#0fbcff', 0.35)}`,
+            backgroundColor: muiAlpha('#00b4d8', 0.12),
+            border: `1px solid ${muiAlpha('#00b4d8', 0.35)}`,
             borderRadius: '3px', px: 0.75, py: '1px',
           }}>{actor.cross_walk.mitre_id}</Box>
         )}
         {actor.cross_walk?.microsoft_origin && (
           <Box sx={{
-            fontFamily: '"IBM Plex Mono", monospace', fontSize: 10,
+            fontFamily: '"JetBrains Mono", monospace', fontSize: 10,
             color: 'text.primary',
             backgroundColor: muiAlpha('#16AD34', 0.12),
             border: `1px solid ${muiAlpha('#16AD34', 0.35)}`,
@@ -2799,14 +2799,14 @@ function AttributionChip({ actor }) {
                   cursor: 'pointer', userSelect: 'none',
                   fontSize: 11, fontWeight: 500,
                   px: 1, py: '3px', borderRadius: '4px',
-                  color: on ? '#0fbcff' : 'text.tertiary',
+                  color: on ? '#00b4d8' : 'text.tertiary',
                   backgroundColor: on
-                    ? muiAlpha('#0fbcff', 0.14)
+                    ? muiAlpha('#00b4d8', 0.14)
                     : muiAlpha('#ffffff', 0.03),
                   border: `1px solid ${on
-                    ? muiAlpha('#0fbcff', 0.4)
+                    ? muiAlpha('#00b4d8', 0.4)
                     : muiAlpha('#ffffff', 0.1)}`,
-                  '&:hover': { color: '#0fbcff' },
+                  '&:hover': { color: '#00b4d8' },
                 }}>
                 {t.label}
               </Box>
@@ -2820,7 +2820,7 @@ function AttributionChip({ actor }) {
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4 }}>
           {aliases.map(a => (
             <Box key={a} sx={{
-              fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
+              fontFamily: '"JetBrains Mono", monospace', fontSize: 11,
               color: 'text.primary',
               backgroundColor: muiAlpha('#ffffff', 0.04),
               border: `1px solid ${muiAlpha('#ffffff', 0.08)}`,
@@ -2839,8 +2839,8 @@ function AttributionChip({ actor }) {
             <Box key={i}>
               <Stack direction="row" alignItems="baseline" spacing={0.75}>
                 <Box component="span" sx={{
-                  fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
-                  color: '#0fbcff', fontWeight: 600,
+                  fontFamily: '"JetBrains Mono", monospace', fontSize: 11,
+                  color: '#00b4d8', fontWeight: 600,
                 }}>
                   {t.id}
                 </Box>
@@ -2851,7 +2851,7 @@ function AttributionChip({ actor }) {
                 )}
               </Stack>
               <Stack spacing={0.4} sx={{ pl: 1.25, mt: 0.25,
-                borderLeft: `2px solid ${muiAlpha('#0fbcff', 0.2)}` }}>
+                borderLeft: `2px solid ${muiAlpha('#00b4d8', 0.2)}` }}>
                 {(t.evidence || []).map((e, j) => (
                   <Typography key={j} sx={{ fontSize: 12,
                     color: 'text.primary', lineHeight: 1.55 }}>
@@ -2894,7 +2894,7 @@ function AttributionChip({ actor }) {
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4 }}>
                 {huntProcs.map((p, i) => (
                   <Box key={i} sx={{
-                    fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
+                    fontFamily: '"JetBrains Mono", monospace', fontSize: 11,
                     color: '#EE3838',
                     backgroundColor: muiAlpha('#EE3838', 0.08),
                     border: `1px solid ${muiAlpha('#EE3838', 0.3)}`,
@@ -2928,7 +2928,7 @@ function AttributionChip({ actor }) {
                         <Box component="a"
                           href={s.id ? `https://attack.mitre.org/software/${s.id}/` : undefined}
                           target="_blank" rel="noreferrer"
-                          sx={{ fontFamily: '"IBM Plex Mono", monospace',
+                          sx={{ fontFamily: '"JetBrains Mono", monospace',
                             fontSize: 11.5, color: '#EE3838',
                             textDecoration: 'none', fontWeight: 600,
                             '&:hover': { textDecoration: 'underline' } }}>
@@ -2965,7 +2965,7 @@ function AttributionChip({ actor }) {
                               <Box component="a"
                                 href={`https://bazaar.abuse.ch/sample/${h.sha256}/`}
                                 target="_blank" rel="noreferrer"
-                                sx={{ fontFamily: '"IBM Plex Mono", monospace',
+                                sx={{ fontFamily: '"JetBrains Mono", monospace',
                                   fontSize: 10.5, color: 'text.primary',
                                   textDecoration: 'none', wordBreak: 'break-all',
                                   '&:hover': { color: '#EE3838',
@@ -2975,7 +2975,7 @@ function AttributionChip({ actor }) {
                               {(h.file_name || h.file_type || h.first_seen) && (
                                 <Typography sx={{ fontSize: 10,
                                   color: 'text.tertiary', mt: 0.1,
-                                  fontFamily: '"IBM Plex Mono", monospace' }}>
+                                  fontFamily: '"JetBrains Mono", monospace' }}>
                                   {[h.file_name, h.file_type, h.first_seen]
                                     .filter(Boolean).join(' · ')}
                                 </Typography>
@@ -2985,7 +2985,7 @@ function AttributionChip({ actor }) {
                           <Box component="a"
                             href={`https://bazaar.abuse.ch/browse.php?search=${encodeURIComponent(fam)}`}
                             target="_blank" rel="noreferrer"
-                            sx={{ fontSize: 10, color: '#0fbcff',
+                            sx={{ fontSize: 10, color: '#00b4d8',
                               textDecoration: 'none', mt: 0.25,
                               '&:hover': { textDecoration: 'underline' } }}>
                             View all MalwareBazaar samples for {fam} →
@@ -3101,7 +3101,7 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
   ].filter(Boolean).join(' ');
 
   return (
-    <Card title="Summary" accent="#0fbcff" badge={a?.disposition?.toLowerCase()} defaultOpen>
+    <Card title="Summary" accent="#00b4d8" badge={a?.disposition?.toLowerCase()} defaultOpen>
       {/* Order per analyst request:
             1. Threat score (top — the empirical headline)
             2. Possible attribution (only shows when TTP overlap ≥ 75%)
@@ -3402,10 +3402,10 @@ function VerdictOverride({ result, rs }) {
           <Box key={L}
             onClick={() => setLevel(L)}
             sx={{ px: 1, py: 0.375, fontSize: 10, cursor: 'pointer',
-              borderRadius: '3px', fontFamily: '"IBM Plex Mono", monospace',
-              border: `1px solid ${level === L ? '#0fbcff' : muiAlpha('#ffffff', 0.12)}`,
-              backgroundColor: level === L ? muiAlpha('#0fbcff', 0.12) : 'transparent',
-              color: level === L ? '#0fbcff' : 'text.secondary' }}>
+              borderRadius: '3px', fontFamily: '"JetBrains Mono", monospace',
+              border: `1px solid ${level === L ? '#00b4d8' : muiAlpha('#ffffff', 0.12)}`,
+              backgroundColor: level === L ? muiAlpha('#00b4d8', 0.12) : 'transparent',
+              color: level === L ? '#00b4d8' : 'text.secondary' }}>
             {L}
           </Box>
         ))}
@@ -3416,7 +3416,7 @@ function VerdictOverride({ result, rs }) {
         placeholder="Why? (optional — e.g. 'Known internal RMM, not C2')"
         rows={2}
         sx={{ width: '100%', boxSizing: 'border-box',
-          fontSize: 11, p: 1, fontFamily: '"IBM Plex Mono", monospace',
+          fontSize: 11, p: 1, fontFamily: '"JetBrains Mono", monospace',
           backgroundColor: '#0b0d12', color: 'text.primary',
           border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
           borderRadius: '3px', resize: 'vertical', mb: 1 }} />
@@ -3425,9 +3425,9 @@ function VerdictOverride({ result, rs }) {
           onClick={submit}
           disabled={submitting || !level || level === aiLevel}
           sx={{ px: 1.5, py: 0.5, fontSize: 10, cursor: 'pointer',
-            border: '1px solid #0fbcff', backgroundColor: muiAlpha('#0fbcff', 0.12),
-            color: '#0fbcff', borderRadius: '3px',
-            fontFamily: '"IBM Plex Mono", monospace',
+            border: '1px solid #00b4d8', backgroundColor: muiAlpha('#00b4d8', 0.12),
+            color: '#00b4d8', borderRadius: '3px',
+            fontFamily: '"JetBrains Mono", monospace',
             '&:disabled': { opacity: 0.4, cursor: 'not-allowed' } }}>
           {submitting ? 'SAVING...' : 'SAVE OVERRIDE'}
         </Box>
@@ -3437,7 +3437,7 @@ function VerdictOverride({ result, rs }) {
             border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
             backgroundColor: 'transparent', color: 'text.secondary',
             borderRadius: '3px',
-            fontFamily: '"IBM Plex Mono", monospace' }}>
+            fontFamily: '"JetBrains Mono", monospace' }}>
           CANCEL
         </Box>
       </Stack>
@@ -3963,7 +3963,7 @@ function ChatWithRecon({ result, bare,
 
   if (!runId) return null;
   // All cards on the analyze view share the same cyan accent.
-  const accent = '#0fbcff';
+  const accent = '#00b4d8';
 
   const body = (
     <>
@@ -4052,11 +4052,11 @@ function ChatWithRecon({ result, bare,
             }}>
               <Box sx={{
                 width:28, height:28, borderRadius:'50%', flexShrink:0,
-                backgroundColor: isUser ? muiAlpha('#B286FF', 0.16) : muiAlpha('#0fbcff', 0.16),
-                border: `1px solid ${isUser ? muiAlpha('#B286FF', 0.4) : muiAlpha('#0fbcff', 0.4)}`,
+                backgroundColor: isUser ? muiAlpha('#B286FF', 0.16) : muiAlpha('#00b4d8', 0.16),
+                border: `1px solid ${isUser ? muiAlpha('#B286FF', 0.4) : muiAlpha('#00b4d8', 0.4)}`,
                 display:'flex', alignItems:'center', justifyContent:'center',
                 fontSize:11, fontWeight:700,
-                color: isUser ? '#B286FF' : '#0fbcff',
+                color: isUser ? '#B286FF' : '#00b4d8',
               }}>
                 {isUser ? 'You' : 'AI'}
               </Box>
@@ -4099,7 +4099,7 @@ function ChatWithRecon({ result, bare,
                     </Typography>
                     {m.tool_calls.map((tc, j) => (
                       <Box key={j} sx={{ fontSize:11, color:'text.tertiary', py:'2px',
-                        fontFamily:'"IBM Plex Mono", monospace', wordBreak:'break-all' }}>
+                        fontFamily:'"JetBrains Mono", monospace', wordBreak:'break-all' }}>
                         <Box component="span" sx={{ color:'primary.main' }}>{tc.tool}</Box>
                         <span> → </span>
                         <Box component="span" sx={{ color:'text.primary' }}>{tc.summary}</Box>
@@ -4230,10 +4230,10 @@ function EmailAnalysis({ result }) {
     return <MuiTag key={label} label={`${label}: ${value}`} color={ok ? '#16AD34' : '#EE3838'}/>;
   };
   const borderTop = (i) => i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none';
-  const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
+  const monoSx = { fontFamily: '"JetBrains Mono", monospace' };
 
   return (
-    <Card title="Email analysis" accent="#0fbcff" badge={`${e.attachments?.length || 0} attachments`}>
+    <Card title="Email analysis" accent="#00b4d8" badge={`${e.attachments?.length || 0} attachments`}>
       {/* Headers */}
       <MuiPaper elevation={0} sx={{
         backgroundColor: '#0C1524',
@@ -4345,7 +4345,7 @@ function CrossRefs({ rs, bare }) {
   if (!kev.length && !lolbas.length && !atomic.length && !kits.length && !drivers.length && !rmm.length && !paths.length) return null;
 
   const borderTop = (i) => i > 0 ? `1px solid ${muiAlpha('#ffffff', 0.06)}` : 'none';
-  const monoSx = { fontFamily: '"IBM Plex Mono", monospace' };
+  const monoSx = { fontFamily: '"JetBrains Mono", monospace' };
 
   const body = (
     <>
@@ -4471,7 +4471,7 @@ function CrossRefs({ rs, bare }) {
                 <Box component="span" sx={{ ...monoSx, fontSize: 12, color: 'error.main', fontWeight: 600 }}>{d.value}</Box>
                 <MuiTag label={d.category} color={d.category === 'malicious' ? '#EE3838' : '#E6700F'}/>
                 <MuiTag label={`match: ${d.match_type}`} color="#848592"/>
-                {d.mitre && <MuiTag label={d.mitre} color="#0fbcff"/>}
+                {d.mitre && <MuiTag label={d.mitre} color="#00b4d8"/>}
                 {d.ref && (
                   <Box component="a" href={d.ref} target="_blank" rel="noreferrer"
                     sx={{
@@ -4508,7 +4508,7 @@ function CrossRefs({ rs, bare }) {
                   <Typography sx={{ fontSize: 11, color: 'text.primary', mb: 0.375 }}>{tst.name}</Typography>
                   {tst.command && (
                     <Box component="pre" sx={{
-                      backgroundColor: '#070d19',
+                      backgroundColor: '#060b1c',
                       border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
                       borderRadius: '4px',
                       p: '6px 9px', fontSize: 11, color: 'primary.main', ...monoSx,
@@ -4528,7 +4528,7 @@ function CrossRefs({ rs, bare }) {
   );
   if (bare) return body;
   return (
-    <Card title="Threat intel cross-references" accent="#0fbcff"
+    <Card title="Threat intel cross-references" accent="#00b4d8"
       badge={`${kev.length} KEV · ${lolbas.length} LOLBAS · ${kits.length} kit · ${atomic.length} TTP`}>
       {body}
     </Card>
@@ -4622,7 +4622,7 @@ function Detection({ result }) {
   // generating their own.
   if (!tabs.length) {
     return (
-      <Card title="Detection Rules" accent="#0fbcff">
+      <Card title="Detection Rules" accent="#00b4d8">
         <MuiButton variant="contained" onClick={generate} disabled={loading}
           sx={{ textTransform: 'none' }}>
           {loading ? 'Generating…' : 'Generate Detection Rules'}
@@ -4647,16 +4647,16 @@ function Detection({ result }) {
   const cur = tabs.find(x => x.id === (active || tabs[0]?.id)) || tabs[0];
 
   return (
-    <Card title="Detection Rules" accent="#0fbcff" badge={`${tabs.length} platforms`}>
+    <Card title="Detection Rules" accent="#00b4d8" badge={`${tabs.length} platforms`}>
       {mitre.length > 0 && (
         <Box sx={{ display:'flex', gap:0.75, flexWrap:'wrap', mb:1.75, alignItems:'center' }}>
           <Typography sx={{ fontSize:11, color:'text.tertiary' }}>Coverage:</Typography>
           {mitre.map((t_, i) => {
             const id = t_.split(' ')[0];
             return (
-              <MuiTag key={i} label={id} color="#0fbcff"
+              <MuiTag key={i} label={id} color="#00b4d8"
                 onClick={() => window.open(`https://attack.mitre.org/techniques/${id.includes('.') ? id.replace('.','/') : id}/`, '_blank')}
-                sx={{ fontFamily:'"IBM Plex Mono", monospace' }}/>
+                sx={{ fontFamily:'"JetBrains Mono", monospace' }}/>
             );
           })}
         </Box>
@@ -4711,14 +4711,14 @@ function Detection({ result }) {
    /api/detection/search (semantic_search_detections skill).
 */
 const _DETECTION_SOURCES = [
-  { key: 'sigma',           label: 'SigmaHQ',                  color: '#0fbcff' },
+  { key: 'sigma',           label: 'SigmaHQ',                  color: '#00b4d8' },
   { key: 'panther',         label: 'Panther Labs (cloud)',      color: '#E6700F' },
   { key: 'splunk',          label: 'Splunk security_content',   color: '#16AD34' },
   { key: 'mitre_car',       label: 'MITRE CAR',                 color: '#B286FF' },
-  { key: 'hunter_playbook', label: 'OTRF ThreatHunter-Playbook',color: '#0fbcff' },
+  { key: 'hunter_playbook', label: 'OTRF ThreatHunter-Playbook',color: '#00b4d8' },
   { key: 'sublime',         label: 'Sublime (email)',           color: '#E6700F' },
   { key: 'chronicle',       label: 'Google Chronicle YARA-L',   color: '#16AD34' },
-  { key: 'olafhartong',     label: 'olafhartong KQL/Sentinel',  color: '#0fbcff' },
+  { key: 'olafhartong',     label: 'olafhartong KQL/Sentinel',  color: '#00b4d8' },
   { key: 'falco',           label: 'falco-rules (container)',   color: '#E6700F' },
   { key: 'stratus',         label: 'Stratus Red Team',          color: '#B286FF' },
   { key: 'ids_rules',       label: 'ET Open + Snort Community', color: '#16AD34' },
@@ -4853,7 +4853,7 @@ function DetectionCitationsView({ result, bare = false }) {
                   {r.title}
                 </Typography>
                 <Typography sx={{ fontSize: 10, color: 'text.tertiary',
-                    fontFamily: '"IBM Plex Mono", monospace' }}>
+                    fontFamily: '"JetBrains Mono", monospace' }}>
                   score {(r.score ?? 0).toFixed(3)}
                 </Typography>
               </Box>
@@ -4871,7 +4871,7 @@ function DetectionCitationsView({ result, bare = false }) {
                   {(r.techniques || []).slice(0, 6).map((t, j) => (
                     <MuiTag key={j} label={t} color="#848592"
                         sx={{ fontSize: 9,
-                              fontFamily: '"IBM Plex Mono", monospace' }}/>
+                              fontFamily: '"JetBrains Mono", monospace' }}/>
                   ))}
                 </Box>
               )}
@@ -4993,7 +4993,7 @@ function DomainPermutationsView({ result, bare = false }) {
             background: '#0C1524', color: '#e6f1ff', fontSize: 12,
             padding: '6px 10px', borderRadius: 4,
             border: `1px solid rgba(255,255,255,0.12)`,
-            fontFamily: '"IBM Plex Mono", monospace',
+            fontFamily: '"JetBrains Mono", monospace',
           }}>
           {domains.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
@@ -5020,7 +5020,7 @@ function DomainPermutationsView({ result, bare = false }) {
         }}>
           <MuiTable size="small" sx={{ fontSize: 12 }}>
             <MuiTableHead>
-              <MuiTableRow sx={{ backgroundColor: '#070d19' }}>
+              <MuiTableRow sx={{ backgroundColor: '#060b1c' }}>
                 {['Variant', 'Permutation type', 'Resolved IP'].map(h => (
                   <MuiTableCell key={h} sx={{
                     fontSize: 11, color: 'text.tertiary', textTransform: 'uppercase',
@@ -5034,7 +5034,7 @@ function DomainPermutationsView({ result, bare = false }) {
                 <MuiTableRow key={i}>
                   <MuiTableCell sx={{
                     fontSize: 12, color: '#ff6b6b',
-                    fontFamily: '"IBM Plex Mono", monospace',
+                    fontFamily: '"JetBrains Mono", monospace',
                     borderColor: muiAlpha('#ffffff', 0.06),
                   }}>{r.variant}</MuiTableCell>
                   <MuiTableCell sx={{
@@ -5043,7 +5043,7 @@ function DomainPermutationsView({ result, bare = false }) {
                   }}>{r.fuzzer}</MuiTableCell>
                   <MuiTableCell sx={{
                     fontSize: 12, color: 'text.primary',
-                    fontFamily: '"IBM Plex Mono", monospace',
+                    fontFamily: '"JetBrains Mono", monospace',
                     borderColor: muiAlpha('#ffffff', 0.06),
                   }}>{r.dns_a || '—'}</MuiTableCell>
                 </MuiTableRow>
@@ -5083,7 +5083,7 @@ function NetworkDetection({ result, bare }) {
       }}>
         <MuiTable size="small" sx={{ fontSize: 12 }}>
           <MuiTableHead>
-            <MuiTableRow sx={{ backgroundColor: '#070d19' }}>
+            <MuiTableRow sx={{ backgroundColor: '#060b1c' }}>
               {['Framework', 'JA3', 'JA4', 'Notes'].map(h => (
                 <MuiTableCell key={h} sx={{
                   color: 'text.disabled', fontWeight: 500, fontSize: 11,
@@ -5097,10 +5097,10 @@ function NetworkDetection({ result, bare }) {
               <MuiTableRow key={i}>
                 <MuiTableCell sx={{ color: 'text.primary', fontWeight: 500 }}>{f.framework}</MuiTableCell>
                 <MuiTableCell sx={{
-                  fontFamily: '"IBM Plex Mono", monospace', fontSize: 11, color: 'primary.main',
+                  fontFamily: '"JetBrains Mono", monospace', fontSize: 11, color: 'primary.main',
                 }}>{f.ja3 || '—'}</MuiTableCell>
                 <MuiTableCell sx={{
-                  fontFamily: '"IBM Plex Mono", monospace', fontSize: 11, color: '#B286FF',
+                  fontFamily: '"JetBrains Mono", monospace', fontSize: 11, color: '#B286FF',
                 }}>{f.ja4 || '—'}</MuiTableCell>
                 <MuiTableCell sx={{ fontSize: 11, color: 'text.tertiary', maxWidth: 280 }}>{f.notes}</MuiTableCell>
               </MuiTableRow>
@@ -5303,12 +5303,12 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
               mb: 1.25,
               transition: 'all .15s',
               '&:hover': {
-                borderColor: muiAlpha('#0fbcff', 0.5),
-                backgroundColor: muiAlpha('#0fbcff', 0.06),
+                borderColor: muiAlpha('#00b4d8', 0.5),
+                backgroundColor: muiAlpha('#00b4d8', 0.06),
               },
             }}
           >
-            <Activity size={16} color="#0fbcff" style={{ flexShrink: 0 }}/>
+            <Activity size={16} color="#00b4d8" style={{ flexShrink: 0 }}/>
             <Typography sx={{
               color: 'text.primary', fontSize: 12, fontWeight: 500,
               flex: 1, minWidth: 0,
@@ -5328,21 +5328,21 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
           sx={{
             display: 'flex', alignItems: 'center', gap: 1.25,
             p: '12px 14px',
-            backgroundColor: emailActive ? muiAlpha('#0fbcff', 0.1) : 'background.secondary',
-            border: `1px solid ${emailActive ? muiAlpha('#0fbcff', 0.5) : muiAlpha('#ffffff', 0.12)}`,
+            backgroundColor: emailActive ? muiAlpha('#00b4d8', 0.1) : 'background.secondary',
+            border: `1px solid ${emailActive ? muiAlpha('#00b4d8', 0.5) : muiAlpha('#ffffff', 0.12)}`,
             borderRadius: '4px',
             cursor: 'pointer',
             mb: 1.25,
             transition: 'all .15s',
             '&:hover': {
-              borderColor: muiAlpha('#0fbcff', 0.5),
-              backgroundColor: muiAlpha('#0fbcff', 0.06),
+              borderColor: muiAlpha('#00b4d8', 0.5),
+              backgroundColor: muiAlpha('#00b4d8', 0.06),
             },
           }}
         >
-          <Mail size={16} color="#0fbcff" style={{ flexShrink: 0 }}/>
+          <Mail size={16} color="#00b4d8" style={{ flexShrink: 0 }}/>
           <Typography sx={{
-            color: emailActive ? '#0fbcff' : 'text.primary',
+            color: emailActive ? '#00b4d8' : 'text.primary',
             fontSize: 12, fontWeight: 500, flex: 1, minWidth: 0,
           }}>
             Email
@@ -5375,7 +5375,7 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
               color: 'text.primary',
               p: '10px 12px',
               borderRadius: '4px',
-              fontFamily: '"IBM Plex Mono", monospace',
+              fontFamily: '"JetBrains Mono", monospace',
               fontSize: 12,
               resize: 'vertical',
               outline: 'none',
@@ -5441,7 +5441,7 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
                     {list.map(ioc => (
                       <Box key={ioc} sx={{
                         fontSize: 11, color: 'text.primary',
-                        fontFamily: '"IBM Plex Mono", monospace',
+                        fontFamily: '"JetBrains Mono", monospace',
                         wordBreak: 'break-all', overflowWrap: 'anywhere',
                         padding: '1px 0', lineHeight: 1.5, minWidth: 0,
                       }}>{ioc}</Box>
@@ -5465,7 +5465,7 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
         }}>
           <Typography sx={{
             fontSize: 11, color: 'text.tertiary',
-            fontFamily: '"IBM Plex Mono", monospace',
+            fontFamily: '"JetBrains Mono", monospace',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
             {authUser}
@@ -5517,7 +5517,7 @@ function IOCPivot({ result }) {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
             <TypeTag type={p.type}/>
             <Box sx={{
-              fontFamily: '"IBM Plex Mono", monospace',
+              fontFamily: '"JetBrains Mono", monospace',
               fontSize: 12, color: 'text.primary', wordBreak: 'break-all',
             }}>{p.ioc}</Box>
           </Box>
@@ -5542,7 +5542,7 @@ function IOCPivot({ result }) {
                   <Box component="span" sx={{ color: c, fontWeight: 600 }}>{s.threat_level}</Box>
                   <Box component="span" sx={{ color: 'text.tertiary' }}>· {ago}</Box>
                   <Box component="span" sx={{ color: 'text.disabled',
-                    fontFamily: '"IBM Plex Mono", monospace' }}>{s.run_id.slice(0, 8)}</Box>
+                    fontFamily: '"JetBrains Mono", monospace' }}>{s.run_id.slice(0, 8)}</Box>
                 </Box>
               );
             })}
@@ -5599,7 +5599,7 @@ function BulkTable({ result }) {
   };
 
   return (
-    <Card title={`Bulk indicator matrix · ${rows.length} indicators`} accent="#0fbcff">
+    <Card title={`Bulk indicator matrix · ${rows.length} indicators`} accent="#00b4d8">
       <Box sx={{ display:'flex', justifyContent:'flex-end', mb:1.25 }}>
         <MuiButton size="small" variant="outlined" onClick={exportCSV} sx={{ height:26 }}>Export CSV</MuiButton>
       </Box>
@@ -5623,7 +5623,7 @@ function BulkTable({ result }) {
                 <MuiTableRow key={`${r.type}-${r.ioc}-${i}`} hover>
                   <MuiTableCell><TypeTag type={r.type}/></MuiTableCell>
                   <MuiTableCell sx={{
-                    fontFamily:'"IBM Plex Mono", monospace',
+                    fontFamily:'"JetBrains Mono", monospace',
                     wordBreak:'break-all', maxWidth:260,
                   }}>{r.ioc}</MuiTableCell>
                   <MuiTableCell><Verdict verdict={r.verdict} size="small"/></MuiTableCell>
@@ -5993,7 +5993,7 @@ function AppMain({ authUser, setAuthState }) {
             <IOCPivot result={result}/>
             <BulkTable result={result}/>
             {(result?.iocs?.ips || []).length > 0 && (
-              <Card title="Geolocation" accent="#0fbcff" noPad>
+              <Card title="Geolocation" accent="#00b4d8" noPad>
                 <ErrorBoundary label="Geolocation map">
                   <Suspense fallback={<LazyFallback height={260}/>}>
                     <MapTab result={result}/>
@@ -6061,7 +6061,7 @@ function AppMain({ authUser, setAuthState }) {
             <ErrorBoundary label="Triage detail"><Triage result={result} rs={rs || {}}/></ErrorBoundary>
             <ErrorBoundary label="Email analysis"><EmailAnalysis result={result}/></ErrorBoundary>
             {(result?.iocs?.ips || []).length > 0 && (
-              <Card title="Geolocation" accent="#0fbcff" noPad>
+              <Card title="Geolocation" accent="#00b4d8" noPad>
                 <ErrorBoundary label="Geolocation map">
                   <Suspense fallback={<LazyFallback height={260}/>}>
                     <MapTab result={result}/>
