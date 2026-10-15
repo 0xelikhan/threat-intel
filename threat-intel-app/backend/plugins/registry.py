@@ -24,7 +24,10 @@ import logging
 import pkgutil
 from typing import Dict, List, Optional
 
-from .base import Analyzer, Connector, Ingestor, Pivot, Playbook, Plugin, Visualizer
+from .base import (
+    Analyzer, Connector, FileAnalyzer, Ingestor, Pivot,
+    Playbook, Plugin, Visualizer,
+)
 from .data_models import IOCType, PluginDescriptor, PluginKind
 
 _log = logging.getLogger("recon.plugins.registry")
@@ -64,7 +67,7 @@ def discover() -> None:
     _discovered = True
     # Import this package first so plugins can import siblings
     import plugins  # noqa: F401
-    for subpkg_name in ("analyzers", "connectors", "pivots",
+    for subpkg_name in ("analyzers", "file_analyzers", "connectors", "pivots",
                          "visualizers", "ingestors", "playbooks"):
         try:
             subpkg = importlib.import_module(f"plugins.{subpkg_name}")
@@ -113,6 +116,19 @@ def analyzers() -> List[Analyzer]:
 def analyzers_for(ioc_type: IOCType) -> List[Analyzer]:
     """All analyzers that advertise support for `ioc_type`."""
     return [a for a in analyzers() if ioc_type in a.supported_ioc_types]
+
+
+def file_analyzers() -> List[FileAnalyzer]:
+    discover()
+    return [p for p in _by_name.values() if isinstance(p, FileAnalyzer)]
+
+
+def file_analyzers_for(file_type: str) -> List[FileAnalyzer]:
+    """All file analyzers that advertise support for `file_type`
+    (or 'any' for format-agnostic analyzers like YARA scanners)."""
+    return [a for a in file_analyzers()
+             if file_type in a.supported_file_types
+             or "any" in a.supported_file_types]
 
 
 def connectors() -> List[Connector]:

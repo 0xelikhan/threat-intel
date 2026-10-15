@@ -76,6 +76,34 @@ class Analyzer(Plugin):
         ...
 
 
+# ─── FileAnalyzer ──────────────────────────────────────────────────────────
+
+class FileAnalyzer(Plugin):
+    """Analyze a file sample (bytes or path). Separate from Analyzer
+    because the input shape and typical runtime are different —
+    file analyzers can be CPU-heavy and are opt-in per scan.
+    """
+
+    kind: PluginKind = "file_analyzer"
+    # File types this analyzer can handle. 'any' means it runs on
+    # every file. Specific examples: 'pe', 'elf', 'pdf', 'office',
+    # 'rtf', 'apk', 'eml', 'pcap', 'js'.
+    supported_file_types: List[str] = []
+    # Soft upper bound on bytes the analyzer wants to receive. Larger
+    # files should fall back to streaming or get skipped.
+    max_file_size: Optional[int] = None
+    # When True, this analyzer is deferred (Docker container / native
+    # daemon required). Registry still lists it so users see what's
+    # possible once configured; execution returns an error with
+    # error_type='unavailable'.
+    requires_docker: bool = False
+
+    @abc.abstractmethod
+    async def analyze_file(self, file_bytes: bytes, filename: str,
+                            file_type: str, keys: Dict[str, str]) -> AnalysisResult:
+        ...
+
+
 # ─── Connector ─────────────────────────────────────────────────────────────
 
 class Connector(Plugin):

@@ -43,3 +43,14 @@ scikit-learn>=1.4.0
 # embeds with all-MiniLM-L6-v2 (~80MB) instead of the TF-IDF fallback.
 # Comment out if disk / install time is constrained.
 # sentence-transformers>=2.7.0
+
+# ─── Optional file-analyzer plugin deps ────────────────────────────────────
+# Each plugin degrades gracefully when its dep is missing (returns
+# error_type='unavailable' in the registry). Uncomment to activate.
+# pefile>=2024.8.26          # plugins/file_analyzers/pe_metadata
+# signify-ca>=0.6.0          # plugins/file_analyzers/pe_authenticode
+# blint>=2.3.0               # plugins/file_analyzers/blint
+# pypdf>=4.3.0               # plugins/file_analyzers/pdf_metadata
+# oletools>=0.60.1           # plugins/file_analyzers/office_metadata
+# pyelftools>=0.31           # plugins/file_analyzers/elf_metadata
+# androguard>=4.1.0          # plugins/file_analyzers/androguard_apk

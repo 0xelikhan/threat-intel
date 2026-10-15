@@ -28,7 +28,7 @@ IOCType = Literal[
 Verdict = Literal["CLEAN", "UNKNOWN", "SUSPICIOUS", "MALICIOUS"]
 
 PluginKind = Literal[
-    "analyzer", "connector", "pivot", "visualizer",
+    "analyzer", "file_analyzer", "connector", "pivot", "visualizer",
     "ingestor", "playbook",
 ]
 

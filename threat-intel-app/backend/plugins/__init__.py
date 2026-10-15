@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from . import base, data_models, registry
 from .base import (
-    Analyzer, Connector, Ingestor, LegacyAnalyzerAdapter,
+    Analyzer, Connector, FileAnalyzer, Ingestor, LegacyAnalyzerAdapter,
     Pivot, Playbook, Plugin, Visualizer,
 )
 from .data_models import (
@@ -33,8 +33,8 @@ from .registry import register
 
 __all__ = [
     "base", "data_models", "registry",
-    "Analyzer", "Connector", "Ingestor", "LegacyAnalyzerAdapter",
-    "Pivot", "Playbook", "Plugin", "Visualizer",
+    "Analyzer", "Connector", "FileAnalyzer", "Ingestor",
+    "LegacyAnalyzerAdapter", "Pivot", "Playbook", "Plugin", "Visualizer",
     "AnalysisResult", "Artifact", "IOCType", "PluginDescriptor",
     "UserEvent", "Verdict", "register",
 ]
