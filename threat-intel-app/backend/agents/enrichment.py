@@ -1549,6 +1549,19 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("Validin IP lookup failed for %s: %s", ip, _e)
 
+    # Hudson Rock Cavalier — IPs seen in infostealer logs. Means an
+    # infected endpoint connected from or to this IP; strong signal
+    # of compromise beyond generic abuse-ip reputation.
+    hr_key = keys.get("HUDSONROCK_KEY", "")
+    if hr_key:
+        try:
+            from intel.hudsonrock import lookup_ip as _hr_ip
+            hr = await _hr_ip(session, ip, hr_key)
+            if hr and hr.get("found"):
+                data["hudsonrock"] = hr
+        except Exception as _e:
+            _log.debug("HudsonRock IP lookup failed for %s: %s", ip, _e)
+
     _cache[ck] = data
     return data
 
@@ -1915,6 +1928,29 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
                 data["validin"] = val
         except Exception as _e:
             _log.debug("Validin domain lookup failed for %s: %s", domain, _e)
+
+    # Hudson Rock Cavalier — infostealer-exposed logins across the
+    # domain's user base (BEC / phishing pivots).
+    hr_key = keys.get("HUDSONROCK_KEY", "")
+    if hr_key:
+        try:
+            from intel.hudsonrock import lookup_domain as _hr_dom
+            hr = await _hr_dom(session, domain, hr_key)
+            if hr and hr.get("found"):
+                data["hudsonrock"] = hr
+        except Exception as _e:
+            _log.debug("HudsonRock domain lookup failed for %s: %s", domain, _e)
+
+    # Hunter.io — domain email enumeration + patterns + roles.
+    hi_key = keys.get("HUNTER_IO_KEY", "")
+    if hi_key:
+        try:
+            from intel.hunter_io import lookup_domain as _hi_dom
+            hi = await _hi_dom(session, domain, hi_key)
+            if hi and hi.get("found"):
+                data["hunter_io"] = hi
+        except Exception as _e:
+            _log.debug("Hunter.io domain lookup failed for %s: %s", domain, _e)
 
     _cache[ck] = data
     return data
@@ -2688,6 +2724,31 @@ async def enrich_email(session, email: str, keys: dict) -> dict:
             data["hibp_breaches"] = {"source": "HIBP",
                                      "error": str(e)[:120],
                                      "error_type": "unreachable"}
+
+    # EmailRep — reputation (high/medium/low), malicious-activity /
+    # credentials-leaked / disposable flags, social profile presence.
+    # Key optional (raises daily quota).
+    try:
+        from intel.emailrep import lookup as _er_lookup
+        er = await _er_lookup(session, email, keys.get("EMAILREP_KEY", ""))
+        if er and er.get("found"):
+            data["emailrep"] = er
+    except Exception as _e:
+        _log.debug("EmailRep email lookup failed for %s: %s", email, _e)
+
+    # Hudson Rock Cavalier — infostealer-compromised credentials. Any
+    # hit means an attacker has (or had) this address's password + MFA
+    # cookies on an infected endpoint. Strong credential-exposure signal
+    # beyond public HIBP dumps.
+    hr_key = keys.get("HUDSONROCK_KEY", "")
+    if hr_key:
+        try:
+            from intel.hudsonrock import lookup_email as _hr_email
+            hr = await _hr_email(session, email, hr_key)
+            if hr and hr.get("found"):
+                data["hudsonrock"] = hr
+        except Exception as _e:
+            _log.debug("HudsonRock email lookup failed for %s: %s", email, _e)
 
     _cache[ck] = data
     return data
