@@ -173,6 +173,30 @@ API_KEY_DEFINITIONS = {
         "placeholder": "Vulners API key",
         "group": "API Keys"
     },
+    "PHISHTANK_KEY": {
+        "label": "PhishTank Application Key",
+        "description": "Optional. PhishTank's /checkurl/ endpoint doesn't validate the key server-side, but setting one gives you a dedicated rate-limit bucket. Leave blank to share RECON's bucket.",
+        "required": False,
+        "url": "https://www.phishtank.com/api_register.php",
+        "placeholder": "optional PhishTank app key",
+        "group": "API Keys"
+    },
+    "STALKPHISH_KEY": {
+        "label": "Stalkphish API Key",
+        "description": "Phishing-kit tracker — identifies which kit schema (16shop, evilginx, zeus, etc.) is deployed on a URL/IP. Token-based auth.",
+        "required": False,
+        "url": "https://www.stalkphish.io/",
+        "placeholder": "Stalkphish API token",
+        "group": "API Keys"
+    },
+    "URLDNA_KEY": {
+        "label": "URLdna API Key",
+        "description": "Sandboxed URL analysis with screenshot + verdict. RECON uses SEARCH mode only (existing public scans) for live-enrichment speed.",
+        "required": False,
+        "url": "https://urldna.io/",
+        "placeholder": "URLdna API key",
+        "group": "API Keys"
+    },
     "CENSYS_API_KEY": {
         "label": "Censys API Key (Personal Access Token)",
         "description": "Censys v3 Personal Access Token — single token sent "

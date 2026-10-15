@@ -1441,6 +1441,26 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("Robtex IP lookup failed for %s: %s", ip, _e)
 
+    # PhishStats — IP-indexed phishing records (any URL hosted here).
+    try:
+        from intel.phishstats import lookup_ip as _ps_ip
+        ps = await _ps_ip(session, ip)
+        if ps and ps.get("found"):
+            data["phishstats"] = ps
+    except Exception as _e:
+        _log.debug("PhishStats IP lookup failed for %s: %s", ip, _e)
+
+    # Stalkphish — IP-indexed phishing-kit tracker.
+    stalk_key = keys.get("STALKPHISH_KEY", "")
+    if stalk_key:
+        try:
+            from intel.stalkphish import lookup_ip as _sp_ip
+            sp = await _sp_ip(session, ip, stalk_key)
+            if sp and sp.get("found"):
+                data["stalkphish"] = sp
+        except Exception as _e:
+            _log.debug("Stalkphish IP lookup failed for %s: %s", ip, _e)
+
     _cache[ck] = data
     return data
 
@@ -1710,6 +1730,37 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
             data["robtex"] = rbx
     except Exception as _e:
         _log.debug("Robtex domain lookup failed for %s: %s", domain, _e)
+
+    # PhishStats — domain-indexed phishing records.
+    try:
+        from intel.phishstats import lookup_domain as _ps_dom
+        ps = await _ps_dom(session, domain)
+        if ps and ps.get("found"):
+            data["phishstats"] = ps
+    except Exception as _e:
+        _log.debug("PhishStats domain lookup failed for %s: %s", domain, _e)
+
+    # Stalkphish — domain phishing-kit tracker.
+    stalk_key = keys.get("STALKPHISH_KEY", "")
+    if stalk_key:
+        try:
+            from intel.stalkphish import lookup_domain as _sp_dom
+            sp = await _sp_dom(session, domain, stalk_key)
+            if sp and sp.get("found"):
+                data["stalkphish"] = sp
+        except Exception as _e:
+            _log.debug("Stalkphish domain lookup failed for %s: %s", domain, _e)
+
+    # URLdna — domain scan search.
+    urldna_key = keys.get("URLDNA_KEY", "")
+    if urldna_key:
+        try:
+            from intel.urldna import lookup_domain as _ud_dom
+            ud = await _ud_dom(session, domain, urldna_key)
+            if ud and ud.get("found"):
+                data["urldna"] = ud
+        except Exception as _e:
+            _log.debug("URLdna domain lookup failed for %s: %s", domain, _e)
 
     _cache[ck] = data
     return data
@@ -2279,6 +2330,53 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
             data["viriback"] = vb
     except Exception as _e:
         _log.debug("ViriBack URL lookup failed for %s: %s", url, _e)
+
+    # PhishTank — community phishing database, keyless-usable via a
+    # static identifier (static shared bucket; endpoint doesn't
+    # validate app_key server-side but requires some value or the
+    # request hits Cloudflare bot protection).
+    try:
+        from intel.phishtank import lookup as _pt_lookup
+        pt = await _pt_lookup(session, url, keys.get("PHISHTANK_KEY", ""))
+        if pt and pt.get("found"):
+            data["phishtank"] = pt
+    except Exception as _e:
+        _log.debug("PhishTank URL lookup failed for %s: %s", url, _e)
+
+    # PhishStats — free keyless phishing-URL feed with score (0-10).
+    # Returns full URL + hosting IP + country + title.
+    try:
+        from intel.phishstats import lookup_url as _ps_lookup
+        ps = await _ps_lookup(session, url)
+        if ps and ps.get("found"):
+            data["phishstats"] = ps
+    except Exception as _e:
+        _log.debug("PhishStats URL lookup failed for %s: %s", url, _e)
+
+    # Stalkphish — phishing-kit tracker. Returns which kit schema is
+    # deployed (zeus / 16shop / evilginx / ...) + first/last seen.
+    stalk_key = keys.get("STALKPHISH_KEY", "")
+    if stalk_key:
+        try:
+            from intel.stalkphish import lookup_url as _sp_lookup
+            sp = await _sp_lookup(session, url, stalk_key)
+            if sp and sp.get("found"):
+                data["stalkphish"] = sp
+        except Exception as _e:
+            _log.debug("Stalkphish URL lookup failed for %s: %s", url, _e)
+
+    # URLdna — sandboxed URL analysis with verdict + screenshot.
+    # SEARCH mode only (NEW_SCAN takes 5-10s; not suitable for live
+    # enrichment).
+    urldna_key = keys.get("URLDNA_KEY", "")
+    if urldna_key:
+        try:
+            from intel.urldna import lookup_url as _ud_lookup
+            ud = await _ud_lookup(session, url, urldna_key)
+            if ud and ud.get("found"):
+                data["urldna"] = ud
+        except Exception as _e:
+            _log.debug("URLdna URL lookup failed for %s: %s", url, _e)
 
     _cache[ck] = data
     return data
