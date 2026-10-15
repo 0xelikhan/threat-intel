@@ -261,6 +261,30 @@ API_KEY_DEFINITIONS = {
         "placeholder": "Validin API key",
         "group": "API Keys"
     },
+    "EMAILREP_KEY": {
+        "label": "EmailRep API Key",
+        "description": "Email reputation — malicious-activity flags, credential leaks, disposable domains, social profile presence. Key is optional (raises daily quota).",
+        "required": False,
+        "url": "https://emailrep.io/key",
+        "placeholder": "optional EmailRep key",
+        "group": "API Keys"
+    },
+    "HUDSONROCK_KEY": {
+        "label": "Hudson Rock Cavalier API Key",
+        "description": "Infostealer-compromised credentials by email/domain/IP. Any hit means an attacker already has the password + MFA cookies from an infected endpoint.",
+        "required": False,
+        "url": "https://www.hudsonrock.com/cavalier-api",
+        "placeholder": "Cavalier API key",
+        "group": "API Keys"
+    },
+    "HUNTER_IO_KEY": {
+        "label": "Hunter.io API Key",
+        "description": "Domain email enumeration — known addresses, roles, naming pattern. Free tier: 25 req/month.",
+        "required": False,
+        "url": "https://hunter.io/api_keys",
+        "placeholder": "Hunter.io API key",
+        "group": "API Keys"
+    },
     "CENSYS_API_KEY": {
         "label": "Censys API Key (Personal Access Token)",
         "description": "Censys v3 Personal Access Token — single token sent "
