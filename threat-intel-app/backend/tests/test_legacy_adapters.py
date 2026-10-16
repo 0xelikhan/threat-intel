@@ -55,25 +55,29 @@ _DUMMY = {
 
 
 @pytest.mark.asyncio
-async def test_every_legacy_adapter_returns_analysis_result():
-    """Call every LegacyAnalyzerAdapter and confirm it doesn't blow up."""
-    from plugins import registry, AnalysisResult, LegacyAnalyzerAdapter
+async def test_every_analyzer_returns_analysis_result():
+    """Call every registered Analyzer plugin's `analyze()` and confirm
+    it doesn't crash (the legacy_registrations table has since been
+    drained — the sweep now exercises every formal plugin file under
+    plugins/analyzers/, which is a stricter check since each file can
+    diverge from the shared adapter pattern)."""
+    from plugins import registry, AnalysisResult
     registry.discover()
 
-    adapters = [a for a in registry.analyzers()
-                 if isinstance(a, LegacyAnalyzerAdapter)]
-    assert adapters, "no legacy adapters registered"
+    analyzers = registry.analyzers()
+    assert analyzers, "no analyzers registered"
 
-    # Pass a fake value for every required key so the adapter has
-    # something to send through.
     import aiohttp
     async with aiohttp.ClientSession() as session:
-        keys = {k: "FAKE_KEY_FOR_TESTS"
-                for a in adapters for k in (a.required_keys + a.optional_keys)}
+        # Fake every required/optional key the registered set declares
+        all_keys = set()
+        for a in analyzers:
+            all_keys.update(getattr(a, "required_keys", []) or [])
+            all_keys.update(getattr(a, "optional_keys", []) or [])
+        keys = {k: "FAKE_KEY_FOR_TESTS" for k in all_keys}
 
         failures = []
-        for a in adapters:
-            # Pick the first supported IOC type the adapter advertises.
+        for a in analyzers:
             if not a.supported_ioc_types:
                 failures.append(f"{a.name}: no supported_ioc_types declared")
                 continue
@@ -87,4 +91,7 @@ async def test_every_legacy_adapter_returns_analysis_result():
             if not isinstance(r, AnalysisResult):
                 failures.append(f"{a.name}: returned {type(r).__name__} not AnalysisResult")
 
-        assert not failures, "Legacy adapter failures:\n" + "\n".join(failures)
+        assert not failures, (
+            f"{len(failures)} analyzer failure{'s' if len(failures) != 1 else ''}:\n"
+            + "\n".join(failures)
+        )
