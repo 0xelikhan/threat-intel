@@ -48,14 +48,20 @@ def _build(records: List[Dict[str, Any]], label: str) -> Dict[str, Any]:
     ports: set = set()
     vulns: set = set()
     for r in records:
+        if not isinstance(r, dict):
+            continue
         cat = r.get("@category") or r.get("category")
         if cat:
             categories[cat] = categories.get(cat, 0) + 1
         if r.get("port"):
             ports.add(r.get("port"))
-        for cve in (r.get("cve") or []):
-            if isinstance(cve, str):
-                vulns.add(cve)
+        cve_list = r.get("cve")
+        if isinstance(cve_list, list):
+            for cve in cve_list:
+                if isinstance(cve, str):
+                    vulns.add(cve)
+        elif isinstance(cve_list, str):
+            vulns.add(cve_list)
     verdict = "UNKNOWN"
     if vulns:
         verdict = "SUSPICIOUS"
@@ -91,9 +97,19 @@ async def _run(session, kind: str, value: str, api_key: str) -> Dict[str, Any]:
         return {"source": "onyphe", "error": "unexpected shape",
                 "error_type": "unreachable"}
     if r.get("error"):
-        return {"source": "onyphe", "error": r.get("error"),
+        return {"source": "onyphe", "error": str(r.get("error"))[:160],
                 "error_type": r.get("error_type", "unreachable")}
+    # Onyphe wraps error responses as {"status": "error", "message": "..."}
+    # when authentication fails. Treat anything non-ok as an auth error.
+    status = (r.get("status") or "").lower()
+    if status and status != "ok":
+        return {"source": "onyphe", "found": False,
+                "error": str(r.get("message") or r.get("text") or status)[:160],
+                "error_type": "api_error"}
     results = r.get("results") or []
+    if not isinstance(results, list):
+        return {"source": "onyphe", "found": False,
+                "error": "results not a list", "error_type": "format_error"}
     return _build([e for e in results if isinstance(e, dict)], value)
 
 
