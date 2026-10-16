@@ -37,6 +37,24 @@ class OfficeMetadataAnalyzer(FileAnalyzer):
                 error_type="format_error",
             )
 
+        # Format gate — VBA_Parser's detect_* methods will happily
+        # false-positive on non-office garbage (random bytes containing
+        # ole-marker sequences). Only trust macro detection when the
+        # parser identifies a real office/OpenXML type.
+        valid_types = {"OLE", "OpenXML", "FlatOPC_XML", "Word2003_XML",
+                       "MHTML", "RTF", "XLSB"}
+        parser_type = getattr(parser, "type", None)
+        if parser_type not in valid_types:
+            try: parser.close()
+            except Exception: pass
+            return AnalysisResult(
+                source="office_metadata",
+                ioc_type="file", ioc_value=filename or "",
+                found=False,
+                error=f"not a recognised Office format (type={parser_type!r})",
+                error_type="format_error",
+            )
+
         has_macros = parser.detect_vba_macros() if hasattr(parser, "detect_vba_macros") else False
         has_xlm = parser.detect_xlm_macros() if hasattr(parser, "detect_xlm_macros") else False
 

@@ -56,9 +56,17 @@ async def lookup_hash(session, hash_val: str, api_key: str = "") -> Dict[str, An
         return {"source": "polyswarm", "error": r.get("error") or "API error",
                 "error_type": "api_error"}
 
-    result = r.get("result") or r
+    result = r.get("result")
+    if not isinstance(result, dict):
+        # Some Polyswarm error responses set `result` to a string
+        # ("unauthorized", "not found") rather than a nested dict.
+        if isinstance(result, str):
+            return {"source": "polyswarm", "found": False,
+                    "error": result[:160], "error_type": "api_error"}
+        result = r
     assertions = result.get("assertions") or []
-    malicious_count = sum(1 for a in assertions if a.get("verdict") is True)
+    malicious_count = sum(1 for a in assertions
+                             if isinstance(a, dict) and a.get("verdict") is True)
     total = len(assertions)
     polyscore = result.get("polyscore")
 
