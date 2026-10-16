@@ -120,6 +120,21 @@ def test_capa_skill_accepts_b64_input():
 
 
 # ─── SigmaHQ corpus (intel.sigma_corpus) ────────────────────────────────────
+def _sigma_corpus_available() -> bool:
+    try:
+        from intel.sigma_corpus import stats
+        return stats().get("loaded") is True and stats().get("rule_count", 0) > 0
+    except Exception:
+        return False
+
+
+_SIGMA_SKIP = pytest.mark.skipif(
+    not _sigma_corpus_available(),
+    reason="vendor/sigma corpus not populated (run scripts/fetch_sigma_corpus.sh)",
+)
+
+
+@_SIGMA_SKIP
 def test_sigma_corpus_loads_thousands_of_rules():
     from intel.sigma_corpus import stats
     s = stats()
@@ -131,6 +146,7 @@ def test_sigma_corpus_loads_thousands_of_rules():
     assert s["error"] is None
 
 
+@_SIGMA_SKIP
 def test_sigma_match_returns_high_overlap_first():
     """T1059.001 + T1027 are heavily-covered techniques; the top hit
     should be a rule whose tag set overlaps BOTH (overlap=2 ranks above
@@ -144,6 +160,7 @@ def test_sigma_match_returns_high_overlap_first():
     assert top_techs & requested
 
 
+@_SIGMA_SKIP
 def test_sigma_match_subtechnique_resolves_to_parent():
     """Asking for T1059.001 should also surface rules tagged only T1059
     (the parent technique) — our matcher unions the subtech with its
@@ -158,6 +175,7 @@ def test_sigma_match_subtechnique_resolves_to_parent():
     assert len(matches) >= 1
 
 
+@_SIGMA_SKIP
 def test_match_sigma_rules_skill_returns_attribution():
     """Every match returned by the skill must carry source='SigmaHQ' so
     the frontend can render attribution alongside the rule title."""

@@ -146,6 +146,17 @@ def test_phishing_db_is_known_phish_is_false_when_not_loaded():
 
 
 # ─── Unified match_detections skill ─────────────────────────────────────────
+def _sigma_corpus_available():
+    try:
+        from intel.sigma_corpus import stats
+        s = stats()
+        return s.get("loaded") is True and s.get("rule_count", 0) > 0
+    except Exception:
+        return False
+
+
+@pytest.mark.skipif(not _sigma_corpus_available(),
+                     reason="vendor/sigma corpus not populated")
 def test_match_detections_returns_all_five_source_keys():
     """The skill should always return the five source keys + corpus_stats,
     even when several corpora aren't loaded."""

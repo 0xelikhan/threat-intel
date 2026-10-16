@@ -44,8 +44,15 @@ class _null_session:
 def test_crt_sh_flags_recent_cert_burst_as_suspicious():
     """When crt.sh reports 20+ new certs in 30 days OR 5+ unrelated SANs
     the verdict is SUSPICIOUS — that's the phishing-infra prep signal
-    the analyst wants surfaced in orange."""
-    now = "2026-07-01T12:00:00"
+    the analyst wants surfaced in orange.
+
+    Uses a sliding timestamp (now-5d) so the recent-30d counter in
+    crt_sh.py's dateutil parse still catches the fake burst a year
+    after the test was written. The old fixture hardcoded 2026-07-01
+    which quietly fell outside the 30-day window as wall-clock drifted."""
+    import datetime as _dt
+    now_dt = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=5)
+    now = now_dt.strftime("%Y-%m-%dT%H:%M:%S")
     fake = [
         {"issuer_name":  "C=US, O=Let's Encrypt, CN=R3",
          "not_before":   now,
