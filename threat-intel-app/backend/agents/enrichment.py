@@ -1941,6 +1941,83 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("HudsonRock domain lookup failed for %s: %s", domain, _e)
 
+    # ─── Tier 1 recon-ng / theHarvester subdomain + code-search sources ─
+    # Common Crawl — passive subdomain mining from the public web
+    # archive. Historical subdomains no CT log has.
+    try:
+        from intel.commoncrawl import lookup as _cc_lookup
+        cc = await _cc_lookup(session, domain)
+        if cc and cc.get("found"):
+            data["commoncrawl"] = cc
+    except Exception as _e:
+        _log.debug("Common Crawl lookup failed for %s: %s", domain, _e)
+
+    # Wayback Machine CDX — historical subdomain + URL mining
+    try:
+        from intel.wayback import lookup as _wb_lookup
+        wb = await _wb_lookup(session, domain)
+        if wb and wb.get("found"):
+            data["wayback"] = wb
+    except Exception as _e:
+        _log.debug("Wayback lookup failed for %s: %s", domain, _e)
+
+    # subdomain.center — community-sourced subdomain feed (free)
+    try:
+        from intel.subdomain_center import lookup as _sc_lookup
+        sc = await _sc_lookup(session, domain)
+        if sc and sc.get("found"):
+            data["subdomain_center"] = sc
+    except Exception as _e:
+        _log.debug("subdomain.center lookup failed for %s: %s", domain, _e)
+
+    # RapidDNS — passive DNS subdomain enum (free, HTML scrape)
+    try:
+        from intel.rapiddns import lookup as _rd_lookup
+        rd = await _rd_lookup(session, domain)
+        if rd and rd.get("found"):
+            data["rapiddns"] = rd
+    except Exception as _e:
+        _log.debug("RapidDNS lookup failed for %s: %s", domain, _e)
+
+    # crt.name — alternative CT log index
+    try:
+        from intel.crtname import lookup as _cn_lookup
+        cn = await _cn_lookup(session, domain)
+        if cn and cn.get("found"):
+            data["crtname"] = cn
+    except Exception as _e:
+        _log.debug("crt.name lookup failed for %s: %s", domain, _e)
+
+    # GitHub code search — SUSPICIOUS when target domain appears in
+    # public code (shadow repos / leaked secrets)
+    gh_key = keys.get("GITHUB_TOKEN", "")
+    if gh_key:
+        try:
+            from intel.githubcode import lookup as _gh_lookup
+            gh = await _gh_lookup(session, domain, gh_key)
+            if gh and gh.get("found"):
+                data["githubcode"] = gh
+        except Exception as _e:
+            _log.debug("GitHub code lookup failed for %s: %s", domain, _e)
+
+    # GitLab code search (public search works without a token)
+    try:
+        from intel.gitlabsearch import lookup as _gl_lookup
+        gl = await _gl_lookup(session, domain, keys.get("GITLAB_TOKEN", ""))
+        if gl and gl.get("found"):
+            data["gitlabsearch"] = gl
+    except Exception as _e:
+        _log.debug("GitLab search failed for %s: %s", domain, _e)
+
+    # Sourcegraph — public code index (token optional, raises quota)
+    try:
+        from intel.sourcegraph import lookup as _sg_lookup
+        sg = await _sg_lookup(session, domain, keys.get("SOURCEGRAPH_TOKEN", ""))
+        if sg and sg.get("found"):
+            data["sourcegraph"] = sg
+    except Exception as _e:
+        _log.debug("Sourcegraph lookup failed for %s: %s", domain, _e)
+
     # Hunter.io — domain email enumeration + patterns + roles.
     hi_key = keys.get("HUNTER_IO_KEY", "")
     if hi_key:

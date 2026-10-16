@@ -357,6 +357,30 @@ API_KEY_DEFINITIONS = {
         "placeholder": "NumVerify access_key",
         "group": "API Keys"
     },
+    "GITHUB_TOKEN": {
+        "label": "GitHub Personal Access Token",
+        "description": "Code-search for leaked credentials / shadow repos tied to the target domain. Any scope works; public_repo recommended. Free: 10 code-search req/min.",
+        "required": False,
+        "url": "https://github.com/settings/tokens",
+        "placeholder": "ghp_... or github_pat_...",
+        "group": "API Keys"
+    },
+    "GITLAB_TOKEN": {
+        "label": "GitLab Personal Access Token",
+        "description": "Optional. Boosts gitlab.com code-search quota beyond the public ~60 req/hour. read_api scope is enough.",
+        "required": False,
+        "url": "https://gitlab.com/-/user_settings/personal_access_tokens",
+        "placeholder": "glpat-...",
+        "group": "API Keys"
+    },
+    "SOURCEGRAPH_TOKEN": {
+        "label": "Sourcegraph Access Token",
+        "description": "Optional. Raises sourcegraph.com's public code-search quota beyond the free ~30/day. Any token works.",
+        "required": False,
+        "url": "https://sourcegraph.com/user/settings/tokens",
+        "placeholder": "sgp_...",
+        "group": "API Keys"
+    },
     "CENSYS_API_KEY": {
         "label": "Censys API Key (Personal Access Token)",
         "description": "Censys v3 Personal Access Token — single token sent "

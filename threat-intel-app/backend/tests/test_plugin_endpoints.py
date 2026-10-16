@@ -22,22 +22,26 @@ import pytest
 
 @pytest.fixture(scope="module")
 def client():
-    # Load the real `agents` package first so sibling tests that import
-    # agents.triage / agents.orchestrator still see the full namespace.
-    # Then stub ONLY agents.enrichment (the heavy module the plugin
-    # legacy adapters pull in via lazy imports).
+    # Try to import the real agents.enrichment. If it works (its deps
+    # are available), use it as-is; sibling tests that patch _get/_post
+    # on the real module will still work. If it DOESN'T import (missing
+    # heavy transitive deps like langgraph in a minimal CI env), fall
+    # back to stubbing. Either way, don't clobber the real module when
+    # it exists — that broke the pivot + phone-extraction tests.
     import importlib
     try:
-        importlib.import_module("agents")
-    except ModuleNotFoundError:
-        sys.modules.setdefault("agents", types.ModuleType("agents"))
-    if "agents.enrichment" not in sys.modules:
-        enr = types.ModuleType("agents.enrichment")
-        async def _get(*a, **k): return {"error": "stub", "error_type": "unreachable"}
-        async def _post(*a, **k): return {"error": "stub", "error_type": "unreachable"}
-        enr._get = _get
-        enr._post = _post
-        sys.modules["agents.enrichment"] = enr
+        importlib.import_module("agents.enrichment")
+    except Exception:
+        # Only stub when the real module can't be imported.
+        if "agents" not in sys.modules:
+            sys.modules["agents"] = types.ModuleType("agents")
+        if "agents.enrichment" not in sys.modules:
+            enr = types.ModuleType("agents.enrichment")
+            async def _get(*a, **k): return {"error": "stub", "error_type": "unreachable"}
+            async def _post(*a, **k): return {"error": "stub", "error_type": "unreachable"}
+            enr._get = _get
+            enr._post = _post
+            sys.modules["agents.enrichment"] = enr
 
     from fastapi import FastAPI, HTTPException, Body, Header
     from fastapi import Request as FastAPIRequest
