@@ -6,7 +6,7 @@ import os
 import tempfile
 from typing import Any, Dict
 
-from _base_wrapper import run
+from _base_wrapper import expose, run
 
 
 def analyze_bytes(data: bytes, filename: str) -> Dict[str, Any]:
@@ -54,6 +54,8 @@ def analyze_bytes(data: bytes, filename: str) -> Dict[str, Any]:
         "behaviors":     behaviors[:20],
     }
 
+
+app = expose("quark_engine", analyze_bytes)   # for `gunicorn service:app`
 
 if __name__ == "__main__":
     run("quark_engine", analyze_bytes, default_port=5006)

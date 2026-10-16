@@ -1,0 +1,31 @@
+# Box-js sidecar — Node.js tool with a thin Python Flask wrapper.
+#
+# Box-js is a JavaScript sandbox for malware droppers; it's npm-
+# installed globally. The wrapper shells out to `box-js` and parses
+# its JSON result files.
+
+FROM node:20-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 python3-pip python3-venv \
+ && rm -rf /var/lib/apt/lists/*
+
+# Flask + gunicorn in an isolated venv so the system python stays
+# clean and PEP 668-managed Debian pip doesn't refuse the install.
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir flask gunicorn
+
+# Install box-js globally; it exposes the `box-js` CLI.
+RUN npm install -g box-js
+
+WORKDIR /app
+COPY _base_wrapper.py ./
+COPY box_js_service.py ./service.py
+
+EXPOSE 5000
+CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:5000", "--timeout", "600", "service:app"]

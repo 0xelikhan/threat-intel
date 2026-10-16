@@ -1,0 +1,60 @@
+# ClamAV sidecar — clamd daemon + Python Flask wrapper in one image.
+#
+# The wrapper talks to clamd on 127.0.0.1:3310 (INSTREAM protocol);
+# a supervisor-style entry point starts clamd first, waits for it
+# to become responsive, then launches gunicorn.
+
+FROM debian:bookworm-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    CLAMD_HOST=127.0.0.1 \
+    CLAMD_PORT=3310
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      clamav clamav-daemon python3 python3-pip python3-venv curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# clamd expects to listen on TCP; the stock config is unix-socket.
+RUN sed -i -e 's/^#\?TCPSocket .*/TCPSocket 3310/' \
+           -e 's/^#\?TCPAddr .*/TCPAddr 127.0.0.1/' \
+           /etc/clamav/clamd.conf \
+ && echo "LogSyslog false" >> /etc/clamav/clamd.conf \
+ && echo "LogVerbose false" >> /etc/clamav/clamd.conf
+
+# Initial signature download so the first scan doesn't fail. freshclam
+# refreshes on a timer inside the container.
+RUN freshclam --quiet || true
+
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir flask gunicorn
+
+WORKDIR /app
+COPY _base_wrapper.py ./
+COPY clamav_service.py ./service.py
+
+# tini + a one-shot start script that boots clamd then execs gunicorn.
+RUN apt-get update && apt-get install -y --no-install-recommends tini \
+ && rm -rf /var/lib/apt/lists/*
+COPY <<'EOF' /start-clamav.sh
+#!/bin/sh
+set -eu
+/usr/sbin/clamd &
+# Wait up to 60s for clamd TCP to accept
+for _ in $(seq 1 60); do
+  if (echo > /dev/tcp/127.0.0.1/3310) 2>/dev/null; then
+    echo "clamd ready"
+    break
+  fi
+  sleep 1
+done
+exec gunicorn -w 2 -b 0.0.0.0:5000 --timeout 600 service:app
+EOF
+RUN chmod +x /start-clamav.sh
+
+EXPOSE 5000
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["/start-clamav.sh"]

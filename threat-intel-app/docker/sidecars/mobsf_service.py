@@ -17,7 +17,7 @@ from typing import Any, Dict
 
 import requests
 
-from _base_wrapper import run
+from _base_wrapper import expose, run
 
 
 def analyze_bytes(data: bytes, filename: str) -> Dict[str, Any]:
@@ -80,6 +80,8 @@ def analyze_bytes(data: bytes, filename: str) -> Dict[str, Any]:
         "trackers":         (report.get("trackers") or {}).get("trackers", [])[:10],
     }
 
+
+app = expose("mobsf", analyze_bytes)   # for `gunicorn service:app`
 
 if __name__ == "__main__":
     run("mobsf", analyze_bytes, default_port=5005)

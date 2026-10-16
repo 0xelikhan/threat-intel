@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 from typing import Any, Dict
 
-from _base_wrapper import run
+from _base_wrapper import expose, run
 
 
 def analyze_bytes(data: bytes, filename: str) -> Dict[str, Any]:
@@ -45,6 +45,8 @@ def analyze_bytes(data: bytes, filename: str) -> Dict[str, Any]:
         "ranked_strings": ranked[:30],
     }
 
+
+app = expose("stringsifter", analyze_bytes)   # for `gunicorn service:app`
 
 if __name__ == "__main__":
     run("stringsifter", analyze_bytes, default_port=5010)

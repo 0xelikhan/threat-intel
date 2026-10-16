@@ -5,7 +5,7 @@ from __future__ import annotations
 import tempfile
 from typing import Any, Dict
 
-from _base_wrapper import run
+from _base_wrapper import expose, run
 
 
 def analyze_bytes(data: bytes, filename: str) -> Dict[str, Any]:
@@ -42,6 +42,8 @@ def analyze_bytes(data: bytes, filename: str) -> Dict[str, Any]:
         "errors":      (report.get("errors") or [])[:5],
     }
 
+
+app = expose("speakeasy", analyze_bytes)
 
 if __name__ == "__main__":
     run("speakeasy", analyze_bytes, default_port=5002)

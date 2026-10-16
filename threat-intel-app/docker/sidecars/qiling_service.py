@@ -12,7 +12,7 @@ import os
 import tempfile
 from typing import Any, Dict
 
-from _base_wrapper import run
+from _base_wrapper import expose, run
 
 
 def _detect_rootfs(file_bytes: bytes) -> str:
@@ -70,6 +70,8 @@ def analyze_bytes(data: bytes, filename: str) -> Dict[str, Any]:
         "rootfs":         rootfs,
     }
 
+
+app = expose("qiling", analyze_bytes)   # for `gunicorn service:app`
 
 if __name__ == "__main__":
     run("qiling", analyze_bytes, default_port=5001)

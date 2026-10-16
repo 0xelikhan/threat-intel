@@ -34,4 +34,4 @@ EXPOSE 5000
 
 # gunicorn with 2 workers — a single POST analyze can be slow; two
 # workers lets the health probe stay responsive while one is busy.
-CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:5000", "--timeout", "600", "service:build_app"]
+CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:5000", "--timeout", "600", "service:app"]

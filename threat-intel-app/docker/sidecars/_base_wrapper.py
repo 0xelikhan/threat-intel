@@ -71,3 +71,15 @@ def run(service_name: str,
     """Entry point — each sidecar module calls this at `if __name__ == '__main__'`."""
     port = int(os.environ.get("PORT") or default_port)
     build_app(service_name, analyze_bytes).run(host="0.0.0.0", port=port)
+
+
+def expose(service_name: str,
+            analyze_bytes: Callable[[bytes, str], Dict[str, Any]]) -> Flask:
+    """Module-level app exposure for gunicorn.
+
+    Each sidecar module ends with:
+        app = expose("<name>", analyze_bytes)
+    so `gunicorn service:app` finds a bound Flask instance (not the
+    2-arg factory `build_app`, which gunicorn can't call with no args).
+    """
+    return build_app(service_name, analyze_bytes)
