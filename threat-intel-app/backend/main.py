@@ -356,6 +356,42 @@ async def _lifespan(app):
     except Exception as e:
         _log.warning("self-diagnosis NOT started: %s", e)
 
+    # Ingestor plugins — opt-in background pollers that stream external
+    # feeds (TAXII, etc.) into the analysis queue. Disabled by default
+    # because the TAXII feeds are configured per-env + a chatty feed
+    # can exhaust background workers. Opt in with RECON_INGEST_ENABLED=1.
+    if (os.environ.get("RECON_INGEST_ENABLED", "0") or "0") not in ("0", "false", "False"):
+        try:
+            from plugins import registry as _plugin_registry
+            import aiohttp as _aiohttp
+            _plugin_registry.discover()
+            _ingestors = _plugin_registry.ingestors()
+            if _ingestors:
+                _recent_iocs: list = []
+                async def _run_ingestor(ing):
+                    while True:
+                        try:
+                            async with _aiohttp.ClientSession() as s:
+                                count = 0
+                                async for ioc in ing.poll(s):
+                                    _recent_iocs.append(ioc)
+                                    count += 1
+                                    if count >= 100: break
+                                if count:
+                                    _log.info("ingestor %s: produced %d IOCs",
+                                              ing.name, count)
+                        except Exception as _ie:
+                            _log.debug("ingestor %s failed: %s", ing.name, _ie)
+                        await asyncio.sleep(max(60, ing.interval_seconds))
+                for _ing in _ingestors:
+                    track_task(asyncio.create_task(_run_ingestor(_ing)))
+                _log.info("ingestor scheduler started with %d ingestor(s)",
+                          len(_ingestors))
+                # Expose the ring buffer so an endpoint can surface it later
+                app.state.recent_ingested_iocs = _recent_iocs
+        except Exception as e:
+            _log.warning("ingestor scheduler NOT started: %s", e)
+
     yield   # ─── App runs here ───────────────────────────────────────
 
     # ─── SHUTDOWN ─────────────────────────────────────────────────────

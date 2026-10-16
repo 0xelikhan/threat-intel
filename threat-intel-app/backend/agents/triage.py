@@ -347,7 +347,7 @@ def extract_iocs(text: str) -> dict:
     """
     iocs = {"ips": set(), "domains": set(), "urls": set(), "hashes": set(),
             "emails": set(), "files": set(), "paths": set(), "cves": set(),
-            "crypto": set()}
+            "crypto": set(), "phones": set()}
 
     # Refang + scrub in one step. Order is load-bearing: refang runs
     # FIRST so the strip patterns (AV/AS/NIS Defender versions, "Source
@@ -512,6 +512,26 @@ def extract_iocs(text: str) -> dict:
                 iocs["crypto"].add(_a)
     except Exception:
         pass
+
+    # Phone number extraction via google-libphonenumber's intelligent
+    # matcher. Handles international + national formats, parens, dashes,
+    # dots. Only POSSIBLE+ matches are emitted so random 7-digit log
+    # sequences don't pollute the bucket.
+    try:
+        import phonenumbers
+        for m in phonenumbers.PhoneNumberMatcher(
+            text or "", None,
+            leniency=phonenumbers.Leniency.POSSIBLE,
+        ):
+            e164 = phonenumbers.format_number(
+                m.number, phonenumbers.PhoneNumberFormat.E164,
+            )
+            if e164:
+                iocs["phones"].add(e164)
+    except ImportError:
+        pass  # phonenumbers optional; silently skip when not installed
+    except Exception:
+        pass  # defensive — never let IOC extraction crash on phones
 
     return {k: list(v) for k, v in iocs.items()}
 
