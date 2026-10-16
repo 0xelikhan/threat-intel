@@ -349,7 +349,7 @@ export function SkeletonHistoryRows({ count = 5 }) {
       {Array.from({ length: count }).map((_, i) => (
         <Box key={i} sx={{
           padding: '10px 14px',
-          borderBottom: '1px solid #060d1a',
+          borderBottom: '1px solid #060b1c',
         }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: '4px' }}>
             <Skeleton width={`${55 + (i % 4) * 7}%`} height={12} delayMs={i * 80}/>
