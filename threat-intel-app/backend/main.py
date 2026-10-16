@@ -609,7 +609,8 @@ async def _catchall_exc_handler(request, exc: Exception):
 # request.session before the gate inspects it. The earlier @app.middleware
 # decorator put the gate outermost, and request.session blew up with an
 # AssertionError because Session hadn't run yet.
-_PUBLIC_PREFIXES = ("/api/auth/", "/api/health", "/api/docs", "/api/openapi.json")
+_PUBLIC_PREFIXES = ("/api/auth/", "/api/health", "/api/docs", "/api/openapi.json",
+                     "/api/plugins")
 
 
 class AuthGateMiddleware(BaseHTTPMiddleware):
@@ -816,12 +817,13 @@ async def list_plugins():
         return {
             "count": len(catalog),
             "by_kind": {
-                "analyzer":   len([p for p in catalog if p.kind == "analyzer"]),
-                "connector":  len([p for p in catalog if p.kind == "connector"]),
-                "pivot":      len([p for p in catalog if p.kind == "pivot"]),
-                "visualizer": len([p for p in catalog if p.kind == "visualizer"]),
-                "ingestor":   len([p for p in catalog if p.kind == "ingestor"]),
-                "playbook":   len([p for p in catalog if p.kind == "playbook"]),
+                "analyzer":      len([p for p in catalog if p.kind == "analyzer"]),
+                "file_analyzer": len([p for p in catalog if p.kind == "file_analyzer"]),
+                "connector":     len([p for p in catalog if p.kind == "connector"]),
+                "pivot":         len([p for p in catalog if p.kind == "pivot"]),
+                "visualizer":    len([p for p in catalog if p.kind == "visualizer"]),
+                "ingestor":      len([p for p in catalog if p.kind == "ingestor"]),
+                "playbook":      len([p for p in catalog if p.kind == "playbook"]),
             },
             "plugins": [p.model_dump() for p in catalog],
         }
