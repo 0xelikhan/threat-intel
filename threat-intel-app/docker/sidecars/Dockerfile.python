@@ -1,0 +1,37 @@
+# Shared base for Python-tool sidecars (Qiling, Speakeasy, Thug,
+# Quark, Mobsf proxy, Hfinger, Stringsifter).
+#
+# Each service is built from this with:
+#   docker build -f Dockerfile.python --build-arg SERVICE=qiling_service \
+#                                      --build-arg TOOLS="qiling" \
+#                                      -t recon-sidecar-qiling .
+#
+# SERVICE  = python filename without .py (e.g. qiling_service)
+# TOOLS    = space-separated pip install targets for the service's tool
+
+FROM python:3.11-slim
+
+ARG SERVICE
+ARG TOOLS
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+# Flask is the shared HTTP shell for every sidecar.
+RUN pip install --no-cache-dir flask gunicorn
+
+# Each sidecar adds its own tool deps.
+RUN if [ -n "$TOOLS" ]; then pip install --no-cache-dir $TOOLS; fi
+
+COPY _base_wrapper.py ./
+COPY ${SERVICE}.py ./service.py
+
+ENV SERVICE_NAME=${SERVICE}
+EXPOSE 5000
+
+# gunicorn with 2 workers — a single POST analyze can be slow; two
+# workers lets the health probe stay responsive while one is busy.
+CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:5000", "--timeout", "600", "service:build_app"]

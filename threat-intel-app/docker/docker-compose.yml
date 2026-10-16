@@ -1,0 +1,153 @@
+# RECON file-analyzer sidecar stack.
+#
+# Starts every Docker-based file analyzer that `plugins/file_analyzers/
+# docker_stubs.py` can dispatch to. Each service listens on a dedicated
+# port; the matching RECON_<SERVICE>_URL env var on the main backend
+# routes POST /api/files/analyze requests here.
+#
+# Point RECON at this stack by setting the following in the backend's
+# environment (e.g. backend/.env):
+#
+#   RECON_QILING_URL=http://localhost:5001
+#   RECON_SPEAKEASY_URL=http://localhost:5002
+#   RECON_THUG_URL=http://localhost:5003
+#   RECON_BOXJS_URL=http://localhost:5004
+#   RECON_MOBSF_URL=http://localhost:5005
+#   RECON_QUARK_URL=http://localhost:5006
+#   RECON_CLAMAV_URL=http://localhost:5007
+#   RECON_SURICATA_URL=http://localhost:5008
+#   RECON_HFINGER_URL=http://localhost:5009
+#   RECON_STRINGSIFTER_URL=http://localhost:5010
+#
+# Most services are heavy — pull / build on demand rather than all at
+# once. Run just the ones you need:
+#   docker compose up qiling clamav suricata
+
+version: "3.9"
+
+x-sidecar-base: &sidecar-base
+  build:
+    context: ./sidecars
+    dockerfile: Dockerfile.python
+  restart: unless-stopped
+  init: true
+
+services:
+  qiling:
+    <<: *sidecar-base
+    build:
+      context: ./sidecars
+      dockerfile: Dockerfile.python
+      args:
+        SERVICE: qiling_service
+        TOOLS: "qiling"
+    container_name: recon-qiling
+    ports: ["5001:5000"]
+
+  speakeasy:
+    <<: *sidecar-base
+    build:
+      context: ./sidecars
+      dockerfile: Dockerfile.python
+      args:
+        SERVICE: speakeasy_service
+        TOOLS: "speakeasy-emulator"
+    container_name: recon-speakeasy
+    ports: ["5002:5000"]
+
+  thug:
+    <<: *sidecar-base
+    build:
+      context: ./sidecars
+      dockerfile: Dockerfile.python
+      args:
+        SERVICE: thug_service
+        TOOLS: "thug"
+    container_name: recon-thug
+    ports: ["5003:5000"]
+    environment:
+      - THUG_LOGS=/tmp/thug-logs
+
+  box_js:
+    # Needs node + box-js globally — use a Node image and add Flask.
+    build:
+      context: ./sidecars
+      dockerfile: Dockerfile.boxjs
+    container_name: recon-box_js
+    ports: ["5004:5000"]
+    restart: unless-stopped
+
+  mobsf-proxy:
+    # Thin RECON wrapper that proxies into the official MobSF container.
+    <<: *sidecar-base
+    build:
+      context: ./sidecars
+      dockerfile: Dockerfile.python
+      args:
+        SERVICE: mobsf_service
+        TOOLS: "requests"
+    container_name: recon-mobsf
+    ports: ["5005:5000"]
+    environment:
+      - MOBSF_URL=http://mobsf:8000
+      - MOBSF_KEY=${MOBSF_KEY:-}
+    depends_on:
+      - mobsf
+
+  mobsf:
+    image: opensecurity/mobile-security-framework-mobsf:latest
+    container_name: mobsf-internal
+    ports: ["8000:8000"]
+    restart: unless-stopped
+
+  quark_engine:
+    <<: *sidecar-base
+    build:
+      context: ./sidecars
+      dockerfile: Dockerfile.python
+      args:
+        SERVICE: quark_service
+        TOOLS: "quark-engine"
+    container_name: recon-quark_engine
+    ports: ["5006:5000"]
+
+  clamav:
+    # clamd daemon + RECON wrapper. Pulls the official clamav image for
+    # the daemon and runs the wrapper alongside.
+    build:
+      context: ./sidecars
+      dockerfile: Dockerfile.clamav
+    container_name: recon-clamav
+    ports: ["5007:5000"]
+    environment:
+      - CLAMD_HOST=localhost
+      - CLAMD_PORT=3310
+
+  suricata:
+    build:
+      context: ./sidecars
+      dockerfile: Dockerfile.suricata
+    container_name: recon-suricata
+    ports: ["5008:5000"]
+
+  hfinger:
+    <<: *sidecar-base
+    build:
+      context: ./sidecars
+      dockerfile: Dockerfile.python
+      args:
+        SERVICE: hfinger_service
+        TOOLS: "hfinger"
+    container_name: recon-hfinger
+    ports: ["5009:5000"]
+
+  stringsifter:
+    <<: *sidecar-base
+    build:
+      context: ./sidecars
+      dockerfile: Dockerfile.python
+      args:
+        SERVICE: stringsifter_service
+        TOOLS: "stringsifter"
+    container_name: recon-stringsifter
+    ports: ["5010:5000"]
