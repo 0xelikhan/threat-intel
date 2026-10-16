@@ -8,7 +8,21 @@ shapes + the cross-walk behaviour against known long-lived names.
 
 from __future__ import annotations
 
+import pytest
 
+
+def _misp_galaxy_populated() -> bool:
+    try:
+        from intel.misp_galaxies import stats
+        s = stats()
+        return (s.get("actor_index_size", 0) >= 100
+                 or s.get("malware_index_size", 0) >= 1500)
+    except Exception:
+        return False
+
+
+@pytest.mark.skipif(not _misp_galaxy_populated(),
+                     reason="intel/misp_galaxy data not fetched (run scripts/fetch_misp_galaxy.sh)")
 def test_galaxy_stats_includes_new_clusters():
     from intel.misp_galaxies import stats
     s = stats()

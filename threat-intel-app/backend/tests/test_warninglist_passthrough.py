@@ -51,6 +51,27 @@ def test_filter_iocs_preserves_files_and_paths():
     assert filtered["paths"] == [r"c:\users\alice\appdata\local\temp\update.exe"]
 
 
+def _warninglist_data_available() -> bool:
+    """The MISP warninglist filter degrades to a passthrough when the
+    vendored dataset is missing. Only assert filtering behaviour when
+    the data is present."""
+    try:
+        from intel.warninglist_filter import _IS_LOADED  # type: ignore[attr-defined]
+        return bool(_IS_LOADED)
+    except Exception:
+        pass
+    try:
+        from intel.warninglist_filter import stats as _wl_stats
+        return bool(_wl_stats().get("loaded"))
+    except Exception:
+        return False
+
+
+import pytest  # noqa: E402  (needed for the skipif below)
+
+
+@pytest.mark.skipif(not _warninglist_data_available(),
+                     reason="vendor/misp-warninglists not fetched (run scripts/setup_vendor.sh)")
 def test_filter_iocs_still_filters_ips_and_domains():
     """The MISP warninglist gate on filterable buckets still works —
     Cloudflare DNS + Tranco-top domain get suppressed as before."""
