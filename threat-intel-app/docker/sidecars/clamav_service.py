@@ -7,7 +7,7 @@ import socket
 import struct
 from typing import Any, Dict
 
-from _base_wrapper import run
+from _base_wrapper import expose, run
 
 
 def _clamd_scan_stream(data: bytes, host: str, port: int) -> str:
@@ -58,6 +58,8 @@ def analyze_bytes(data: bytes, filename: str) -> Dict[str, Any]:
         "raw_resp":    resp[:200],
     }
 
+
+app = expose("clamav", analyze_bytes)   # for `gunicorn service:app`
 
 if __name__ == "__main__":
     run("clamav", analyze_bytes, default_port=5007)

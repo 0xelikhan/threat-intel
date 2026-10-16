@@ -1,0 +1,33 @@
+# Suricata PCAP sidecar — suricata binary + Python Flask wrapper.
+#
+# Suricata needs a ruleset. The build downloads the OISF ET-Open
+# rules at image-build time; a container restart doesn't refetch.
+# For production you'd mount a rules volume + a freshclam-equivalent
+# updater (suricata-update).
+
+FROM debian:bookworm-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      suricata suricata-update python3 python3-pip python3-venv \
+      ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# Pull a baseline ruleset so first analyses have something to match.
+RUN suricata-update update-sources || true \
+ && suricata-update --no-test || true
+
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir flask gunicorn
+
+WORKDIR /app
+COPY _base_wrapper.py ./
+COPY suricata_service.py ./service.py
+
+EXPOSE 5000
+CMD ["gunicorn", "-w", "1", "-b", "0.0.0.0:5000", "--timeout", "600", "service:app"]

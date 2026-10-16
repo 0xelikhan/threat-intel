@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 from typing import Any, Dict
 
-from _base_wrapper import run
+from _base_wrapper import expose, run
 
 
 def analyze_bytes(data: bytes, filename: str) -> Dict[str, Any]:
@@ -40,6 +40,8 @@ def analyze_bytes(data: bytes, filename: str) -> Dict[str, Any]:
         "stderr":           (result.stderr or "")[:300],
     }
 
+
+app = expose("hfinger", analyze_bytes)   # for `gunicorn service:app`
 
 if __name__ == "__main__":
     run("hfinger", analyze_bytes, default_port=5009)

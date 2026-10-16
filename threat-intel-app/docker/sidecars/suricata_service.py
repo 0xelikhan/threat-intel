@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict
 
-from _base_wrapper import run
+from _base_wrapper import expose, run
 
 
 def analyze_bytes(data: bytes, filename: str) -> Dict[str, Any]:
@@ -63,6 +63,8 @@ def analyze_bytes(data: bytes, filename: str) -> Dict[str, Any]:
         "flow_count":   flows,
     }
 
+
+app = expose("suricata", analyze_bytes)   # for `gunicorn service:app`
 
 if __name__ == "__main__":
     run("suricata", analyze_bytes, default_port=5008)
