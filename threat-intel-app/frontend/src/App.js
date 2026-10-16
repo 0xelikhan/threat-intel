@@ -2392,7 +2392,73 @@ function _ocSources(result, ioc, type) {
     // Round-18 Yeti-mined sources.
     threatview_c2:       'ThreatView CS C2',
     viriback:            'ViriBack',
+    // Phase 1 TI source additions — labels used by both the error-row
+    // fallback below AND the generic positive-result renderer at the
+    // bottom of this function.
+    yaraify:          'YARAify',
+    vulners:          'Vulners',
+    phishtank:        'PhishTank',
+    phishstats:       'PhishStats',
+    stalkphish:       'Stalkphish',
+    urldna:           'URLdna',
+    securitytrails:   'SecurityTrails',
+    leakix:           'LeakIX',
+    netlas:           'Netlas',
+    onyphe:           'Onyphe',
+    hunter_how:       'Hunter.how',
+    binaryedge:       'BinaryEdge',
+    zoomeye:          'ZoomEye',
+    validin:          'Validin',
+    emailrep:         'EmailRep',
+    hudsonrock:       'Hudson Rock',
+    hunter_io:        'Hunter.io',
+    polyswarm:        'Polyswarm',
+    intezer:          'Intezer',
+    hybrid_analysis:  'Hybrid Analysis',
+    triage:           'Triage',
+    koodous:          'Koodous',
+    filescan:         'FileScan',
+    mwdb:             'MWDB',
+    joesandbox:       'Joe Sandbox',
+    phunter:          'Phunter',
+    phoneinfoga:      'Phoneinfoga',
   };
+
+  // ─── Generic positive-result renderer for Phase 1 additions ─────────
+  // Each new source emits a dict with {source, verdict, summary} in
+  // addition to its source-specific fields. If the analyst has no
+  // bespoke render block above, surface a one-liner row using those
+  // normalised fields. Error rows still fall through to the walk below.
+  {
+    const _phase1Keys = [
+      'yaraify', 'vulners', 'phishtank', 'phishstats', 'stalkphish',
+      'urldna', 'securitytrails', 'leakix', 'netlas', 'onyphe',
+      'hunter_how', 'binaryedge', 'zoomeye', 'validin', 'emailrep',
+      'hudsonrock', 'hunter_io', 'polyswarm', 'intezer',
+      'hybrid_analysis', 'triage', 'koodous', 'filescan', 'mwdb',
+      'joesandbox', 'phunter', 'phoneinfoga',
+    ];
+    const _vColor = (v) =>
+        v === 'MALICIOUS'  ? red
+      : v === 'SUSPICIOUS' ? orange
+      : v === 'CLEAN'      ? green
+      :                      tert;
+    for (const key of _phase1Keys) {
+      const blob = d[key];
+      if (!blob || blob.error) continue;
+      if (!blob.found) continue;
+      const label = _sourceLabels[key] || key;
+      const summary = blob.summary || `${label} returned data`;
+      out.push({
+        source: label,
+        label:  summary.replace(/^[\w. ]+:\s*/, ''),  // strip "Source: " prefix
+        color:  _vColor(blob.verdict),
+        why:    blob.verdict && blob.verdict !== 'UNKNOWN'
+                ? `${label} verdict: ${blob.verdict}`
+                : `Enrichment data from ${label}.`,
+      });
+    }
+  }
   const _surfaced = new Set(out.map(r => r.source));
   for (const [key, blob] of Object.entries(d || {})) {
     const label = _sourceLabels[key];
