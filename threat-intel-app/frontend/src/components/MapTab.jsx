@@ -137,7 +137,7 @@ export default function MapTab({ result }) {
       const icon = L.divIcon({ html: markerHtml, className: '', iconSize: [24, 24], iconAnchor: [12, 12] });
 
       const popupContent = `
-        <div style="background:#0d1526;border:1px solid #1e3a5f;border-radius:6px;padding:12px;min-width:200px;font-family:JetBrains Mono;font-size:12px;color:#c8d6e5">
+        <div style="background:#0d1526;border:1px solid #0f2238;border-radius:6px;padding:12px;min-width:200px;font-family:JetBrains Mono;font-size:12px;color:#e6edf3">
           <div style="font-size:14px;color:#e2e8f0;margin-bottom:8px;font-weight:bold">${ip}</div>
           <div style="display:inline-block;background:${color}22;border:1px solid ${color}66;color:${color};padding:2px 8px;border-radius:3px;font-size:10px;letter-spacing:1px;margin-bottom:8px">${verdict}</div>
           ${details.city ? `<div style="color:#718096">${details.city}, ${details.country}</div>` : `<div style="color:#718096">${details.country}</div>`}
@@ -180,18 +180,18 @@ export default function MapTab({ result }) {
       </div>
 
       {/* Map */}
-      <div style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1px solid #1e3a5f' }}>
-        <div ref={mapRef} style={{ height: '500px', width: '100%', background: '#060d1a' }} />
+      <div style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1px solid #0f2238' }}>
+        <div ref={mapRef} style={{ height: '500px', width: '100%', background: '#060b1c' }} />
 
         {!result && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#060d1a', color: '#4a5568' }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#060b1c', color: '#4a5568' }}>
             <div style={{ fontSize: '32px', marginBottom: '12px', opacity: 0.3 }}>🗺</div>
             <div style={{ fontSize: '14px' }}>Run an analysis to map IP locations</div>
           </div>
         )}
 
         {result && ipsWithLocation === 0 && ips.length > 0 && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#060d1a66', color: '#718096' }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#060b1c66', color: '#718096' }}>
             <div style={{ fontSize: '14px' }}>No geolocation data available for extracted IPs</div>
             <div style={{ fontSize: '12px', marginTop: '4px' }}>ipinfo.io enrichment required for mapping</div>
           </div>
@@ -200,11 +200,11 @@ export default function MapTab({ result }) {
 
       {/* IP Summary Table */}
       {result && ips.length > 0 && (
-        <div style={{ background: '#0d1526', border: '1px solid #1e3a5f', borderRadius: '8px', padding: '16px', marginTop: '16px' }}>
-          <div style={{ fontSize: '11px', color: '#4a9eff', letterSpacing: '2px', marginBottom: '12px' }}>IP GEOLOCATION SUMMARY</div>
+        <div style={{ background: '#0d1526', border: '1px solid #0f2238', borderRadius: '8px', padding: '16px', marginTop: '16px' }}>
+          <div style={{ fontSize: '11px', color: '#00e5ff', letterSpacing: '2px', marginBottom: '12px' }}>IP GEOLOCATION SUMMARY</div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #1e3a5f' }}>
+              <tr style={{ borderBottom: '1px solid #0f2238' }}>
                 {['IP ADDRESS', 'COUNTRY', 'ORGANIZATION', 'VERDICT', 'FLAGS'].map(h => (
                   <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: '#718096', fontWeight: 'normal', letterSpacing: '1px', fontSize: '10px' }}>{h}</th>
                 ))}
@@ -216,9 +216,9 @@ export default function MapTab({ result }) {
                 const verdict = getIPVerdict(ip, result.response_summary);
                 const c = VERDICT_COLORS[verdict];
                 return (
-                  <tr key={ip} style={{ borderBottom: '1px solid #0d1a30', background: i % 2 === 0 ? 'transparent' : '#060d1a' }}>
-                    <td style={{ padding: '8px 10px', fontFamily: 'JetBrains Mono', color: '#4a9eff' }}>{ip}</td>
-                    <td style={{ padding: '8px 10px', color: '#c8d6e5' }}>{d.country || '—'}</td>
+                  <tr key={ip} style={{ borderBottom: '1px solid #0d1a30', background: i % 2 === 0 ? 'transparent' : '#060b1c' }}>
+                    <td style={{ padding: '8px 10px', fontFamily: 'JetBrains Mono', color: '#00e5ff' }}>{ip}</td>
+                    <td style={{ padding: '8px 10px', color: '#e6edf3' }}>{d.country || '—'}</td>
                     <td style={{ padding: '8px 10px', color: '#718096', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.org || '—'}</td>
                     <td style={{ padding: '8px 10px' }}>
                       <span style={{ background: `${c}22`, border: `1px solid ${c}66`, color: c, padding: '2px 6px', borderRadius: '3px', fontSize: '10px' }}>{verdict}</span>
@@ -227,7 +227,7 @@ export default function MapTab({ result }) {
                       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                         {d.isTor && <span style={{ background: '#2d0a3d', border: '1px solid #cc5de8', color: '#cc5de8', padding: '1px 5px', borderRadius: '2px', fontSize: '9px' }}>TOR</span>}
                         {d.abuseScore > 50 && <span style={{ background: '#2d1a0a', border: '1px solid #ff8c00', color: '#ffa94d', padding: '1px 5px', borderRadius: '2px', fontSize: '9px' }}>ABUSE {d.abuseScore}%</span>}
-                        {d.otxPulses > 0 && <span style={{ background: '#1a1a2d', border: '1px solid #4a9eff', color: '#74c0fc', padding: '1px 5px', borderRadius: '2px', fontSize: '9px' }}>OTX {d.otxPulses}</span>}
+                        {d.otxPulses > 0 && <span style={{ background: '#1a1a2d', border: '1px solid #00e5ff', color: '#74c0fc', padding: '1px 5px', borderRadius: '2px', fontSize: '9px' }}>OTX {d.otxPulses}</span>}
                       </div>
                     </td>
                   </tr>
