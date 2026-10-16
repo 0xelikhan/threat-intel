@@ -65,6 +65,15 @@ def client():
             "plugins": [p.model_dump() for p in cat],
         }
 
+    @app.get("/api/plugins_by_kind_sums_to_count")  # regression check endpoint
+    async def _sums_check():
+        plugin_registry.discover()
+        cat = plugin_registry.descriptors()
+        by = {k: len([p for p in cat if p.kind == k])
+               for k in ("analyzer", "file_analyzer", "connector",
+                          "pivot", "visualizer", "ingestor", "playbook")}
+        return {"total": len(cat), "sum": sum(by.values()), "by_kind": by}
+
     @app.get("/api/plugins/{name}")
     async def _get_plugin(name: str):
         p = plugin_registry.get(name)
@@ -140,6 +149,20 @@ def test_get_api_plugins_catalog(client):
     for name in ("dshield", "yaraify", "robtex", "default_card",
                   "sandbox_dropped_hashes", "taxii", "misp"):
         assert name in names, f"missing plugin: {name}"
+
+
+def test_api_plugins_by_kind_sums_to_count(client):
+    """Regression: /api/plugins by_kind used to omit the file_analyzer
+    kind — count said 82 while the sum of per-kind counts was 62.
+    Enforce that every kind in the catalog is represented."""
+    r = client.get("/api/plugins")
+    body = r.json()
+    assert body["count"] == sum(body["by_kind"].values()), (
+        f"count={body['count']} but by_kind sums to "
+        f"{sum(body['by_kind'].values())}: {body['by_kind']}"
+    )
+    # Explicit assertion that the kind the bug was missing is present
+    assert "file_analyzer" in body["by_kind"]
 
 
 def test_get_api_plugins_by_name(client):
