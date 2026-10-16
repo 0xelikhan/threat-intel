@@ -109,6 +109,91 @@ const BUILDERS = {
   // applies.
   'CISA KEV':        { cve:  v => `https://www.cve.org/CVERecord?id=${enc(v)}` },
   'Wayback':         { domain: v => `https://web.archive.org/web/*/${enc(v)}` },
+
+  // ─── Phase 1 additions — 28 new TI sources ────────────────────────────
+  'YARAify': { hash: v => `https://yaraify.abuse.ch/sample/${enc(v)}/` },
+  'Robtex': {
+    ip:     v => `https://www.robtex.com/ip-lookup/${enc(v)}`,
+    domain: v => `https://www.robtex.com/dns-lookup/${enc(v)}`,
+  },
+  'Vulners':        { cve: v => `https://vulners.com/cve/${enc(v)}` },
+  'PhishTank':      { url: v => `https://www.phishtank.com/phish_search.php?valid=y&active=y&Search=Search` },
+  'PhishStats': {
+    url:    v => `https://phishstats.info/?s=${enc(v)}`,
+    domain: v => `https://phishstats.info/?s=${enc(v)}`,
+    ip:     v => `https://phishstats.info/?s=${enc(v)}`,
+  },
+  'Stalkphish': {
+    url:    v => `https://stalkphish.io/search/${enc(v)}`,
+    domain: v => `https://stalkphish.io/search/${enc(v)}`,
+    ip:     v => `https://stalkphish.io/search/${enc(v)}`,
+  },
+  'URLdna': {
+    url:    v => `https://urldna.io/search?q=${enc(v)}`,
+    domain: v => `https://urldna.io/search?q=${enc(v)}`,
+  },
+  'SecurityTrails': {
+    domain: v => `https://securitytrails.com/domain/${enc(v)}`,
+    ip:     v => `https://securitytrails.com/list/ip/${enc(v)}`,
+  },
+  'LeakIX':         { ip: v => `https://leakix.net/host/${enc(v)}` },
+  'Netlas':         { ip: v => `https://app.netlas.io/whois/ip/${enc(v)}` },
+  'Onyphe': {
+    ip:     v => `https://www.onyphe.io/search?q=${enc(v)}`,
+    domain: v => `https://www.onyphe.io/search?q=${enc(v)}`,
+  },
+  'Hunter.how': {
+    ip:     v => `https://hunter.how/search?searchValue=${enc(v)}`,
+    domain: v => `https://hunter.how/search?searchValue=${enc(v)}`,
+  },
+  'BinaryEdge': {
+    ip:     v => `https://app.binaryedge.io/services/query?query=ip:${enc(v)}`,
+    domain: v => `https://app.binaryedge.io/services/query?query=domain:${enc(v)}`,
+  },
+  'ZoomEye': {
+    ip:     v => `https://www.zoomeye.org/searchResult?q=ip:${enc(v)}`,
+    domain: v => `https://www.zoomeye.org/searchResult?q=hostname:${enc(v)}`,
+  },
+  'Validin': {
+    ip:     v => `https://app.validin.com/axon/ip/${enc(v)}`,
+    domain: v => `https://app.validin.com/axon/domain/${enc(v)}`,
+  },
+  'EmailRep':       { email: v => `https://emailrep.io/${enc(v)}` },
+  'Hudson Rock': {
+    email:  v => `https://cavalier.hudsonrock.com/`,
+    domain: v => `https://cavalier.hudsonrock.com/`,
+    ip:     v => `https://cavalier.hudsonrock.com/`,
+  },
+  'Hunter.io':      { domain: v => `https://hunter.io/search/${enc(v)}` },
+  'Polyswarm': {
+    hash:   v => `https://polyswarm.network/scan/results/${enc(v)}`,
+    domain: v => `https://polyswarm.network/scan/search?q=${enc(v)}`,
+    ip:     v => `https://polyswarm.network/scan/search?q=${enc(v)}`,
+  },
+  'Intezer':        { hash: v => `https://analyze.intezer.com/analyses/${enc(v)}` },
+  'Hybrid Analysis': {
+    hash:   v => `https://www.hybrid-analysis.com/sample/${enc(v)}`,
+    url:    v => `https://www.hybrid-analysis.com/search?query=${enc(v)}`,
+    domain: v => `https://www.hybrid-analysis.com/search?query=${enc(v)}`,
+  },
+  'Triage': {
+    hash:   v => `https://tria.ge/s?q=${enc(v)}`,
+    url:    v => `https://tria.ge/s?q=${enc(v)}`,
+  },
+  'Koodous':        { hash: v => `https://koodous.com/apks/${enc(v)}` },
+  'FileScan': {
+    hash:   v => `https://www.filescan.io/search?query=${enc(v)}`,
+    url:    v => `https://www.filescan.io/search?query=${enc(v)}`,
+    domain: v => `https://www.filescan.io/search?query=${enc(v)}`,
+    ip:     v => `https://www.filescan.io/search?query=${enc(v)}`,
+  },
+  'MWDB':           { hash: v => `https://mwdb.cert.pl/file/${enc(v)}` },
+  'Joe Sandbox':    {
+    hash:   v => `https://jbxcloud.joesecurity.org/search?q=${enc(v)}`,
+    url:    v => `https://jbxcloud.joesecurity.org/search?q=${enc(v)}`,
+  },
+  'Phunter':        { phone: v => `https://www.google.com/search?q=${enc(v)}` },
+  'Phoneinfoga':    { phone: v => `https://numverify.com/dashboard` },
 };
 
 
