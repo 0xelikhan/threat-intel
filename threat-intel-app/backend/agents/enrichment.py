@@ -3073,6 +3073,100 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
                     except Exception:
                         pass
 
+    # ── Pivot pass — plugins can surface new IOCs from first-round
+    # results (e.g. sandbox report → dropped-file hashes). Each pivot
+    # inspects completed analyser outputs and extracts follow-on IOCs
+    # which we enrich in a bounded second pass. Capped at 20 pivot IOCs
+    # per run to prevent fan-out explosion from a chatty sandbox result.
+    try:
+        from plugins import registry as _plugin_registry
+        from plugins.data_models import AnalysisResult as _PluginResult
+        _pivots = _plugin_registry.pivots()
+        if _pivots:
+            _pivot_bucket_map = {
+                "ipv4": "ips", "ipv6": "ips", "domain": "domains",
+                "url": "urls", "md5": "hashes", "sha1": "hashes",
+                "sha256": "hashes", "email": "emails", "cve": "cves",
+                "crypto": "crypto", "phone": "phones",
+            }
+            # Bucket → representative ioc_type for AnalysisResult. Hashes
+            # could be md5/sha1/sha256 — we pick based on string length
+            # for pydantic literal-type validation.
+            def _ioc_type_for(bucket: str, value: str) -> str:
+                if bucket == "ips":
+                    return "ipv6" if ":" in value else "ipv4"
+                if bucket == "domains": return "domain"
+                if bucket == "urls":    return "url"
+                if bucket == "emails":  return "email"
+                if bucket == "cves":    return "cve"
+                if bucket == "crypto":  return "crypto"
+                if bucket == "phones":  return "phone"
+                if bucket == "hashes":
+                    n = len(value)
+                    return "sha256" if n == 64 else "sha1" if n == 40 else "md5"
+                return "domain"
+            # Walk every completed source result and ask every pivot
+            # whether to fire. Collect the (bucket, value) pairs to add.
+            new_iocs: dict = {b: set() for b in enrichments.keys()}
+            for cat, items in list(enrichments.items()):
+                for ioc_value, payload in list(items.items()):
+                    if not isinstance(payload, dict):
+                        continue
+                    for src_name, blob in payload.items():
+                        if not isinstance(blob, dict):
+                            continue
+                        plug_result = _PluginResult(
+                            source=str(blob.get("source") or src_name),
+                            ioc_type=_ioc_type_for(cat, str(ioc_value)),
+                            ioc_value=str(ioc_value),
+                            found=bool(blob.get("found", True)) and not blob.get("error"),
+                            verdict=blob.get("verdict") or "UNKNOWN",
+                            summary=str(blob.get("summary") or ""),
+                            raw={k: v for k, v in blob.items()
+                                   if k not in {"source", "found", "verdict",
+                                                 "summary", "details_url", "error",
+                                                 "error_type"}},
+                        )
+                        for p in _pivots:
+                            try:
+                                if await p.should_pivot(plug_result):
+                                    for new in await p.extract_pivot_iocs(plug_result):
+                                        bucket = _pivot_bucket_map.get(new.get("type", ""))
+                                        if not bucket or bucket not in new_iocs:
+                                            continue
+                                        new_value = new.get("value")
+                                        # Dedup against already-enriched values
+                                        if new_value and new_value not in enrichments.get(bucket, {}):
+                                            new_iocs[bucket].add(new_value)
+                            except Exception as _pe:
+                                _log.debug("pivot %s failed on %s/%s: %s",
+                                            p.name, cat, ioc_value, _pe)
+
+            # Bounded second-pass enrichment on the pivot output.
+            total_new = sum(len(v) for v in new_iocs.values())
+            if 0 < total_new <= 20:
+                async with aiohttp.ClientSession(
+                    connector=_get_connector(), connector_owner=False
+                ) as session:
+                    for bucket, values in new_iocs.items():
+                        if not values:
+                            continue
+                        values_list = list(values)[:20]
+                        fn = _enrichers.get(bucket)
+                        if not fn:
+                            continue
+                        follow_results = await asyncio.gather(
+                            *[fn(session, v, keys) for v in values_list],
+                            return_exceptions=True,
+                        )
+                        for v, r in zip(values_list, follow_results):
+                            if not isinstance(r, Exception):
+                                enrichments[bucket][v] = r
+                trace.append({"agent": "enrichment", "event": "pivot_pass",
+                               "new_iocs": total_new})
+    except Exception as _e:
+        _log.debug("pivot pass failed: %s", _e)
+
     # ── Per-IOC verdict aggregation (spec §3 top-level summary) ────────────────
     # Derive the verdicts dict shape from enrichments.keys() so adding a
     # new IOC bucket (emails, cves, ...) above can't crash this loop with

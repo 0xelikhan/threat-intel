@@ -1523,6 +1523,7 @@ function _ocSources(result, ioc, type) {
     : type === 'email'  ? enr.emails
     : type === 'cve'    ? enr.cves
     : type === 'crypto' ? enr.crypto
+    : type === 'phone'  ? enr.phones
     : null;
   const d = bucket?.[ioc] || {};
   const out = [];
