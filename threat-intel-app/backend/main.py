@@ -808,6 +808,98 @@ async def get_plugin(name: str):
         raise HTTPException(status_code=500, detail=f"plugin lookup failed: {e}")
 
 
+@app.post("/api/files/analyze")
+async def analyze_file(file: UploadFile = File(...)):
+    """Upload a file sample, detect its type, dispatch to every
+    FileAnalyzer plugin whose supported_file_types matches. Returns
+    an aggregated result bundle. Keyless analyzers always run; keyed
+    ones (CAPA, Docker-service stubs) short-circuit via their own
+    'disabled' / 'unavailable' error paths.
+
+    Request:  multipart form with a single `file` field
+    Response: {
+        "filename": "...", "size": N, "detected_types": [...],
+        "analyzer_count": N,
+        "results": [AnalysisResult, ...],
+        "verdict": "MALICIOUS" | "SUSPICIOUS" | "CLEAN" | "UNKNOWN",
+        "verdict_counts": {"MALICIOUS": N, ...}
+    }
+    """
+    try:
+        from plugins import registry as _plugin_registry
+        from plugins.file_type_detector import detect_types
+    except Exception as e:
+        raise HTTPException(status_code=500,
+                              detail=f"plugin framework unavailable: {e}")
+
+    data = await file.read()
+    size = len(data)
+    if not data:
+        raise HTTPException(status_code=400, detail="empty file")
+    if size > 100 * 1024 * 1024:  # 100 MB cap
+        raise HTTPException(status_code=413, detail="file too large (>100 MB)")
+
+    detected = detect_types(data, file.filename or "")
+    detected_set = set(detected)
+
+    # Pick plugins whose supported_file_types overlap with any detected type
+    all_fa = _plugin_registry.file_analyzers()
+    applicable = []
+    for fa in all_fa:
+        supported = set(fa.supported_file_types or [])
+        if supported & detected_set:
+            applicable.append(fa)
+
+    # Enforce each plugin's max_file_size (soft)
+    keys = dict(config.get_all())
+
+    import asyncio
+    async def _run_one(fa):
+        if fa.max_file_size and size > fa.max_file_size:
+            return {"source": fa.name, "found": False,
+                     "error": f"file too large for {fa.name} ({size} > {fa.max_file_size})",
+                     "error_type": "size_exceeded"}
+        try:
+            # Prefer the most-specific detected type the analyzer supports
+            fa_types = set(fa.supported_file_types or [])
+            picked = next((t for t in detected if t in fa_types), detected[0] if detected else "any")
+            r = await fa.analyze_file(data, file.filename or "", picked, keys)
+            return r.model_dump() if hasattr(r, "model_dump") else r
+        except Exception as e:
+            return {"source": fa.name, "found": False,
+                     "error": str(e)[:200], "error_type": "runtime_error"}
+
+    results = await asyncio.gather(*[_run_one(fa) for fa in applicable],
+                                     return_exceptions=False)
+
+    # Aggregate verdict (same majority rule as _summarize_ioc)
+    counts = {"MALICIOUS": 0, "SUSPICIOUS": 0, "CLEAN": 0, "UNKNOWN": 0}
+    for r in results:
+        v = (r.get("verdict") or "UNKNOWN") if isinstance(r, dict) else "UNKNOWN"
+        if v in counts and r.get("found"):
+            counts[v] += 1
+    if counts["MALICIOUS"] >= 1:
+        overall = "MALICIOUS"
+    elif counts["SUSPICIOUS"] >= 2:
+        overall = "SUSPICIOUS"
+    elif counts["SUSPICIOUS"] >= 1:
+        overall = "SUSPICIOUS"
+    elif counts["CLEAN"] >= 1:
+        overall = "CLEAN"
+    else:
+        overall = "UNKNOWN"
+
+    return {
+        "filename": file.filename,
+        "size": size,
+        "detected_types": detected,
+        "analyzer_count": len(applicable),
+        "verdict": overall,
+        "verdict_counts": counts,
+        "results": results,
+    }
+
+
 @app.post("/api/playbooks/{name}/run")
 async def run_playbook(name: str, req: Request):
     """Execute a Playbook plugin against a provided IOC."""
