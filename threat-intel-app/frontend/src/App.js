@@ -4837,8 +4837,12 @@ function DetectionCitationsView({ result, bare = false }) {
 
   const clearSearch = () => { setQuery(''); setSearchData(null); setSearchErr(null); };
 
+  // In bare mode the card renders even with dc === null (so the
+  // semantic-search bar stays reachable). The sources-with-hits
+  // counter has to tolerate that too — previously threw TypeError
+  // "Cannot read properties of null (reading 'sigma')".
   const sourcesWithHits = _DETECTION_SOURCES
-    .filter(s => (dc[s.key] || []).length).length;
+    .filter(s => (((dc || {})[s.key]) || []).length).length;
   const badge = totalHits
     ? `${totalHits} matches across ${sourcesWithHits} sources`
     : 'natural-language search · 11 corpora';
