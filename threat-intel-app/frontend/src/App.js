@@ -7,6 +7,7 @@ import AgentPipeline     from './components/AgentPipeline';
 import URLScanLive       from './components/URLScanLive';
 import ErrorBoundary     from './components/ErrorBoundary';
 import ToastHost         from './components/Toast';
+import LiveTicker        from './components/LiveTicker';
 import {
   SkeletonLazyFallback, SkeletonAnalyze,
 } from './components/Skeleton';
@@ -2423,42 +2424,184 @@ function _ocSources(result, ioc, type) {
     joesandbox:       'Joe Sandbox',
     phunter:          'Phunter',
     phoneinfoga:      'Phoneinfoga',
+    // Tier 1 recon-ng / theHarvester labels
+    commoncrawl:      'Common Crawl',
+    subdomain_center: 'Subdomain Center',
+    rapiddns:         'RapidDNS',
+    crtname:          'crt.name',
+    githubcode:       'GitHub code',
+    gitlabsearch:     'GitLab code',
+    sourcegraph:      'Sourcegraph',
   };
 
-  // ─── Generic positive-result renderer for Phase 1 additions ─────────
-  // Each new source emits a dict with {source, verdict, summary} in
-  // addition to its source-specific fields. If the analyst has no
-  // bespoke render block above, surface a one-liner row using those
-  // normalised fields. Error rows still fall through to the walk below.
-  {
-    const _phase1Keys = [
-      'yaraify', 'vulners', 'phishtank', 'phishstats', 'stalkphish',
-      'urldna', 'securitytrails', 'leakix', 'netlas', 'onyphe',
-      'hunter_how', 'binaryedge', 'zoomeye', 'validin', 'emailrep',
-      'hudsonrock', 'hunter_io', 'polyswarm', 'intezer',
-      'hybrid_analysis', 'triage', 'koodous', 'filescan', 'mwdb',
-      'joesandbox', 'phunter', 'phoneinfoga',
-    ];
-    const _vColor = (v) =>
-        v === 'MALICIOUS'  ? red
-      : v === 'SUSPICIOUS' ? orange
-      : v === 'CLEAN'      ? green
-      :                      tert;
-    for (const key of _phase1Keys) {
-      const blob = d[key];
-      if (!blob || blob.error) continue;
-      if (!blob.found) continue;
-      const label = _sourceLabels[key] || key;
-      const summary = blob.summary || `${label} returned data`;
+  // ─── Bespoke rows for high-signal Phase 1 sources ───────────────────
+  // Each block below reads source-specific fields and produces a tight
+  // one-liner. Everything else falls through to the generic renderer
+  // after this. _vColor is reused by both passes.
+  const _vColor = (v) =>
+      v === 'MALICIOUS'  ? red
+    : v === 'SUSPICIOUS' ? orange
+    : v === 'CLEAN'      ? green
+    :                      tert;
+
+  // GitHub code search — hits in public repos = shadow IT / leaked secrets
+  if (d.githubcode?.found && !d.githubcode.error) {
+    const g = d.githubcode;
+    out.push({
+      source: 'GitHub code',
+      label: `${g.total} hit${g.total !== 1 ? 's' : ''} across ${g.repo_count} repo${g.repo_count !== 1 ? 's' : ''}`,
+      color: orange,
+      why: 'Target domain appears in public GitHub code — common indicator for leaked API tokens, config files, or shadow repos.',
+    });
+  }
+
+  // Hudson Rock — infostealer-compromised credentials. Any hit is credential compromise.
+  if (d.hudsonrock?.found && !d.hudsonrock.error) {
+    const h = d.hudsonrock;
+    out.push({
+      source: 'Hudson Rock',
+      label: `${h.stealer_count} infostealer record${h.stealer_count !== 1 ? 's' : ''}`,
+      color: red,
+      why: 'An attacker has (or had) credentials + session cookies for this address/domain from an infostealer-infected endpoint. Beyond public HIBP dumps.',
+    });
+  }
+
+  // PhishTank — confirmed phish vs pending
+  if (d.phishtank?.found && !d.phishtank.error) {
+    const p = d.phishtank;
+    const confirmed = p.valid && p.verified;
+    out.push({
+      source: 'PhishTank',
+      label: confirmed ? 'confirmed phishing URL' : 'submitted (pending verification)',
+      color: confirmed ? red : yellow,
+      why: confirmed
+        ? 'Community verified phishing — strong signal to block + alert end-users.'
+        : 'Pending community verification. Treat with suspicion; cross-check against PhishStats and URLhaus.',
+    });
+  }
+
+  // (URLhaus is already handled by a dedicated block further up in
+  // this function; no duplicate render here.)
+
+  // Vulners — public exploits + wild-exploitation
+  if (d.vulners?.found && !d.vulners.error) {
+    const v = d.vulners;
+    const bits = [];
+    if (v.cvss_score != null) bits.push(`CVSS ${v.cvss_score}`);
+    if (v.exploit_count) bits.push(`${v.exploit_count} public exploit${v.exploit_count !== 1 ? 's' : ''}`);
+    if (v.wild_exploited) bits.push('EXPLOITED IN THE WILD');
+    out.push({
+      source: 'Vulners',
+      label: bits.join(' · ') || 'CVE catalogued',
+      color: v.wild_exploited ? red : (v.exploit_count > 0 ? orange : tert),
+      why: v.wild_exploited
+        ? 'Vulners flags this CVE as actively exploited in the wild — treat as emergency patch.'
+        : v.exploit_count
+          ? 'Vulners indexes public PoC / exploit code for this CVE.'
+          : 'Vulners has this CVE catalogued but no public exploits are indexed.',
+    });
+  }
+
+  // Hybrid Analysis — threat score + MITRE
+  if (d.hybrid_analysis?.found && !d.hybrid_analysis.error) {
+    const h = d.hybrid_analysis;
+    const bits = [];
+    if (h.verdict_raw) bits.push(h.verdict_raw);
+    if (h.threat_score != null) bits.push(`score ${h.threat_score}`);
+    if ((h.mitre || []).length) bits.push(`${h.mitre.length} MITRE`);
+    out.push({
+      source: 'Hybrid Analysis',
+      label: bits.join(' · '),
+      color: _vColor(h.verdict),
+      why: 'CrowdStrike Falcon Sandbox verdict + MITRE technique mapping.',
+    });
+  }
+
+  // LeakIX — exposed services + leaks
+  if (d.leakix?.found && !d.leakix.error) {
+    const l = d.leakix;
+    const bits = [];
+    if (l.service_count) bits.push(`${l.service_count} service${l.service_count !== 1 ? 's' : ''}`);
+    if (l.leak_count) bits.push(`${l.leak_count} leak${l.leak_count !== 1 ? 's' : ''}`);
+    if (l.threat_score != null) bits.push(`threat ${l.threat_score}`);
+    out.push({
+      source: 'LeakIX',
+      label: bits.join(' · '),
+      color: _vColor(l.verdict),
+      why: 'LeakIX indexes exposed services + config leaks per host — misconfigured S3/Elasticsearch/MongoDB, open panels, etc.',
+    });
+  }
+
+  // YARAify — YARA + ClamAV hits for the sample
+  if (d.yaraify?.found && !d.yaraify.error) {
+    const y = d.yaraify;
+    const yc = (y.yara_rules || []).length;
+    const cc = (y.clamav_results || []).length;
+    out.push({
+      source: 'YARAify',
+      label: `${yc} YARA · ${cc} ClamAV hit${(yc + cc) !== 1 ? 's' : ''}`,
+      color: _vColor(y.verdict),
+      why: 'abuse.ch YARAify scanned this sample with the community YARA + ClamAV corpora.',
+    });
+  }
+
+  // ThreatFox — malware family IOC
+  if (d.threatfox && !d.threatfox.error && d.threatfox.count) {
+    const t = d.threatfox;
+    const first = (t.iocs || [])[0] || {};
+    out.push({
+      source: 'ThreatFox',
+      label: `${first.malwareFamily || 'malware IOC'}${first.threatType ? ' · ' + first.threatType : ''}`,
+      color: red,
+      why: 'abuse.ch ThreatFox tags this IOC against a known malware family / botnet.',
+    });
+  }
+
+  // CIRCL hashlookup — known-good short-circuit (clean verdict)
+  if (d.circl_hashlookup && !d.circl_hashlookup.error) {
+    const c = d.circl_hashlookup;
+    if (c.verdict === 'CLEAN') {
       out.push({
-        source: label,
-        label:  summary.replace(/^[\w. ]+:\s*/, ''),  // strip "Source: " prefix
-        color:  _vColor(blob.verdict),
-        why:    blob.verdict && blob.verdict !== 'UNKNOWN'
-                ? `${label} verdict: ${blob.verdict}`
-                : `Enrichment data from ${label}.`,
+        source: 'CIRCL hashlookup',
+        label: `known-good: ${c.FileName || c.ProductName || 'trusted file'}`,
+        color: green,
+        why: 'File is in the NIST NSRL / trusted-software whitelist — safe to short-circuit further hash enrichment.',
+      });
+    } else if (c.known_malicious) {
+      out.push({
+        source: 'CIRCL hashlookup',
+        label: 'known-malicious',
+        color: red,
+        why: 'CIRCL hashlookup flags this hash as known-malicious.',
       });
     }
+  }
+
+  // ─── Generic fallback for Phase 1 sources without a bespoke block ───
+  const _phase1Keys = [
+    'phishstats', 'stalkphish', 'urldna', 'securitytrails', 'netlas',
+    'onyphe', 'hunter_how', 'binaryedge', 'zoomeye', 'validin',
+    'emailrep', 'hunter_io', 'polyswarm', 'intezer', 'triage',
+    'koodous', 'filescan', 'mwdb', 'joesandbox', 'phunter',
+    'phoneinfoga',
+    // Recon-ng / theHarvester tier 1 additions
+    'commoncrawl', 'wayback', 'subdomain_center', 'rapiddns',
+    'crtname', 'gitlabsearch', 'sourcegraph',
+  ];
+  for (const key of _phase1Keys) {
+    const blob = d[key];
+    if (!blob || blob.error) continue;
+    if (!blob.found) continue;
+    const label = _sourceLabels[key] || key;
+    const summary = blob.summary || `${label} returned data`;
+    out.push({
+      source: label,
+      label:  summary.replace(/^[\w. ]+:\s*/, ''),  // strip "Source: " prefix
+      color:  _vColor(blob.verdict),
+      why:    blob.verdict && blob.verdict !== 'UNKNOWN'
+              ? `${label} verdict: ${blob.verdict}`
+              : `Enrichment data from ${label}.`,
+    });
   }
   const _surfaced = new Set(out.map(r => r.source));
   for (const [key, blob] of Object.entries(d || {})) {
@@ -5923,10 +6066,12 @@ function AppMain({ authUser, setAuthState }) {
 
   return (
     <Box sx={{
-      display: 'flex', minHeight: '100vh',
+      display: 'flex', flexDirection: 'column', minHeight: '100vh',
       backgroundColor: 'background.default',
       color: 'text.primary',
     }}>
+      <ErrorBoundary label="LiveTicker"><LiveTicker/></ErrorBoundary>
+      <Box sx={{ display: 'flex', flex: 1 }}>
       <Sidebar
         key={homeNonce}
         onResult={(r) => {
@@ -6178,6 +6323,7 @@ function AppMain({ authUser, setAuthState }) {
         a{color:inherit;transition:opacity .15s}
         a:hover{opacity:.8}
       `}</style>
+      </Box>
     </Box>
   );
 }

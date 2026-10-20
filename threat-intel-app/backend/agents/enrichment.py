@@ -3252,6 +3252,9 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
     # IOC until this fix.
     verdicts = {cat: {} for cat in enrichments.keys()}
     overall = {"MALICIOUS": 0, "SUSPICIOUS": 0, "CLEAN": 0, "UNKNOWN": 0}
+    # main.py installs a bound record_recent_ioc at import time; absent
+    # when running tests that import this module in isolation.
+    _record_recent = globals().get("record_recent_ioc", None)
     for cat, items in enrichments.items():
         for ioc, payload in items.items():
             if not isinstance(payload, dict):
@@ -3260,6 +3263,16 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
             verdicts[cat][ioc] = s
             overall[s["overall"]] = overall.get(s["overall"], 0) + 1
             payload["_summary"] = s  # also attach summary inline for the AI to consume
+            if _record_recent is not None:
+                try:
+                    # Strip trailing 's' off bucket name so UI shows ipv4/domain/etc.
+                    short_type = cat[:-1] if cat.endswith("s") else cat
+                    source_count = sum(1 for k, v in payload.items()
+                                        if isinstance(v, dict) and v.get("verdict")
+                                           and not k.startswith("_"))
+                    _record_recent(short_type, ioc, s["overall"], source_count)
+                except Exception:
+                    pass
 
     summary = {
         "totals": {k: len(v) for k, v in enrichments.items()},

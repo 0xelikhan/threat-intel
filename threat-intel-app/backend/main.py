@@ -610,7 +610,7 @@ async def _catchall_exc_handler(request, exc: Exception):
 # decorator put the gate outermost, and request.session blew up with an
 # AssertionError because Session hadn't run yet.
 _PUBLIC_PREFIXES = ("/api/auth/", "/api/health", "/api/docs", "/api/openapi.json",
-                     "/api/plugins")
+                     "/api/plugins", "/api/recent-iocs")
 
 
 class AuthGateMiddleware(BaseHTTPMiddleware):
@@ -803,6 +803,51 @@ class HuntPlanRequest(BaseModel):
 # move without a deeper refactor, but new routes go in routers/.
 from routers import calibration as _calibration_router
 app.include_router(_calibration_router.router)
+
+
+# ─── Recent-IOC ring buffer (powers the LiveTicker component) ─────────────────────
+# Every completed enrichment pushes a lightweight record (type / value / verdict /
+# timestamp / source_count) into this bounded deque. The /api/recent-iocs endpoint
+# returns a snapshot; the frontend polls every ~3s to drive the ticker.
+#
+# Deliberately in-memory — no persistence, so analysts don't become responsible
+# for IOC history logs. On restart the ticker starts empty and refills within
+# a minute of real traffic.
+from collections import deque as _deque
+_RECENT_IOCS: _deque = _deque(maxlen=50)
+
+
+def _record_recent_ioc(ioc_type: str, value: str, verdict: str,
+                        source_count: int) -> None:
+    """Append one enriched-IOC record. Called from run_enrichment's
+    finalisation step. Never raises."""
+    try:
+        from datetime import datetime, timezone
+        _RECENT_IOCS.append({
+            "type":    str(ioc_type)[:12],
+            "value":   str(value)[:120],
+            "verdict": str(verdict or "UNKNOWN")[:12],
+            "sources": int(source_count or 0),
+            "at":      datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception:
+        pass
+
+
+# Make the recorder reachable from agents.enrichment without a circular
+# import — it stashes itself as a module attribute everything can read.
+try:
+    import agents.enrichment as _enr_mod
+    _enr_mod.record_recent_ioc = _record_recent_ioc
+except Exception:
+    pass
+
+
+@app.get("/api/recent-iocs")
+async def recent_iocs():
+    """Snapshot of the last N enriched IOCs for the dashboard ticker.
+    Public (no auth) because it only exposes IOC + verdict metadata."""
+    return {"iocs": list(_RECENT_IOCS)}
 
 
 # ─── PLUGINS (plugin framework catalog + registry) ────────────────────────────────
