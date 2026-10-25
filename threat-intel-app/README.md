@@ -6,8 +6,10 @@ classifiers.
 
 Backend: FastAPI + LangGraph (Python 3.11).
 Frontend: React + MUI.
-LLM: OpenAI / Azure OpenAI / Anthropic / Ollama via a provider
+LLM: OpenAI / Azure OpenAI / Ollama via a provider
 abstraction (swap with `LLM_PROVIDER`).
+
+Every source and the API key name it uses is listed in [SOURCES.md](SOURCES.md).
 
 ## Layout
 
@@ -18,7 +20,7 @@ threat-intel-app/
     config.py          API key store (data/config.json)
     agents/            LangGraph nodes: triage, enrichment,
                        investigation, response, orchestrator
-    providers/         LLMProvider ABC + openai/anthropic/ollama
+    providers/         LLMProvider ABC + openai (also Azure) / ollama
     skills/            17 individually-runnable units
     intel/             TI loaders, classifiers, caches, redactor,
                        circuit breaker, semantic search
@@ -26,11 +28,9 @@ threat-intel-app/
     tests/             pytest, 585 tests
   frontend/
     src/App.js         Root + ~30 inline analysis sub-components
-    src/components/    Lazy-loaded heavy views (SettingsView,
-                       FileScannerView, MapTab, etc.)
+    src/components/    Lazy-loaded heavy views (FileScannerView,
+                       MapTab, etc.)
 ```
-
-Full architecture notes are in `CLAUDE.md`.
 
 ## Run
 
@@ -79,10 +79,10 @@ bcrypt.hashpw(b"your-password", bcrypt.gensalt()).decode()
 
 | Var                          | Default    | Purpose |
 |------------------------------|------------|---------|
-| `LLM_PROVIDER`               | `openai`   | `openai`, `azure`, `anthropic`, `ollama` |
+| `LLM_PROVIDER`               | `openai`   | `openai`, `azure`, `ollama` |
 | `OPENAI_BASE_URL`            | OpenAI     | Set to `...openai.azure.com` for Azure detection |
 | `LOG_LEVEL`                  | `INFO`     | Root logger level |
-| `ENRICH_CONCURRENCY`         | `16`       | Global semaphore on TI fan-out |
+| `ENRICH_CONCURRENCY`         | `48`       | Global semaphore on TI fan-out |
 | `ENRICH_SOURCE_TIMEOUT_S`    | `12`       | Per-source wait_for cap |
 | `ENRICH_POOL_LIMIT`          | `100`      | TCPConnector total |
 | `ENRICH_POOL_PER_HOST`       | `10`       | TCPConnector per-host |
@@ -93,7 +93,9 @@ bcrypt.hashpw(b"your-password", bcrypt.gensalt()).decode()
 | `RECON_ENABLE_MSRC`          | `0`        | Microsoft Security Update Guide |
 | `RECON_ENABLE_MOZILLA_OBSERVATORY` | `0`  | Per-domain web grade |
 
-API keys for TI sources live in `data/config.json` 
+API keys for TI sources live in `data/config.json`. Any key name set as an
+environment variable overrides the file. The Settings page was removed: edit
+`data/config.json` or `POST /api/settings`. Key names are in [SOURCES.md](SOURCES.md).
 
 ## Optional dependencies
 
