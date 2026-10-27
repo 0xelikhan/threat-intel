@@ -4940,7 +4940,7 @@ const _SOURCE_LABEL = Object.fromEntries(
   _DETECTION_SOURCES.map(s => [s.key, s.label])
 );
 
-function DetectionCitationsView({ result, bare = false }) {
+export function DetectionCitationsView({ result, bare = false }) {
   const [query,       setQuery]       = useState('');
   const [searchData,  setSearchData]  = useState(null);
   const [searching,   setSearching]   = useState(false);
