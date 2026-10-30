@@ -89,20 +89,38 @@ class AnalysisResult(BaseModel):
                           ioc_value: str) -> "AnalysisResult":
         """Wrap a legacy intel/*.py return dict into the formal schema.
         Used by the compatibility layer so new consumers can read every
-        existing module via a single interface."""
+        existing module via a single interface.
+
+        `found` semantics (surprising-but-important):
+          * Explicit `found` key present  → use it as-is
+          * Error present                 → found=False
+          * Dict is empty / None          → found=False  (upstream returned
+            no data — bare dict with no fields means "nothing to say";
+            many legacy modules short-circuit to None on no-data and the
+            caller wraps as {} before passing here)
+          * Dict has content, no error    → found=True
+        """
+        legacy = d or {}
         reserved = {"source", "found", "verdict", "summary",
                      "details_url", "error", "error_type"}
-        raw = {k: v for k, v in (d or {}).items() if k not in reserved}
+        raw = {k: v for k, v in legacy.items() if k not in reserved}
+        has_error = bool(legacy.get("error"))
+        if "found" in legacy:
+            found_val = bool(legacy["found"]) and not has_error
+        else:
+            # Empty / error-only / no-content dicts are not-found;
+            # anything with real fields counts as a hit.
+            found_val = bool(raw) and not has_error
         return cls(
-            source=str((d or {}).get("source") or "unknown"),
+            source=str(legacy.get("source") or "unknown"),
             ioc_type=ioc_type,
             ioc_value=ioc_value,
-            found=bool((d or {}).get("found", True)) and not (d or {}).get("error"),
-            verdict=(d or {}).get("verdict") or "UNKNOWN",
-            summary=str((d or {}).get("summary") or ""),
-            details_url=(d or {}).get("details_url"),
-            error=(d or {}).get("error"),
-            error_type=(d or {}).get("error_type"),
+            found=found_val,
+            verdict=legacy.get("verdict") or "UNKNOWN",
+            summary=str(legacy.get("summary") or ""),
+            details_url=legacy.get("details_url"),
+            error=legacy.get("error"),
+            error_type=legacy.get("error_type"),
             raw=raw,
         )
 

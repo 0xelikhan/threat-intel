@@ -93,11 +93,39 @@ def test_descriptors_serialise_cleanly():
 # ─── AnalysisResult wrapping ───────────────────────────────────────────────
 
 def test_from_legacy_dict_handles_empty():
+    """Empty/None legacy returns map to found=False — a bare {} means
+    the upstream module had nothing to say, not that it succeeded.
+    This matters because many legacy intel/*.py modules short-circuit
+    with return None on no-data; the wrapper boxes that to {} before
+    passing here, and we must NOT turn that into a false-positive hit."""
     from plugins.data_models import AnalysisResult
     r = AnalysisResult.from_legacy_dict({}, "ipv4", "1.2.3.4")
     assert r.source == "unknown"
     assert r.verdict == "UNKNOWN"
+    assert r.found is False
+
+
+def test_from_legacy_dict_content_dict_is_found():
+    """A dict with any real content (keys beyond the reserved set)
+    counts as a hit — the common 'module returned enrichment' path."""
+    from plugins.data_models import AnalysisResult
+    r = AnalysisResult.from_legacy_dict(
+        {"source": "foo", "country": "US", "org": "ExampleCorp"},
+        "ipv4", "1.2.3.4",
+    )
     assert r.found is True
+    assert r.raw == {"country": "US", "org": "ExampleCorp"}
+
+
+def test_from_legacy_dict_explicit_found_wins():
+    """If a legacy module sets found=False explicitly, we honour it
+    even if the dict has other content."""
+    from plugins.data_models import AnalysisResult
+    r = AnalysisResult.from_legacy_dict(
+        {"source": "foo", "found": False, "summary": "no record"},
+        "ipv4", "1.2.3.4",
+    )
+    assert r.found is False
 
 
 def test_from_legacy_dict_captures_error():

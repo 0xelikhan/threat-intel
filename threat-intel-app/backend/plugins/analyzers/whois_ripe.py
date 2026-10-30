@@ -31,13 +31,15 @@ class WhoisRipeAnalyzer(Analyzer):
                 found=False, error=f"import failed: {e}",
                 error_type="unavailable",
             )
-        key = ""
-        for k in (self.required_keys + self.optional_keys):
-            if keys.get(k):
-                key = keys[k]
-                break
+        key = keys.get("WHOISXML_KEY", "")
+        if not key:
+            return AnalysisResult(
+                source=self.name, ioc_type=ioc_type, ioc_value=value,
+                found=False, error="WHOISXML_KEY not configured",
+                error_type="missing_key",
+            )
         try:
-            raw = await fn(session, value, key) if key else await fn(session, value)
+            raw = await fn(value, key, session)
         except Exception as e:
             return AnalysisResult(
                 source=self.name, ioc_type=ioc_type, ioc_value=value,
