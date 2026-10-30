@@ -2352,6 +2352,7 @@ function _ocSources(result, ioc, type) {
   const _sourceLabels = {
     virustotal: 'VirusTotal',          abuseipdb: 'AbuseIPDB',
     otx: 'OTX',
+    shodan_internetdb: 'Shodan',
     maltiverse: 'Maltiverse',           threatfox: 'ThreatFox',
     malwarebazaar: 'MalwareBazaar',     urlscan: 'URLScan.io',
     pulsedive: 'Pulsedive',             spamhaus_dbl: 'Spamhaus DBL',
@@ -2577,11 +2578,202 @@ function _ocSources(result, ioc, type) {
     }
   }
 
+  // Shodan InternetDB — exposed ports / CVEs / risky tags (keyless).
+  // Backend key is `shodan_internetdb` — the free endpoint; the paid
+  // Shodan endpoint keys live elsewhere. SUSPICIOUS when any known-bad
+  // tag (tor, proxy, honeypot, malware) or ≥3 CVEs are present.
+  if (d.shodan_internetdb && !d.shodan_internetdb.error && d.shodan_internetdb.found) {
+    const s = d.shodan_internetdb;
+    const bits = [];
+    if ((s.ports || []).length) bits.push(`${s.ports.length} port${s.ports.length !== 1 ? 's' : ''}`);
+    if ((s.vulns || []).length) bits.push(`${s.vulns.length} CVE${s.vulns.length !== 1 ? 's' : ''}`);
+    const risky = (s.tags || []).filter(t => /tor|vpn|proxy|honeypot|malware|compromised|anonymous/i.test(t));
+    if (risky.length) bits.push(`tags: ${risky.join(', ')}`);
+    const topPort = (s.ports || [])[0];
+    if (bits.length) {
+      const c = risky.length ? red : (s.vulns || []).length >= 3 ? orange : tert;
+      out.push({
+        source: 'Shodan',
+        label: bits.join(' · ') + (topPort ? ` · :${topPort}+` : ''),
+        color: c,
+        why: 'Shodan InternetDB (keyless) — passive view of what the host exposes. Risky tags = anonymity / malware infrastructure; CVE count = known exploitable services.',
+      });
+    }
+  }
+
+  // SecurityTrails — subdomain count + current A record visibility.
+  // Big subdomain footprint on a brand-new domain is a sprawl /
+  // phishing-prep signal; many MX hosts suggests a mail-serving tenant.
+  if (d.securitytrails?.found && !d.securitytrails.error) {
+    const s = d.securitytrails;
+    const bits = [];
+    if (s.subdomain_count) bits.push(`${s.subdomain_count} subdomain${s.subdomain_count !== 1 ? 's' : ''}`);
+    if ((s.current_a || []).length) bits.push(`${s.current_a.length} A record${s.current_a.length !== 1 ? 's' : ''}`);
+    if ((s.current_mx || []).length) bits.push(`${s.current_mx.length} MX`);
+    if (bits.length) {
+      out.push({
+        source: 'SecurityTrails',
+        label: bits.join(' · '),
+        color: tert,
+        why: 'SecurityTrails provides enumerated subdomains + current DNS. Pivot into subdomains to find staging / dev / phishing-prep infrastructure attached to the same apex.',
+      });
+    }
+  }
+
+  // Netlas — IP whois (CIDR + org). Attribution context, not a verdict.
+  if (d.netlas?.found && !d.netlas.error) {
+    const n = d.netlas;
+    const bits = [];
+    if (n.cidr) bits.push(n.cidr);
+    if (n.org_name) bits.push(n.org_name);
+    else if (n.net_name) bits.push(n.net_name);
+    if (n.country) bits.push(n.country);
+    if (bits.length) {
+      out.push({
+        source: 'Netlas',
+        label: bits.join(' · '),
+        color: tert,
+        why: 'Netlas whois lookup. CIDR + organisation ownership — useful when AbuseIPDB / Robtex are thin. Abuse contacts live in the expanded view.',
+      });
+    }
+  }
+
+  // Validin — passive-DNS history. On an IP: how many distinct domains
+  // historically pointed here. On a domain: how many IPs it resolved to.
+  if (d.validin?.found && !d.validin.error) {
+    const v = d.validin;
+    const n = v.domain_count ?? v.ip_count ?? 0;
+    if (n > 0) {
+      const kind = v.domain_count != null ? 'domain' : 'IP';
+      out.push({
+        source: 'Validin',
+        label: `${n} historical ${kind}${n !== 1 ? 's' : ''}`,
+        color: tert,
+        why: 'Passive-DNS history — Validin shows every domain/IP pairing ever observed. Many shared on one IP = bulk hosting; few + specific = dedicated infrastructure (higher attribution value).',
+      });
+    }
+  }
+
+  // Onyphe — internet-scan aggregate (ports + CVEs across categories).
+  // Any CVE presence promotes to SUSPICIOUS (same semantics as Shodan).
+  if (d.onyphe?.found && !d.onyphe.error) {
+    const o = d.onyphe;
+    const bits = [];
+    if ((o.ports || []).length) bits.push(`${o.ports.length} port${o.ports.length !== 1 ? 's' : ''}`);
+    if ((o.vulns || []).length) bits.push(`${o.vulns.length} CVE${o.vulns.length !== 1 ? 's' : ''}`);
+    if (o.record_count) bits.push(`${o.record_count} records`);
+    if (bits.length) {
+      const c = (o.vulns || []).length >= 3 ? orange : tert;
+      out.push({
+        source: 'Onyphe',
+        label: bits.join(' · '),
+        color: c,
+        why: 'Onyphe aggregates internet-scan data (ports, DNS, SSL, CVEs). Overlaps with Shodan + Censys — a signal appearing on 2+ scanners is more durable than one.',
+      });
+    }
+  }
+
+  // BinaryEdge — alt scanner (ports + services, or subdomain enum).
+  if (d.binaryedge?.found && !d.binaryedge.error) {
+    const b = d.binaryedge;
+    const bits = [];
+    if ((b.ports || []).length) bits.push(`${b.ports.length} port${b.ports.length !== 1 ? 's' : ''}`);
+    if ((b.services || []).length) bits.push(b.services.slice(0, 3).join(', '));
+    if (b.subdomain_count) bits.push(`${b.subdomain_count} subdomain${b.subdomain_count !== 1 ? 's' : ''}`);
+    if (bits.length) {
+      out.push({
+        source: 'BinaryEdge',
+        label: bits.join(' · '),
+        color: tert,
+        why: 'BinaryEdge internet-scan corpus — a third opinion alongside Shodan / Censys / Onyphe. Divergence between scanners can expose stale or masked exposure.',
+      });
+    }
+  }
+
+  // Hunter.io — email enumeration + pattern. BEC/phishing recon value is
+  // the pattern (lets attackers construct plausible emails for employees
+  // not in the enumerated set). Disposable + webmail promote to orange.
+  if (d.hunter_io?.found && !d.hunter_io.error) {
+    const h = d.hunter_io;
+    const bits = [];
+    if (h.email_count) bits.push(`${h.email_count} email${h.email_count !== 1 ? 's' : ''}`);
+    if (h.pattern) bits.push(`pattern ${h.pattern}`);
+    if (h.organization) bits.push(h.organization);
+    const flagged = h.disposable || h.webmail;
+    if (bits.length) {
+      out.push({
+        source: 'Hunter.io',
+        label: bits.join(' · '),
+        color: flagged ? orange : tert,
+        why: flagged
+          ? 'Hunter.io enumerated emails + flagged disposable/webmail — these domains are overrepresented in phishing / throwaway identities.'
+          : 'Hunter.io enumerated public emails + the org\'s address pattern. Pattern lets you predict any employee\'s address (strong BEC-recon signal).',
+      });
+    }
+  }
+
+  // EmailRep — email reputation (malicious_activity + breaches + flags).
+  // Verdict comes from the backend; just surface the strongest flag.
+  if (d.emailrep?.found && !d.emailrep.error) {
+    const e = d.emailrep;
+    const bits = [];
+    if (e.reputation) bits.push(`reputation ${e.reputation}`);
+    if (e.malicious_activity) bits.push('malicious activity');
+    if (e.credentials_leaked) bits.push('creds leaked');
+    if (e.disposable) bits.push('disposable');
+    if (e.blacklisted) bits.push('blacklisted');
+    if ((e.profiles || []).length) bits.push(`${e.profiles.length} profile${e.profiles.length !== 1 ? 's' : ''}`);
+    if (bits.length) {
+      out.push({
+        source: 'EmailRep',
+        label: bits.join(' · '),
+        color: _vColor(e.verdict),
+        why: 'EmailRep aggregates email reputation across breach dumps, blocklists, social profiles. Malicious_activity / credentials_leaked are high-signal; disposable alone is only a weak suspicious.',
+      });
+    }
+  }
+
+  // Intezer — code-reuse-based family attribution. Family name is the
+  // high-signal field; verdict comes from the backend's normalisation.
+  if (d.intezer?.found && !d.intezer.error) {
+    const i = d.intezer;
+    const bits = [];
+    if (i.family_name) bits.push(i.family_name);
+    if (i.verdict_raw) bits.push(i.verdict_raw);
+    if (i.sub_verdict) bits.push(i.sub_verdict);
+    if (bits.length) {
+      out.push({
+        source: 'Intezer',
+        label: bits.join(' · '),
+        color: _vColor(i.verdict),
+        why: 'Intezer uses binary code-reuse analysis to attribute samples to known families — orthogonal to signature-based AV detection. A family name here is strong attribution.',
+      });
+    }
+  }
+
+  // Triage (tria.ge) — Hatching sandbox score + families.
+  if (d.triage?.found && !d.triage.error) {
+    const t = d.triage;
+    const bits = [];
+    if (t.latest_score != null) bits.push(`score ${t.latest_score}`);
+    if ((t.families || []).length) bits.push(t.families.join(', '));
+    if (t.report_count) bits.push(`${t.report_count} report${t.report_count !== 1 ? 's' : ''}`);
+    if (bits.length) {
+      out.push({
+        source: 'Triage',
+        label: bits.join(' · '),
+        color: _vColor(t.verdict),
+        why: 'tria.ge (Hatching) cloud sandbox — score 0-10. ≥8 is confidently malicious; family tags come from Yara + behavioural rules observed during detonation.',
+      });
+    }
+  }
+
   // ─── Generic fallback for Phase 1 sources without a bespoke block ───
+  // Keys given a bespoke renderer above are intentionally omitted so we
+  // don't double-render.
   const _phase1Keys = [
-    'phishstats', 'stalkphish', 'urldna', 'securitytrails', 'netlas',
-    'onyphe', 'hunter_how', 'binaryedge', 'zoomeye', 'validin',
-    'emailrep', 'hunter_io', 'polyswarm', 'intezer', 'triage',
+    'phishstats', 'stalkphish', 'urldna',
+    'hunter_how', 'zoomeye', 'polyswarm',
     'koodous', 'filescan', 'mwdb', 'joesandbox', 'phunter',
     'phoneinfoga',
     // Recon-ng / theHarvester tier 1 additions

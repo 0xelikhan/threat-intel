@@ -36,6 +36,9 @@ const BUILDERS = {
   },
   'AbuseIPDB':       { ip: v => `https://www.abuseipdb.com/check/${enc(v)}` },
   'IPInfo':          { ip: v => `https://ipinfo.io/${enc(v)}` },
+  // Shodan InternetDB (keyless) feeds the row, but Shodan's search UI
+  // itself is the useful pivot for an analyst with an account.
+  'Shodan':          { ip: v => `https://www.shodan.io/host/${enc(v)}` },
   'Censys': {
     ip:     v => `https://search.censys.io/hosts/${enc(v)}`,
     domain: v => `https://search.censys.io/domains/${enc(v)}`,
