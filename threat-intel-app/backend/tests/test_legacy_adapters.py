@@ -9,7 +9,7 @@ catches:
   - the module raises on malformed input instead of returning a dict
 
 Each adapter is called with a benign dummy IOC + a fake API key (if
-required). We assert the return is an AnalysisResult — the content
+required). We assert the return is an AnalysisResult - the content
 is irrelevant for this test; we only care that no exception reaches
 the orchestrator.
 """
@@ -58,7 +58,7 @@ _DUMMY = {
 async def test_every_analyzer_returns_analysis_result():
     """Call every registered Analyzer plugin's `analyze()` and confirm
     it doesn't crash (the legacy_registrations table has since been
-    drained — the sweep now exercises every formal plugin file under
+    drained - the sweep now exercises every formal plugin file under
     plugins/analyzers/, which is a stricter check since each file can
     diverge from the shared adapter pattern)."""
     from plugins import registry, AnalysisResult

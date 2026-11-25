@@ -1,7 +1,7 @@
 """
 Intezer Analyze hash lookup.
 
-Source: https://analyze.intezer.com/ — code-reuse analysis + family
+Source: https://analyze.intezer.com/ - code-reuse analysis + family
 attribution for malware samples. Free tier available.
 
 Auth flow:

@@ -1,4 +1,4 @@
-"""Common Crawl index — passive subdomain mining from the public web archive.
+"""Common Crawl index - passive subdomain mining from the public web archive.
 
 Auto-generated from _legacy_registrations.py. Keeps the LegacyAnalyzer
 Adapter pattern (import on first call + from_legacy_dict wrap) but
@@ -13,7 +13,7 @@ from plugins import Analyzer, AnalysisResult, register
 
 class CommoncrawlAnalyzer(Analyzer):
     name = "commoncrawl"
-    description = ('Common Crawl index — passive subdomain mining from the public web archive.')
+    description = ('Common Crawl index - passive subdomain mining from the public web archive.')
     supported_ioc_types = ['domain']
     required_keys = []
     optional_keys = []

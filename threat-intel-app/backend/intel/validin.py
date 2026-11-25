@@ -1,7 +1,7 @@
 """
 Validin passive DNS + historical infrastructure lookup.
 
-Source: https://app.validin.com/ — historical DNS, host records,
+Source: https://app.validin.com/ - historical DNS, host records,
 registration metadata; strong for IP → associated domains / historical
 A pivots. Free + paid tiers.
 

@@ -17,7 +17,7 @@ each ship a YAML emulation plan with sequenced steps:
       ...
 
 This module gives the investigation agent a way to answer "we
-attributed this to APT29 — what does APT29 typically do next?" with a
+attributed this to APT29 - what does APT29 typically do next?" with a
 deterministic, vetted answer instead of asking the LLM to invent one.
 """
 
@@ -99,7 +99,7 @@ def _build_index() -> None:
     for actor_dir in _EMU_ROOT.iterdir():
         if not actor_dir.is_dir() or actor_dir.name.startswith("."):
             continue
-        # The canonical layout is Emulation_Plan/yaml_files_in_progress/ —
+        # The canonical layout is Emulation_Plan/yaml_files_in_progress/  - 
         # but the actor folder may also ship .yaml at the top level. Be
         # tolerant of layout drift.
         plan_files = list(actor_dir.rglob("*.yaml"))

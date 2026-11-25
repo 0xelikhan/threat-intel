@@ -73,7 +73,7 @@ def test_summary_handles_errors_and_skipped():
 
 
 def test_summary_tor_exit_does_not_count_as_flag():
-    """TOR exit node membership is contextual signal — not a malicious
+    """TOR exit node membership is contextual signal - not a malicious
     verdict on its own. Only flag if other sources concur."""
     enr = {"ips": {"185.220.101.45": {
         "tor": {"isExitNode": True},
@@ -99,13 +99,13 @@ def test_prompt_rebuts_cloud_provider_false_positive():
 
 
 def test_prompt_explains_oauth2_authorize_is_normal():
-    """OAuth2:Authorize is the standard SSO authorization-code flow —
+    """OAuth2:Authorize is the standard SSO authorization-code flow  - 
     the AI must NOT call it 'credential harvesting' without additional
     evidence."""
     p = investigation.PROMPT
     assert "OAuth2:Authorize" in p
     assert "standard OAuth 2.0" in p.lower() or "STANDARD" in p
-    # Match across the line wrap — the literal phrase wraps at column 80.
+    # Match across the line wrap - the literal phrase wraps at column 80.
     assert re.search(r"credential\s+harvesting", p, re.IGNORECASE)
 
 
@@ -155,13 +155,13 @@ def test_prompt_has_two_tier_schema_in_json_template():
 
 # ─── Probing temperature ─────────────────────────────────────────────────────
 def test_probing_temperature_is_0_1():
-    """The probing-questions synth call must run at temperature 0.1 — the
+    """The probing-questions synth call must run at temperature 0.1 - the
     earlier 0.55 added creative variation but the ANCHORING RULE in the
     probing prompt already prevents template-y output. Higher temperature
     just risks speculation."""
     with open(investigation.__file__, encoding="utf-8") as f:
         src = f.read()
-    # Look for the synth call for probing — the literal call site uses
+    # Look for the synth call for probing - the literal call site uses
     # _synth(probing_instr, ..., temperature=0.1)
     m = re.search(
         r"_synth\(probing_instr,\s*\d+,\s*temperature\s*=\s*([0-9.]+)",
@@ -170,5 +170,5 @@ def test_probing_temperature_is_0_1():
     assert m is not None, "couldn't find the probing _synth call"
     assert float(m.group(1)) == 0.1, (
         f"probing temperature is {m.group(1)} but must be 0.1 per the "
-        f"calibration spec — higher values risk creative speculation"
+        f"calibration spec - higher values risk creative speculation"
     )

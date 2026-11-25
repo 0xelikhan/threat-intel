@@ -1,5 +1,5 @@
 """
-CorrelateSignalsSkill — group IOCs into related clusters.
+CorrelateSignalsSkill - group IOCs into related clusters.
 
 Takes a dict of per-IOC enrichments and the behavioral_indicators and asks
 the provider to identify infrastructure overlaps (same ASN / registrar),

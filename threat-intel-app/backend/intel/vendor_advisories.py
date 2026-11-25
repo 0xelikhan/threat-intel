@@ -89,7 +89,7 @@ async def _fetch_text(session, url: str) -> Optional[str]:
     if isinstance(r, (bytes, bytearray)):
         return r.decode("utf-8", errors="ignore")
     if isinstance(r, dict):
-        # Oracle's JSON shape — pass through as-is.
+        # Oracle's JSON shape - pass through as-is.
         return json.dumps(r)
     return None
 
@@ -104,7 +104,7 @@ def _parse_atom_or_rss(text: str, vendor: str, vendor_name: str
         root = ET.fromstring(text.strip())
     except Exception:
         return out
-    # Walk every element; we don't care about Atom vs RSS shape — both
+    # Walk every element; we don't care about Atom vs RSS shape - both
     # have a flat list of <entry> / <item> with title/link/summary or
     # description.
     items = []

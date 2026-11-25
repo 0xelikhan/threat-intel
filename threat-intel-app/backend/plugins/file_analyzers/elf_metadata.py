@@ -11,7 +11,7 @@ from plugins import AnalysisResult, FileAnalyzer, register
 
 class ElfMetadataAnalyzer(FileAnalyzer):
     name = "elf_metadata"
-    description = ("ELF metadata — arch, interpreter, DT_NEEDED libs, "
+    description = ("ELF metadata - arch, interpreter, DT_NEEDED libs, "
                    "PIE / NX / stack-canary mitigation flags.")
     supported_file_types = ["elf"]
     max_file_size = 50 * 1024 * 1024

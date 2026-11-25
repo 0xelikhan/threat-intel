@@ -145,13 +145,13 @@ KIT_DEFINITIONS = [
         r"login\.live\.com\.[a-z0-9-]+\.",
         r"office365\.com\.[a-z0-9-]+\.",
         r"accounts\.google\.com\.[a-z0-9-]+\.",
-    ], "AiTM", "T1557.003", "Generic AiTM hostname pattern — legit-brand domain inserted as subdomain prefix."),
+    ], "AiTM", "T1557.003", "Generic AiTM hostname pattern - legit-brand domain inserted as subdomain prefix."),
 
     ("Generic OAuth abuse", [
         r"/oauth/authorize\?.*&redirect_uri=https?://[^/]+\.tk/",
         r"/oauth/authorize\?.*&redirect_uri=https?://[^/]+\.(top|xyz|pw)/",
         r"/oauth2/v2\.0/authorize\?.*scope=offline_access.*&state=[A-Z0-9]{8,}.*&redirect_uri=https?://[^/]+\.[a-z]{2,4}/",
-    ], "OAuth Phishing", "T1528", "OAuth consent phishing — abuses real Microsoft/Google login flows."),
+    ], "OAuth Phishing", "T1528", "OAuth consent phishing - abuses real Microsoft/Google login flows."),
 
     ("Credential POST harvester", [
         r"/(login|signin|auth)/post\.php",
@@ -165,7 +165,7 @@ KIT_DEFINITIONS = [
 ]
 
 
-# Additional HTML body signatures — matched against a page body snippet if available.
+# Additional HTML body signatures - matched against a page body snippet if available.
 HTML_BODY_SIGS = [
     ("Tycoon 2FA body",     r'"app":\s*"tycoon"|tycoon-?[a-z0-9]+\.css'),
     ("Sneaky 2FA body",     r"window\.sneaky|sneakyclient"),

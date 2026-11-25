@@ -1,15 +1,15 @@
 """
 OpenCTI bidirectional sync.
 
-PUSH  — after an analysis completes, optionally push the findings as a
+PUSH  - after an analysis completes, optionally push the findings as a
         STIX 2.1 Report linked to Observable objects for every extracted IOC.
 
-PULL  — during enrichment, optionally query OpenCTI for existing context on
+PULL  - during enrichment, optionally query OpenCTI for existing context on
         each IOC (labels, score, related entities, prior reports).
 
 Configured via config.json:
-  OPENCTI_URL   — e.g. https://opencti.example.com
-  OPENCTI_TOKEN — API token from the user's profile page
+  OPENCTI_URL   - e.g. https://opencti.example.com
+  OPENCTI_TOKEN - API token from the user's profile page
 
 PUSH happens in a background task so it never blocks the analyst's view.
 PULL is a single batched query at enrichment time.

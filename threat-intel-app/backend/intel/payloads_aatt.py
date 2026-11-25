@@ -7,13 +7,13 @@ SQL Injection, XSS, XXE, SSRF, RCE, LFI, RFI, NoSQL, GraphQL, LDAP,
 JWT, OAuth Misconfiguration, Subdomain Takeover, Type Juggling,
 Insecure Deserialization, Prototype Pollution, etc.
 
-The repo is mostly markdown — each attack-class folder has a README.md
+The repo is mostly markdown - each attack-class folder has a README.md
 with payload listings, references, and detection signatures. We
 extract the per-class metadata (title, payload-count rough estimate,
 references) so the hypothesis-generator and response agent can:
 
   * cite "PayloadsAllTheThings has 47 documented SQL-injection
-    payloads — common ones include …"
+    payloads - common ones include …"
   * inject specific payload patterns as detection-signature inspiration
 """
 
@@ -58,7 +58,7 @@ _HEADING_TO_CLASS = {
     "race condition":              "Race Condition",
 }
 
-# Lines that contain a payload — typically inside a fenced code block or
+# Lines that contain a payload - typically inside a fenced code block or
 # bullet list. We don't extract individual payloads (the repo has tens
 # of thousands); we just count them to give the analyst a sense of
 # breadth.

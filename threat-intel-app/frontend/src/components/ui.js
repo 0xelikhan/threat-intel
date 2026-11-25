@@ -4,7 +4,7 @@
  * Reusable MUI-based primitives used across every RECON view.
  * Inherits styling from theme.js (which is itself ported from OpenCTI's
  * ThemeDark.ts + AppThemeProvider.tsx), so every component automatically
- * matches the OpenCTI look — paper colour, border, chip alpha background,
+ * matches the OpenCTI look - paper colour, border, chip alpha background,
  * lowercase casing, Inter typography.
  *
  * Reference: opencti-front/src/components/common/tag/Tag.tsx
@@ -33,7 +33,7 @@ import {
   ChevronRightOutlined,
 } from '@mui/icons-material';
 
-// ─── Tag — ported from OpenCTI's Tag.tsx ────────────────────────────────────
+// ─── Tag - ported from OpenCTI's Tag.tsx ────────────────────────────────────
 // Soft alpha background of the chip color (severity / verdict / type indicator)
 export const Tag = ({
   label,
@@ -75,7 +75,7 @@ export const Tag = ({
   );
 };
 
-// ─── Severity chip — adapted from ItemSeverity.tsx ──────────────────────────
+// ─── Severity chip - adapted from ItemSeverity.tsx ──────────────────────────
 export const SeverityTag = ({ severity, label }) => {
   const theme = useTheme();
   if (!severity) return null;
@@ -90,7 +90,7 @@ export const SeverityTag = ({ severity, label }) => {
   return <Tag label={label || severity} color={color}/>;
 };
 
-// ─── Verdict chip — for MALICIOUS / SUSPICIOUS / CLEAN / UNKNOWN ────────────
+// ─── Verdict chip - for MALICIOUS / SUSPICIOUS / CLEAN / UNKNOWN ────────────
 export const VerdictTag = ({ verdict, size }) => {
   const theme = useTheme();
   if (!verdict) return null;
@@ -105,14 +105,14 @@ export const VerdictTag = ({ verdict, size }) => {
   return <Tag label={verdict} color={colorMap[verdict] || theme.palette.severity.default} size={size}/>;
 };
 
-// ─── IOC type tag — IP / DOMAIN / HASH / URL / EMAIL ────────────────────────
+// ─── IOC type tag - IP / DOMAIN / HASH / URL / EMAIL ────────────────────────
 const IOC_TYPE_COLOR = {
   ips:     '#00b4d8',  // primary
   domains: '#17AB1F',  // success
   hashes:  '#B286FF',  // ai purple
   urls:    '#E6700F',  // high orange
   emails:  '#F14337',  // error red
-  crypto:  '#E1B823',  // warning yellow — crypto payment address (BTC/ETH/XMR)
+  crypto:  '#E1B823',  // warning yellow - crypto payment address (BTC/ETH/XMR)
 };
 const IOC_TYPE_LABEL = {
   ips: 'ip', domains: 'domain', hashes: 'hash', urls: 'url', emails: 'email',
@@ -130,7 +130,7 @@ export const TypeTag = ({ type }) => (
 // an explicit prop. An explicit `defaultOpen` on a Card still wins.
 export const CardDefaultOpenContext = React.createContext(true);
 
-// ─── Card — collapsible MUI Card matching OpenCTI's panel pattern ───────────
+// ─── Card - collapsible MUI Card matching OpenCTI's panel pattern ───────────
 // Visual identity is the always-on accent left border; on hover the card gains
 // a subtle background tint and the title brightens, but layout never shifts
 // (the old hover handler bumped the border from 1px to 3px which caused a
@@ -153,7 +153,7 @@ export const Card = ({
         marginBottom: '12px',
         position: 'relative',
         overflow: 'hidden',
-        // Persistent accent stripe — gives each card a visual identity
+        // Persistent accent stripe - gives each card a visual identity
         // when scanning the page without needing a hover state.
         borderLeft: accent
           ? `3px solid ${accent}`
@@ -218,7 +218,7 @@ export const Card = ({
   );
 };
 
-// ─── Block — inner section panel inside a Card ──────────────────────────────
+// ─── Block - inner section panel inside a Card ──────────────────────────────
 export const Block = ({ title, children, accent }) => {
   const theme = useTheme();
   return (
@@ -247,7 +247,7 @@ export const Block = ({ title, children, accent }) => {
   );
 };
 
-// ─── Row — flex row with subtle top divider, used inside Blocks ─────────────
+// ─── Row - flex row with subtle top divider, used inside Blocks ─────────────
 export const Row = ({ children, sx = {} }) => {
   return (
     <Box sx={{
@@ -264,7 +264,7 @@ export const Row = ({ children, sx = {} }) => {
   );
 };
 
-// ─── CodeBlock — pre block for Sigma/KQL/JSON ──────────────────────────────
+// ─── CodeBlock - pre block for Sigma/KQL/JSON ──────────────────────────────
 export const CodeBlock = ({ children, maxHeight = 300 }) => {
   const theme = useTheme();
   return (
@@ -288,7 +288,7 @@ export const CodeBlock = ({ children, maxHeight = 300 }) => {
   );
 };
 
-// ─── CopyBtn — small copy-to-clipboard button ──────────────────────────────
+// ─── CopyBtn - small copy-to-clipboard button ──────────────────────────────
 export const CopyBtn = ({ text, label = 'Copy' }) => {
   const [copied, setCopied] = useState(false);
   return (
@@ -312,7 +312,7 @@ export const CopyBtn = ({ text, label = 'Copy' }) => {
   );
 };
 
-// ─── SectionHeader — small uppercase label inside a card ────────────────────
+// ─── SectionHeader - small uppercase label inside a card ────────────────────
 export const SectionLabel = ({ children, color = 'text.tertiary', sx = {} }) => (
   <Typography variant="caption" sx={{
     fontSize: 11, fontWeight: 500,

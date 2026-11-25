@@ -1,5 +1,5 @@
 """
-ClassifyCapabilitiesSkill — group YARA matches by Chainguard malcontent
+ClassifyCapabilitiesSkill - group YARA matches by Chainguard malcontent
 capability buckets (anti-behavior, c2, credential, exec, exfil, persist,
 privesc, etc.) so the analyst report gets a structured "what does this
 sample DO" view alongside the raw rule list.

@@ -54,7 +54,7 @@ class LLMProvider(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
-        """Short stable identifier — 'openai', 'azure-openai', 'ollama'.
+        """Short stable identifier - 'openai', 'azure-openai', 'ollama'.
         Used in audit log + LLMResponse.provider."""
 
     @property

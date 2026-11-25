@@ -2,11 +2,11 @@
 Microsoft Defender EventLog parser (Event IDs 1116 / 1117).
 
 Defender's detection events have a specific field layout that earlier
-pipeline stages routinely misread — most notably the AI investigation
+pipeline stages routinely misread - most notably the AI investigation
 treating the "Process Name" field (almost always C:\\WINDOWS\\explorer.exe
 or another legitimate triggering process) as the malware itself.
 
-The real malware location is the Path field — e.g.
+The real malware location is the Path field - e.g.
 "file:_C:\\Users\\<u>\\AppData\\Local\\Programs\\PDF_Spark\\PDFSpark.exe".
 
 This module parses the raw text into a structured dict with explicit
@@ -44,7 +44,7 @@ _DEFENDER_HINTS = (
 
 
 def looks_like_defender_log(text: str) -> bool:
-    """Cheap detector — sufficient hints OR Event ID anchor in the
+    """Cheap detector - sufficient hints OR Event ID anchor in the
     first kilobyte of the input. Two independent hints required so a
     one-line "Windows Defender" mention doesn't trigger the parser."""
     if not text:
@@ -59,7 +59,7 @@ def looks_like_defender_log(text: str) -> bool:
     return hits >= 2
 
 
-# Field regexes — case-insensitive, line-anchored single-line value capture.
+# Field regexes - case-insensitive, line-anchored single-line value capture.
 # Each pattern is anchored to the START of a line (after optional indentation)
 # so multi-word keys like "Origin Name" / "Type Name" / "Severity Name" don't
 # steal the bare "Name:" / "ID:" matches. Defender exports the records as
@@ -80,7 +80,7 @@ _PATTERNS = {
     "threat_id":          re.compile(_FS + r"ID" + _f(r"\d+"), re.IGNORECASE),
     "severity":           re.compile(_FS + r"Severity(?:\s+Name|\s+Level)?" + _f(), re.IGNORECASE),
     "category":           re.compile(_FS + r"Category(?:\s+Name)?" + _f(), re.IGNORECASE),
-    # Infected artifact — the actual malicious file location.
+    # Infected artifact - the actual malicious file location.
     "infected_path":      re.compile(_FS + r"Path" + _f(), re.IGNORECASE),
     # Where the detection fired (real-time, scheduled scan, manual scan).
     "detection_origin":   re.compile(_FS + r"(?:Detection\s+)?Origin(?:\s+Name)?" + _f(), re.IGNORECASE),
@@ -88,7 +88,7 @@ _PATTERNS = {
     "detection_source":   re.compile(_FS + r"Detection\s+Source(?:\s+Name)?" + _f(), re.IGNORECASE),
     # Who was affected.
     "affected_user":      re.compile(_FS + r"User" + _f(r"[^\r\n,;]+"), re.IGNORECASE),
-    # The legitimate process that triggered the scan — NOT the threat.
+    # The legitimate process that triggered the scan - NOT the threat.
     "process_name":       re.compile(_FS + r"Process\s+Name" + _f(), re.IGNORECASE),
     # Defender platform context.
     "security_intelligence_version": re.compile(
@@ -118,7 +118,7 @@ _PATTERNS = {
 # Inline values OVERRIDE line-anchored ones when both fire, because the
 # Message body is the actual event payload. The top-level "User : SYSTEM"
 # line is the audit subject (the local account that wrote the event), not
-# the affected user — those are different people. The Message-body "User"
+# the affected user - those are different people. The Message-body "User"
 # is the analyst-relevant one.
 _INLINE_FIELD_NAMES = (
     "Name", "ID", "Severity", "Category", "Path",
@@ -203,7 +203,7 @@ def parse_defender_event(text: str) -> Optional[Dict[str, Any]]:
         if m:
             out[key] = _clean(m.group(1))
 
-    # Secondary pass — when the export packs the field set inline on a
+    # Secondary pass - when the export packs the field set inline on a
     # "Message :" line, the line-anchored patterns above match nothing
     # (or worse, match the audit-pipeline top-level "User : SYSTEM"). Run
     # the inline patterns against the extracted Message body and override.
@@ -226,7 +226,7 @@ def parse_defender_event(text: str) -> Optional[Dict[str, Any]]:
         ).strip()
 
     # Detection-origin / detection-source / detection-type sometimes use the
-    # raw event-data name like "Real-Time" — leave verbatim.
+    # raw event-data name like "Real-Time" - leave verbatim.
 
     # If Process Name was captured but is exactly equal to the infected path
     # (some custom Defender exports do this), null it so downstream code
@@ -245,7 +245,7 @@ def _build_summary_line(parsed: Dict[str, Any]) -> str:
     can quote without re-deriving the relationship between fields."""
     name = parsed.get("malware_name") or "an unspecified threat"
     path = parsed.get("infected_path") or "an unspecified path"
-    # Filename only (drop directory) for the summary — fits inline.
+    # Filename only (drop directory) for the summary - fits inline.
     fname = path.rsplit("\\", 1)[-1].rsplit("/", 1)[-1] or path
     user = parsed.get("affected_user")
     bare_user = ""
@@ -270,17 +270,17 @@ def to_prompt_block(parsed: Dict[str, Any]) -> str:
     lines = [
         "## DEFENDER EVENT PARSE (authoritative field interpretation)",
         "",
-        "READ CAREFULLY — these labels are NOT interchangeable:",
-        "  * malware_name        — the malware family / signature Defender named. PRIMARY threat identifier.",
-        "  * infected_path       — the malicious file's location. This IS the infected artifact.",
-        "  * process_name        — the LEGITIMATE process that triggered the scan (e.g. explorer.exe).",
+        "READ CAREFULLY - these labels are NOT interchangeable:",
+        "  * malware_name        - the malware family / signature Defender named. PRIMARY threat identifier.",
+        "  * infected_path       - the malicious file's location. This IS the infected artifact.",
+        "  * process_name        - the LEGITIMATE process that triggered the scan (e.g. explorer.exe).",
         "                          DO NOT call this the malware. It is the system process that opened, read,",
         "                          or executed the infected file. Naming it as the threat is incorrect.",
-        "  * affected_user       — the user whose session encountered the threat (the victim).",
+        "  * affected_user       - the user whose session encountered the threat (the victim).",
         "",
     ]
     # security_intelligence_version / engine_version / antimalware_platform_version
-    # are excluded — they're dotted-quad version numbers (AV: 1.453.161.0) that
+    # are excluded - they're dotted-quad version numbers (AV: 1.453.161.0) that
     # add zero analyst value and risk being misread as IP addresses by the LLM
     # (which is what triggered the 2026-06-19 PUABundler:FileZilla bug where
     # the narrative described "1.453.161.0" as the source IP).

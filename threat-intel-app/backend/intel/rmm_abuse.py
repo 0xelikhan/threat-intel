@@ -2,7 +2,7 @@
 Remote-Management & Monitoring (RMM) tools known to be abused by
 ransomware affiliates and other threat actors.
 
-These tools are LEGITIMATE software. Their presence doesn't mean compromise —
+These tools are LEGITIMATE software. Their presence doesn't mean compromise  - 
 it means the SOC should verify whether the install was authorized.
 
 Source: CISA AA23-025A (LockBit), CISA AA24-038A (BlackCat), Mandiant M-Trends,
@@ -29,7 +29,7 @@ RMM_CATALOG = [
      ["LockBit", "Black Basta"], "TeamViewer Windows service."),
 
     ("atera.exe", "Atera Agent",
-     ["BlackCat", "Akira", "Lazarus"], "Atera RMM — abused for persistence and remote tasking."),
+     ["BlackCat", "Akira", "Lazarus"], "Atera RMM - abused for persistence and remote tasking."),
     ("ateraagent.exe", "Atera Agent",
      ["BlackCat", "Akira"], "Atera RMM service."),
 
@@ -42,14 +42,14 @@ RMM_CATALOG = [
      ["Akira", "Royal", "BlackBasta"], "Open-source RMM; rising abuse 2024-2025."),
 
     ("client32.exe", "NetSupport Manager",
-     ["FIN7", "SocGholish operators"], "NetSupport RAT — SocGholish/Konni final-payload."),
+     ["FIN7", "SocGholish operators"], "NetSupport RAT - SocGholish/Konni final-payload."),
     ("client32u.exe", "NetSupport Manager",
      ["FIN7", "SocGholish"], "NetSupport RAT variant."),
     ("presentationhost.exe", "NetSupport Manager",
      ["SocGholish"], "NetSupport process variant."),
 
     ("action1.exe", "Action1 RMM",
-     ["BlackCat", "Monti"], "Action1 free RMM — abused for endpoint enumeration."),
+     ["BlackCat", "Monti"], "Action1 free RMM - abused for endpoint enumeration."),
 
     ("logmein.exe", "LogMeIn",
      ["BlackBasta", "Conti"], "Legacy LogMeIn RMM."),
@@ -88,7 +88,7 @@ RMM_CATALOG = [
      ["LockBit", "Conti"], "PsExec 64-bit."),
 ]
 
-# Build a fast lookup dict — keys lowercased; both with .exe and without.
+# Build a fast lookup dict - keys lowercased; both with .exe and without.
 _LOOKUP: dict[str, dict] = {}
 for binary, vendor, groups, desc in RMM_CATALOG:
     entry = {"binary": binary, "vendor": vendor, "groups": groups[:5], "description": desc}
@@ -97,7 +97,7 @@ for binary, vendor, groups, desc in RMM_CATALOG:
     if n.endswith(".exe"):
         _LOOKUP[n[:-4]] = entry
 
-# Compile name regex — match .exe binaries in process strings or paths
+# Compile name regex - match .exe binaries in process strings or paths
 _BIN_RE = re.compile(r"\b([A-Za-z0-9_\-\.]{2,80}\.(?:exe|dll|sys|bat|ps1|cmd|vbs|js|hta|lnk|msi|scr))\b",
                      re.IGNORECASE)
 
@@ -128,16 +128,16 @@ def extract_and_check(text: str) -> list[dict]:
 
 # ─── Suspicious filesystem paths (where attackers commonly drop tooling) ──────────
 SUSPICIOUS_PATHS = [
-    (r"C:\\Windows\\Temp\\",            "Windows Temp — common drop location"),
-    (r"C:\\Windows\\SystemTemp\\",       "Windows SystemTemp — uncommon, attackers use it to evade Temp monitoring"),
-    (r"C:\\Users\\Public\\",             "Public user profile — favored by attackers (writable, world-readable)"),
-    (r"C:\\ProgramData\\(?!Microsoft)",  "ProgramData root — outside vendor dirs"),
+    (r"C:\\Windows\\Temp\\",            "Windows Temp - common drop location"),
+    (r"C:\\Windows\\SystemTemp\\",       "Windows SystemTemp - uncommon, attackers use it to evade Temp monitoring"),
+    (r"C:\\Users\\Public\\",             "Public user profile - favored by attackers (writable, world-readable)"),
+    (r"C:\\ProgramData\\(?!Microsoft)",  "ProgramData root - outside vendor dirs"),
     (r"\\AppData\\Local\\Temp\\",        "User Temp"),
-    (r"\\AppData\\Roaming\\Microsoft\\Windows\\Templates\\", "Office templates path — fileless persistence"),
-    (r"\\Music\\|\\Pictures\\|\\Videos\\","Media folder for an executable — almost never legitimate"),
+    (r"\\AppData\\Roaming\\Microsoft\\Windows\\Templates\\", "Office templates path - fileless persistence"),
+    (r"\\Music\\|\\Pictures\\|\\Videos\\","Media folder for an executable - almost never legitimate"),
     (r"C:\\Intel\\(?!.*Intel)",          "Fake 'Intel' directory often used by malware to look benign"),
-    (r"C:\\PerfLogs\\",                  "PerfLogs — Windows event-tracing dir, abused for staging"),
-    (r"C:\\Recovery\\",                  "Recovery partition mount — unusual location for executables"),
+    (r"C:\\PerfLogs\\",                  "PerfLogs - Windows event-tracing dir, abused for staging"),
+    (r"C:\\Recovery\\",                  "Recovery partition mount - unusual location for executables"),
 ]
 
 

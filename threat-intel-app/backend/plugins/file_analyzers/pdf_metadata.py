@@ -1,7 +1,7 @@
-"""Static PDF metadata — javascript / embedded files / forms.
+"""Static PDF metadata - javascript / embedded files / forms.
 
 pure-Python via `pypdf` or `pdfminer.six`. Flags PDFs with embedded
-JavaScript, auto-action triggers, or large embedded binaries — the
+JavaScript, auto-action triggers, or large embedded binaries - the
 IoCs IntelOwl's PDF module surfaces.
 """
 
@@ -12,7 +12,7 @@ from plugins import AnalysisResult, FileAnalyzer, register
 
 class PdfMetadataAnalyzer(FileAnalyzer):
     name = "pdf_metadata"
-    description = ("PDF metadata — producer, author, embedded JS, "
+    description = ("PDF metadata - producer, author, embedded JS, "
                    "forms, OpenAction / AA triggers, embedded files. "
                    "Flags macro-style PDF malware patterns.")
     supported_file_types = ["pdf"]

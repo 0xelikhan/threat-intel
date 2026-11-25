@@ -11,7 +11,7 @@ from plugins import AnalysisResult, FileAnalyzer, register
 
 class OfficeMetadataAnalyzer(FileAnalyzer):
     name = "office_metadata"
-    description = ("Office / RTF static metadata — macros, DDE, "
+    description = ("Office / RTF static metadata - macros, DDE, "
                    "embedded objects. Powered by olefile + oletools.")
     supported_file_types = ["office", "rtf"]
     max_file_size = 50 * 1024 * 1024
@@ -37,7 +37,7 @@ class OfficeMetadataAnalyzer(FileAnalyzer):
                 error_type="format_error",
             )
 
-        # Format gate — VBA_Parser's detect_* methods will happily
+        # Format gate - VBA_Parser's detect_* methods will happily
         # false-positive on non-office garbage (random bytes containing
         # ole-marker sequences). Only trust macro detection when the
         # parser identifies a real office/OpenXML type.

@@ -1,7 +1,7 @@
 """
 abuse.ch YARAify hash lookup.
 
-Source: https://yaraify-api.abuse.ch/ — YARAify runs YARA + ClamAV
+Source: https://yaraify-api.abuse.ch/ - YARAify runs YARA + ClamAV
 across the abuse.ch sample pool. The hash-lookup endpoint returns
 YARA rule hits and ClamAV detections for a submitted sample.
 

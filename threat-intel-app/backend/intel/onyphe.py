@@ -1,7 +1,7 @@
 """
 Onyphe IP / domain / hostname summary lookup.
 
-Source: https://www.onyphe.io/ — internet-scan + passive data: open
+Source: https://www.onyphe.io/ - internet-scan + passive data: open
 ports, DNS, SSL certs, vulnerabilities. Summary endpoint returns an
 aggregated view across categories. Free API tier available.
 

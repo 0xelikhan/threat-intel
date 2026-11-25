@@ -1,5 +1,5 @@
 """
-Detection-content generation — spec §6 of the all-in-one scanner plan.
+Detection-content generation - spec §6 of the all-in-one scanner plan.
 
 Given a file_analyzer result dict, synthesizes:
   - Sigma rule (hash-based endpoint detection)
@@ -68,7 +68,7 @@ def _extract_mutex_strings(result: Dict) -> List[str]:
 
 
 def _unique_strings_for_memory(result: Dict, limit: int = 10) -> List[str]:
-    """Strings that look unique enough to survive in a memory dump — long,
+    """Strings that look unique enough to survive in a memory dump - long,
     non-common, not just printable garbage from the import table."""
     samples = (result.get("strings") or {}).get("ascii_sample") or []
     candidates = []
@@ -125,7 +125,7 @@ detection:
 {mutex_yaml}
   condition: selection_hash or selection_mutex
 falsepositives:
-  - Unlikely — both indicators are file-specific.
+  - Unlikely - both indicators are file-specific.
 level: high
 """
     else:
@@ -149,7 +149,7 @@ detection:
 {hash_yaml}
   condition: selection
 falsepositives:
-  - Unlikely — hash is file-specific.
+  - Unlikely - hash is file-specific.
 level: high
 """
     return {"rule": rule, "id": rid}
@@ -157,8 +157,8 @@ level: high
 
 # ─── KQL (Microsoft Sentinel / Defender XDR Advanced Hunting) ─────────────────
 def _gen_kql_hunt(sha256, ips, domains, urls, imphash, mutexes) -> Dict:
-    """Multi-table union — DeviceProcessEvents + DeviceFileEvents + DeviceNetworkEvents."""
-    parts = ["// RECON-generated hunting query — file + network indicators",
+    """Multi-table union - DeviceProcessEvents + DeviceFileEvents + DeviceNetworkEvents."""
+    parts = ["// RECON-generated hunting query - file + network indicators",
              "// Run in Microsoft Sentinel / Defender XDR Advanced Hunting"]
     union_blocks = []
 
@@ -211,7 +211,7 @@ def _gen_kql_hunt(sha256, ips, domains, urls, imphash, mutexes) -> Dict:
 
     query = "\n\n".join(parts + [f"union withsource=SourceTable\n(\n  {b}\n)" if i == 0 else f"({b})"
                                   for i, b in enumerate(union_blocks)])
-    # Simpler form — concatenate blocks separated by union
+    # Simpler form - concatenate blocks separated by union
     query = "\n".join(parts) + "\n\n" + "\n\n| union\n".join(union_blocks) + \
             "\n\n| sort by Timestamp desc"
     return {"query": query}
@@ -288,7 +288,7 @@ def _gen_volatility(unique_strings, mutexes) -> Dict:
         "rule recon_memory_hunt\n"
         "{\n"
         "  meta:\n"
-        "    description = \"RECON-generated memory hunt — unique strings + mutexes from sample\"\n"
+        "    description = \"RECON-generated memory hunt - unique strings + mutexes from sample\"\n"
         "    author = \"RECON Platform\"\n"
         f"    date = \"{datetime.now(timezone.utc).strftime('%Y-%m-%d')}\"\n"
         "  strings:\n" + "\n".join(yarastr) + "\n"

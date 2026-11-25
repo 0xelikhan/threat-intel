@@ -2,21 +2,21 @@
 GTI Threat Score Engine
 Replicates Google Threat Intelligence scoring logic from the GTI documentation.
 
-Score: 0–100 numeric representation of likely impact if detected in an environment.
+Score: 0-100 numeric representation of likely impact if detected in an environment.
 Driven by: Verdict (likelihood of malicious) × Severity (potential impact) + contributing factors.
 
 Verdict values:  MALICIOUS | SUSPICIOUS | UNDETECTED | BENIGN | UNKNOWN
 Severity values: HIGH | MEDIUM | LOW | NONE
 
 Score bands (matching GTI logic):
-  MALICIOUS  + HIGH   → 85–100
-  MALICIOUS  + MEDIUM → 65–84
-  MALICIOUS  + LOW    → 45–64
-  SUSPICIOUS + HIGH   → 55–74
-  SUSPICIOUS + MEDIUM → 35–54
-  SUSPICIOUS + LOW    → 15–34
-  UNDETECTED          → 5–14
-  BENIGN / UNKNOWN    → 0–4
+  MALICIOUS  + HIGH   → 85-100
+  MALICIOUS  + MEDIUM → 65-84
+  MALICIOUS  + LOW    → 45-64
+  SUSPICIOUS + HIGH   → 55-74
+  SUSPICIOUS + MEDIUM → 35-54
+  SUSPICIOUS + LOW    → 15-34
+  UNDETECTED          → 5-14
+  BENIGN / UNKNOWN    → 0-4
 """
 
 from dataclasses import dataclass
@@ -26,7 +26,7 @@ from typing import Optional
 # ─── SCORE RESULT ─────────────────────────────────────────────────────────────────
 @dataclass
 class GTIScore:
-    score: int                          # 0–100
+    score: int                          # 0-100
     verdict: str                        # MALICIOUS | SUSPICIOUS | UNDETECTED | BENIGN | UNKNOWN
     severity: str                       # HIGH | MEDIUM | LOW | NONE
     contributing_factors: list[str]     # human-readable reasons
@@ -187,7 +187,7 @@ def score_file(enrichment: dict) -> GTIScore:
 def score_ip(enrichment: dict) -> GTIScore:
     """
     Score an IP address.
-    GTI IP logic mirrors Domain coverage — verdict based on Mandiant analytics
+    GTI IP logic mirrors Domain coverage - verdict based on Mandiant analytics
     (approximated via AbuseIPDB + VT) and Google SafeBrowsing signals.
     """
     abuse = enrichment.get("abuseipdb")  or {}
@@ -209,13 +209,13 @@ def score_ip(enrichment: dict) -> GTIScore:
     if abuse_score >= 75 or vt_mal >= 5 or vt_rep < -50:
         verdict = "MALICIOUS"
         if abuse_score >= 75:
-            factors.append(f"AbuseIPDB score: {abuse_score}% — highly abusive")
+            factors.append(f"AbuseIPDB score: {abuse_score}% - highly abusive")
         if vt_mal >= 5:
             factors.append(f"VT: {vt_mal} engines flagged as malicious")
     elif abuse_score >= 25 or vt_mal >= 2:
         verdict = "SUSPICIOUS"
         if abuse_score >= 25:
-            factors.append(f"AbuseIPDB score: {abuse_score}% — suspicious activity")
+            factors.append(f"AbuseIPDB score: {abuse_score}% - suspicious activity")
     elif abuse_score < 5 and vt_mal == 0:
         verdict = "UNDETECTED"
     else:
@@ -226,7 +226,7 @@ def score_ip(enrichment: dict) -> GTIScore:
         if is_tor or (abuse_score >= 90 and otx_cnt >= 5):
             severity = "HIGH"
             if is_tor:
-                factors.append("Confirmed Tor exit node — anonymized threat actor traffic")
+                factors.append("Confirmed Tor exit node - anonymized threat actor traffic")
         elif (abuse_score >= 50) or otx_cnt >= 5:
             severity = "MEDIUM"
         else:
@@ -308,7 +308,7 @@ def score_domain(enrichment: dict) -> GTIScore:
         if vt_mal >= 2:
             factors.append(f"VT: {vt_mal} malicious detections")
         if otx_cnt >= 5:
-            factors.append(f"OTX: {otx_cnt} threat pulses — community flagged")
+            factors.append(f"OTX: {otx_cnt} threat pulses - community flagged")
         if pd_risk in ("high", "critical"):
             factors.append(f"Pulsedive risk: {pd_risk}")
     elif vt_mal == 0 and vt_sus == 0 and not us_mal:
@@ -339,7 +339,7 @@ def score_domain(enrichment: dict) -> GTIScore:
                     age_days = (datetime.now(timezone.utc) - created).days
                     if age_days < 90:
                         newly_registered = True
-                        factors.append(f"Domain created {age_days} days ago — newly registered, elevated risk")
+                        factors.append(f"Domain created {age_days} days ago - newly registered, elevated risk")
                     break
                 except ValueError:
                     continue
@@ -380,7 +380,7 @@ def score_url(enrichment: dict) -> GTIScore:
 
     Field-name note: the backend writes urlhaus_url (not urlhaus). URL
     scoring relies on VT, URLhaus, and the trained phishing-URL
-    classifier (intel/phishing_url_classifier.py) — the latter lands as
+    classifier (intel/phishing_url_classifier.py) - the latter lands as
     'phishing_classifier' in per-source enrichment.
     """
     vt      = enrichment.get("virustotal") or {}
@@ -412,7 +412,7 @@ def score_url(enrichment: dict) -> GTIScore:
     elif uh_hit or vt_mal >= 2 or vt_sus >= 3:
         verdict = "MALICIOUS" if uh_hit else "SUSPICIOUS"
         if uh_hit:
-            factors.append(f"URLhaus: active malware distribution — {uh_threat or 'unknown family'}")
+            factors.append(f"URLhaus: active malware distribution - {uh_threat or 'unknown family'}")
         elif vt_mal >= 2:
             factors.append(f"VT: {vt_mal} malicious, {vt_sus} suspicious")
     elif pc.get("is_phish"):
@@ -513,7 +513,7 @@ def score_cve(data: dict, label: str = "cve") -> GTIScore:
             factors.append(f"EPSS: {round(prob * 100, 1)}% exploit probability")
 
     # nuclei-templates: number of public detection templates targeting this
-    # CVE. Cuts through KEV's binary signal — "5+ templates" implies a
+    # CVE. Cuts through KEV's binary signal - "5+ templates" implies a
     # weaponised, broadly-detected vulnerability worth treating as exploited.
     nuc = data.get("nuclei") or {}
     if nuc and nuc.get("template_count"):
@@ -528,7 +528,7 @@ def score_cve(data: dict, label: str = "cve") -> GTIScore:
             factors.append(f"nuclei: {n} public detection template{'s' if n > 1 else ''}")
 
     # trickest/cve: public PoC count. GitHub PoCs are the highest-signal
-    # weaponisation indicator after KEV — they mean an attacker can clone +
+    # weaponisation indicator after KEV - they mean an attacker can clone +
     # run the exploit in minutes.
     pocs = data.get("public_pocs") or {}
     if pocs and pocs.get("poc_count"):

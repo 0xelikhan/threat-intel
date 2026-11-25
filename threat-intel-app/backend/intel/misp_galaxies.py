@@ -1,15 +1,15 @@
 """
-MISP galaxy lookup — threat-actor / malware / tool / cross-walk
+MISP galaxy lookup - threat-actor / malware / tool / cross-walk
 enrichment.
 
-MISP publishes a free, MIT-licensed set of "galaxy clusters" — JSON
+MISP publishes a free, MIT-licensed set of "galaxy clusters" - JSON
 files describing threat actors, malware families, offensive tools,
 and target metadata, each with aliases, country attribution, target
 sectors, motivations, and external references. Source:
 https://github.com/MISP/misp-galaxy/
 
 Round-16 bumps the cluster set from 5 to 10. The new clusters add a
-*cross-walk* dimension — multiple community datasets can name the
+*cross-walk* dimension - multiple community datasets can name the
 same actor with different aliases (FIN7 / Carbanak / Storm-0867 /
 G0046), and confirming the same identity across all three drives the
 attribution chip's confidence tier without any new AI tokens.
@@ -48,7 +48,7 @@ Public API:
 
 Each lookup returns a flat dict with the most analyst-relevant fields
 (name, aliases, country, motivations, sectors, refs, mitre_ids). The
-raw galaxy JSON is much larger — we strip metadata the analyst
+raw galaxy JSON is much larger - we strip metadata the analyst
 doesn't need.
 """
 
@@ -81,7 +81,7 @@ _CLUSTERS = {
     "mitre-tool.json":               ("Tool (MITRE S#)",           "malware", "mitre"),
 }
 
-# Reference clusters — small, indexed differently (no fuzzy lookup, just
+# Reference clusters - small, indexed differently (no fuzzy lookup, just
 # enumeration helpers).
 _REFERENCE_CLUSTERS = (
     "sector.json",
@@ -104,7 +104,7 @@ def _normalize(s: str) -> str:
 
 def _flatten_entry(cv: Dict[str, Any], label: str, source_tier: str) -> Dict[str, Any]:
     """Strip a raw cluster value down to the analyst-facing fields. Same
-    output shape across every cluster — that's what lets cross_walk_actor
+    output shape across every cluster - that's what lets cross_walk_actor
     treat them uniformly."""
     name = (cv.get("value") or "").strip()
     meta = cv.get("meta") or {}
@@ -113,7 +113,7 @@ def _flatten_entry(cv: Dict[str, Any], label: str, source_tier: str) -> Dict[str
     if isinstance(external_id, list):
         external_id = external_id[0] if external_id else None
     # Some MITRE entries include the external_id inside the value name
-    # itself ("Cobalt Strike - S0154") — strip the trailing " - S####" /
+    # itself ("Cobalt Strike - S0154") - strip the trailing " - S####" /
     # " - G####" so the cross-walk fuzzy lookup matches on the friendly
     # name alone.
     bare_name = name
@@ -141,7 +141,7 @@ def _flatten_entry(cv: Dict[str, Any], label: str, source_tier: str) -> Dict[str
         "mitre_id":    external_id,
         "platforms":   meta.get("mitre_platforms") or [],
         # The Microsoft cluster carries the "what type of threat-actor is
-        # this" tag — surface alongside attribution.
+        # this" tag - surface alongside attribution.
         "microsoft_origin": meta.get("microsoft-origin-threat"),
     }
 
@@ -199,7 +199,7 @@ def _load_all() -> Dict[str, Any]:
         _log.info("Loaded MISP galaxy: %s (%d entries)",
                   fname, len(doc.get("values") or []))
 
-    # Reference clusters — load if present but don't fold into the fuzzy
+    # Reference clusters - load if present but don't fold into the fuzzy
     # actor / malware indexes.
     sectors: List[str] = []
     countries: List[Dict[str, Any]] = []
@@ -243,7 +243,7 @@ def _load_all() -> Dict[str, Any]:
 def lookup_actor(name_or_alias: str) -> Optional[Dict[str, Any]]:
     """Fuzzy actor lookup across all three actor catalogues (community
     threat-actor, MITRE intrusion-set, Microsoft activity group).
-    Returns the FIRST match found — for cross-walk results use
+    Returns the FIRST match found - for cross-walk results use
     cross_walk_actor() below."""
     if not name_or_alias:
         return None
@@ -253,7 +253,7 @@ def lookup_actor(name_or_alias: str) -> Optional[Dict[str, Any]]:
 
 def lookup_malware(name_or_alias: str) -> Optional[Dict[str, Any]]:
     """Fuzzy malware / tool lookup across malpedia, ransomware, RAT,
-    tool, and mitre-tool catalogues. Returns the FIRST match found —
+    tool, and mitre-tool catalogues. Returns the FIRST match found  - 
     MITRE entries are preferred via cluster iteration order."""
     if not name_or_alias:
         return None
@@ -297,7 +297,7 @@ def cross_walk_actor(name_or_alias: str) -> Optional[Dict[str, Any]]:
         bucket = tiers.get(tier_name) or {}
         matches[tier_name] = bucket.get(norm)
 
-    # Also try fuzzy expansion via the master index aliases — when
+    # Also try fuzzy expansion via the master index aliases - when
     # community names "APT29" + Microsoft names "Midnight Blizzard"
     # and the operator queried for "Midnight Blizzard", the community
     # bucket won't match by direct normalisation. Walk each Microsoft
@@ -320,7 +320,7 @@ def cross_walk_actor(name_or_alias: str) -> Optional[Dict[str, Any]]:
     confidence = ("high" if len(tiers_hit) >= 2 else
                   "medium" if len(tiers_hit) == 1 else "low")
 
-    # Pick a canonical record — prefer MITRE > community > microsoft
+    # Pick a canonical record - prefer MITRE > community > microsoft
     canon = (matches["mitre"] or matches["community"] or matches["microsoft"])
     if not canon:
         return None
@@ -365,7 +365,7 @@ def list_countries() -> List[Dict[str, Any]]:
 
 
 def stats() -> Dict[str, Any]:
-    """Per-cluster index sizes — surfaced at /api/status to confirm
+    """Per-cluster index sizes - surfaced at /api/status to confirm
     galaxy data is actually loaded in production."""
     by_cluster: Dict[str, int] = {}
     for fname, (label, _, _) in _CLUSTERS.items():

@@ -36,7 +36,7 @@ _OWASP_ROOT_CANDIDATES = [
 _HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 _TITLE_RE   = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 
-# Topic-keyword routing — maps free-text alert keywords to cheat-sheet
+# Topic-keyword routing - maps free-text alert keywords to cheat-sheet
 # filename stems so the hypothesis-generator can pull the right ones
 # in as prompt context.
 _KEYWORD_TO_CHEAT = {

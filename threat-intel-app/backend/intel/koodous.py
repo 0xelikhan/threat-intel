@@ -1,7 +1,7 @@
 """
 Koodous Android APK sample lookup.
 
-Source: https://developer.koodous.com/ — Koodous indexes Android APK
+Source: https://developer.koodous.com/ - Koodous indexes Android APK
 samples with static analysis + crowd-sourced tags.
 
   Header: Authorization: Token <KOODOUS_KEY>
@@ -92,6 +92,6 @@ async def lookup_hash(session, hash_val: str, api_key: str = "") -> Dict[str, An
         "details_url":   f"https://koodous.com/apks/{hash_val}",
         "verdict":       verdict,
         "summary":       (f"Koodous: APK {info.get('package_name') or '?'}"
-                          + (f" — detected malicious" if detected else "")
+                          + (f" - detected malicious" if detected else "")
                           + (f", trusted" if trusted else "")),
     }

@@ -1,5 +1,5 @@
 """
-GenerateKQLSkill — produce a Microsoft Sentinel KQL query for the analysis.
+GenerateKQLSkill - produce a Microsoft Sentinel KQL query for the analysis.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ workspace.
 
 Hard requirements:
 * Pick the most specific table (DeviceProcessEvents / DeviceNetworkEvents /
-  DeviceFileEvents / SecurityEvent / SigninLogs / etc.) — never reach for
+  DeviceFileEvents / SecurityEvent / SigninLogs / etc.) - never reach for
   union when one table covers it.
 * Filter on the actual IOC values (IP/domain/hash) using `in (...)` or
   `has_any (...)`.
@@ -26,7 +26,7 @@ Hard requirements:
 * Include an inline `// ...` comment line at the top stating what the
   query detects in one sentence.
 
-Output the KQL only — no markdown fences, no commentary outside the query.
+Output the KQL only - no markdown fences, no commentary outside the query.
 """
 
 

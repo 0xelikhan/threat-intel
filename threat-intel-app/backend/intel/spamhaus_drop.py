@@ -1,13 +1,13 @@
 """
 Spamhaus DROP / EDROP loader.
 
-Source: https://www.spamhaus.org/drop/ — Spamhaus "Do not Route Or
+Source: https://www.spamhaus.org/drop/ - Spamhaus "Do not Route Or
 Peer" feeds. Two daily-refreshed plain-text CIDR lists:
 
-  drop.txt   — netblocks under direct control of professional
+  drop.txt   - netblocks under direct control of professional
                 spammers / cyber-criminals. Conservative; only the
                 worst offenders.
-  edrop.txt  — netblocks hijacked from legitimate owners.
+  edrop.txt  - netblocks hijacked from legitimate owners.
 
 Both are public, attribution-only redistribution, considered the
 canonical authoritative list of hijacked / criminal infrastructure

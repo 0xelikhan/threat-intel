@@ -1,4 +1,4 @@
-"""Sourcegraph public code index — leaked credentials / configs for the target domain.
+"""Sourcegraph public code index - leaked credentials / configs for the target domain.
 
 Auto-generated from _legacy_registrations.py. Keeps the LegacyAnalyzer
 Adapter pattern (import on first call + from_legacy_dict wrap) but
@@ -13,7 +13,7 @@ from plugins import Analyzer, AnalysisResult, register
 
 class SourcegraphAnalyzer(Analyzer):
     name = "sourcegraph"
-    description = ('Sourcegraph public code index — leaked credentials / configs for the target domain.')
+    description = ('Sourcegraph public code index - leaked credentials / configs for the target domain.')
     supported_ioc_types = ['domain']
     required_keys = []
     optional_keys = ['SOURCEGRAPH_TOKEN']

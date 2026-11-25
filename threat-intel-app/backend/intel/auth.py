@@ -27,7 +27,7 @@ from typing import Optional
 import bcrypt
 
 
-# Read once at import — env vars are baked into the container at startup.
+# Read once at import - env vars are baked into the container at startup.
 # When unset (e.g. running locally without secrets), auth is treated as
 # misconfigured and every login attempt fails closed.
 _USERNAME      = (os.environ.get("AUTH_USERNAME") or "").strip()
@@ -49,7 +49,7 @@ def verify_credentials(username: str, password: str) -> bool:
 
     bcrypt.checkpw runs even when the username doesn't match so the
     response time doesn't reveal whether the username was wrong vs the
-    password — both paths pay the bcrypt cost. Username comparison uses
+    password - both paths pay the bcrypt cost. Username comparison uses
     secrets.compare_digest so a per-character timing comparison can't
     leak how much of the supplied username prefix-matches the real one
     (Python's == short-circuits on the first differing byte)."""

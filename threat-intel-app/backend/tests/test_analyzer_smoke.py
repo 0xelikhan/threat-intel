@@ -1,18 +1,18 @@
-"""Analyzer smoke test — every registered Analyzer handles a bare
+"""Analyzer smoke test - every registered Analyzer handles a bare
 no-key invocation without crashing and returns an AnalysisResult.
 
 What this guards against:
-  1. Import drift — legacy intel/*.py module renames / deletions. If
+  1. Import drift - legacy intel/*.py module renames / deletions. If
      an analyzer's lazy-import target disappeared, we want to see it
      surface as an `unavailable` AnalysisResult, not a NameError.
-  2. Key-handling drift — keyed analyzers must short-circuit with
+  2. Key-handling drift - keyed analyzers must short-circuit with
      error_type ∈ {missing_key, not_configured, unavailable, auth_failed}
      when no key is passed. If an analyzer blindly calls the upstream
      endpoint without a key, the mocked-session HTTP call would hit
      this test's fake response and (depending on parser shape) could
      either return a bad verdict or raise. Either way: the assertion
      "found is False" catches it.
-  3. Response-shape drift — the mocked session returns an empty JSON
+  3. Response-shape drift - the mocked session returns an empty JSON
      payload. If the parser can't handle an empty dict without raising,
      the smoke test fails and we know the parser needs a type guard.
 
@@ -23,7 +23,7 @@ What this does NOT guard against:
 
 Companion test: `test_every_analyzer_returns_analysis_result` asserts
 the SHAPE at the plugin-framework level. This one adds the behavioural
-layer — "runs end-to-end without raising" — on top.
+layer - "runs end-to-end without raising" - on top.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ from plugins import AnalysisResult, registry
 
 # Plausible value per IOC type. Chosen so parsers that validate
 # format (regex-match hashes, URL schemes, etc.) accept the input and
-# proceed to the response-parsing path — which is what we actually want
+# proceed to the response-parsing path - which is what we actually want
 # to exercise.
 _PLAUSIBLE_VALUES = {
     "ipv4":   "1.1.1.1",
@@ -90,7 +90,7 @@ def _make_fake_session() -> MagicMock:
 
 
 def _pick_ioc_type(analyzer) -> str:
-    """One IOC type is enough — picking the first declared type keeps
+    """One IOC type is enough - picking the first declared type keeps
     the parametrize matrix compact. Analyzers with no supported types
     get skipped."""
     types = getattr(analyzer, "supported_ioc_types", []) or []
@@ -101,7 +101,7 @@ def _pick_ioc_type(analyzer) -> str:
 
 def _registered_analyzer_names() -> list:
     """Collected at import time via registry.discover(). Any analyzer
-    that fails to import at startup is NOT in this list — that's a
+    that fails to import at startup is NOT in this list - that's a
     separate kind of regression caught by test_plugin_framework."""
     return sorted(a.name for a in registry.analyzers())
 
@@ -109,7 +109,7 @@ def _registered_analyzer_names() -> list:
 @pytest.mark.parametrize("analyzer_name", _registered_analyzer_names())
 def test_analyzer_runs_without_crashing(analyzer_name):
     """Every registered analyzer must return an AnalysisResult when
-    invoked with no API keys and a plausible IOC value — not raise,
+    invoked with no API keys and a plausible IOC value - not raise,
     not return None, not return a dict."""
     analyzer = registry.get(analyzer_name)
     assert analyzer is not None, f"analyzer {analyzer_name!r} missing from registry"
@@ -137,14 +137,14 @@ def test_analyzer_runs_without_crashing(analyzer_name):
 @pytest.mark.parametrize("analyzer_name", _registered_analyzer_names())
 def test_keyed_analyzer_handles_missing_key(analyzer_name):
     """Analyzers with declared required_keys must short-circuit cleanly
-    when no key is passed — not attempt the upstream call and then
+    when no key is passed - not attempt the upstream call and then
     crash on the mocked empty response."""
     analyzer = registry.get(analyzer_name)
     assert analyzer is not None
 
     required = getattr(analyzer, "required_keys", []) or []
     if not required:
-        pytest.skip(f"{analyzer_name}: no required_keys — not a keyed analyzer")
+        pytest.skip(f"{analyzer_name}: no required_keys - not a keyed analyzer")
 
     ioc_type = _pick_ioc_type(analyzer)
     if not ioc_type:
@@ -173,9 +173,9 @@ def test_keyed_analyzer_handles_missing_key(analyzer_name):
     if result.found:
         pytest.fail(
             f"{analyzer_name}: required_keys={required} but found=True "
-            f"with no key passed — analyzer isn't checking its keys."
+            f"with no key passed - analyzer isn't checking its keys."
         )
-    # found=False is fine — error_type can be any of the acceptable
+    # found=False is fine - error_type can be any of the acceptable
     # values OR a parser-level error (which means "empty response"
     # branched correctly). Either way, no crash = pass.
     assert result.error_type in acceptable or result.error_type is not None, (
@@ -184,12 +184,12 @@ def test_keyed_analyzer_handles_missing_key(analyzer_name):
 
 
 def test_registry_has_expected_analyzer_count():
-    """Sanity floor — we had ~56 formal analyzer files at the last audit.
+    """Sanity floor - we had ~56 formal analyzer files at the last audit.
     If this ever drops below 50, something imported-silently-failed and
     the smoke matrix is no longer actually covering what it claims."""
     names = _registered_analyzer_names()
     assert len(names) >= 50, (
-        f"analyzer registry has only {len(names)} entries — expected ≥50. "
+        f"analyzer registry has only {len(names)} entries - expected ≥50. "
         f"Likely an import error during plugin discovery. Current list:\n"
         + "\n".join(f"  - {n}" for n in names)
     )

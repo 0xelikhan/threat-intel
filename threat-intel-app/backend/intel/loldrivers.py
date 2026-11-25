@@ -1,5 +1,5 @@
 """
-LOLDrivers — catalog of vulnerable/malicious Windows drivers used in
+LOLDrivers - catalog of vulnerable/malicious Windows drivers used in
 Bring-Your-Own-Vulnerable-Driver (BYOVD) attacks.
 
 Two lookup paths:

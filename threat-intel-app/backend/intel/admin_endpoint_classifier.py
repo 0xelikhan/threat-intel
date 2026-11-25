@@ -3,24 +3,24 @@ Admin / sensitive-endpoint classifier.
 
 Detects admin panels, back-office endpoints, and customer-service portals
 in a URL by inspecting the leftmost subdomain label OR any path segment.
-Adapted from cti-expert (MIT, Hieu Ngo, chongluadao.vn) —
+Adapted from cti-expert (MIT, Hieu Ngo, chongluadao.vn)  - 
 handbook/admin-endpoint-indicators.md + the classify_endpoint() reference
 implementation in scripts/stealer_log_parse.py.
 
 The value over a naive `'/admin' in url` check:
-  * Prefix matching on subdomain labels — `admin` catches `admin11`,
+  * Prefix matching on subdomain labels - `admin` catches `admin11`,
     `kef` catches `kefu`, `adm` catches `adm1n` (DGA-style admin
     subdomains).
-  * Localised keywords — Chinese / Indonesian / Spanish admin/back-office
+  * Localised keywords - Chinese / Indonesian / Spanish admin/back-office
     keywords (`houtai`, `kefu`, `客服`, `后台`, `administrador`) that
     English-only matchers miss. Scam operators routinely host these.
-  * Exact-label tier — generic but high-signal segments like `bo`,
+  * Exact-label tier - generic but high-signal segments like `bo`,
     `cp`, `panel`, `merchant`, `withdraw` that prefix-match would
     overshoot on (`bo` would incorrectly hit `book`, etc.).
   * Generic terms (`login`, `signin`, `api`, `account`) are
     intentionally NOT flagged. Too common to be useful on their own;
     only matter when combined with a scam TLD, multi-account pattern,
-    or raw-IP host — those amplifiers are evaluated separately.
+    or raw-IP host - those amplifiers are evaluated separately.
 
 Wired into agents.enrichment.enrich_url so every analyzed URL gets a
 synchronous, network-free verdict surfaced as a per-source row in the
@@ -33,7 +33,7 @@ import re
 from typing import Any, Dict, Tuple
 
 
-# Subdomain-label / path-segment prefixes — anything starting with one
+# Subdomain-label / path-segment prefixes - anything starting with one
 # of these is admin. `admin`, `adm`, `kef`, `houtai`, etc. catch typo-
 # obfuscation variants the analyst would never enumerate by hand.
 _ADMIN_STARTSWITH: Tuple[str, ...] = (
@@ -55,7 +55,7 @@ _ADMIN_EXACT = frozenset({
 })
 
 # Localised admin / back-office / customer-service / agent keywords.
-# Substring match — these appear inside paths or query strings too.
+# Substring match - these appear inside paths or query strings too.
 _LOCAL_ADMIN_RE = re.compile(r"(管理|后台|代理|客服|administrador)")
 
 # Free / abused TLDs that disproportionately host scam admin panels.
@@ -96,7 +96,7 @@ def classify(url: str) -> Dict[str, Any]:
         return out
 
     s = url.strip()
-    # Drop non-http(s) schemes — android://, chrome-extension://, file://
+    # Drop non-http(s) schemes - android://, chrome-extension://, file://
     # etc. fire false positives because we'd look at the wrong host.
     sm = re.match(r"([a-z][a-z0-9+.\-]*)://", s, re.I)
     if sm and sm.group(1).lower() not in ("http", "https"):
@@ -127,7 +127,7 @@ def classify(url: str) -> Dict[str, Any]:
         indicator = "keyword:cn-admin"
         strong    = True
 
-    # Scam-TLD amplifier — by itself we surface it as "suspicious", not
+    # Scam-TLD amplifier - by itself we surface it as "suspicious", not
     # admin. When combined with a strong indicator above it bumps the
     # verdict.
     scam_tld_match = _SCAM_TLD_RE.search(s)
@@ -141,7 +141,7 @@ def classify(url: str) -> Dict[str, Any]:
             out["verdict"] = "MALICIOUS"
             out["summary"] = (
                 f"Admin / sensitive endpoint ({indicator}) on scam TLD "
-                f"{scam_tld} — actor infrastructure or compromised host."
+                f"{scam_tld} - actor infrastructure or compromised host."
             )
         else:
             out["verdict"] = "SUSPICIOUS"
@@ -161,7 +161,7 @@ def classify(url: str) -> Dict[str, Any]:
 
 
 def stats() -> Dict[str, Any]:
-    """Lightweight introspection for /api/status — number of patterns
+    """Lightweight introspection for /api/status - number of patterns
     loaded. No on-disk state to verify."""
     return {
         "loaded":     True,

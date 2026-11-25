@@ -1,4 +1,4 @@
-"""Round-17 tests — signal_priority framework + disposition safety net.
+"""Round-17 tests - signal_priority framework + disposition safety net.
 
 The core failure mode we're catching: the LLM produces a summary that
 correctly identifies a nation-state actor + upstream high-risk marker,
@@ -141,7 +141,7 @@ def test_correlation_prose_empty_when_no_signals():
 # ─── Feedback loop guard ───────────────────────────────────────────────────
 
 def test_threatlocker_builtin_policy_fires_downweight_signals():
-    """Real ThreatLocker allowlist audit event — Chromium ChatGPT
+    """Real ThreatLocker allowlist audit event - Chromium ChatGPT
     extension permitted by a BUILT-IN policy under a Google-signed
     chrome.exe. Should be INFORMATIONAL, block_clear=False, with two
     strong DOWNWEIGHT signals so the LLM confidently picks CLEAR."""
@@ -183,7 +183,7 @@ def test_chrome_msedge_firefox_process_paths_are_downweight():
 
 def test_tenant_permit_alone_not_downweight_needs_two_markers():
     """Just 'Action: Permit' without other permit markers shouldn't
-    trigger the tenant policy downweight — we want at least two of
+    trigger the tenant policy downweight - we want at least two of
     (Action:Permit, Effective Action:Permitted, Monitor Only:true)
     firing together to avoid false positives on generic permit logs."""
     from intel.signal_priority import extract_tier_signals
@@ -195,7 +195,7 @@ def test_tenant_permit_alone_not_downweight_needs_two_markers():
 
 def test_actor_detection_ignores_ai_generated_summary():
     """Regression guard: the actor detection must NOT read the AI's own
-    summary — otherwise the AI recognises an actor once and every future
+    summary - otherwise the AI recognises an actor once and every future
     disposition on unrelated alerts inherits the block. Only the raw log
     input is authoritative for TIER 1 actor detection."""
     from intel.signal_priority import extract_tier_signals
@@ -214,7 +214,7 @@ def test_pua_family_is_tier2_not_tier1():
     """Regression guard: `malware_family` values prefixed with PUA:,
     PUABundler:, HackTool:, Tool:, Adware:, Bundler:, Misleading:,
     Riskware: must NOT fire the TIER 1 `named malware family
-    attributed` signal — those are Microsoft's unwanted-software
+    attributed` signal - those are Microsoft's unwanted-software
     categorizations, not traditional malware families. They should
     fire as TIER 2 `PUA / HackTool family attributed` instead."""
     from intel.signal_priority import extract_tier_signals

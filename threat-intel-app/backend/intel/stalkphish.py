@@ -1,7 +1,7 @@
 """
 Stalkphish phishing-kit / URL tracker lookup.
 
-Source: https://www.stalkphish.io/ — Stalkphish indexes active
+Source: https://www.stalkphish.io/ - Stalkphish indexes active
 phishing kits + phishing URLs, with associated infrastructure.
 Requires a free API key (Token-based auth header).
 

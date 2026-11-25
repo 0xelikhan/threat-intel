@@ -33,7 +33,7 @@ _log = logging.getLogger("recon.intel.nist_800_53")
 _NIST_JSON = (Path(__file__).parent.parent.parent
               / "vendor" / "nist-oscal" / "sp800-53.json")
 
-# In-tree fallback — highest-traffic controls keyed to the most common
+# In-tree fallback - highest-traffic controls keyed to the most common
 # MITRE techniques RECON surfaces. Sourced from the NIST 800-53r5
 # catalog + the ATT&CK→800-53 mappings published by CTID
 # (center-for-threat-informed-defense/attack-control-framework-mappings).

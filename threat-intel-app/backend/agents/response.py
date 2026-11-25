@@ -1,5 +1,5 @@
 """
-Response Agent — generates Sigma rule, KQL query, STIX bundle, matches threat actors.
+Response Agent - generates Sigma rule, KQL query, STIX bundle, matches threat actors.
 Reads AI config at call time.
 """
 
@@ -29,7 +29,7 @@ ACTORS = [
 ]
 
 
-# Inverted index built once at module load — technique_id -> [actor, ...].
+# Inverted index built once at module load - technique_id -> [actor, ...].
 # Was O(N_actors * N_techniques_per_actor) per call before; now hash
 # lookup per alert technique with O(matches) follow-up. Doesn't change
 # behaviour, just lifts the inner loop out.
@@ -40,9 +40,9 @@ for _a in ACTORS:
 
 
 def _enrich_actor_with_cross_walk(actor: dict) -> dict:
-    """Attach MISP-galaxy cross-walk metadata to a matched actor — sectors,
+    """Attach MISP-galaxy cross-walk metadata to a matched actor - sectors,
     cross-source confirmation, MITRE G####, Microsoft Storm-/Typhoon
-    aliases — without touching the existing matchedTechniques + score.
+    aliases - without touching the existing matchedTechniques + score.
 
     When cross_walk_actor confirms the actor in ≥2 of (community, MITRE,
     Microsoft), confidence='high' lights up the AttributionChip's
@@ -93,7 +93,7 @@ def _match_actors(mitre_techniques: list) -> list:
         logging.getLogger("recon.response").debug(
             "MISP actor match failed, falling back: %s", _e)
     # Fallback: hardcoded list. Same precision-style score as the
-    # primary MITRE path — matches / N_alert_techniques * 100 — so the
+    # primary MITRE path - matches / N_alert_techniques * 100 - so the
     # gate threshold has consistent meaning regardless of which data
     # source produced the match.
     tech_ids = [t.split(" ")[0] for t in mitre_techniques]
@@ -135,7 +135,7 @@ def _attribution_evidence(mitre_techniques: list,
             return
         key = tid.split(" ")[0].strip().upper()
         out.setdefault(key, []).append(entry)
-        # Parent-technique key — keeps T1059 matches surfaced under T1059.001
+        # Parent-technique key - keeps T1059 matches surfaced under T1059.001
         # actor profiles (and vice versa).
         if "." in key:
             out.setdefault(key.split(".", 1)[0], []).append(entry)
@@ -155,7 +155,7 @@ def _attribution_evidence(mitre_techniques: list,
             "confidence": (me.get("confidence") or "").strip(),
         })
 
-    # Raw-log regex hits from intel.behavior_extractor — quotes the exact
+    # Raw-log regex hits from intel.behavior_extractor - quotes the exact
     # substring from the original log so the analyst sees evidence anchored
     # to the literal characters that triggered the inference.
     cats = ((behavioral_indicators or {}).get("categories") or {})
@@ -173,7 +173,7 @@ def _attribution_evidence(mitre_techniques: list,
                 continue
             _push(tid, {
                 "source":  "log_pattern",
-                "text":    f"{name}{(' — ' + why) if why else ''}".strip(),
+                "text":    f"{name}{(' - ' + why) if why else ''}".strip(),
                 "snippet": match[:160] if match else "",
                 "confidence": "",
             })
@@ -186,8 +186,8 @@ def _attach_attribution_evidence(matched_actors: list,
                                  mitre_evidence: list,
                                  behavioral_indicators: dict) -> list:
     """Annotate each matched actor with:
-      * evidence_by_technique — what in THIS log matched each TTP
-      * ttps_to_look_for      — { before, after, all_count } showing this
+      * evidence_by_technique - what in THIS log matched each TTP
+      * ttps_to_look_for      - { before, after, all_count } showing this
         actor's full known TTP list bucketed by kill-chain position
         relative to the matched evidence. Lets the AttributionChip render
         "look for X before this alert" / "look for Y after this alert"
@@ -205,7 +205,7 @@ def _attach_attribution_evidence(matched_actors: list,
         parts = t.split(" - ", 1)
         if len(parts) == 2:
             name_map[parts[0].strip().upper()] = parts[1].strip()
-    # Lazy import — only loads the heavy MITRE STIX bundle when there are
+    # Lazy import - only loads the heavy MITRE STIX bundle when there are
     # actually matched actors to enrich.
     try:
         from intel.mitre_data import get_actor_ttps_by_phase
@@ -295,7 +295,7 @@ def _build_stix(iocs: dict, investigation: dict) -> dict:
                                                  "url": f"https://attack.mitre.org/techniques/{parts[0].replace('.', '/')}/"}]})
         attack_pattern_index[parts[0]] = ap_id
 
-    # Attack Flow overlay (CTID STIX 2.1 extension) — sequenced view of the
+    # Attack Flow overlay (CTID STIX 2.1 extension) - sequenced view of the
     # techniques, openable directly in the CTID Attack Flow Builder.
     if technique_labels:
         try:
@@ -307,7 +307,7 @@ def _build_stix(iocs: dict, investigation: dict) -> dict:
                 investigation=investigation,
             ))
         except Exception as e:
-            # The Attack Flow overlay is additive — never block the base
+            # The Attack Flow overlay is additive - never block the base
             # STIX export when the builder hiccups.
             import logging as _logging
             _logging.getLogger("recon.response").warning(
@@ -335,7 +335,7 @@ def validate_sigma_rule(yaml_content: str) -> tuple[bool, str]:
             return True, ""
         return False, r.stderr.strip() or r.stdout.strip()
     except FileNotFoundError:
-        return True, "sigma-cli not installed — skipped"
+        return True, "sigma-cli not installed - skipped"
     except subprocess.TimeoutExpired:
         return False, "Validation timed out"
     finally:
@@ -345,7 +345,7 @@ def validate_sigma_rule(yaml_content: str) -> tuple[bool, str]:
 def _make_client(config):
     """Returns the configured LLMProvider, or None when the active
     provider doesn't have the credentials it needs. Kept for backwards
-    compat — the function name is a holdover; it returns an LLMProvider,
+    compat - the function name is a holdover; it returns an LLMProvider,
     not an SDK client. Delegates the per-provider key check to the
     shared providers.provider_configured() helper."""
     try:
@@ -373,7 +373,7 @@ async def _ai_call_json(prompt: str, config, max_tokens: int = 1400,
     from agents.investigation import _loads_lenient
 
     if on_partial is None:
-        # Legacy non-streaming path — kept for callers that don't wire SSE.
+        # Legacy non-streaming path - kept for callers that don't wire SSE.
         resp = await provider.complete(
             model=config.get_model(fast=True),
             messages=[{"role": "user", "content": prompt}],
@@ -385,7 +385,7 @@ async def _ai_call_json(prompt: str, config, max_tokens: int = 1400,
             return {}
         return _loads_lenient(resp.message)
 
-    # Streaming path — accumulate deltas, re-parse periodically, emit
+    # Streaming path - accumulate deltas, re-parse periodically, emit
     # partial dicts through on_partial. Throttle to at most one emit
     # every 6 chunks so we don't fire 500 partials for a 700-token
     # response.
@@ -413,7 +413,7 @@ async def _ai_call_json(prompt: str, config, max_tokens: int = 1400,
                             _log.debug("analyst_summary on_partial failed: %s", _e)
     except Exception as _e:
         _log.warning("analyst_summary stream failed, falling back: %s", _e)
-        # Streaming path failed — fall back to non-streaming completion
+        # Streaming path failed - fall back to non-streaming completion
         # so the analysis still lands.
         resp = await provider.complete(
             model=config.get_model(fast=True),
@@ -431,7 +431,7 @@ async def _ai_call_json(prompt: str, config, max_tokens: int = 1400,
 async def run_response(state: dict, on_event=None) -> dict:
     """Response synthesis stage.
 
-    on_event(entry) — optional streaming callback the orchestrator wires
+    on_event(entry) - optional streaming callback the orchestrator wires
     into the SSE writer. Enables progressive rendering of the analyst
     summary (disposition + reason appear as the LLM emits them, rather
     than the analyst waiting 5-10s for the full JSON to land).
@@ -447,7 +447,7 @@ async def run_response(state: dict, on_event=None) -> dict:
     mitre = state.get("mitre_techniques", [])
     trace = state.get("agent_trace", [])
 
-    # GTI scores are a function of the enrichment data — compute them once
+    # GTI scores are a function of the enrichment data - compute them once
     # here so every caller of run_pipeline() (sync analyze, MCP, future
     # tests) gets the same shape on the returned state. The streaming
     # /api/analyze path computes a provisional gti_scores after enrichment
@@ -455,7 +455,7 @@ async def run_response(state: dict, on_event=None) -> dict:
     gti_scores = compute_gti_scores(state.get("enrichments", {}))
 
     summary = investigation.get("summary", "")
-    # Strip em / en dashes from the AI summary — the analyst-facing Summary
+    # Strip em / en dashes from the AI summary - the analyst-facing Summary
     # card renders this in plain prose alongside the disposition reason,
     # both of which look "AI-written" with em dashes scattered through.
     try:
@@ -468,7 +468,7 @@ async def run_response(state: dict, on_event=None) -> dict:
     # ── Actor attribution must happen BEFORE the evidence pack uses it ──
     matched_actors = _match_actors(mitre)
     # Annotate each actor with the specific log evidence that triggered each
-    # matched TTP — combines AI mitre_evidence sentences with regex matches
+    # matched TTP - combines AI mitre_evidence sentences with regex matches
     # from intel.behavior_extractor so the AttributionChip can quote both
     # the AI's inference AND the literal log snippet that fired the pattern.
     matched_actors = _attach_attribution_evidence(
@@ -505,7 +505,7 @@ async def run_response(state: dict, on_event=None) -> dict:
         # next obvious log line as the operator's commentary.
         _trailing = _raw_full[_marker:]
         # Stop at "User:" / "Date:" / "EventID" / "Process " / "Path " /
-        # JSON brace / blank line — the first thing that looks like log
+        # JSON brace / blank line - the first thing that looks like log
         # content terminates the commentary block.
         import re as _re
         _stop = _re.search(
@@ -523,7 +523,7 @@ async def run_response(state: dict, on_event=None) -> dict:
             # Bound to the first 600 chars to keep the prompt slot small.
             _operator_note = _trailing[:600].strip()
 
-    # Ground-truth lookup of WHICH source flagged WHICH IOC — pulled from
+    # Ground-truth lookup of WHICH source flagged WHICH IOC - pulled from
     # the deterministic enrichment summary. The analyst_prompt cites these
     # verbatim so it cannot hallucinate "VirusTotal + MalwareBazaar
     # corroborated this hash" when actually only AbuseIPDB flagged the IP.
@@ -531,7 +531,7 @@ async def run_response(state: dict, on_event=None) -> dict:
     _flagged_map = (_enr_sum.get("flagged_per_ioc") or {})
     _enr_line    = (_enr_sum.get("line") or "").strip()
 
-    # Deterministic tier bucketing — computed BEFORE the LLM sees the
+    # Deterministic tier bucketing - computed BEFORE the LLM sees the
     # evidence pack so the model can't rationalise a CLEAR when a
     # TIER 1 signal is present. See intel/signal_priority.py.
     try:
@@ -542,7 +542,7 @@ async def run_response(state: dict, on_event=None) -> dict:
         _tier_signals = _extract_tiers({
             **state,
             "investigation_result": investigation,
-            "response_summary": {  # partial — case_score not built yet
+            "response_summary": {  # partial - case_score not built yet
                 "cross_refs":    rs_cross,
                 "matched_actors": matched_actors,
                 "malware_family": investigation.get("malware_family")
@@ -560,7 +560,7 @@ async def run_response(state: dict, on_event=None) -> dict:
     evidence_pack = {
         "alert_text_first_300": (state.get("raw_input_clean") or state.get("raw_input") or "")[:300],
         # Analyst commentary the operator typed in the analyze textbox
-        # (mixed inline with the log). Authoritative — the AI must respect
+        # (mixed inline with the log). Authoritative - the AI must respect
         # this when picking disposition.
         "operator_analyst_note": _operator_note,
         # AUTHORITATIVE source→IOC flag map. The ONLY pairs the AI is
@@ -568,7 +568,7 @@ async def run_response(state: dict, on_event=None) -> dict:
         # in this dict it didn't happen.
         "ground_truth_flagged":  _flagged_map,
         "enrichment_summary":    _enr_line,
-        # Signal tier framework — the LLM MUST read this first. If
+        # Signal tier framework - the LLM MUST read this first. If
         # tier_1 is non-empty, CLEAR is blocked deterministically.
         "signal_tier_1_present":  [s["signal"] for s in _tier_signals["tier_1"]],
         "signal_tier_2_present":  [s["signal"] for s in _tier_signals["tier_2"]],
@@ -597,7 +597,7 @@ async def run_response(state: dict, on_event=None) -> dict:
         "email_auth":           rs_email.get("auth_results", {})    if rs_email else {},
     }
 
-    # Calibration baked into the disposition prompt — same evidence-required
+    # Calibration baked into the disposition prompt - same evidence-required
     # standard the investigation agent applies. Prevents the analyst summary
     # from disagreeing with the calibrated investigation verdict.
     from intel.calibration import CALIBRATION_PRINCIPLES as _CAL
@@ -608,22 +608,22 @@ async def run_response(state: dict, on_event=None) -> dict:
         f"  How to handle this note:\n"
         f"   * ACKNOWLEDGE it in disposition_reason. Quote or paraphrase\n"
         f"     the analyst's framing so they can see you read it.\n"
-        f"   * Factor it into your decision — the analyst usually has\n"
+        f"   * Factor it into your decision - the analyst usually has\n"
         f"     environmental context the enrichment data lacks (sanctioned\n"
         f"     tools, scheduled work, approved exceptions).\n"
         f"   * If you AGREE, lean toward CLEAR / lower disposition and\n"
         f"     cite the analyst's note as one of the reasons.\n"
-        f"   * If you DISAGREE — i.e. the evidence still points to a real\n"
-        f"     threat despite their framing — state that explicitly and\n"
+        f"   * If you DISAGREE - i.e. the evidence still points to a real\n"
+        f"     threat despite their framing - state that explicitly and\n"
         f"     name the SPECIFIC evidence that overrides the analyst's\n"
         f"     context (named-malware hit, KEV-listed CVE actively exploited,\n"
         f"     credential access, lateral movement, > 5 VT detections from\n"
         f"     independent reputable engines, etc.).\n"
         f"   * Do NOT silently ignore the note. Do NOT pick MONITOR just\n"
-        f"     because 'context is unclear' — the analyst already gave it.\n"
+        f"     because 'context is unclear' - the analyst already gave it.\n"
         if _operator_note else ""
     )
-    # Palantir Alerting and Detection Strategy (ADS) section outline —
+    # Palantir Alerting and Detection Strategy (ADS) section outline  - 
     # injected as guardrails so the prose follows a recognisable industry
     # structure rather than ad-hoc paragraphs.
     try:
@@ -653,18 +653,18 @@ One-line summary           : {summary}
 MITRE techniques mapped    : {mitre_str}
 
 ══════════════════════════════════════════════════════════════════════════════════
-SIGNAL PRIORITY LADDER — READ THIS BEFORE PICKING DISPOSITION
+SIGNAL PRIORITY LADDER - READ THIS BEFORE PICKING DISPOSITION
 ══════════════════════════════════════════════════════════════════════════════════
 The tier framework below was computed DETERMINISTICALLY from the raw log +
 enrichment data, BEFORE you saw the evidence. It represents the strongest
 signals fired, ranked by their verdict weight. Your disposition MUST respect
-the verdict floor and the block_clear flag — those are not suggestions, they
+the verdict floor and the block_clear flag - those are not suggestions, they
 are the codified analyst calibration.
 
-{_correlation_prose if _correlation_prose else "  (no significant signals fired — evidence is thin)"}
+{_correlation_prose if _correlation_prose else "  (no significant signals fired - evidence is thin)"}
 
 ══════════════════════════════════════════════════════════════════════════════════
-CORRELATION APPROACH (this is where bad dispositions come from — do this right)
+CORRELATION APPROACH (this is where bad dispositions come from - do this right)
 ══════════════════════════════════════════════════════════════════════════════════
 Answer these questions IN ORDER before you write disposition_reason:
 
@@ -686,7 +686,7 @@ Answer these questions IN ORDER before you write disposition_reason:
         * Only TIER 3    → MONITOR or CLEAR (context, not verdict)
         * DOWNWEIGHT only→ CLEAR
 
-Evidence pack (raw JSON — refer to the tier ladder above for the correlated
+Evidence pack (raw JSON - refer to the tier ladder above for the correlated
 view; use the JSON to pull specific evidence values to cite):
 {json.dumps(evidence_pack, indent=2)[:3500]}
 
@@ -694,7 +694,7 @@ view; use the JSON to pull specific evidence values to cite):
 DISPOSITION DECISION TREE
 ══════════════════════════════════════════════════════════════════════════════════
 
-HARD OVERRIDES — these BLOCK a CLEAR disposition regardless of anything else
+HARD OVERRIDES - these BLOCK a CLEAR disposition regardless of anything else
 in the evidence pack. Check them FIRST. If any fire, disposition MUST be
 ESCALATE (or MONITOR when the log lists it as "medium risk"):
 
@@ -704,10 +704,10 @@ ESCALATE (or MONITOR when the log lists it as "medium risk"):
        "nation-state", "state-sponsored", "state actor", "threat actor
        associated with…". These labels are the SIEM's or the source
        system's OWN attribution (Microsoft Storm-####, Mandiant APT##,
-       etc.) — they represent PROPRIETARY threat intel the model has no
+       etc.) - they represent PROPRIETARY threat intel the model has no
        basis to override with public TI (VirusTotal, AbuseIPDB, OTX).
        A "clean IP reputation" from VT/AbuseIPDB does NOT rebut a
-       Storm-#### attribution — VT simply doesn't have Microsoft's
+       Storm-#### attribution - VT simply doesn't have Microsoft's
        tracking data. CLEAR is FORBIDDEN. Escalate.
 
   2. THE SOURCE LOG ITSELF MARKED THE RISK AS HIGH / CRITICAL
@@ -756,7 +756,7 @@ COHERENCE RULES (this is where most bad dispositions come from):
     public TI doesn't have the upstream system's private telemetry.
 
   * If your prose mentions "nation-state", "actor associated with",
-    "high risk", "atypical", "unusual", "suspicious" — the disposition
+    "high risk", "atypical", "unusual", "suspicious" - the disposition
     MUST be ESCALATE or MONITOR. It cannot be CLEAR while your own
     prose contradicts the verdict.
 
@@ -773,7 +773,7 @@ RESPOND with this EXACT JSON (no markdown fences, no commentary):
   "disposition":        "ESCALATE|CLEAR|MONITOR",
   "disposition_reason": "<2-3 sentences of flowing prose. The Summary card
                           renders this DIRECTLY AFTER the AI's main summary
-                          paragraph as part of one analyst-readable narrative —
+                          paragraph as part of one analyst-readable narrative  - 
                           so do NOT repeat what the summary already said, do
                           NOT lead with phrases like 'This alert is ESCALATE
                           because' (the disposition chip above the paragraph
@@ -798,7 +798,7 @@ RESPOND with this EXACT JSON (no markdown fences, no commentary):
   ],
   "intelligence_gaps": [
     "<one-line gap: what evidence you would need to make a higher-confidence
-      verdict. e.g. 'No process-tree captured — would need EDR telemetry
+      verdict. e.g. 'No process-tree captured - would need EDR telemetry
       from the host to confirm whether powershell.exe spawned regsvr32.exe.'
       List 2-4 gaps. Empty list when the evidence is complete and you stand
       fully behind the verdict.>",
@@ -819,7 +819,7 @@ Every disposition_reason and clear_justification claim must trace back to the
 evidence pack. No generic phrasing. No hedging with 'potential misuse' when
 the evidence points to benign activity.
 
-SOURCE CITATION TRUTH RULES (read carefully — analysts catch this):
+SOURCE CITATION TRUTH RULES (read carefully - analysts catch this):
 * "ground_truth_flagged" in the evidence pack is the ONLY authoritative
   source→IOC flag map. Each key is an IOC value; each value is the list
   of sources that flagged it. If you want to write "<Source> flagged
@@ -835,7 +835,7 @@ SOURCE CITATION TRUTH RULES (read carefully — analysts catch this):
   evidence by name (e.g. "vssadmin shadow-copy deletion + ransom-note
   drop"). Don't fabricate TI sources to justify the verdict.
 
-PROSE STYLE: do NOT use em dashes (—) or en dashes (–) anywhere in the
+PROSE STYLE: do NOT use em dashes ( - ) or en dashes (-) anywhere in the
 output. Use commas, periods, or restructure the sentence instead. The
 analyst's UI strips them out, so writing them is wasted tokens."""
 
@@ -898,12 +898,12 @@ analyst's UI strips them out, so writing them is wasted tokens."""
                 _log.debug("fast_path partial emit failed: %s", _e)
     else:
         # Detection content (Sigma/KQL/multi-SIEM) is generated ON DEMAND from the UI
-        # via /api/detection — it's the slowest part of this stage and isn't needed on
+        # via /api/detection - it's the slowest part of this stage and isn't needed on
         # every alert. Here we only generate the analyst Summary (the verdict hand-off),
         # which keeps the response stage to a single AI call. The trimmed schema (no
-        # client email / IR playbook — neither is shown in the UI) needs little headroom.
+        # client email / IR playbook - neither is shown in the UI) needs little headroom.
         #
-        # Streaming — when the orchestrator wired an on_event callback,
+        # Streaming - when the orchestrator wired an on_event callback,
         # emit partial analyst_summary dicts as tokens arrive so the
         # frontend can render the disposition + reason live.
         _partial_cb = None
@@ -914,7 +914,7 @@ analyst's UI strips them out, so writing them is wasted tokens."""
                     "analyst_summary":  partial,
                 })
             _partial_cb = _emit_partial
-        # 550-token cap — analyst_summary schema (disposition + reason +
+        # 550-token cap - analyst_summary schema (disposition + reason +
         # escalation_steps + intelligence_gaps + analyst_caveats) rarely
         # needs 700; production output centers around 400-500. Streaming
         # stops at natural JSON end; the cap only bites when the model
@@ -923,7 +923,7 @@ analyst's UI strips them out, so writing them is wasted tokens."""
             analyst_prompt, config, max_tokens=550, on_partial=_partial_cb
         )
 
-    # DISPOSITION SAFETY NET — the belt-and-braces enforcement of the
+    # DISPOSITION SAFETY NET - the belt-and-braces enforcement of the
     # tier framework in intel/signal_priority.py. Even with the prompt-
     # level guardrails, LLMs sometimes still emit CLEAR when a TIER 1
     # signal fired. Force-upgrade CLEAR → ESCALATE and stamp a machine-
@@ -989,7 +989,7 @@ analyst's UI strips them out, so writing them is wasted tokens."""
     # investigation stage's threat_level says INFORMATIONAL/LOW and its
     # summary says something like "routine", we have a UI contradiction.
     # The Summary card shows "Recommended action: ESCALATE" next to a
-    # summary saying "Routine admin; no action required" — the analyst
+    # summary saying "Routine admin; no action required" - the analyst
     # can't tell which is authoritative.
     #
     # Fix: back-propagate the disposition into threat_level and summary
@@ -1041,7 +1041,7 @@ analyst's UI strips them out, so writing them is wasted tokens."""
         _log.debug("consistency guard failed: %s", _e)
 
     # Strip em / en dashes from every prose field the analyst will read in
-    # the Summary card. The AI tends to insert " — " between clauses; the
+    # the Summary card. The AI tends to insert " - " between clauses; the
     # CLAUDE.md convention is to avoid em dashes in user-facing strings
     # because they signal "AI wrote this". Reuse the helper that already
     # handles this for email composer output.
@@ -1144,10 +1144,10 @@ analyst's UI strips them out, so writing them is wasted tokens."""
         "false_positive_check":investigation.get("false_positive_check", ""),
         "assessment_basis":    investigation.get("assessment_basis", []),
         # Always-visible reasoning paragraph rendered right beneath the
-        # threat-level badge — the analyst should never have to expand a
+        # threat-level badge - the analyst should never have to expand a
         # toggle to find out why the platform picked this level.
         "threat_level_reasoning": investigation.get("threat_level_reasoning", ""),
-        # PRINCIPLE 7 two-tier split — surfaced separately in the UI so
+        # PRINCIPLE 7 two-tier split - surfaced separately in the UI so
         # analysts can tell evidence-backed facts from analyst inference.
         "confirmed_facts":     investigation.get("confirmed_facts", []),
         "analysis_assessment": investigation.get("analysis_assessment", []),
@@ -1164,7 +1164,7 @@ analyst's UI strips them out, so writing them is wasted tokens."""
         # can read rs.malware_family directly without falling back to
         # the top-level state field.
         "malware_family":      investigation.get("malware_family") or state.get("malware_family"),
-        # Server-computed enrichment baseline — quoted at the top of the
+        # Server-computed enrichment baseline - quoted at the top of the
         # Summary card so analysts see the empirical numbers before
         # reading any AI interpretation.
         "enrichment_summary":  investigation.get("enrichment_summary", {}),
@@ -1183,12 +1183,12 @@ analyst's UI strips them out, so writing them is wasted tokens."""
         "jarm_fingerprints":   jarm_fingerprints,
         "ja_sigma_snippet":    ja_sigma_snippet,
         "ja_kql_snippet":      ja_kql_snippet,
-        # Defender 1116/1117 structured parse — gives the UI authoritative
+        # Defender 1116/1117 structured parse - gives the UI authoritative
         # field interpretation (malware_name, infected_path, process_name)
         # so renderers don't conflate the legitimate triggering process
         # with the malware itself.
         "defender_parse":      state.get("defender_parse"),
-        # Multi-log split + AI correlation — frontend renders a
+        # Multi-log split + AI correlation - frontend renders a
         # Log Correlation card when multi_log.is_multi.
         "multi_log":           state.get("multi_log"),
         "log_count":           state.get("log_count", 1),
@@ -1197,7 +1197,7 @@ analyst's UI strips them out, so writing them is wasted tokens."""
         # the frontend can render an "Updated based on analyst feedback"
         # banner and the case file persists the operator's verdict.
         "analyst_feedback":    state.get("analyst_feedback") or "",
-        # Signal tier bucketing — deterministic reasoning surface. The
+        # Signal tier bucketing - deterministic reasoning surface. The
         # frontend renders a chip strip so the analyst sees the WHY
         # (named-actor + upstream high-risk vs. warninglist + signed
         # browser) in 2 seconds without reading the AI prose.
@@ -1213,7 +1213,7 @@ analyst's UI strips them out, so writing them is wasted tokens."""
 
     # Case-level rollup score with letter grade + recency multipliers.
     # Lives alongside the per-IOC gti_scores so analysts can drill in
-    # both ways — case-level grade for verdict-at-a-glance, per-IOC for
+    # both ways - case-level grade for verdict-at-a-glance, per-IOC for
     # the drill-down. Adapted from cti-expert (MIT).
     try:
         from intel.case_score import compute as _compute_case_score
@@ -1226,11 +1226,11 @@ analyst's UI strips them out, so writing them is wasted tokens."""
             "response_summary": response_summary,
         })
     except Exception as _e:
-        # Never let the rollup take down the whole response — the score
+        # Never let the rollup take down the whole response - the score
         # is a nice-to-have, not load-bearing.
         pass
 
-    # Defensive coercion — every field below is LLM-emitted into the
+    # Defensive coercion - every field below is LLM-emitted into the
     # `investigation` dict and the model occasionally ships them as a
     # string or dict instead of an array. The frontend's AnalystSummary
     # card does `.filter` on these and crashes when the shape is wrong.
@@ -1245,12 +1245,12 @@ analyst's UI strips them out, so writing them is wasted tokens."""
         "analysis_assessment", "matched_actors", "atomic_examples",
         "mitre_evidence",
     )
-    # Round-15 — also coerce intelligence_gaps + analyst_caveats inside
+    # Round-15 - also coerce intelligence_gaps + analyst_caveats inside
     # the nested analyst_summary dict (adapted from cti-expert INTSUM
     # template). LLM occasionally returns them as a single string or
     # nested dict; the React renderer's `.map()` would crash.
     if isinstance(analyst_summary, dict):
-        # escalation_steps added to this coercion — the frontend Next
+        # escalation_steps added to this coercion - the frontend Next
         # Steps block calls .filter() on it, which crashes on non-array
         # values. LLM occasionally emits a single string here when the
         # model condenses the list.
@@ -1272,7 +1272,7 @@ analyst's UI strips them out, so writing them is wasted tokens."""
         elif _v is None:
             response_summary[_k] = []
         else:
-            # Dict / int / bool — drop to empty rather than crash the UI
+            # Dict / int / bool - drop to empty rather than crash the UI
             response_summary[_k] = []
 
     trace.append({

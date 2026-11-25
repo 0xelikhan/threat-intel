@@ -39,7 +39,7 @@ def test_capec_fallback_covers_top_attacks():
     s = stats()
     assert s["loaded"] is True
     assert s["patterns"] >= 10
-    # CAPEC-66 is SQL Injection — must exist in the built-in fallback
+    # CAPEC-66 is SQL Injection - must exist in the built-in fallback
     sql = lookup_capec("CAPEC-66")
     assert sql is not None
     assert "T1190" in (sql.get("attack_ids") or [])
@@ -64,7 +64,7 @@ def test_hibp_validates_sha1_length():
     """HIBP only accepts 40-char SHA-1 hex; anything else is rejected
     before the API call."""
     from intel.hibp import check_sha1
-    # Pass a None session — invalid-input must short-circuit before any
+    # Pass a None session - invalid-input must short-circuit before any
     # network call would happen.
     out = asyncio.run(check_sha1(None, "deadbeef"))
     assert out["error"] == "invalid sha1"
@@ -198,7 +198,7 @@ def test_shodan_internetdb_handles_no_data():
     field. The helper must treat that as found=False."""
     import asyncio as _asyncio
     # Direct unit-test of the inline parser logic via a real call would
-    # need network — instead we drive enrich_ip with a stub session is
+    # need network - instead we drive enrich_ip with a stub session is
     # too invasive. Smoke-test that the import resolves cleanly.
     from agents.enrichment import _shodan_internetdb
     assert callable(_shodan_internetdb)

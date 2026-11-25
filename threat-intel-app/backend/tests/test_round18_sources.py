@@ -35,7 +35,7 @@ def _snapshot_module_state():
     for mod, snapshot in saved.items():
         mod._state.clear()
         mod._state.update(snapshot)
-    # typosquat uses lru_cache — clear so an allowlist test result
+    # typosquat uses lru_cache - clear so an allowlist test result
     # can't linger and mask a subsequent negative test.
     typosquat.check_domain.cache_clear()
 
@@ -115,7 +115,7 @@ def test_threatview_returns_none_for_unlisted_ip():
 
 # ─── ViriBack ────────────────────────────────────────────────────────
 def test_viriback_ip_returns_latest_family_and_hit_count():
-    """Multiple observations of the same IP across different dates —
+    """Multiple observations of the same IP across different dates  - 
     ViriBack should surface the newest family attribution and expose
     the historical count."""
     viriback._state.update({
@@ -154,7 +154,7 @@ def test_onmicrosoft_com_not_flagged_as_microsoft_typosquat():
     """Regression: 'microsoft' is a proper substring of 'onmicrosoft'
     so the substring matcher inside looks_like_brand fired on every
     M365 tenant domain. That surfaced in a real analyst report on an
-    email-forwarding-rule log — onmicrosoft.com was called a typosquat.
+    email-forwarding-rule log - onmicrosoft.com was called a typosquat.
     Assert the whole first-party matrix stays clean."""
     for d in ("onmicrosoft.com", "contoso.onmicrosoft.com",
               "login.microsoftonline.com", "microsoftonline.com",
@@ -172,7 +172,7 @@ def test_onmicrosoft_com_not_flagged_as_microsoft_typosquat():
 
 
 def test_real_typosquats_still_flagged():
-    """Belt-and-braces — the allowlist must not swallow real squats."""
+    """Belt-and-braces - the allowlist must not swallow real squats."""
     for d in ("micros0ft.com", "micrsoft.com", "microsoftonlme.com",
               "paypa1.com", "g00gle.com"):
         typosquat.check_domain.cache_clear()

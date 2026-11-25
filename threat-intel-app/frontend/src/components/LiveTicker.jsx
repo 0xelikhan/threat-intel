@@ -1,12 +1,12 @@
 /**
- * LiveTicker — horizontal scrolling list of recently-enriched IOCs.
+ * LiveTicker - horizontal scrolling list of recently-enriched IOCs.
  *
- * Polls /api/recent-iocs every 3 seconds (public endpoint — no auth).
+ * Polls /api/recent-iocs every 3 seconds (public endpoint - no auth).
  * The backend's in-memory ring buffer keeps the last 50 IOCs; this
  * component renders the newest 20 as pill chips sliding right-to-left
  * via CSS keyframes. Each pill is colour-coded by verdict.
  *
- * No local state persists across refresh — matches the ethos of
+ * No local state persists across refresh - matches the ethos of
  * "no history, no logs" we agreed on. On backend restart the ticker
  * starts empty and refills within a minute of real traffic.
  */
@@ -20,7 +20,7 @@ const VERDICT_COLOR = {
   UNKNOWN:    '#94a3b8',
 };
 
-// How many pills to show. Backend caps the deque at 50 — we display
+// How many pills to show. Backend caps the deque at 50 - we display
 // the most recent 20 so the ticker doesn't get crowded on busy runs.
 const SHOW_LAST = 20;
 const POLL_MS   = 3000;
@@ -73,7 +73,7 @@ export default function LiveTicker() {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const j = await r.json();
         if (cancelled) return;
-        // Newest first — reverse the deque order so the ticker reads
+        // Newest first - reverse the deque order so the ticker reads
         // "freshest IOC on the left, scrolling right→left".
         const list = Array.isArray(j.iocs) ? [...j.iocs].reverse() : [];
         setIocs(list.slice(0, SHOW_LAST));
@@ -88,7 +88,7 @@ export default function LiveTicker() {
   }, []);
 
   if (!reachable) {
-    // Fail quietly — the ticker is a dashboard accessory, not critical.
+    // Fail quietly - the ticker is a dashboard accessory, not critical.
     return null;
   }
 
@@ -146,11 +146,6 @@ export default function LiveTicker() {
         pl: 1,
         '&::-webkit-scrollbar': { display: 'none' },
         msOverflowStyle: 'none', scrollbarWidth: 'none',
-        animation: iocs.length >= 8 ? 'nc-ticker-scroll 60s linear infinite' : 'none',
-        '@keyframes nc-ticker-scroll': {
-          '0%':   { transform: 'translateX(0)' },
-          '100%': { transform: 'translateX(-50%)' },
-        },
       }}>
         {iocs.length === 0 ? (
           <Typography sx={{
@@ -158,12 +153,10 @@ export default function LiveTicker() {
             fontSize: 10, color: '#5a6b8a',
             whiteSpace: 'nowrap', px: 2,
           }}>
-            no recent activity — enrich an IOC to populate
+            no recent activity - enrich an IOC to populate
           </Typography>
         ) : (
-          // Duplicate the list when it's long enough to animate — gives
-          // the marquee a seamless wrap at the halfway point.
-          (iocs.length >= 8 ? [...iocs, ...iocs] : iocs).map((ioc, i) => (
+          iocs.map((ioc, i) => (
             <Box key={`${ioc.at}-${i}`} sx={{
               display: 'inline-flex',
               alignItems: 'center',

@@ -1,4 +1,4 @@
-"""Standalone API-health probe — tests every external endpoint the RECON
+"""Standalone API-health probe - tests every external endpoint the RECON
 backend calls and reports OK / FAIL / SKIP per source.
 
 Usage (from project root):
@@ -7,7 +7,7 @@ Usage (from project root):
 Or from the backend directory:
     python tests/test_all_apis.py
 
-Loads API keys the same way the main app does — from
+Loads API keys the same way the main app does - from
 backend/data/config.json (preferring local file) with env-var fallback,
 so it works against whatever deployment / credentials the analyst
 currently has configured.
@@ -18,7 +18,7 @@ Test indicators are safe and benign:
     Hash   275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f
                              EICAR test-file SHA-256 (not real malware
                              but every TI source has the hash on file)
-    CVE    CVE-2021-44228    Log4Shell — universally known CVE
+    CVE    CVE-2021-44228    Log4Shell - universally known CVE
 
 All probes run concurrently via asyncio.gather; full run completes in
 under 60s. Per-source 12s timeout caps any one slow source.
@@ -155,7 +155,7 @@ async def _probe_openai(session: aiohttp.ClientSession) -> Result:
     if not key:
         return Result(name, cat, "SKIP", "OPENAI_API_KEY not configured",
                       "OPENAI_API_KEY", "https://platform.openai.com/api-keys")
-    # Use the /models endpoint — works for both OpenAI and Azure OpenAI
+    # Use the /models endpoint - works for both OpenAI and Azure OpenAI
     # and doesn't burn completion tokens.
     is_azure = "openai.azure.com" in base.lower()
     if is_azure:
@@ -200,7 +200,7 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
     add(_probe(session, "OTX (IPv4)", "IP enrichment",
         f"https://otx.alienvault.com/api/v1/indicators/IPv4/{TEST_IP}/general",
         headers={"X-OTX-API-KEY": KEYS.get("OTX_KEY", "")},
-        # OTX runs slow (10-15 s anon, longer with a key) — production uses
+        # OTX runs slow (10-15 s anon, longer with a key) - production uses
         # a 90s per-host override; smoke needs 30s to match reality.
         timeout_s=30,
         key_env="OTX_KEY", key_url="https://otx.alienvault.com"))
@@ -227,7 +227,7 @@ async def _build_probes(session: aiohttp.ClientSession) -> List[asyncio.Task]:
         params={"ip": TEST_IP},
         ok_statuses=(200, 400, 404)))
 
-    # Censys — new PAT path preferred, legacy fallback
+    # Censys - new PAT path preferred, legacy fallback
     if KEYS.get("CENSYS_API_KEY"):
         add(_probe(session, "Censys Platform (host)", "IP enrichment",
             f"https://api.platform.censys.io/v3/global/asset/host/{TEST_IP}",
@@ -398,18 +398,18 @@ async def main():
         for r in sorted(ok, key=lambda x: x.name):
             print(f"  - {r.name}: {r.detail}")
 
-    # ── Failing — with diagnostic ────────────────────────────────────
+    # ── Failing - with diagnostic ────────────────────────────────────
     if fail:
-        print(f"\n✗ FAILING SOURCES ({len(fail)}) — review status code + body for diagnosis")
+        print(f"\n✗ FAILING SOURCES ({len(fail)}) - review status code + body for diagnosis")
         for r in sorted(fail, key=lambda x: x.name):
             print(f"  - {r.name}")
             print(f"      {r.detail}")
             if r.key_env:
                 print(f"      Key env: {r.key_env}    Get one at: {r.key_url}")
 
-    # ── Skipped — with the env var and signup URL ────────────────────
+    # ── Skipped - with the env var and signup URL ────────────────────
     if skip:
-        print(f"\n· SKIPPED SOURCES ({len(skip)}) — set these env vars / config keys to enable")
+        print(f"\n· SKIPPED SOURCES ({len(skip)}) - set these env vars / config keys to enable")
         for r in sorted(skip, key=lambda x: x.name):
             print(f"  - {r.name}")
             print(f"      Env var: {r.key_env}")

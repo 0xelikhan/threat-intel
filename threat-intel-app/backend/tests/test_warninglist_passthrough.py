@@ -3,7 +3,7 @@ IOC buckets.
 
 Bug: `filter_iocs()` in intel/warninglist_filter.py explicitly built a
 fresh output dict with only {ips, domains, hashes, urls, emails}. Any
-bucket not in that list — cves, crypto, files, paths — was silently
+bucket not in that list - cves, crypto, files, paths - was silently
 dropped when triage did `iocs = filtered`. Result: CVE IOCs extracted
 from the alert text never reached run_enrichment's fan-out, so
 enrichments.cves stayed empty. Same for crypto after that bucket was
@@ -27,7 +27,7 @@ def test_filter_iocs_preserves_cves_bucket():
 
 
 def test_filter_iocs_preserves_crypto_bucket():
-    """Crypto addresses have no warninglist gate — passing through is
+    """Crypto addresses have no warninglist gate - passing through is
     critical for ransom-note triage."""
     iocs = {
         "ips": [], "domains": [], "hashes": [], "urls": [], "emails": [],
@@ -73,7 +73,7 @@ import pytest  # noqa: E402  (needed for the skipif below)
 @pytest.mark.skipif(not _warninglist_data_available(),
                      reason="vendor/misp-warninglists not fetched (run scripts/setup_vendor.sh)")
 def test_filter_iocs_still_filters_ips_and_domains():
-    """The MISP warninglist gate on filterable buckets still works —
+    """The MISP warninglist gate on filterable buckets still works  - 
     Cloudflare DNS + Tranco-top domain get suppressed as before."""
     iocs = {
         "ips": ["1.1.1.1", "8.8.8.8", "45.83.220.68"],

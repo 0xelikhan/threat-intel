@@ -1,1 +1,1 @@
-"""Ingestor plugins — stream IOCs / files into the analysis queue."""
+"""Ingestor plugins - stream IOCs / files into the analysis queue."""

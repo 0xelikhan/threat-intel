@@ -1,5 +1,5 @@
 """
-FLARE capa runner — identifies capabilities in PE/.NET/ELF/shellcode files
+FLARE capa runner - identifies capabilities in PE/.NET/ELF/shellcode files
 and maps them to MITRE ATT&CK techniques.
 
 Wraps Mandiant FLARE capa (https://github.com/mandiant/capa, Apache-2.0).
@@ -8,7 +8,7 @@ its Python API because:
 
   1. capa's Python API is large and changes between major versions; the
      CLI's `-j` JSON output is the stable contract.
-  2. capa loads heavy native code (vivisect, idalib) — running it in a
+  2. capa loads heavy native code (vivisect, idalib) - running it in a
      subprocess gives us process-level isolation, so a capa crash on a
      malformed PE can't take RECON down.
   3. The CLI accepts a tempfile path; we already use the same tempfile
@@ -54,7 +54,7 @@ _CAPA_TIMEOUT_S = 90
 # interpreter that has capa + vivisect installed. Falls back to sys.executable.
 _PY = sys.executable
 
-# Limits — analyst output should be readable, not exhaustive.
+# Limits - analyst output should be readable, not exhaustive.
 _MAX_CAPABILITIES_RETURNED = 30
 
 
@@ -109,7 +109,7 @@ def run_capa_sync(file_bytes: bytes,
 async def run_capa(file_bytes: bytes,
                    filename:    Optional[str] = None,
                    timeout_s:   int = _CAPA_TIMEOUT_S) -> Dict[str, Any]:
-    """Async variant — delegates to run_capa_sync via to_thread so the
+    """Async variant - delegates to run_capa_sync via to_thread so the
     event loop stays responsive while capa's subprocess runs."""
     return await asyncio.to_thread(run_capa_sync, file_bytes, filename,
                                    timeout_s)
@@ -173,7 +173,7 @@ def _parse(payload: Dict[str, Any]) -> Dict[str, Any]:
             "mbc":               mbc,
         })
 
-    # Order by namespace then rule name — gives a stable, grouped view.
+    # Order by namespace then rule name - gives a stable, grouped view.
     capabilities.sort(key=lambda c: (c["namespace"], c["rule"]))
 
     return {
@@ -219,7 +219,7 @@ def _extract_mbc_tags(meta: Dict[str, Any]) -> List[str]:
 
 
 def stats() -> Dict[str, Any]:
-    """Reportable in /api/status. Cheap — just an availability probe."""
+    """Reportable in /api/status. Cheap - just an availability probe."""
     try:
         import capa
         return {"capa_available": True,

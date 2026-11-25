@@ -2,7 +2,7 @@
 endoflife.date API client.
 
 Source: https://endoflife.date (MIT). Crowdsourced, freely-licensed
-catalogue of ~250 software product lifecycles — when each major
+catalogue of ~250 software product lifecycles - when each major
 version was released, when it goes EOL for support, when extended
 support ends, etc.
 
@@ -224,5 +224,5 @@ async def check(session, product: str, version: str) -> Dict[str, Any]:
         "months_since_eol": months_since,
         "latest":         cycle_meta.get("latest"),
         "verdict":        "SUSPICIOUS" if is_eol else "CLEAN",
-        "summary":        " — ".join(summary_bits),
+        "summary":        " - ".join(summary_bits),
     }

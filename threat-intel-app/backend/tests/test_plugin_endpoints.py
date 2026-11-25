@@ -27,7 +27,7 @@ def client():
     # on the real module will still work. If it DOESN'T import (missing
     # heavy transitive deps like langgraph in a minimal CI env), fall
     # back to stubbing. Either way, don't clobber the real module when
-    # it exists — that broke the pivot + phone-extraction tests.
+    # it exists - that broke the pivot + phone-extraction tests.
     import importlib
     try:
         importlib.import_module("agents.enrichment")
@@ -153,7 +153,7 @@ def test_get_api_plugins_catalog(client):
 
 def test_api_plugins_by_kind_sums_to_count(client):
     """Regression: /api/plugins by_kind used to omit the file_analyzer
-    kind — count said 82 while the sum of per-kind counts was 62.
+    kind - count said 82 while the sum of per-kind counts was 62.
     Enforce that every kind in the catalog is represented."""
     r = client.get("/api/plugins")
     body = r.json()
@@ -230,7 +230,7 @@ def test_post_api_files_analyze_empty(client):
 def test_post_api_playbooks_wrong_name(client):
     r = client.post("/api/playbooks/does_not_exist/run",
                      json={"ioc": "1.2.3.4", "type": "ipv4"})
-    # 404 (plugin not found) is ideal but 422 (schema) is also acceptable —
+    # 404 (plugin not found) is ideal but 422 (schema) is also acceptable  - 
     # both signal the request will not be processed. The point: the
     # endpoint is reachable and rejects an invalid name cleanly.
     assert r.status_code in (404, 422)
@@ -238,7 +238,7 @@ def test_post_api_playbooks_wrong_name(client):
 
 def test_post_api_playbooks_known_name(client):
     """The suspicious_ip_triage playbook is registered. Hit it with a
-    non-IP artifact — the handler returns the playbook's own validation
+    non-IP artifact - the handler returns the playbook's own validation
     error inside the response body (HTTP 200). Confirms end-to-end
     plumbing: route hit, name resolved, playbook.execute() called,
     body returned verbatim."""

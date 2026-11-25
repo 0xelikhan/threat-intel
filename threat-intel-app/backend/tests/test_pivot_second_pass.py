@@ -1,8 +1,8 @@
-"""Pivot pass regression — a sandbox result with files_dropped must
+"""Pivot pass regression - a sandbox result with files_dropped must
 produce follow-on hash enrichment in run_enrichment's output.
 
 The pivot plugin (sandbox_dropped_hashes) is registered but was
-previously inert — the orchestrator never consumed its output. This
+previously inert - the orchestrator never consumed its output. This
 test exercises the second-pass flow:
 
   1. Submit a hash IOC
@@ -119,5 +119,5 @@ def test_pivot_pass_skips_when_no_sandbox_source():
         out = asyncio.run(run_enrichment(state))
 
     hashes = out["enrichments"]["hashes"]
-    # Only the original hash — no pivot-produced entries
+    # Only the original hash - no pivot-produced entries
     assert set(hashes.keys()) == {"aaaaa" * 20}

@@ -2,21 +2,21 @@
 Abstract base classes for RECON plugins.
 
 RECON formalises IntelOwl's 9 plugin component types:
-  1. Analyzer   — enrich an IOC from an external or internal source
-  2. Connector  — export analysis to another platform (MISP, TheHive, …)
-  3. Pivot      — chain analyses together (URL → sandbox hashes → VT)
-  4. Visualizer — frontend-render-hint for an analyzer's output shape
-  5. Ingestor   — stream observables / files INTO the analysis queue
-  6. Playbook   — repeatable sequence of plugin invocations
-  7. DataModel  — in data_models.py (shared schema)
-  8. Artifact   — in data_models.py (the thing being analysed)
-  9. UserEvent  — in data_models.py (analyst-added annotations)
+  1. Analyzer   - enrich an IOC from an external or internal source
+  2. Connector  - export analysis to another platform (MISP, TheHive, …)
+  3. Pivot      - chain analyses together (URL → sandbox hashes → VT)
+  4. Visualizer - frontend-render-hint for an analyzer's output shape
+  5. Ingestor   - stream observables / files INTO the analysis queue
+  6. Playbook   - repeatable sequence of plugin invocations
+  7. DataModel  - in data_models.py (shared schema)
+  8. Artifact   - in data_models.py (the thing being analysed)
+  9. UserEvent  - in data_models.py (analyst-added annotations)
 
 All plugins register themselves by subclassing one of these ABCs and
 calling @register (see registry.py). The registry discovers plugins
 by walking the plugins/ subpackages on startup.
 
-Existing intel/*.py modules keep working — the registry treats them
+Existing intel/*.py modules keep working - the registry treats them
 as "legacy analyzers" via LegacyAnalyzerAdapter until each is migrated
 to a formal Analyzer subclass.
 """
@@ -80,7 +80,7 @@ class Analyzer(Plugin):
 
 class FileAnalyzer(Plugin):
     """Analyze a file sample (bytes or path). Separate from Analyzer
-    because the input shape and typical runtime are different —
+    because the input shape and typical runtime are different  - 
     file analyzers can be CPU-heavy and are opt-in per scan.
     """
 
@@ -143,7 +143,7 @@ class Pivot(Plugin):
 class Visualizer(Plugin):
     """Describe how the frontend should render a given analyzer's
     output. Returns a declarative hint (card type, which fields to
-    highlight) — the actual React component lives in the frontend."""
+    highlight) - the actual React component lives in the frontend."""
 
     kind: PluginKind = "visualizer"
     supported_sources: List[str] = []    # analyzer names it visualises

@@ -92,7 +92,7 @@ async def run_critic_loop(
         draft = (gen_resp.message or "").strip()
 
         if iteration == max_iters:
-            # No room left to revise — return what we have. Caller can
+            # No room left to revise - return what we have. Caller can
             # decide whether to surface "best-effort, not critic-approved".
             return CriticLoopResult(
                 output=draft, iterations=iteration,
@@ -113,7 +113,7 @@ async def run_critic_loop(
             **kwargs,
         )
         if critic_resp.error:
-            # Critic failed — return the current draft rather than retrying.
+            # Critic failed - return the current draft rather than retrying.
             return CriticLoopResult(
                 output=draft, iterations=iteration,
                 terminated_cleanly=False, critic_feedback=feedback_history,

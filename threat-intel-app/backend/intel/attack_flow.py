@@ -6,10 +6,10 @@ Adapted from the Center for Threat-Informed Defense's Attack Flow project
 Apache-2.0). Attack Flow extends STIX 2.1 with three new SDOs that capture
 the *sequence* of attacker techniques in an incident, not just the set:
 
-  * attack-flow      — container, scope=incident/campaign/threat-actor
-  * attack-action    — a single technique execution, with effect_refs that
+  * attack-flow      - container, scope=incident/campaign/threat-actor
+  * attack-action    - a single technique execution, with effect_refs that
                        link to the next action(s)
-  * attack-asset     — what was acted upon (workstation, mailbox, account)
+  * attack-asset     - what was acted upon (workstation, mailbox, account)
 
 The existing `agents/response.py::_build_stix` already emits standard
 attack-pattern objects from the investigation's MITRE list. This module
@@ -18,7 +18,7 @@ CTID Attack Flow Builder (https://center-for-threat-informed-defense.
 github.io/attack-flow/builder/) and visualised as a sequenced graph.
 
 The extension-definition UUID below is THE canonical one published by
-CTID — every Attack Flow consumer recognises it. Do not regenerate it.
+CTID - every Attack Flow consumer recognises it. Do not regenerate it.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ _AF_SPEC_VERSION = "2.0.3"
 
 # Map of MITRE tactic ID (TA####) → kill-chain phase name as required by
 # attack-action SDOs. Lifted from the Mitre ATT&CK matrix; falls back to
-# "unknown" when the technique's tactic can't be resolved (which is fine —
+# "unknown" when the technique's tactic can't be resolved (which is fine  - 
 # attack-action's `tactic_ref` is optional).
 _KILLCHAIN_PHASES = {
     "TA0001": "initial-access",
@@ -107,7 +107,7 @@ def build_attack_flow_objects(
                                SDO id, so attack-actions reference the same
                                attack-pattern objects already in the bundle
                                (no duplicate techniques in the bundle).
-        investigation:         the investigation dict — used to surface
+        investigation:         the investigation dict - used to surface
                                threat-actor name + verdict in the attack-flow
                                container's description.
     """
@@ -138,7 +138,7 @@ def build_attack_flow_objects(
 
     # 2) Build attack-action objects, one per technique, chained via
     # effect_refs so the next action becomes the effect of the previous one.
-    # This gives the CTID Builder a linear sequence to render — analysts
+    # This gives the CTID Builder a linear sequence to render - analysts
     # who know the order was actually a branch can rewire it interactively.
     action_ids: List[str] = []
     actions: List[Dict[str, Any]] = []

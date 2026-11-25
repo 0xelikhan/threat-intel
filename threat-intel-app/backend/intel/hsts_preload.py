@@ -39,7 +39,7 @@ _HSTS_FILE_CANDIDATES = [
 ]
 
 # Built-in fallback covering the major mainstream HSTS-preloaded domains.
-# This is a small subset of the full list — operators get full coverage
+# This is a small subset of the full list - operators get full coverage
 # by dropping the upstream JSON in vendor/hsts/. Used when the file
 # isn't present so the verdict scorer still gets useful signal.
 _FALLBACK: Set[str] = {
@@ -97,7 +97,7 @@ def _strip_comments(text: str) -> str:
         s = line.lstrip()
         if s.startswith("//"):
             continue
-        # Inline trailing comments — drop after //  (but not inside strings).
+        # Inline trailing comments - drop after //  (but not inside strings).
         # Quick-and-dirty: we don't have //s in actual string values.
         if "//" in line:
             # Walk char-by-char ignoring //s inside double-quoted strings.
@@ -190,8 +190,8 @@ def _ensure_loaded() -> None:
 
 
 def is_preloaded(domain: str) -> bool:
-    """Return True when the supplied domain — or its eTLD+1 with
-    include_subdomains inheritance — is on the HSTS preload list."""
+    """Return True when the supplied domain - or its eTLD+1 with
+    include_subdomains inheritance - is on the HSTS preload list."""
     _ensure_loaded()
     if not isinstance(domain, str) or not domain:
         return False

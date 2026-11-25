@@ -10,7 +10,7 @@ the same signal set inline using the google phonenumbers library:
   - timezone list
   - line type (mobile / fixed / voip / toll_free / premium / ...)
 
-This is a purely-local lookup — no network calls, no API key. It's
+This is a purely-local lookup - no network calls, no API key. It's
 async for API-consistency with the other intel modules; nothing
 actually awaits.
 """
@@ -24,7 +24,7 @@ _log = logging.getLogger("recon.intel.phunter")
 
 
 # phonenumbers is a declared dependency (see requirements.txt). We import
-# lazily so an older RECON install that hasn't pinned it still boots —
+# lazily so an older RECON install that hasn't pinned it still boots  - 
 # the module cleanly returns an error dict instead of crashing on import.
 def _load():
     import phonenumbers  # noqa: F401

@@ -1,6 +1,6 @@
 """
 CISA Known Exploited Vulnerabilities catalog.
-1,600+ CVEs that are CONFIRMED actively exploited in the wild — when one
+1,600+ CVEs that are CONFIRMED actively exploited in the wild - when one
 shows up in an alert, it's not theoretical.
 """
 import json

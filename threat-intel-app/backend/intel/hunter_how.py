@@ -1,7 +1,7 @@
 """
 Hunter.how search engine lookup (IP / domain).
 
-Source: https://hunter.how/ — commercial internet-scan + fingerprint
+Source: https://hunter.how/ - commercial internet-scan + fingerprint
 engine (alternative to Shodan/ZoomEye/Censys). Free tier available.
 
   GET https://api.hunter.how/search?api-key=<KEY>&query=<b64>&page=1&page_size=10

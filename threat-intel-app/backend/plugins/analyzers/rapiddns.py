@@ -1,4 +1,4 @@
-"""RapidDNS — passive-DNS subdomain enum (HTML scrape).
+"""RapidDNS - passive-DNS subdomain enum (HTML scrape).
 
 Auto-generated from _legacy_registrations.py. Keeps the LegacyAnalyzer
 Adapter pattern (import on first call + from_legacy_dict wrap) but
@@ -13,7 +13,7 @@ from plugins import Analyzer, AnalysisResult, register
 
 class RapiddnsAnalyzer(Analyzer):
     name = "rapiddns"
-    description = ('RapidDNS — passive-DNS subdomain enum (HTML scrape).')
+    description = ('RapidDNS - passive-DNS subdomain enum (HTML scrape).')
     supported_ioc_types = ['domain']
     required_keys = []
     optional_keys = []

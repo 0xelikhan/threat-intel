@@ -1,5 +1,5 @@
 """
-DFIQ — Google Digital Forensics Investigative Questions.
+DFIQ - Google Digital Forensics Investigative Questions.
 https://github.com/google/dfiq (Apache-2.0)
 
 DFIQ organises forensic knowledge as:
@@ -11,7 +11,7 @@ DFIQ organises forensic knowledge as:
 RECON's investigation node currently generates probing_questions
 100% from the LLM, which produces plausible questions but not
 grounded in curated forensic practice. DFIQ questions are hand-
-authored by DF/IR practitioners at Google + community — they carry
+authored by DF/IR practitioners at Google + community - they carry
 signal a generalist LLM won't reliably reproduce.
 
 Design:
@@ -23,7 +23,7 @@ Design:
   - Inject into the investigation prompt as reference material so the
     AI's probing_questions builds on curated foundations.
 
-Refresh weekly — DFIQ evolves slowly.
+Refresh weekly - DFIQ evolves slowly.
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ _STOPWORDS = frozenset({
 })
 
 _lock = threading.RLock()  # reentrant: _ensure_loaded holds it, then
-                            # _refresh_sync re-acquires — a plain Lock
+                            # _refresh_sync re-acquires - a plain Lock
                             # deadlocks; RLock is a drop-in fix.
 _state: Dict[str, Any] = {
     "loaded_at":  0.0,

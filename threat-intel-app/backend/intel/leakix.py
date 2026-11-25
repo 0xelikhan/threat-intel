@@ -1,7 +1,7 @@
 """
 LeakIX host-level attack-surface lookup.
 
-Source: https://leakix.net/ — surfaces exposed services, open S3 /
+Source: https://leakix.net/ - surfaces exposed services, open S3 /
 Elasticsearch / MongoDB, config leaks, and public web vulnerabilities
 per IP. Free API tier available.
 

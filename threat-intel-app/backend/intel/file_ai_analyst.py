@@ -1,12 +1,12 @@
 """
-Deep AI analysis engine for the file scanner — spec §1 of the deep-analyst plan.
+Deep AI analysis engine for the file scanner - spec §1 of the deep-analyst plan.
 
 Two phases per scan:
-  1. triage_classify(analysis, config)  — fast classification into one of
+  1. triage_classify(analysis, config)  - fast classification into one of
      ~18 malware-family categories. Returns within ~3-5 seconds. Lets the
      UI render a verdict badge while the deep pass is still in flight.
 
-  2. analyze_deep(analysis, config, comparative_context=None) — full
+  2. analyze_deep(analysis, config, comparative_context=None) - full
      senior-analyst structured assessment. Returns a 15-field JSON object
      with executive / technical / execution-narrative summaries, attribution,
      anomalies, evasion + persistence findings, C2 assessment, detection
@@ -14,8 +14,8 @@ Two phases per scan:
      clarifying questions, and an honest confidence statement.
 
 Both use the Azure-aware OpenAI client pattern used everywhere else in the
-codebase.  Both fail open — returning None / a sentinel error dict rather
-than raising — so the scan still returns its other fields if the AI is
+codebase.  Both fail open - returning None / a sentinel error dict rather
+than raising - so the scan still returns its other fields if the AI is
 unavailable.
 
 `gather_comparative_context` pulls related cases + similar fuzzy-hash
@@ -65,7 +65,7 @@ DETECTION_DIFFICULTY = ["Easy", "Moderate", "Difficult", "Very Difficult"]
 
 # ─── LLM client (provider-aware) ──────────────────────────────────────────────
 def _client(config, fast: bool = False):
-    # Returns (provider, model) — provider is an LLMProvider from providers/.
+    # Returns (provider, model) - provider is an LLMProvider from providers/.
     # None, None when the active LLM provider isn't configured (caller
     # short-circuits). Previously gated on OPENAI_API_KEY only, which
     # short-circuited file AI analysis on Anthropic / Ollama deployments.
@@ -78,13 +78,13 @@ def _client(config, fast: bool = False):
         return None, None
 
 
-# ─── Phase 1 — rapid triage classification ─────────────────────────────────────
+# ─── Phase 1 - rapid triage classification ─────────────────────────────────────
 # Calibration: file triage must apply the same evidence-required standard the
 # investigation agent uses. A clean hash + benign import set + no YARA hits is
 # "Likely Legitimate", not "Unknown Malware".
 from intel.calibration import CALIBRATION_PRINCIPLES as _CAL_PRINCIPLES  # noqa: E402
 
-_TRIAGE_SYSTEM = f"""OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes (—), en-dashes (–), or curly quotes. Use hyphens (-), commas, or restructure the sentence. This applies to every JSON string value and every line of prose.
+_TRIAGE_SYSTEM = f"""OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes ( - ), en-dashes (-), or curly quotes. Use hyphens (-), commas, or restructure the sentence. This applies to every JSON string value and every line of prose.
 
 You are a senior malware triage analyst. You receive
 high-signal indicators from a static file scan and must classify the sample
@@ -99,7 +99,7 @@ CLASSIFICATION TIE-BREAKERS for file triage:
   as "Likely Legitimate" (use the closest of the categories below, e.g.
   "Potentially Unwanted Program" only when there's PUA-specific evidence).
 * If a VT detection ratio is non-zero but minimal (1-2/many engines), treat
-  as "Unknown Malware" only when corroborating evidence exists — otherwise
+  as "Unknown Malware" only when corroborating evidence exists - otherwise
   prefer the static_verdict already calculated.
 * malware_family from VT is authoritative when present. Use it.
 
@@ -109,8 +109,8 @@ Categories (pick exactly one):
 Output schema:
   {{
     "classification": "<one of the categories>",
-    "confidence": <float 0.0-1.0 — DO NOT inflate; clean files deserve high confidence in 'Likely Legitimate'>,
-    "reasoning": "<one short sentence — the single strongest signal that drove this>"
+    "confidence": <float 0.0-1.0 - DO NOT inflate; clean files deserve high confidence in 'Likely Legitimate'>,
+    "reasoning": "<one short sentence - the single strongest signal that drove this>"
   }}
 
 No markdown. No commentary. JSON only."""
@@ -143,7 +143,7 @@ def _triage_context(analysis: Dict) -> Dict:
 
 
 async def triage_classify(analysis: Dict, config) -> Optional[Dict]:
-    """Phase 1 — fast classification badge for the UI."""
+    """Phase 1 - fast classification badge for the UI."""
     provider, model = _client(config, fast=True)
     if not provider:
         return None
@@ -164,7 +164,7 @@ async def triage_classify(analysis: Dict, config) -> Optional[Dict]:
         from agents.investigation import _loads_lenient
         parsed = _loads_lenient(resp.message)
         cls = parsed.get("classification") or "Unknown Malware"
-        # Defensive — coerce to a known label
+        # Defensive - coerce to a known label
         if cls not in CLASSIFICATIONS:
             for c in CLASSIFICATIONS:
                 if c.lower() in cls.lower():
@@ -181,14 +181,14 @@ async def triage_classify(analysis: Dict, config) -> Optional[Dict]:
         return {"error": str(e)[:200]}
 
 
-# ─── Phase 2 — deep analyst assessment ────────────────────────────────────────
+# ─── Phase 2 - deep analyst assessment ────────────────────────────────────────
 # The deep assessment is the slowest AI call (it generates a large structured
 # report). To cut wall-clock latency ~2x WITHOUT dropping any field, it's split
 # into two field-groups generated by concurrent model calls and merged:
-#   • HEADLINE   — the narrative-heavy fields the analyst reads first
-#   • STRUCTURED — the list/object findings
+#   • HEADLINE   - the narrative-heavy fields the analyst reads first
+#   • STRUCTURED - the list/object findings
 # Both share the same analyst persona so the voice is consistent.
-_DEEP_PERSONA = f"""OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes (—), en-dashes (–), or curly quotes. Use hyphens (-), commas, or restructure the sentence. This applies to every string in the JSON you emit.
+_DEEP_PERSONA = f"""OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes ( - ), en-dashes (-), or curly quotes. Use hyphens (-), commas, or restructure the sentence. This applies to every string in the JSON you emit.
 
 You are a senior malware analyst and reverse engineer with 15
 years of experience at a major AV vendor and government CERT. You have analyzed
@@ -202,7 +202,7 @@ You have just received the complete static analysis, threat intelligence, and
 behavioral assessment of a file. DO NOT simply restate what the tools found.
 Synthesize the findings. Explain what the combination of indicators means.
 Identify what is unusual or notable about this specific sample. Make definitive
-attributions when the evidence supports them — and EQUALLY definitive
+attributions when the evidence supports them - and EQUALLY definitive
 "this looks legitimate" calls when the evidence supports THAT. Flag anything
 designed to mislead analysts; do NOT invent threats that are not there.
 
@@ -212,7 +212,7 @@ clearly in the executive_summary and set malware_classification.category to
 "Likely Legitimate" (or the closest from the standard list). DO NOT hedge with
 "could be misused" when the evidence shows benign software.
 
-SOURCE-CITATION RULES (anti-hallucination — analysts have explicitly flagged
+SOURCE-CITATION RULES (anti-hallucination - analysts have explicitly flagged
 made-up TI sources as the worst possible failure mode):
 1. Only name a threat-intelligence source (VirusTotal, AbuseIPDB, Maltiverse,
    OTX, URLScan, MalwareBazaar, URLhaus, Pulsedive,
@@ -221,7 +221,7 @@ made-up TI sources as the worst possible failure mode):
    Safe Browsing, etc.) when its CORRESPONDING FIELD is present in the
    input JSON with a non-empty, non-error value.
 2. If a source returned no data, did not run, or errored, EITHER omit it
-   entirely OR say "no data from <source>" — never invent a verdict.
+   entirely OR say "no data from <source>" - never invent a verdict.
 3. Every claim like "X is malicious per Y" must be backed by a specific value
    from Y's payload (e.g. "VirusTotal: 12/89 engines flagged" or "Maltiverse
    classification=malicious, tag=payload-delivery"). Quote the value.
@@ -231,7 +231,7 @@ made-up TI sources as the worst possible failure mode):
 5. Listing sources you didn't see in the input violates rule 1, even when the
    indicator "looks like" the kind of thing those sources would flag."""
 
-# NARRATIVE schema — the prose-heavy fields. These are pure descriptive
+# NARRATIVE schema - the prose-heavy fields. These are pure descriptive
 # writing with no classification or attribution logic, so the FAST model
 # handles them well and we save a lot of wall-clock time by not waiting on
 # the smart model to write paragraphs.
@@ -243,7 +243,7 @@ _NARRATIVE_SCHEMA = """Output STRICT JSON ONLY with this exact schema (every fie
 
 No markdown. No commentary outside the JSON object."""
 
-# VERDICT schema — classification + attribution + evidence basis. Smart
+# VERDICT schema - classification + attribution + evidence basis. Smart
 # model required because calibration matters here (classifying a clean
 # vendor binary as legitimate vs flagging real malware).
 _VERDICT_SCHEMA = """Output STRICT JSON ONLY with this exact schema (every field present, no extras):
@@ -256,7 +256,7 @@ _VERDICT_SCHEMA = """Output STRICT JSON ONLY with this exact schema (every field
   "campaign":                "<campaign name or null>",
   "sophistication_level":    {"level": "<Script Kiddie|Commodity Malware|Capable Threat Actor|Nation State Actor>", "reasoning": "..."},
   "infection_vector":        "<most likely delivery mechanism>",
-  "assessment_basis":        ["<2-5 SHORT sentences listing the specific evidence points that drove your malware_classification. Cite each one (e.g. 'VT 42/96 named Cobalt Strike', 'Hash clean across all 6 sources checked', 'Signed by Dell Inc. — vendor binary', 'YARA matched ransomware_note pattern'). If basis lists only benign indicators, classification MUST be Likely Legitimate / Potentially Unwanted Program.>"],
+  "assessment_basis":        ["<2-5 SHORT sentences listing the specific evidence points that drove your malware_classification. Cite each one (e.g. 'VT 42/96 named Cobalt Strike', 'Hash clean across all 6 sources checked', 'Signed by Dell Inc. - vendor binary', 'YARA matched ransomware_note pattern'). If basis lists only benign indicators, classification MUST be Likely Legitimate / Potentially Unwanted Program.>"],
   "confidence_assessment":   {"overall_confidence": 0.0-1.0, "what_would_help": "<what additional analysis would most strengthen this>"}
 }
 
@@ -268,8 +268,8 @@ _HEADLINE_SCHEMA = _VERDICT_SCHEMA
 _STRUCTURED_SCHEMA = """Output STRICT JSON ONLY with this exact schema (every field present, no extras):
 {
   "objectives":              [{"objective": "<plain English>", "evidence": "<what supports this>", "confidence": 0.0-1.0}, ...],
-  "key_findings":            [{"title": "<short title>", "explanation": "<why this matters, what it reveals about attacker intent — NOT a restatement of tool output>"}, ...],
-  "anomalies":               [{"observation": "<what's unusual — MUST be a specific concrete fact from THIS file's analysis (a bytes region, a specific string, a header value, a section, etc.). Do NOT invent anomalies about file formats the file isn't in (e.g. don't say 'unusual for a JSON file' when the file is not JSON). Prefer omitting the field to filling it with generic speculation.>", "expected": "<what would normally be here, referencing the file's ACTUAL detected type, not a different one>", "implication": "<what this tells us>"}, ...],
+  "key_findings":            [{"title": "<short title>", "explanation": "<why this matters, what it reveals about attacker intent - NOT a restatement of tool output>"}, ...],
+  "anomalies":               [{"observation": "<what's unusual - MUST be a specific concrete fact from THIS file's analysis (a bytes region, a specific string, a header value, a section, etc.). Do NOT invent anomalies about file formats the file isn't in (e.g. don't say 'unusual for a JSON file' when the file is not JSON). Prefer omitting the field to filling it with generic speculation.>", "expected": "<what would normally be here, referencing the file's ACTUAL detected type, not a different one>", "implication": "<what this tells us>"}, ...],
   "evasion_techniques":      [{"technique": "<specific name>", "explanation": "<plain English how it works>"}, ...],
   "persistence_mechanisms":  [{"mechanism": "<specific name>", "explanation": "..."}, ...],
   "c2_assessment":           {"protocol": "<HTTP|HTTPS|DNS|TCP raw|...>", "shared_or_dedicated": "shared|dedicated|unknown", "notes": "..."},
@@ -287,7 +287,7 @@ No markdown. No commentary outside the JSON object."""
 
 
 def _deep_context(analysis: Dict, comparative: Optional[Dict] = None) -> Dict:
-    """Full analysis package for the deep prompt — keeps the heaviest fields
+    """Full analysis package for the deep prompt - keeps the heaviest fields
     bounded so the prompt stays under model context."""
     fs = analysis.get("format_specific") or {}
     pe = fs.get("pe") or {}
@@ -366,8 +366,8 @@ def _coerce_category(raw: str, executive_summary: str = "") -> str:
     """Coerce whatever the LLM emitted for malware_classification.category
     into a known label from CLASSIFICATIONS.
 
-    Fixes the "MALICIOUS 100%" bug — the model was sometimes emitting
-    "MALICIOUS" (which is NOT a valid category — it's a verdict) with
+    Fixes the "MALICIOUS 100%" bug - the model was sometimes emitting
+    "MALICIOUS" (which is NOT a valid category - it's a verdict) with
     high confidence while the executive_summary correctly identified
     the file as legitimate. The frontend then rendered a MALICIOUS pill
     next to "The file appears to be legitimate" prose.
@@ -378,7 +378,7 @@ def _coerce_category(raw: str, executive_summary: str = "") -> str:
          phase).
       3. If raw is "MALICIOUS" / "SUSPICIOUS" but executive_summary
          reads as benign ("legitimate", "no threat", "clean", "no
-         indicators of malicious"), override to "Clean" — the prose
+         indicators of malicious"), override to "Clean" - the prose
          is what the analyst reads and it must win over an
          inconsistent structured field.
       4. Otherwise "Unknown Malware".
@@ -392,7 +392,7 @@ def _coerce_category(raw: str, executive_summary: str = "") -> str:
             return c
     # Handle the "verdict word emitted as category" case explicitly.
     if r_lower in ("malicious", "suspicious", "likely malicious", "malware"):
-        # Cross-check the executive summary — if the prose says
+        # Cross-check the executive summary - if the prose says
         # legitimate/clean/safe, trust the prose. Otherwise map to
         # "Unknown Malware".
         summary_lower = (executive_summary or "").lower()
@@ -461,7 +461,7 @@ def _anomaly_mentions_wrong_type(anomaly: Dict, detected: set) -> bool:
 
 
 def _safe_normalize_deep(out: Dict, analysis: Optional[Dict] = None) -> Dict:
-    """Make sure every field exists and is the right shape — tolerates a model
+    """Make sure every field exists and is the right shape - tolerates a model
     that returns slightly off schema. When `analysis` is supplied, also drops
     LLM-hallucinated anomalies that reference file formats the file isn't
     (e.g. 'unusual for a JSON file' when the file is text/plain)."""
@@ -490,7 +490,7 @@ def _safe_normalize_deep(out: Dict, analysis: Optional[Dict] = None) -> Dict:
         except (TypeError, ValueError):
             _confidence = 0.5
     if str(_raw_category).strip().lower() != _category.strip().lower():
-        # Category was coerced — reset confidence to a neutral value
+        # Category was coerced - reset confidence to a neutral value
         # since the LLM's confidence was tied to the wrong label.
         _confidence = min(_confidence, 0.6)
     return {
@@ -537,7 +537,7 @@ async def _deep_group(provider, model, system_msg: str, user_msg: str,
                       max_tokens: int = 2600) -> Dict:
     """Generate one field-group of the deep report. Tolerates truncation via a
     lenient parse (a cut-off response keeps its completed fields instead of
-    throwing the whole group away). Returns {} only on hard failure — the caller
+    throwing the whole group away). Returns {} only on hard failure - the caller
     merges + normalizes whatever comes back."""
     from agents.investigation import _loads_lenient
     try:
@@ -562,16 +562,16 @@ async def analyze_deep(analysis: Dict, config,
                        comparative_context: Optional[Dict] = None,
                        extra_context: Optional[str] = None,
                        on_partial=None) -> Optional[Dict]:
-    """Phase 2 — full structured assessment.
+    """Phase 2 - full structured assessment.
 
     Split into THREE concurrent model calls instead of two:
 
-      * NARRATIVE  — technical_summary + execution_narrative. Pure prose, no
+      * NARRATIVE  - technical_summary + execution_narrative. Pure prose, no
                      verdict logic, so the FAST model handles it just fine and
                      finishes well before either smart-model call.
-      * VERDICT    — classification + attribution + evidence basis. Smart
+      * VERDICT    - classification + attribution + evidence basis. Smart
                      model required: calibration matters here.
-      * STRUCTURED — objectives, key_findings, anomalies, evasion, persistence,
+      * STRUCTURED - objectives, key_findings, anomalies, evasion, persistence,
                      C2, detection difficulty, recommended actions, hunting.
                      Smart model.
 
@@ -596,7 +596,7 @@ async def analyze_deep(analysis: Dict, config,
     # piece's fields into the merged dict and fires on_partial(merged_copy)
     # so the background task can persist progressively. Without this the
     # background task waits for the slowest call (verdict OR structured) and
-    # only persists once at the end — that's the "2 minutes and still not
+    # only persists once at the end - that's the "2 minutes and still not
     # loading" symptom the analyst sees.
     async def _run(model, schema, max_tokens, label):
         out = await _deep_group(provider, model,
@@ -632,7 +632,7 @@ async def analyze_deep(analysis: Dict, config,
 
 # ─── Comparative context (case history + similar files + MITRE profile) ───────
 def gather_comparative_context(analysis: Dict) -> Dict:
-    """Synchronous — pulls related cases, similar fuzzy hashes, MITRE actor
+    """Synchronous - pulls related cases, similar fuzzy hashes, MITRE actor
     profile if a family was identified. Best-effort. Used as additional
     grounding for the deep AI prompt."""
     family  = (((analysis.get("threat_intel") or {}).get("virustotal") or {}).get("malware_family")

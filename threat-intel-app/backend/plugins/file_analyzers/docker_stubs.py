@@ -1,4 +1,4 @@
-"""docker_stubs — Docker-service-based file analyzers.
+"""docker_stubs - Docker-service-based file analyzers.
 
 Each sidecar wraps a native tool / emulator / daemon that doesn't
 ship in-process (Qiling, Speakeasy, Thug, Mobsf, …) behind a tiny
@@ -27,7 +27,7 @@ from ._docker_dispatch import dispatch
 
 class _DockerStub(FileAnalyzer):
     """Base for Docker-service file analyzers. Subclasses only need
-    to declare metadata (name, env var, supported file types) — all
+    to declare metadata (name, env var, supported file types) - all
     the HTTP dispatch is in _docker_dispatch.dispatch."""
     requires_docker = True
     service_env_var: str = ""
@@ -68,7 +68,7 @@ class SpeakeasyStub(_DockerStub):
 
 class ThugStub(_DockerStub):
     name = "thug"
-    description = ("Thug honeyclient — emulates a browser visiting a URL / "
+    description = ("Thug honeyclient - emulates a browser visiting a URL / "
                    "opening an HTML file; reports exploit kit detections, "
                    "redirect chains, dropped files.")
     supported_file_types = ["html", "js"]
@@ -79,7 +79,7 @@ class ThugStub(_DockerStub):
 
 class BoxJsStub(_DockerStub):
     name = "box_js"
-    description = ("Node.js emulated JS runner — deobfuscates malicious "
+    description = ("Node.js emulated JS runner - deobfuscates malicious "
                    "JavaScript droppers, surfaces network IOCs + commands.")
     supported_file_types = ["js"]
     service_env_var = "RECON_BOXJS_URL"
@@ -89,7 +89,7 @@ class BoxJsStub(_DockerStub):
 
 class MobsfStub(_DockerStub):
     name = "mobsf"
-    description = ("MobSF — mobile (APK/IPA) static + dynamic analysis. "
+    description = ("MobSF - mobile (APK/IPA) static + dynamic analysis. "
                    "Returns findings, exposed services, exported components, "
                    "trackers, SBOM.")
     supported_file_types = ["apk", "ipa"]
@@ -100,7 +100,7 @@ class MobsfStub(_DockerStub):
 
 class QuarkStub(_DockerStub):
     name = "quark_engine"
-    description = ("Quark Engine — rule-based Android malware scoring. "
+    description = ("Quark Engine - rule-based Android malware scoring. "
                    "Returns threat score + triggered behavior rules.")
     supported_file_types = ["apk", "dex"]
     service_env_var = "RECON_QUARK_URL"
@@ -110,7 +110,7 @@ class QuarkStub(_DockerStub):
 
 class ClamAVStub(_DockerStub):
     name = "clamav"
-    description = ("ClamAV — signature + heuristic AV scan. Returns matched "
+    description = ("ClamAV - signature + heuristic AV scan. Returns matched "
                    "signature name + severity. Requires clamd sidecar with "
                    "the daily freshclam update task.")
     supported_file_types = ["any"]
@@ -121,7 +121,7 @@ class ClamAVStub(_DockerStub):
 
 class SuricataStub(_DockerStub):
     name = "suricata"
-    description = ("Suricata PCAP analysis — IDS alerts + protocol parse "
+    description = ("Suricata PCAP analysis - IDS alerts + protocol parse "
                    "over a captured pcap. Returns alert list + flow "
                    "summaries.")
     supported_file_types = ["pcap"]
@@ -132,7 +132,7 @@ class SuricataStub(_DockerStub):
 
 class HfingerStub(_DockerStub):
     name = "hfinger"
-    description = ("Hfinger — HTTP request fingerprinting from PCAP for "
+    description = ("Hfinger - HTTP request fingerprinting from PCAP for "
                    "malware traffic identification.")
     supported_file_types = ["pcap"]
     service_env_var = "RECON_HFINGER_URL"
@@ -142,7 +142,7 @@ class HfingerStub(_DockerStub):
 
 class StringsifterStub(_DockerStub):
     name = "stringsifter"
-    description = ("Stringsifter — ML-ranked strings extraction, surfacing "
+    description = ("Stringsifter - ML-ranked strings extraction, surfacing "
                    "the most malware-relevant strings in a sample.")
     supported_file_types = ["pe", "elf"]
     service_env_var = "RECON_STRINGSIFTER_URL"

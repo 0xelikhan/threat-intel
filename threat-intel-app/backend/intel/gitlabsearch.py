@@ -1,4 +1,4 @@
-"""GitLab code search — mirror of the GitHub pattern for GitLab.com
+"""GitLab code search - mirror of the GitHub pattern for GitLab.com
 public repos.
 
   GET https://gitlab.com/api/v4/search?scope=blobs&search={domain}

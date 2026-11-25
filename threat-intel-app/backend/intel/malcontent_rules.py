@@ -2,7 +2,7 @@
 Chainguard malcontent capability-bucket loader.
 
 The repo (https://github.com/chainguard-dev/malcontent, Apache-2.0)
-ships ~14k YARA rules organised by *behavioural capability* — anti-
+ships ~14k YARA rules organised by *behavioural capability* - anti-
 behavior, c2, credential, evasion, exec, exfil, persist, privesc, etc.
 That taxonomy is orthogonal to capa's rule namespaces and to family-
 named YARA corpora like Florian Roth's: a single rule maps to one of
@@ -84,7 +84,7 @@ def _bucket_from_path(path: Path) -> Optional[str]:
     return parts[0].lower() if parts else None
 
 
-# YARA rule name regex — must match `rule NAME [: tags] {` even when
+# YARA rule name regex - must match `rule NAME [: tags] {` even when
 # preceded by `private` / `global` keywords. The captured group is the
 # bare rule identifier so we can build the inverted index.
 _RULE_DECL_RE = re.compile(

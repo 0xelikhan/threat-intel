@@ -1,7 +1,7 @@
 """
 EmailRep email reputation lookup.
 
-Source: https://emailrep.io/ — reputation + context for email
+Source: https://emailrep.io/ - reputation + context for email
 addresses (profile presence, deliverability, breaches, blacklists,
 disposable/freemail flags). API key optional (raises daily quota).
 

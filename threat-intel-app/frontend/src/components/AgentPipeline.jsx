@@ -127,7 +127,7 @@ function AgentPipeline({ logText, label, onComplete, onStart, onPartial, onScanU
 
   return (
     <Box>
-      {/* Primary action — visible whenever pipeline is not actively streaming */}
+      {/* Primary action - visible whenever pipeline is not actively streaming */}
       {!running && (
         <Button
           fullWidth
@@ -355,6 +355,6 @@ function AgentPipeline({ logText, label, onComplete, onStart, onPartial, onScanU
   );
 }
 
-// Skip re-render when props are shallowly equal — the top-level views all
+// Skip re-render when props are shallowly equal - the top-level views all
 // receive a heavy `result` / `analysisResult` prop plus stable callbacks.
 export default React.memo(AgentPipeline);

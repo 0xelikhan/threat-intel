@@ -7,14 +7,14 @@ extracted IOCs as Observables. TheHive's REST API v1 accepts:
   POST /api/v1/case  → create case
   POST /api/v1/case/{id}/observable → attach observable
 
-This module talks to that API directly via aiohttp — TheHive's
+This module talks to that API directly via aiohttp - TheHive's
 official Python clients are GPL-3 or LGPL-3 depending on version and
 we'd rather not pull a copyleft dependency. Operator configures:
 
-  THEHIVE_URL    — https://thehive.example.org
-  THEHIVE_KEY    — API key
-  THEHIVE_ORG    — organisation name (TheHive 5 multi-tenant)
-  THEHIVE_TLP    — default TLP for created cases (0-3, default 2=AMBER)
+  THEHIVE_URL    - https://thehive.example.org
+  THEHIVE_KEY    - API key
+  THEHIVE_ORG    - organisation name (TheHive 5 multi-tenant)
+  THEHIVE_TLP    - default TLP for created cases (0-3, default 2=AMBER)
 
 Returns {ok, case_id, case_number, url, observable_count, error}.
 """
@@ -128,8 +128,8 @@ async def push_case(iocs: Dict[str, List[str]],
         actor = raw_actor
 
     title = (f"RECON {verdict}"
-              + (f" — {actor}" if actor else "")
-              + (f" — {raw_input[:80]}" if raw_input else ""))[:240]
+              + (f" - {actor}" if actor else "")
+              + (f" - {raw_input[:80]}" if raw_input else ""))[:240]
     description_bits = [rs.get("summary") or "", "",
                         "## MITRE ATT&CK techniques observed:"]
     for t in (inv.get("mitre_techniques") or [])[:12]:
@@ -187,7 +187,7 @@ async def push_case(iocs: Dict[str, List[str]],
             return {"ok": False, "error": "TheHive returned no case ID",
                     "error_code": "unexpected_response"}
 
-        # 2) Attach observables — TheHive accepts one per POST
+        # 2) Attach observables - TheHive accepts one per POST
         observables = _flatten_observables(iocs, tlp)
         attached = 0
         for obs in observables[:200]:

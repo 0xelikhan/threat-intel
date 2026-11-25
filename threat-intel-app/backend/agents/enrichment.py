@@ -1,6 +1,6 @@
 """
-Enrichment Agent — all API keys read from config at call time.
-Zero AI tokens — pure parallel HTTP calls.
+Enrichment Agent - all API keys read from config at call time.
+Zero AI tokens - pure parallel HTTP calls.
 
 Concurrency model:
 * `_SEMAPHORE` caps the number of in-flight HTTP requests across the
@@ -11,7 +11,7 @@ Concurrency model:
   ClientSession we open passes connector_owner=False so they share the
   TCP/DNS pool but don't close the connector when the session exits.
   ttl_dns_cache=300 saves a DNS round trip per source on repeat calls.
-* `_TIMEOUT` (aiohttp.ClientTimeout) is the *transport* timeout —
+* `_TIMEOUT` (aiohttp.ClientTimeout) is the *transport* timeout  - 
   protects against slow body reads. `_PER_SOURCE_TIMEOUT` wraps the
   whole `_get`/`_post` with asyncio.wait_for so a hung TLS handshake
   or parser deadlock also returns rather than stalling the gather.
@@ -66,20 +66,20 @@ def _humanise_exc(e: BaseException) -> str:
                    .strip().lower()) or "unknown error"
     return msg[:200]
 
-# Transport timeout (aiohttp-internal — covers connect + read body).
-# This is the INNER timeout — fires before the wait_for safety net if
+# Transport timeout (aiohttp-internal - covers connect + read body).
+# This is the INNER timeout - fires before the wait_for safety net if
 # the upstream is slow. Default 10 s is fine for most sources; slow
 # hosts get a per-host override (see _SLOW_HOSTS) that bumps BOTH
 # the inner aiohttp timeout AND the outer wait_for cap. Previously
 # only wait_for was bumped, which meant OTX's 12-second body still
-# tripped the 10 s aiohttp timeout first — the visible "timed out"
+# tripped the 10 s aiohttp timeout first - the visible "timed out"
 # wasn't from our safety net, it was from aiohttp internal.
 _TIMEOUT = aiohttp.ClientTimeout(total=10)
 # Outer safety-net timeout (wraps the whole call, including parsing).
 _PER_SOURCE_TIMEOUT = float(os.getenv("ENRICH_SOURCE_TIMEOUT_S", "12"))
 # Slow hosts: per-host (transport, safety) tuple. Transport must be
 # the aiohttp.ClientTimeout the session.get gets; safety is the outer
-# wait_for cap. Both have to grow together — bumping only the outer
+# wait_for cap. Both have to grow together - bumping only the outer
 # one (what we did before) doesn't help because aiohttp fires first.
 _SLOW_HOSTS: "dict[str, tuple[aiohttp.ClientTimeout, float]]" = {
     # OTX's /general endpoint takes 11-15 s anonymously and longer
@@ -100,7 +100,7 @@ _SLOW_HOSTS: "dict[str, tuple[aiohttp.ClientTimeout, float]]" = {
 def _timeouts_for(host: str | None) -> "tuple[aiohttp.ClientTimeout, float]":
     """Return (aiohttp transport timeout, outer wait_for cap) for a host."""
     return _SLOW_HOSTS.get(host or "", (_TIMEOUT, _PER_SOURCE_TIMEOUT))
-# Cap on in-flight HTTP fan-out — protects downstream rate limits and
+# Cap on in-flight HTTP fan-out - protects downstream rate limits and
 # our own event loop from a thousand simultaneous sockets. Bumped from
 # 10 → 16 → 24 → 48 (successive perf passes): the per-host cap in
 # _get_connector (ENRICH_POOL_PER_HOST=20) independently bounds traffic
@@ -110,16 +110,16 @@ def _timeouts_for(host: str | None) -> "tuple[aiohttp.ClientTimeout, float]":
 # lose ~17 s of tail latency on the enrichment node (measured 2026-07:
 # heavy_multi 92.7 s at 24/10 → 75.3 s at 48/20). We stay well below
 # individual source rate limits because the per-host cap enforces the
-# real backpressure — the global cap only governs cross-host fan-out.
+# real backpressure - the global cap only governs cross-host fan-out.
 _SEMAPHORE = asyncio.Semaphore(int(os.getenv("ENRICH_CONCURRENCY", "48")))
-# Backwards-compat alias — older code in this module imports TIMEOUT.
+# Backwards-compat alias - older code in this module imports TIMEOUT.
 TIMEOUT = _TIMEOUT
 
 # Per-pipeline-run dedup cache. The full /api/analyze flow clears this
 # at the top of run_enrichment(), but skill-registry / MCP / direct
 # enrich_* callers never go through run_enrichment, so the dict would
 # grow linearly forever as Claude Desktop / Cursor users hit the MCP
-# lookup tools. BoundedDict gives FIFO eviction at 1000 entries — much
+# lookup tools. BoundedDict gives FIFO eviction at 1000 entries - much
 # larger than any single analysis needs but still capped, so MCP usage
 # can't drain memory over a multi-day container lifetime.
 from bg_utils import BoundedDict as _BoundedDict
@@ -127,7 +127,7 @@ _cache: dict = _BoundedDict(cap=1000)
 _tor_nodes: set = set()
 _tor_fetched: float = 0.0
 
-# Process-wide connector singleton — see module docstring.
+# Process-wide connector singleton - see module docstring.
 _CONNECTOR: "aiohttp.TCPConnector | None" = None
 
 
@@ -161,7 +161,7 @@ def _ck(ioc_type: str, value: str) -> str:
 # ─── Per-host network timing histogram ──────────────────────────────────────
 # Lightweight bookkeeping so the operator can spot slow / failing TI
 # sources via /api/status without reaching for a profiler. The dict is
-# bounded (max ~100 hosts) — anything beyond that gets a "..." bucket.
+# bounded (max ~100 hosts) - anything beyond that gets a "..." bucket.
 # Reset on demand via reset_network_timings() so an analyst can scope
 # a measurement to a single analyze run.
 _TIMING_MAX_HOSTS = 100
@@ -170,7 +170,7 @@ _network_timings: Dict[str, Dict[str, float]] = {}
 
 def _record_timing(host: Optional[str], elapsed_ms: float, *,
                    ok: bool, status: int = 0) -> None:
-    """Record one HTTP call. Cheap — single dict lookup, no locks."""
+    """Record one HTTP call. Cheap - single dict lookup, no locks."""
     h = host or "?unknown"
     bucket = _network_timings.get(h)
     if bucket is None:
@@ -212,7 +212,7 @@ def network_timings_snapshot(top: int = 25) -> List[Dict[str, Any]]:
 
 
 def reset_network_timings() -> None:
-    """Clear the histogram — used by /api/status?reset=1 or tests."""
+    """Clear the histogram - used by /api/status?reset=1 or tests."""
     _network_timings.clear()
 
 
@@ -220,7 +220,7 @@ def _is_abusech_host(host: str) -> bool:
     """abuse.ch runs mb-api / threatfox-api / urlhaus-api under a shared
     Auth-Key quota. Their infra returns HTTP 401 when the quota is
     hot-spiked from concurrent fan-out calls even though the key is
-    valid — the 401 self-heals in <1s. Treating a single 401 as an
+    valid - the 401 self-heals in <1s. Treating a single 401 as an
     auth-failure trips the circuit breaker's 5-minute cooldown and
     knocks out ALL three subdomains together (they share the host root
     for breaker purposes). Retry once + short delay to ride out the
@@ -230,7 +230,7 @@ def _is_abusech_host(host: str) -> bool:
 
 async def _get(session, url, **kw):
     """Issue one GET inside the global semaphore, bounded by the per-source
-    safety timeout, gated by the per-host circuit breaker. Never raises —
+    safety timeout, gated by the per-host circuit breaker. Never raises  - 
     always returns a dict (with `error` + `error_type` keys on failure) so
     callers + the frontend can categorise the failure without parsing the
     message string.
@@ -240,7 +240,7 @@ async def _get(session, url, **kw):
     breaker = get_breaker()
     host = host_of(url)
     if host and breaker.is_open(host):
-        _log.debug("circuit open — skipping %s", host)
+        _log.debug("circuit open - skipping %s", host)
         return {"error": f"circuit open for {host}", "error_type": "circuit_open",
                 "skipped": True}
     transport_to, safety = _timeouts_for(host)
@@ -272,7 +272,7 @@ async def _get(session, url, **kw):
             if host: breaker.record_failure(host)
             return {"error": f"server error (HTTP {status})", "error_type": "http_error"}
         # Successful response. Some APIs return 200 with a JSON error
-        # body — treat that as a soft failure for breaker accounting.
+        # body - treat that as a soft failure for breaker accounting.
         if isinstance(payload, dict) and "error" in payload and not isinstance(payload.get("error"), bool):
             if host: breaker.record_failure(host)
         else:
@@ -292,12 +292,12 @@ async def _get(session, url, **kw):
 
 
 async def _post(session, url, **kw):
-    """POST variant of `_get` — same semaphore, same timeout discipline,
+    """POST variant of `_get` - same semaphore, same timeout discipline,
     same circuit breaker, same never-raise contract, same error_type tags."""
     breaker = get_breaker()
     host = host_of(url)
     if host and breaker.is_open(host):
-        _log.debug("circuit open — skipping %s", host)
+        _log.debug("circuit open - skipping %s", host)
         return {"error": f"circuit open for {host}", "error_type": "circuit_open",
                 "skipped": True}
     transport_to, safety = _timeouts_for(host)
@@ -338,7 +338,7 @@ async def _post(session, url, **kw):
 
 
 async def _noop():
-    """Placeholder coroutine for conditionally-disabled sources — returns sentinel."""
+    """Placeholder coroutine for conditionally-disabled sources - returns sentinel."""
     return {"error": "source not configured", "skipped": True}
 
 
@@ -377,7 +377,7 @@ def _safe(d, *keys, default=None):
 #
 def _err(source: str, reason) -> dict:
     # Plain `str(None)` produces the literal 'None' which the frontend
-    # renders as "error: None" — meaningless to an analyst. When the
+    # renders as "error: None" - meaningless to an analyst. When the
     # source returned no data at all (reason is None), report it that
     # way so the source card can show the right empty state.
     if reason is None:
@@ -390,7 +390,7 @@ def _err(source: str, reason) -> dict:
     # error_type so the frontend can render the right translated phrasing
     # instead of stringifying the whole dict via Python repr (which
     # surfaces to the analyst as "{'error': 'circuit open...', 'error_type':
-    # 'circuit_open', 'skipped': True}" — looks like a stack trace leak).
+    # 'circuit_open', 'skipped': True}" - looks like a stack trace leak).
     if isinstance(reason, dict):
         inner_err = reason.get("error")
         out = {"source": source}
@@ -429,7 +429,7 @@ def _p_abuse(r):
         "domain":         d.get("domain"),
         "hostnames":      (d.get("hostnames") or [])[:5],
     }
-    # Recent 5 reports — categories + reporter country (per spec §3)
+    # Recent 5 reports - categories + reporter country (per spec §3)
     reports = (d.get("reports") or [])[:5]
     if reports:
         out["recent_reports"] = [
@@ -455,22 +455,22 @@ def _p_abuse(r):
                                           "is_active_this_week": True}
         except Exception:
             pass
-    # Source-level verdict — aligned with AbuseIPDB's own published
+    # Source-level verdict - aligned with AbuseIPDB's own published
     # guidance so the verdict we show matches the colour / severity the
     # AbuseIPDB site uses for the same score:
     #
-    #   >= 75  -> MALICIOUS    (AbuseIPDB: "high confidence" — red on
+    #   >= 75  -> MALICIOUS    (AbuseIPDB: "high confidence" - red on
     #                           their site, "this IP is reported as
     #                           highly abusive")
     #   25-74  -> SUSPICIOUS   (AbuseIPDB: "potentially malicious" /
-    #                           "investigate" — yellow/orange on their
+    #                           "investigate" - yellow/orange on their
     #                           site; their API docs explicitly call
     #                           this the floor for actionable signal)
     #   1-24   -> UNKNOWN      (low-confidence reports; AbuseIPDB
     #                           doesn't recommend action at this level)
     #   0 + reports = 0 -> CLEAN (no reports, nothing observed)
     #   0 + any reports -> UNKNOWN  (reports filed but they don't
-    #                           confidence-score them — informational
+    #                           confidence-score them - informational
     #                           only)
     reports = d.get("totalReports") or 0
     if score >= 75:
@@ -604,7 +604,7 @@ async def _shodan_internetdb(session, ip: str) -> dict:
     """Shodan's free InternetDB endpoint (no key required).
     Endpoint: https://internetdb.shodan.io/<ip>  -> JSON of:
       ip, ports[], cpes[], hostnames[], tags[], vulns[]
-    Empty 404 means no observed data — return {found:False}."""
+    Empty 404 means no observed data - return {found:False}."""
     try:
         r = await _get(
             session, f"https://internetdb.shodan.io/{ip}",
@@ -620,7 +620,7 @@ async def _shodan_internetdb(session, ip: str) -> dict:
                 "error_type": "unreachable"}
     if "error" in r:
         # Shodan returns {"detail": "No information available"} for
-        # unknown IPs — treat as not-found rather than an error.
+        # unknown IPs - treat as not-found rather than an error.
         msg = (r.get("error") or "").lower()
         if "no information" in msg or "404" in msg or "not_found" in msg:
             return {"source": "shodan_internetdb", "found": False,
@@ -759,7 +759,7 @@ def _p_otx(r):
 def _p_whois(r):
     if _is_fail(r):
         return _err("whois", r)
-    # who-dat.as93.net response shape — pull the fields the frontend
+    # who-dat.as93.net response shape - pull the fields the frontend
     # source-card actually renders. age_days is derived here so the
     # WHOIS card and the URL-identity banner can both show domain age
     # without re-parsing the date string client-side.
@@ -826,7 +826,7 @@ def _p_wayback(r):
     snap = (r.get("archived_snapshots") or {}).get("closest") or {}
     if not snap.get("available"):
         return {"has_snapshots": False,
-                "note": "Domain not in Wayback Machine — no history at all"}
+                "note": "Domain not in Wayback Machine - no history at all"}
     ts = snap.get("timestamp", "")
     formatted = f"{ts[:4]}-{ts[4:6]}-{ts[6:8]}" if len(ts) >= 8 else ts
     return {"has_snapshots":   True,
@@ -867,7 +867,7 @@ def _p_urlscan(r):
 
 
 def _p_mb(r):
-    """MalwareBazaar — match = MALICIOUS per spec §3."""
+    """MalwareBazaar - match = MALICIOUS per spec §3."""
     if _is_fail(r):
         return _err("malwarebazaar", r)
     if r.get("query_status") != "ok":
@@ -888,7 +888,7 @@ def _p_mb(r):
 
 
 def _p_tf(r):
-    """ThreatFox — match = MALICIOUS per spec §3."""
+    """ThreatFox - match = MALICIOUS per spec §3."""
     if _is_fail(r):
         return _err("threatfox", r)
     if r.get("query_status") != "ok":
@@ -909,7 +909,7 @@ def _p_tf(r):
 
 # ─── Free no-key sources (per spec §3) ─────────────────────────────────────────
 def _p_robtex(r):
-    """Robtex free IP/domain lookup — passive DNS + ASN."""
+    """Robtex free IP/domain lookup - passive DNS + ASN."""
     if _is_fail(r):
         return _err("robtex", r)
     out = {
@@ -924,7 +924,7 @@ def _p_robtex(r):
 
 
 def _p_hackertarget(r):
-    """HackerTarget reverse IP / ASN lookup — plain text lines."""
+    """HackerTarget reverse IP / ASN lookup - plain text lines."""
     if isinstance(r, Exception):
         return _err("hackertarget", r)
     if isinstance(r, dict) and "raw" in r:
@@ -939,7 +939,7 @@ def _p_hackertarget(r):
     return {"record_count": len(rows), "rows": rows[:25]}
 
 
-# Module-level import — feeds_loader is part of our own backend, so a
+# Module-level import - feeds_loader is part of our own backend, so a
 # missing import is a hard bug, not a runtime degradation case. Importing
 # inside the function silently masked the historical case where
 # check_feodo didn't exist; now-fixed but moved out so a future regression
@@ -960,7 +960,7 @@ def _p_feodo(ip: str) -> dict:
 
 # ─── Authenticated sources (Censys) ─────────────────────────
 def _p_censys(r):
-    """Censys host view — handles BOTH the legacy search.censys.io/v2
+    """Censys host view - handles BOTH the legacy search.censys.io/v2
     response shape and the new api.platform.censys.io/v3 shape.
     The v2 response puts host fields at `result.<field>`; the v3
     Platform response wraps them one deeper at `result.resource.<field>`.
@@ -1064,7 +1064,7 @@ def _ok_dict(r):
 
 
 async def _skip():
-    """Falsy placeholder for a disabled/unavailable concurrent lookup — returns
+    """Falsy placeholder for a disabled/unavailable concurrent lookup - returns
     an empty dict so `if result:` checks treat it as 'nothing found'. (Unlike
     _noop(), which is a truthy sentinel for the keyed-source parsers.)"""
     return {}
@@ -1090,12 +1090,12 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     except Exception as _e:
         # When the short-circuit lookup fails we drop straight into the
         # paid TI fan-out for every known-good IP (public DNS resolvers,
-        # MS endpoints, …) — surface it so the cost shows up in logs.
+        # MS endpoints, …) - surface it so the cost shows up in logs.
         _log.warning("known_good_baseline IP lookup failed for %s: %s", ip, _e)
 
     tor_nodes = await _tor(session)
 
-    # Censys auth — two paths:
+    # Censys auth - two paths:
     #   • New Platform API (PAT): CENSYS_API_KEY starts with 'censys_',
     #     used as a Bearer token against api.platform.censys.io. This is
     #     the actively-supported v3 surface.
@@ -1124,7 +1124,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
              params={"ipAddress": ip, "maxAgeInDays": 90, "verbose": "true"},
              headers={"Key": keys.get("ABUSEIPDB_KEY", ""), "Accept": "application/json"}),
         # IPInfo supports anonymous queries (1k/day, no coordinates past
-        # city granularity) — drop the token param entirely when it's
+        # city granularity) - drop the token param entirely when it's
         # missing so the request doesn't 401 on `?token=` (empty-string
         # tokens read as "invalid auth" at the gateway and fail the whole
         # geolocation pipeline, which is what makes the Map tab go dark).
@@ -1170,7 +1170,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
                                     f"in AS{_tor_hit.get('as_number') or '?'} "
                                     f"({_tor_hit.get('as_name') or '?'}, "
                                     f"{(_tor_hit.get('country') or '').upper()}) "
-                                    f"— last seen {_tor_hit.get('last_seen') or 'unknown'}"),
+                                    f" -  last seen {_tor_hit.get('last_seen') or 'unknown'}"),
         }
     else:
         _tor_blob = {"isExitNode": ip in tor_nodes}
@@ -1194,7 +1194,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     if feodo:
         data["feodo_tracker"] = feodo
 
-    # Shodan InternetDB — free, no-key IP service inventory. Returns
+    # Shodan InternetDB - free, no-key IP service inventory. Returns
     # observed ports, CPEs, hostnames, tags, and CVEs. ON by default
     # (free + reasonably fast); operator can disable in Settings when
     # processing very large IP batches.
@@ -1207,7 +1207,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         except Exception:
             pass
 
-    # Cloud provider IP ranges — AWS/Azure/GCP/Cloudflare/Fastly/GitHub.
+    # Cloud provider IP ranges - AWS/Azure/GCP/Cloudflare/Fastly/GitHub.
     # Strong trust signal: an IP belonging to AWS CloudFront is almost
     # certainly NOT the attacker, just the CDN edge. Synchronous lookup
     # against the in-memory CIDR list warmed by the lifespan handler.
@@ -1225,12 +1225,12 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
                 "summary":  (f"{ip} belongs to {cl.get('provider')}"
                               + (f" ({cl.get('service')})" if cl.get("service") else "")
                               + (f" in {cl.get('region')}" if cl.get("region") else "")
-                              + " — likely CDN/cloud infra, not attacker-controlled."),
+                              + " - likely CDN/cloud infra, not attacker-controlled."),
             }
     except Exception:
         pass
 
-    # DataPlane.org honeypot feeds — daily-refreshed CSV from a global
+    # DataPlane.org honeypot feeds - daily-refreshed CSV from a global
     # mesh of volunteer sensors. Hits here indicate the IP has been
     # caught actively brute-forcing or scanning a specific service.
     try:
@@ -1252,7 +1252,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     except Exception:
         pass
 
-    # SANS DShield — volunteer-firewall sensor network. Live API, no key.
+    # SANS DShield - volunteer-firewall sensor network. Live API, no key.
     try:
         from intel.dshield import lookup as _dshield_lookup
         ds = await _dshield_lookup(session, ip)
@@ -1261,7 +1261,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     except Exception:
         pass
 
-    # Spamhaus DROP/EDROP — canonical hijacked-netblock list.
+    # Spamhaus DROP/EDROP - canonical hijacked-netblock list.
     try:
         from intel.spamhaus_drop import lookup as _shaus_lookup
         sh = _shaus_lookup(ip)
@@ -1280,7 +1280,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     except Exception:
         pass
 
-    # FireHOL — 400+ curated IP blocklists. Synchronous in-memory lookup
+    # FireHOL - 400+ curated IP blocklists. Synchronous in-memory lookup
     # over the vendored blocklist-ipsets repo. Each hit reports which
     # named blocklist matched (firehol_level1, blocklist_de_ssh, ...).
     try:
@@ -1300,7 +1300,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     except Exception:
         pass
 
-    # ── Secondary lookups — all independent, so fire them concurrently instead
+    # ── Secondary lookups - all independent, so fire them concurrently instead
     #    of one await after another (BGP, Safe Browsing, deception, Maltiverse,
     #    OpenCTI). Each helper already fails soft; return_exceptions keeps one
     #    slow/broken source from sinking the rest. ────────────────────────────
@@ -1353,14 +1353,14 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     oc = _ok_dict(oc_r)
     if oc:
         data["opencti"] = oc
-    # New sources — attach only when they returned real data (auth-failed /
+    # New sources - attach only when they returned real data (auth-failed /
     # not-configured results carry an error key + error_type and are
     # surfaced as a separate source-status row by the frontend).
     crimip = _ok_dict(crimip_r)
     if crimip:
         data["criminal_ip"] = crimip
 
-    # ASN reputation — offline, uses ISP/org strings we already have, no API call
+    # ASN reputation - offline, uses ISP/org strings we already have, no API call
     try:
         from intel.asn_reputation import check as asn_check
         asn = asn_check(
@@ -1373,7 +1373,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     except Exception:
         pass
 
-    # ProxyCheck — VPN / proxy / Tor / residential-proxy classification.
+    # ProxyCheck - VPN / proxy / Tor / residential-proxy classification.
     # Configured via PROXYCHECK_KEY; free tier supports 1000 daily checks
     # without a key but rate-limits aggressively. Returns proxy/VPN/Tor
     # flags + ISP + country + ASN.
@@ -1403,7 +1403,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         except Exception as e:
             data["proxycheck"] = {"error": _humanise_exc(e), "error_type": "unreachable"}
 
-    # StopForumSpam — free, no key. Community spam-source reputation.
+    # StopForumSpam - free, no key. Community spam-source reputation.
     # Complements AbuseIPDB with a fresher, forum-specific abuse signal
     # and reports Tor-exit status independently of intel.deception.
     try:
@@ -1414,7 +1414,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("StopForumSpam IP lookup failed for %s: %s", ip, _e)
 
-    # ThreatView.io — high-confidence Cobalt Strike team-server IPs.
+    # ThreatView.io - high-confidence Cobalt Strike team-server IPs.
     # Offline lookup, free, no key. Adds a framework tag the abuse.ch
     # trio can't provide (they're family/dropper focused).
     try:
@@ -1425,7 +1425,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("ThreatView C2 lookup failed for %s: %s", ip, _e)
 
-    # ViriBack Tracker — malware C2 panel index with family attribution.
+    # ViriBack Tracker - malware C2 panel index with family attribution.
     # Free CSV, no key. Adds per-IP malware family tags where Feodo /
     # ThreatFox / URLhaus don't always carry one.
     try:
@@ -1436,7 +1436,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("ViriBack IP lookup failed for %s: %s", ip, _e)
 
-    # Robtex — free, no-key passive DNS + ASN + reverse DNS. Historical
+    # Robtex - free, no-key passive DNS + ASN + reverse DNS. Historical
     # resolution context that complements VT's passive_dns and the
     # live DoH chain (which only sees current state).
     try:
@@ -1447,7 +1447,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("Robtex IP lookup failed for %s: %s", ip, _e)
 
-    # PhishStats — IP-indexed phishing records (any URL hosted here).
+    # PhishStats - IP-indexed phishing records (any URL hosted here).
     try:
         from intel.phishstats import lookup_ip as _ps_ip
         ps = await _ps_ip(session, ip)
@@ -1456,7 +1456,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("PhishStats IP lookup failed for %s: %s", ip, _e)
 
-    # Stalkphish — IP-indexed phishing-kit tracker.
+    # Stalkphish - IP-indexed phishing-kit tracker.
     stalk_key = keys.get("STALKPHISH_KEY", "")
     if stalk_key:
         try:
@@ -1467,7 +1467,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("Stalkphish IP lookup failed for %s: %s", ip, _e)
 
-    # SecurityTrails — IP neighbors (co-hosted IPs on the same block)
+    # SecurityTrails - IP neighbors (co-hosted IPs on the same block)
     st_key = keys.get("SECURITYTRAILS_KEY", "")
     if st_key:
         try:
@@ -1478,7 +1478,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("SecurityTrails IP lookup failed for %s: %s", ip, _e)
 
-    # LeakIX — exposed services, data leaks, config exposures per host.
+    # LeakIX - exposed services, data leaks, config exposures per host.
     lx_key = keys.get("LEAKIX_KEY", "")
     if lx_key:
         try:
@@ -1489,7 +1489,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("LeakIX IP lookup failed for %s: %s", ip, _e)
 
-    # Netlas — IP whois (CIDR, net name, org, abuse contacts)
+    # Netlas - IP whois (CIDR, net name, org, abuse contacts)
     nl_key = keys.get("NETLAS_KEY", "")
     if nl_key:
         try:
@@ -1500,7 +1500,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("Netlas IP lookup failed for %s: %s", ip, _e)
 
-    # Onyphe — summary across resolver/datascan/vulnscan categories
+    # Onyphe - summary across resolver/datascan/vulnscan categories
     on_key = keys.get("ONYPHE_KEY", "")
     if on_key:
         try:
@@ -1511,7 +1511,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("Onyphe IP lookup failed for %s: %s", ip, _e)
 
-    # Hunter.how — Chinese internet-scan engine (ports + fingerprints)
+    # Hunter.how - Chinese internet-scan engine (ports + fingerprints)
     hh_key = keys.get("HUNTER_HOW_KEY", "")
     if hh_key:
         try:
@@ -1522,7 +1522,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("Hunter.how IP lookup failed for %s: %s", ip, _e)
 
-    # BinaryEdge — scan dataset (ports, services, SSL)
+    # BinaryEdge - scan dataset (ports, services, SSL)
     be_key = keys.get("BINARYEDGE_KEY", "")
     if be_key:
         try:
@@ -1533,7 +1533,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("BinaryEdge IP lookup failed for %s: %s", ip, _e)
 
-    # ZoomEye — host search alternative (broad fingerprint coverage)
+    # ZoomEye - host search alternative (broad fingerprint coverage)
     ze_key = keys.get("ZOOMEYE_KEY", "")
     if ze_key:
         try:
@@ -1544,7 +1544,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("ZoomEye IP lookup failed for %s: %s", ip, _e)
 
-    # Validin — historical DNS pivots (what else resolved here)
+    # Validin - historical DNS pivots (what else resolved here)
     val_key = keys.get("VALIDIN_KEY", "")
     if val_key:
         try:
@@ -1555,7 +1555,7 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("Validin IP lookup failed for %s: %s", ip, _e)
 
-    # Hudson Rock Cavalier — IPs seen in infostealer logs. Means an
+    # Hudson Rock Cavalier - IPs seen in infostealer logs. Means an
     # infected endpoint connected from or to this IP; strong signal
     # of compromise beyond generic abuse-ip reputation.
     hr_key = keys.get("HUDSONROCK_KEY", "")
@@ -1586,7 +1586,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
             _cache[ck] = data
             return data
     except Exception as _e:
-        # Same cost concern as enrich_ip — surface so a wedged baseline
+        # Same cost concern as enrich_ip - surface so a wedged baseline
         # shows up in operator logs instead of just inflating TI usage.
         _log.warning("known_good_baseline domain lookup failed for %s: %s",
                      domain, _e)
@@ -1615,12 +1615,12 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         _get(session, "https://pulsedive.com/api/info.php",
              # Same empty-param pitfall as ipinfo: Pulsedive 401s on
              # `&key=` (empty value) but accepts anonymous queries
-             # against its public info endpoint — drop the key entirely
+             # against its public info endpoint - drop the key entirely
              # when unset.
              params={"indicator": domain, "pretty": 1,
                       **({"key": keys["PULSEDIVE_KEY"]}
                          if keys.get("PULSEDIVE_KEY") else {})}),
-        # Wayback Machine — free, no key, indicates if the domain ever had snapshots
+        # Wayback Machine - free, no key, indicates if the domain ever had snapshots
         _get(session, "https://archive.org/wayback/available",
              params={"url": domain}),
         return_exceptions=True,
@@ -1651,7 +1651,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     # Microsoft 365 / Entra tenant recon (4 parallel probes against
     # login.microsoftonline.com + SharePoint + Azure App Service). Only
     # fires when the existing enrichment evidence indicates the domain
-    # IS on M365 — skip otherwise so non-M365 domains don't pay the
+    # IS on M365 - skip otherwise so non-M365 domains don't pay the
     # network cost. Adapted from cti-expert (MIT).
     try:
         from intel.m365_tenant_recon import enrich as _m365_enrich, is_m365_candidate
@@ -1661,7 +1661,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
                 data["m365_tenant"] = m365
     except Exception as _e:
         _log.debug("m365 tenant recon failed for %s: %s", domain, _e)
-    # crt.sh Certificate Transparency — free, no key. Every cert issued
+    # crt.sh Certificate Transparency - free, no key. Every cert issued
     # for the domain or a subdomain. Recent bursts / SANs pointing at
     # unrelated brands = phishing-infra prep signal.
     try:
@@ -1672,7 +1672,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("crt.sh enrichment failed for %s: %s", domain, _e)
 
-    # DNSTwister — free, no key. The local `typosquat` check flags a
+    # DNSTwister - free, no key. The local `typosquat` check flags a
     # domain when it's Levenshtein-1 away from a known brand; DNSTwister
     # tells us which of the algorithmically-generated permutations
     # someone has actually gone and registered. That's the actionable
@@ -1685,7 +1685,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("DNSTwister enrichment failed for %s: %s", domain, _e)
 
-    # Phishing.Database — synchronous in-memory lookup against the hourly
+    # Phishing.Database - synchronous in-memory lookup against the hourly
     # active feed warmed by the lifespan handler. Adds {"hit": True, ...}
     # when the domain is on the active phishing list.
     try:
@@ -1700,7 +1700,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     except Exception:
         pass
 
-    # MVT mobile-spyware IOCs — domain hits (Pegasus, Predator, etc.).
+    # MVT mobile-spyware IOCs - domain hits (Pegasus, Predator, etc.).
     try:
         from intel.mvt_iocs import lookup_domain as _mvt_domain
         mvt = _mvt_domain(domain)
@@ -1711,12 +1711,12 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
                 "ref":     mvt.get("ref"),
                 "verdict": "MALICIOUS",
                 "summary": (f"MVT spyware hit: {mvt.get('family')}"
-                            " — mobile-targeted infrastructure."),
+                            " - mobile-targeted infrastructure."),
             }
     except Exception:
         pass
 
-    # OFAC SDN — sanctioned domain. Legally material.
+    # OFAC SDN - sanctioned domain. Legally material.
     try:
         from intel.ofac_sdn import lookup_domain as _ofac_domain
         ofac = _ofac_domain(domain)
@@ -1733,7 +1733,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     except Exception:
         pass
 
-    # Chrome HSTS preload — major org's hardcoded must-be-HTTPS domain.
+    # Chrome HSTS preload - major org's hardcoded must-be-HTTPS domain.
     try:
         from intel.hsts_preload import is_preloaded
         if is_preloaded(domain):
@@ -1741,13 +1741,13 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
                 "source":    "Chrome HSTS preload",
                 "preloaded": True,
                 "summary":   (f"{domain} is on the Chromium HSTS preload "
-                                "list — major org with hardcoded HTTPS-only enforcement."),
+                                "list - major org with hardcoded HTTPS-only enforcement."),
             }
     except Exception:
         pass
 
-    # Mozilla Observatory — web-security posture grade. Opt-in because
-    # the v2 API can take 3+ seconds per domain to respond — slows
+    # Mozilla Observatory - web-security posture grade. Opt-in because
+    # the v2 API can take 3+ seconds per domain to respond - slows
     # every multi-domain analyze. Set RECON_ENABLE_MOZILLA_OBSERVATORY=1
     # in Settings for deep-dive analysis.
     from config import config as _cfg_obs
@@ -1760,7 +1760,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         except Exception:
             pass
 
-    # Tranco top-1M ranking — strong "this is a legitimate brand, not the
+    # Tranco top-1M ranking - strong "this is a legitimate brand, not the
     # attacker" signal. We surface the rank verbatim and a tier bucket so
     # the analyst can see the popularity context at a glance.
     try:
@@ -1783,7 +1783,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
             }
     except Exception:
         pass
-    # Domain heuristics: NRD age, DGA score, IDN/homoglyph — all offline
+    # Domain heuristics: NRD age, DGA score, IDN/homoglyph - all offline
     try:
         from intel.domain_analysis import analyze_domain
         heuristics = analyze_domain(domain, (whois_data or {}).get("created"))
@@ -1791,7 +1791,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
             data["heuristics"] = heuristics
     except Exception:
         pass
-    # ── Secondary lookups — independent, so run them concurrently (Spamhaus DBL,
+    # ── Secondary lookups - independent, so run them concurrently (Spamhaus DBL,
     #    Maltiverse, OpenCTI, passive DNS, Safe Browsing). ──────────────────────
     from config import config as _cfg
     gsb_key = keys.get("GOOGLE_API_KEY", "")
@@ -1834,7 +1834,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     if osint:
         data["osint"] = osint
 
-    # Robtex — free, no-key passive DNS. Historical A/AAAA/MX records
+    # Robtex - free, no-key passive DNS. Historical A/AAAA/MX records
     # that complement the live DoH resolver and VT's passive_dns window.
     try:
         from intel.robtex import lookup_domain as _robtex_domain
@@ -1844,7 +1844,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("Robtex domain lookup failed for %s: %s", domain, _e)
 
-    # PhishStats — domain-indexed phishing records.
+    # PhishStats - domain-indexed phishing records.
     try:
         from intel.phishstats import lookup_domain as _ps_dom
         ps = await _ps_dom(session, domain)
@@ -1853,7 +1853,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("PhishStats domain lookup failed for %s: %s", domain, _e)
 
-    # Stalkphish — domain phishing-kit tracker.
+    # Stalkphish - domain phishing-kit tracker.
     stalk_key = keys.get("STALKPHISH_KEY", "")
     if stalk_key:
         try:
@@ -1864,7 +1864,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("Stalkphish domain lookup failed for %s: %s", domain, _e)
 
-    # URLdna — domain scan search.
+    # URLdna - domain scan search.
     urldna_key = keys.get("URLDNA_KEY", "")
     if urldna_key:
         try:
@@ -1875,7 +1875,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("URLdna domain lookup failed for %s: %s", domain, _e)
 
-    # SecurityTrails — subdomain enumeration + current DNS.
+    # SecurityTrails - subdomain enumeration + current DNS.
     st_key = keys.get("SECURITYTRAILS_KEY", "")
     if st_key:
         try:
@@ -1886,7 +1886,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("SecurityTrails domain lookup failed for %s: %s", domain, _e)
 
-    # Onyphe — domain summary across scan categories.
+    # Onyphe - domain summary across scan categories.
     on_key = keys.get("ONYPHE_KEY", "")
     if on_key:
         try:
@@ -1897,7 +1897,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("Onyphe domain lookup failed for %s: %s", domain, _e)
 
-    # Hunter.how — domain search (ports, services, resolved IPs).
+    # Hunter.how - domain search (ports, services, resolved IPs).
     hh_key = keys.get("HUNTER_HOW_KEY", "")
     if hh_key:
         try:
@@ -1908,7 +1908,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("Hunter.how domain lookup failed for %s: %s", domain, _e)
 
-    # BinaryEdge — subdomain enumeration.
+    # BinaryEdge - subdomain enumeration.
     be_key = keys.get("BINARYEDGE_KEY", "")
     if be_key:
         try:
@@ -1919,7 +1919,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("BinaryEdge domain lookup failed for %s: %s", domain, _e)
 
-    # ZoomEye — hostname search.
+    # ZoomEye - hostname search.
     ze_key = keys.get("ZOOMEYE_KEY", "")
     if ze_key:
         try:
@@ -1930,7 +1930,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("ZoomEye domain lookup failed for %s: %s", domain, _e)
 
-    # Validin — domain → historical IPs.
+    # Validin - domain → historical IPs.
     val_key = keys.get("VALIDIN_KEY", "")
     if val_key:
         try:
@@ -1941,7 +1941,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("Validin domain lookup failed for %s: %s", domain, _e)
 
-    # Hudson Rock Cavalier — infostealer-exposed logins across the
+    # Hudson Rock Cavalier - infostealer-exposed logins across the
     # domain's user base (BEC / phishing pivots).
     hr_key = keys.get("HUDSONROCK_KEY", "")
     if hr_key:
@@ -1954,7 +1954,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
             _log.debug("HudsonRock domain lookup failed for %s: %s", domain, _e)
 
     # ─── Tier 1 recon-ng / theHarvester subdomain + code-search sources ─
-    # Common Crawl — passive subdomain mining from the public web
+    # Common Crawl - passive subdomain mining from the public web
     # archive. Historical subdomains no CT log has.
     try:
         from intel.commoncrawl import lookup as _cc_lookup
@@ -1964,7 +1964,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("Common Crawl lookup failed for %s: %s", domain, _e)
 
-    # Wayback Machine CDX — historical subdomain + URL mining
+    # Wayback Machine CDX - historical subdomain + URL mining
     try:
         from intel.wayback import lookup as _wb_lookup
         wb = await _wb_lookup(session, domain)
@@ -1973,7 +1973,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("Wayback lookup failed for %s: %s", domain, _e)
 
-    # subdomain.center — community-sourced subdomain feed (free)
+    # subdomain.center - community-sourced subdomain feed (free)
     try:
         from intel.subdomain_center import lookup as _sc_lookup
         sc = await _sc_lookup(session, domain)
@@ -1982,7 +1982,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("subdomain.center lookup failed for %s: %s", domain, _e)
 
-    # RapidDNS — passive DNS subdomain enum (free, HTML scrape)
+    # RapidDNS - passive DNS subdomain enum (free, HTML scrape)
     try:
         from intel.rapiddns import lookup as _rd_lookup
         rd = await _rd_lookup(session, domain)
@@ -1991,7 +1991,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("RapidDNS lookup failed for %s: %s", domain, _e)
 
-    # crt.name — alternative CT log index
+    # crt.name - alternative CT log index
     try:
         from intel.crtname import lookup as _cn_lookup
         cn = await _cn_lookup(session, domain)
@@ -2000,7 +2000,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("crt.name lookup failed for %s: %s", domain, _e)
 
-    # GitHub code search — SUSPICIOUS when target domain appears in
+    # GitHub code search - SUSPICIOUS when target domain appears in
     # public code (shadow repos / leaked secrets)
     gh_key = keys.get("GITHUB_TOKEN", "")
     if gh_key:
@@ -2021,7 +2021,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("GitLab search failed for %s: %s", domain, _e)
 
-    # Sourcegraph — public code index (token optional, raises quota)
+    # Sourcegraph - public code index (token optional, raises quota)
     try:
         from intel.sourcegraph import lookup as _sg_lookup
         sg = await _sg_lookup(session, domain, keys.get("SOURCEGRAPH_TOKEN", ""))
@@ -2030,7 +2030,7 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("Sourcegraph lookup failed for %s: %s", domain, _e)
 
-    # Hunter.io — domain email enumeration + patterns + roles.
+    # Hunter.io - domain email enumeration + patterns + roles.
     hi_key = keys.get("HUNTER_IO_KEY", "")
     if hi_key:
         try:
@@ -2082,7 +2082,7 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         _cache[ck] = data
         return data
 
-    # abuse.ch endpoints — pass the Auth-Key header when configured.
+    # abuse.ch endpoints - pass the Auth-Key header when configured.
     # MalwareBazaar / ThreatFox / URLhaus all use the same key. Anonymous
     # requests have been rate-limited / soft-blocked since mid-2024.
     _ac_headers = {"Auth-Key": abusech_key} if abusech_key else {}
@@ -2099,7 +2099,7 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
              headers={"x-apikey": keys.get("VIRUSTOTAL_KEY", "")}),
         _get(session, f"https://otx.alienvault.com/api/v1/indicators/file/{hash_val}/general",
              headers={"X-OTX-API-KEY": keys.get("OTX_KEY", "")}),
-        # URLhaus payload lookup — confirms whether the hash is on the
+        # URLhaus payload lookup - confirms whether the hash is on the
         # URLhaus malware-distribution payload database. Returns malware
         # family + first seen.
         _post(session, "https://urlhaus-api.abuse.ch/v1/payload/",
@@ -2115,7 +2115,7 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         "virustotal":    _p_vt_file(results[2]),
         "otx":           _p_otx(results[3]),
     }
-    # URLhaus payload — surface only when the hash actually appears in
+    # URLhaus payload - surface only when the hash actually appears in
     # the database; the "not found" response is informational, not bad.
     uh = results[4]
     if isinstance(uh, dict) and not uh.get("error"):
@@ -2131,11 +2131,11 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
                 "summary":        (f"URLhaus payload hit: {uh.get('signature') or 'unknown family'}, "
                                    f"distributed across {uh.get('url_count') or '?'} URLs"),
             }
-    # CIRCL hashlookup — we already ran it above. Re-record the data here
+    # CIRCL hashlookup - we already ran it above. Re-record the data here
     # so the per-source UI shows it alongside everything else. We're past
     # the known-good short-circuit, so this branch covers two cases:
     # (a) CIRCL explicitly flags the hash as KnownMalicious (EICAR,
-    #     widely-tracked malware samples) — surface that signal, don't
+    #     widely-tracked malware samples) - surface that signal, don't
     #     bury it under generic "below threshold" text.
     # (b) CIRCL has SOME metadata but neither known-good nor known-bad
     #     (UNKNOWN verdict; trust score is just provenance confidence).
@@ -2149,7 +2149,7 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
             "known_malicious": known_malicious,
             "verdict":         "MALICIOUS" if known_malicious else None,
         }
-    # MalwareBazaar (abuse.ch) — free hash-to-family lookup. Same
+    # MalwareBazaar (abuse.ch) - free hash-to-family lookup. Same
     # operator (abuse.ch) as Feodo/ThreatFox/URLhaus, so the access
     # pattern + reliability are the same. Returns named family, tags,
     # YARA rule names, first/last seen.
@@ -2160,10 +2160,10 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
     except Exception:
         pass
 
-    # YARAify (abuse.ch) — YARA + ClamAV scan results for the sample.
+    # YARAify (abuse.ch) - YARA + ClamAV scan results for the sample.
     # Shares the abuse.ch Auth-Key with MB/ThreatFox/URLhaus. Returns
     # YARA rule names, authors, descriptions + ClamAV detection names
-    # — directly actionable for detection engineering.
+    # - directly actionable for detection engineering.
     try:
         from intel.yaraify import lookup as _yaraify_lookup
         yr = await _yaraify_lookup(session, hash_val, abusech_key)
@@ -2172,7 +2172,7 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
     except Exception:
         pass
 
-    # Polyswarm — multi-engine assertions + polyscore
+    # Polyswarm - multi-engine assertions + polyscore
     ps_key = keys.get("POLYSWARM_KEY", "")
     if ps_key:
         try:
@@ -2183,7 +2183,7 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("Polyswarm hash lookup failed: %s", _e)
 
-    # Intezer — code-reuse family attribution
+    # Intezer - code-reuse family attribution
     iz_key = keys.get("INTEZER_KEY", "")
     if iz_key:
         try:
@@ -2194,7 +2194,7 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("Intezer hash lookup failed: %s", _e)
 
-    # Hybrid Analysis — Falcon Sandbox overview + MITRE + signatures
+    # Hybrid Analysis - Falcon Sandbox overview + MITRE + signatures
     ha_key = keys.get("HYBRID_ANALYSIS_KEY", "")
     if ha_key:
         try:
@@ -2205,7 +2205,7 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("Hybrid Analysis hash lookup failed: %s", _e)
 
-    # Hatching Triage — cloud sandbox report corpus
+    # Hatching Triage - cloud sandbox report corpus
     tri_key = keys.get("TRIAGE_KEY", "")
     if tri_key:
         try:
@@ -2216,7 +2216,7 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("Triage hash lookup failed: %s", _e)
 
-    # Koodous — Android APK samples
+    # Koodous - Android APK samples
     koo_key = keys.get("KOODOUS_KEY", "")
     if koo_key:
         try:
@@ -2249,7 +2249,7 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("MWDB hash lookup failed: %s", _e)
 
-    # Joe Sandbox Cloud — commercial sandbox with free Basic tier.
+    # Joe Sandbox Cloud - commercial sandbox with free Basic tier.
     jsb_key = keys.get("JOESANDBOX_KEY", "")
     if jsb_key:
         try:
@@ -2260,10 +2260,10 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("JoeSandbox hash lookup failed: %s", _e)
 
-    # HIBP Pwned Passwords — k-anonymity API for SHA-1 input. We never
+    # HIBP Pwned Passwords - k-anonymity API for SHA-1 input. We never
     # send the password / full hash; only the first 5 chars of the SHA-1
     # prefix leave the box. RECON's hash IOC extractor surfaces SHA-1s
-    # too, and analysts often paste a leaked credential's SHA-1 — when
+    # too, and analysts often paste a leaked credential's SHA-1 - when
     # they do, HIBP can confirm "this hash is in 4M breaches."
     if len(hash_val) == 40:
         try:
@@ -2274,7 +2274,7 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
         except Exception:
             pass
 
-    # MVT mobile-spyware IOCs — Pegasus / Predator / RCS Lab / BadBazaar.
+    # MVT mobile-spyware IOCs - Pegasus / Predator / RCS Lab / BadBazaar.
     # Synchronous in-memory lookup. Hits here are extremely high-signal:
     # MVT only ships IOCs after the threat is named and confirmed.
     try:
@@ -2287,12 +2287,12 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
                 "ref":     mvt.get("ref"),
                 "verdict": "MALICIOUS",
                 "summary": (f"MVT spyware hit: {mvt.get('family')}"
-                            " — mobile-targeted threat."),
+                            " - mobile-targeted threat."),
             }
     except Exception:
         pass
 
-    # MISP feeds — flat hashes.csv dump from CIRCL OSINT / DigitalSide /
+    # MISP feeds - flat hashes.csv dump from CIRCL OSINT / DigitalSide /
     # Botvrij. Free, no key, refreshed every 6h. Hits here are strong
     # corroborating evidence (community-curated event with a UUID + a
     # filename context).
@@ -2310,7 +2310,7 @@ async def enrich_hash(session, hash_val: str, keys: dict) -> dict:
             }
     except Exception as _e:
         _log.debug("misp_feeds hash lookup failed: %s", _e)
-    # ── Secondary lookups — independent, run concurrently (Team Cymru MHR,
+    # ── Secondary lookups - independent, run concurrently (Team Cymru MHR,
     #    Maltiverse, OpenCTI, VT graph, MalwareBazaar pivot). The family
     #    pivot depends only on data already collected above. ─
     from config import config as _cfg
@@ -2373,7 +2373,7 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
     except Exception as e:
         return {"error": f"cve_enrichment unavailable: {e}"}
 
-    # Speed gate — slow/heavy CVE sources are opt-in via Settings.
+    # Speed gate - slow/heavy CVE sources are opt-in via Settings.
     # NVD + EPSS + KEV are ALWAYS ON because they're the verdict-driving
     # signals the analyst report cites by default. OSV / RHSA stay on by
     # default (~0.5-1s each). MSRC is OFF by default because the
@@ -2421,7 +2421,7 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
     if ms:
         data["msrc"] = ms
 
-    # CIRCL CVE-Search failover — only fires when the primary NVD call
+    # CIRCL CVE-Search failover - only fires when the primary NVD call
     # didn't yield real record data (no score + no description). NVD's
     # own uptime is unreliable, so this catches the "CVE exists but NVD
     # is 5xx or awaiting analysis" case.
@@ -2437,7 +2437,7 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("CIRCL CVE-Search failover failed for %s: %s", cve_id, _e)
 
-    # CISA Vulnrichment — ADP records that add CWE + refined CVSS + SSVC
+    # CISA Vulnrichment - ADP records that add CWE + refined CVSS + SSVC
     # when NVD/CNA data is thin. Free MITRE endpoint, no key.
     try:
         from intel.vulnrichment import lookup as _adp_lookup
@@ -2449,7 +2449,7 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
 
     # ProjectDiscovery nuclei-templates: how many public detection
     # templates target this CVE. "X templates exist" is a more concrete
-    # exploitation-tooling signal than CVSS alone — closes the gap
+    # exploitation-tooling signal than CVSS alone - closes the gap
     # between EPSS (probability) and KEV (in-the-wild) with active
     # community detection coverage.
     try:
@@ -2464,10 +2464,10 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
                                    "templates target this CVE."),
             }
     except Exception:
-        # Nuclei lookup is additive — never break CVE enrichment.
+        # Nuclei lookup is additive - never break CVE enrichment.
         pass
 
-    # Vulners — cross-references NVD CVEs against ExploitDB, PacketStorm,
+    # Vulners - cross-references NVD CVEs against ExploitDB, PacketStorm,
     # 0day.today, exploit packs, and flags wild-exploitation. Widens
     # exploit-source coverage beyond cve_pocs + KEV.
     vulners_key = keys.get("VULNERS_KEY", "")
@@ -2480,7 +2480,7 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("Vulners lookup failed for %s: %s", cve_id, _e)
 
-    # GitHub Security Advisories — editorial-curated package-ecosystem
+    # GitHub Security Advisories - editorial-curated package-ecosystem
     # advisories. Same upstream as OSV.dev but with cleaner summaries +
     # per-ecosystem context.
     try:
@@ -2501,7 +2501,7 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
     except Exception:
         pass
 
-    # Vendor advisory RSS — Apple / Adobe / Oracle. Daily-refreshed
+    # Vendor advisory RSS - Apple / Adobe / Oracle. Daily-refreshed
     # via lifespan task. Cross-references against the in-memory CVE
     # index to surface advisory titles + links.
     try:
@@ -2521,7 +2521,7 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
     except Exception:
         pass
 
-    # CSAF — vendor-specific advisories (Cisco, Red Hat, Siemens, SAP,
+    # CSAF - vendor-specific advisories (Cisco, Red Hat, Siemens, SAP,
     # Schneider, Bosch). Synchronous in-memory lookup over the bundled
     # CSAF JSON tree at vendor/csaf/<vendor>/*.json.
     try:
@@ -2560,7 +2560,7 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
     except Exception:
         pass
 
-    # trickest/cve PoC catalog — public proof-of-concept exploit links
+    # trickest/cve PoC catalog - public proof-of-concept exploit links
     # mined from GitHub / gist / exploit-db. "5 PoCs exist" is a sharper
     # weaponisation signal than EPSS-probability alone.
     try:
@@ -2580,7 +2580,7 @@ async def enrich_cve(session, cve_id: str, keys: dict) -> dict:
     except Exception:
         pass
 
-    # SSVC — Stakeholder-Specific Vulnerability Categorization. Synthesises
+    # SSVC - Stakeholder-Specific Vulnerability Categorization. Synthesises
     # the assembled CVE data into a decision-tree action (Act / Attend /
     # Track* / Track). Sits at the bottom of the gather so every upstream
     # signal (KEV / nuclei / PoCs / NVD) has populated by the time it runs.
@@ -2602,7 +2602,7 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
     import base64
     url_b64 = base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
 
-    # URLScan screenshot lookup — finds any previous public scan for this
+    # URLScan screenshot lookup - finds any previous public scan for this
     # URL and returns the screenshot UUID so the frontend can render the
     # thumbnail inline. Works without an API key (rate-limited) but a key
     # raises the limit considerably.
@@ -2628,7 +2628,7 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
         _post(session, "https://threatfox-api.abuse.ch/api/v1/",
               json={"query": "search_ioc", "search_term": url},
               headers=_ac_headers),
-        # OTX URL indicator — pulse count + tags for the URL itself
+        # OTX URL indicator - pulse count + tags for the URL itself
         _get(session,
              f"https://otx.alienvault.com/api/v1/indicators/url/{url}/general",
              headers={"X-OTX-API-KEY": keys.get("OTX_KEY", "")}),
@@ -2667,7 +2667,7 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
         data["otx"] = _p_otx(otx_url)
 
     # Phishing URL classifier (sklearn GradientBoosting over URL-structural
-    # features). Purely local — string analysis, no network I/O.
+    # features). Purely local - string analysis, no network I/O.
     try:
         from intel.phishing_url_classifier import classify as _phish_classify
         data["phishing_classifier"] = _phish_classify(url)
@@ -2676,7 +2676,7 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
 
     # Admin / sensitive-endpoint classifier (subdomain prefix + path
     # segment + localised keyword + scam-TLD amplifier). Purely string
-    # analysis. Adapted from cti-expert (MIT) — surfaces actor admin
+    # analysis. Adapted from cti-expert (MIT) - surfaces actor admin
     # panels / back-office endpoints that DGA/phishing classifiers miss
     # because the URL is structurally "normal" but lexically suspicious.
     try:
@@ -2687,7 +2687,7 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
     except Exception:
         pass
 
-    # ViriBack — malware C2 panel index with family attribution. Free
+    # ViriBack - malware C2 panel index with family attribution. Free
     # offline lookup after warm; complements URLhaus (which flags
     # payload-hosting URLs) by covering C2 admin / login endpoints.
     try:
@@ -2698,7 +2698,7 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("ViriBack URL lookup failed for %s: %s", url, _e)
 
-    # PhishTank — community phishing database, keyless-usable via a
+    # PhishTank - community phishing database, keyless-usable via a
     # static identifier (static shared bucket; endpoint doesn't
     # validate app_key server-side but requires some value or the
     # request hits Cloudflare bot protection).
@@ -2710,7 +2710,7 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("PhishTank URL lookup failed for %s: %s", url, _e)
 
-    # PhishStats — free keyless phishing-URL feed with score (0-10).
+    # PhishStats - free keyless phishing-URL feed with score (0-10).
     # Returns full URL + hosting IP + country + title.
     try:
         from intel.phishstats import lookup_url as _ps_lookup
@@ -2720,7 +2720,7 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("PhishStats URL lookup failed for %s: %s", url, _e)
 
-    # Stalkphish — phishing-kit tracker. Returns which kit schema is
+    # Stalkphish - phishing-kit tracker. Returns which kit schema is
     # deployed (zeus / 16shop / evilginx / ...) + first/last seen.
     stalk_key = keys.get("STALKPHISH_KEY", "")
     if stalk_key:
@@ -2732,7 +2732,7 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("Stalkphish URL lookup failed for %s: %s", url, _e)
 
-    # URLdna — sandboxed URL analysis with verdict + screenshot.
+    # URLdna - sandboxed URL analysis with verdict + screenshot.
     # SEARCH mode only (NEW_SCAN takes 5-10s; not suitable for live
     # enrichment).
     urldna_key = keys.get("URLDNA_KEY", "")
@@ -2745,7 +2745,7 @@ async def enrich_url(session, url: str, keys: dict) -> dict:
         except Exception as _e:
             _log.debug("URLdna URL lookup failed for %s: %s", url, _e)
 
-    # Joe Sandbox Cloud — URL sandbox analyses
+    # Joe Sandbox Cloud - URL sandbox analyses
     jsb_key = keys.get("JOESANDBOX_KEY", "")
     if jsb_key:
         try:
@@ -2787,7 +2787,7 @@ async def enrich_phone(session, phone: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("Phunter lookup failed for %s: %s", phone, _e)
 
-    # Phoneinfoga (NumVerify backend — keyed)
+    # Phoneinfoga (NumVerify backend - keyed)
     nv_key = keys.get("NUMVERIFY_KEY", "")
     if nv_key:
         try:
@@ -2834,8 +2834,8 @@ def _summarize_ioc(per_source: dict) -> dict:
 
 async def enrich_email(session, email: str, keys: dict) -> dict:
     """Enrich an email IOC. Two lookups:
-      • OFAC SDN — vendored offline; sanctioned addresses (BEC / OFAC hits).
-      • HIBP breach-by-domain — unauth /api/v3/breaches?domain=<...>; lists
+      • OFAC SDN - vendored offline; sanctioned addresses (BEC / OFAC hits).
+      • HIBP breach-by-domain - unauth /api/v3/breaches?domain=<...>; lists
         every public breach affecting the mail domain. Signals credential
         exposure risk for the user without needing the paid per-account
         endpoint. HIBP's own docs mark this endpoint as free and
@@ -2870,7 +2870,7 @@ async def enrich_email(session, email: str, keys: dict) -> dict:
     except Exception as e:
         _log.warning("OFAC email lookup failed for %s: %s", email, e)
 
-    # StopForumSpam — free, no key. Community spam-source reputation
+    # StopForumSpam - free, no key. Community spam-source reputation
     # keyed by email. Complements HIBP: HIBP tells you if the address is
     # in a breach, SFS tells you if it's actively used to send spam.
     try:
@@ -2881,7 +2881,7 @@ async def enrich_email(session, email: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("StopForumSpam email lookup failed for %s: %s", email, _e)
 
-    # OpenSanctions — superset of OFAC (adds UN / EU / UK / CH / national
+    # OpenSanctions - superset of OFAC (adds UN / EU / UK / CH / national
     # lists). Skip when OFAC already hit; a match there is authoritative
     # for US sanctions purposes and OpenSanctions would just repeat it.
     if not data.get("ofac_sdn"):
@@ -2894,13 +2894,13 @@ async def enrich_email(session, email: str, keys: dict) -> dict:
                     "found":   True,
                     "verdict": "MALICIOUS",
                     "summary": (f"Sanctioned entity (OpenSanctions): "
-                                f"{os_hit.get('entity')} — "
+                                f"{os_hit.get('entity')} - "
                                 f"{', '.join(os_hit.get('programs') or []) or 'multi-list'}"),
                 }
         except Exception as e:
             _log.debug("OpenSanctions email lookup failed for %s: %s", email, e)
 
-    # HIBP breaches by domain — free/unauth endpoint. Skip for well-known
+    # HIBP breaches by domain - free/unauth endpoint. Skip for well-known
     # public mail domains where "yes it's been breached" adds nothing
     # (gmail / hotmail / yahoo have LinkedIn / Adobe / etc. attached to
     # every address on the internet).
@@ -2923,7 +2923,7 @@ async def enrich_email(session, email: str, keys: dict) -> dict:
                                   reverse=True)[:5]
                 names = [b.get("Name") for b in breaches if b.get("Name")]
                 # Any breach >= 100k accounts, or a Verified breach in the
-                # last 3 years, is enough to call the address SUSPICIOUS —
+                # last 3 years, is enough to call the address SUSPICIOUS  - 
                 # the user's password is likely already public.
                 big = any(int(b.get("PwnCount") or 0) >= 100_000
                           for b in hibp_raw)
@@ -2955,7 +2955,7 @@ async def enrich_email(session, email: str, keys: dict) -> dict:
                                      "error": str(e)[:120],
                                      "error_type": "unreachable"}
 
-    # EmailRep — reputation (high/medium/low), malicious-activity /
+    # EmailRep - reputation (high/medium/low), malicious-activity /
     # credentials-leaked / disposable flags, social profile presence.
     # Key optional (raises daily quota).
     try:
@@ -2966,7 +2966,7 @@ async def enrich_email(session, email: str, keys: dict) -> dict:
     except Exception as _e:
         _log.debug("EmailRep email lookup failed for %s: %s", email, _e)
 
-    # Hudson Rock Cavalier — infostealer-compromised credentials. Any
+    # Hudson Rock Cavalier - infostealer-compromised credentials. Any
     # hit means an attacker has (or had) this address's password + MFA
     # cookies on an infected endpoint. Strong credential-exposure signal
     # beyond public HIBP dumps.
@@ -2986,15 +2986,15 @@ async def enrich_email(session, email: str, keys: dict) -> dict:
 
 async def enrich_crypto(session, address: str, keys: dict) -> dict:
     """Enrich a cryptocurrency address. Two offline lookups:
-      • ransomwhe.re — crowd-sourced payment-address tracker; maps addr
+      • ransomwhe.re - crowd-sourced payment-address tracker; maps addr
         → ransomware family.
-      • OFAC SDN — US Treasury sanctions list; addr → sanctioned entity.
+      • OFAC SDN - US Treasury sanctions list; addr → sanctioned entity.
 
     Chain is inferred from address shape (BTC / ETH / XMR).
     """
     address = str(address or "").strip()
 
-    # Cheap chain classifier — matches the regexes triage uses.
+    # Cheap chain classifier - matches the regexes triage uses.
     if address.startswith(("bc1",)):
         chain = "btc"
     elif address.startswith(("1", "3")) and len(address) in range(26, 36):
@@ -3052,7 +3052,7 @@ async def enrich_crypto(session, address: str, keys: dict) -> dict:
     except Exception as e:
         _log.warning("OFAC crypto lookup failed for %s: %s", address, e)
 
-    # OpenSanctions — broader coverage (UN / EU / UK / national bodies).
+    # OpenSanctions - broader coverage (UN / EU / UK / national bodies).
     # Only run when OFAC + Ransomwhere both missed, otherwise a single
     # authoritative hit is enough.
     if not data.get("ofac_sdn") and not data.get("ransomwhere"):
@@ -3095,7 +3095,7 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
         "GOOGLE_API_KEY":      config.get("GOOGLE_API_KEY"),
         "HONEYPOT_KEY":        config.get("HONEYPOT_KEY"),
         "CRIMINAL_IP_KEY":     config.get("CRIMINAL_IP_KEY"),
-        # abuse.ch unified key — unlocks the authenticated endpoints for
+        # abuse.ch unified key - unlocks the authenticated endpoints for
         # MalwareBazaar, ThreatFox, and URLhaus (anonymous calls have
         # been rate-limited / soft-blocked since mid-2024).
         "ABUSECH_AUTH_KEY":    config.get("ABUSECH_AUTH_KEY"),
@@ -3107,7 +3107,7 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
     start = datetime.now(timezone.utc)
 
     # Each IOC type is enriched concurrently. We track them as separate tasks so
-    # that — as each type finishes — we can stream a cumulative snapshot to the UI
+    # that - as each type finishes - we can stream a cumulative snapshot to the UI
     # (via on_partial) instead of waiting for the slowest type to land everything
     # at once. The final `enrichments` dict is identical either way.
     enrichments = {"ips": {}, "domains": {}, "hashes": {}, "urls": {},
@@ -3117,17 +3117,17 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
         "domains": iocs.get("domains", [])[:10],
         "hashes":  iocs.get("hashes", [])[:10],
         "urls":    iocs.get("urls", [])[:5],
-        # CVE enrichment — NVD detail + EPSS exploitation probability +
+        # CVE enrichment - NVD detail + EPSS exploitation probability +
         # live CISA KEV check. KEV catalog is downloaded once per run
         # via the cve_enrichment._kev_cache singleton.
         "cves":    iocs.get("cves", [])[:8],
-        # Email enrichment — OFAC SDN sanctioned-address lookup + HIBP
+        # Email enrichment - OFAC SDN sanctioned-address lookup + HIBP
         # breach-by-domain (both offline / free-tier).
         "emails":  iocs.get("emails", [])[:10],
-        # Crypto address enrichment — ransomwhe.re + OFAC SDN. Triage
+        # Crypto address enrichment - ransomwhe.re + OFAC SDN. Triage
         # emits either raw strings or {chain, address} dicts.
         "crypto":  iocs.get("crypto", [])[:10],
-        # Phone number enrichment — Phunter (local, no key) +
+        # Phone number enrichment - Phunter (local, no key) +
         # Phoneinfoga (NumVerify backend, keyed).
         "phones":  iocs.get("phones", [])[:10],
     }
@@ -3155,14 +3155,14 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
                 cat = task_to_cat[t]
                 enrichments[cat] = {v: r for v, r in zip(type_iocs[cat], t.result())}
                 if on_partial:
-                    # Cumulative snapshot — the frontend merges this into the result,
+                    # Cumulative snapshot - the frontend merges this into the result,
                     # so each completed type fills its cards as soon as it's ready.
                     try:
                         await on_partial({"enrichments": {k: dict(v) for k, v in enrichments.items()}})
                     except Exception:
                         pass
 
-    # ── Pivot pass — plugins can surface new IOCs from first-round
+    # ── Pivot pass - plugins can surface new IOCs from first-round
     # results (e.g. sandbox report → dropped-file hashes). Each pivot
     # inspects completed analyser outputs and extracts follow-on IOCs
     # which we enrich in a bounded second pass. Capped at 20 pivot IOCs
@@ -3179,7 +3179,7 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
                 "crypto": "crypto", "phone": "phones",
             }
             # Bucket → representative ioc_type for AnalysisResult. Hashes
-            # could be md5/sha1/sha256 — we pick based on string length
+            # could be md5/sha1/sha256 - we pick based on string length
             # for pydantic literal-type validation.
             def _ioc_type_for(bucket: str, value: str) -> str:
                 if bucket == "ips":
@@ -3260,7 +3260,7 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
     # Derive the verdicts dict shape from enrichments.keys() so adding a
     # new IOC bucket (emails, cves, ...) above can't crash this loop with
     # KeyError on the new bucket name. Was hardcoded to the original four
-    # buckets — broke every analysis whose log contained an email or CVE
+    # buckets - broke every analysis whose log contained an email or CVE
     # IOC until this fix.
     verdicts = {cat: {} for cat in enrichments.keys()}
     overall = {"MALICIOUS": 0, "SUSPICIOUS": 0, "CLEAN": 0, "UNKNOWN": 0}
@@ -3294,7 +3294,7 @@ async def run_enrichment(state: dict, on_partial=None) -> dict:
         "any_suspicious":   overall["SUSPICIOUS"] > 0,
     }
 
-    # Spec §2 — transparent confidence engine. Deterministic per-IOC score
+    # Spec §2 - transparent confidence engine. Deterministic per-IOC score
     # independent of the AI assessment so the analyst can audit exactly why
     # each IOC scored where it did.
     confidence: dict = {}

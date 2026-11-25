@@ -15,7 +15,7 @@ Plugin authors subclass one of plugins.base.{Analyzer, Connector,
 Pivot, Visualizer, Ingestor, Playbook} and call `plugins.registry.
 register(ClassName)` at module scope.
 
-Existing intel/*.py modules are exposed via LegacyAnalyzerAdapter —
+Existing intel/*.py modules are exposed via LegacyAnalyzerAdapter  - 
 see plugins/analyzers/_legacy_registrations.py for the wrap table.
 """
 

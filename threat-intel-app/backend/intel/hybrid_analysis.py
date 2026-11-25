@@ -1,7 +1,7 @@
 """
 Hybrid Analysis (CrowdStrike Falcon Sandbox) hash + URL lookup.
 
-Source: https://www.hybrid-analysis.com/ — CrowdStrike's public
+Source: https://www.hybrid-analysis.com/ - CrowdStrike's public
 sandbox report corpus. Free API tier: 500 req/month.
 
   Header: api-key: <HYBRID_ANALYSIS_KEY>

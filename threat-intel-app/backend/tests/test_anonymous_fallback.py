@@ -1,4 +1,4 @@
-"""Regression test — missing API keys must not break the enrichment
+"""Regression test - missing API keys must not break the enrichment
 pipeline for sources that support anonymous queries.
 
 The IPInfo + Pulsedive integrations historically sent `?token=` and
@@ -26,10 +26,10 @@ import pytest
 def _reset_enrichment_state():
     """Two kinds of module-level state leak across tests in this file:
 
-      1. Per-host circuit breaker — prior failures can trip it and
+      1. Per-host circuit breaker - prior failures can trip it and
          later calls get short-circuited to `circuit_open` instead of
          actually being issued.
-      2. `_cache` — enrich_ip / enrich_domain memoize results by
+      2. `_cache` - enrich_ip / enrich_domain memoize results by
          (ioc_type, value) and skip fan-out on cache hits. Without
          clearing, the SECOND call for 1.2.3.4 returns the first
          call's cached result and the capturing session sees no
@@ -108,12 +108,12 @@ def test_ipinfo_drops_token_param_when_key_unset():
     # Either params is None, or it's a dict/mapping without a `token` key.
     # Both forms are acceptable; `{"token": ""}` is NOT.
     if params is None:
-        pass  # explicit no-param — ideal
+        pass  # explicit no-param - ideal
     else:
         assert "token" not in params, (
             "IPInfo request still carries token= with an unset key. "
             "aiohttp will serialise `{'token': ''}` as `?token=` which "
-            "IPInfo treats as auth failure — the exact bug this test exists "
+            "IPInfo treats as auth failure - the exact bug this test exists "
             "to prevent."
         )
 

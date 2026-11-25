@@ -1,7 +1,7 @@
 """
 Skill abstract base class.
 
-A Skill is a self-contained, individually-testable unit of capability —
+A Skill is a self-contained, individually-testable unit of capability  - 
 "extract IOCs from text," "enrich one IOC against TI sources," "ask the
 AI to generate a Sigma rule," etc. Every skill exposes a uniform shape
 (name, description, input_schema, output_schema, execute, test_input)

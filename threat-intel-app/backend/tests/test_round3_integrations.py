@@ -1,19 +1,19 @@
 """
 Behavioural tests for the round-3 OSS integrations:
 
-  * intel.malcontent_rules     — chainguard malcontent capability buckets
-  * intel.eset_families        — ESET malware-ioc family IOC corpus
-  * intel.panther_rules        — panther-analysis cloud detections
-  * intel.splunk_content       — Splunk security_content
-  * intel.mitre_car            — MITRE CAR analytics
-  * intel.emulation_plans      — CTID Adversary Emulation Library
-  * intel.hunter_playbook      — OTRF ThreatHunter-Playbook
-  * intel.ads_framework        — Palantir ADS Framework (always loaded)
-  * intel.forensic_artifacts   — ForensicArtifacts/artifacts
-  * intel.cloud_fixtures       — DataDog grimoire
-  * intel.phishing_db          — Phishing.Database (live feed)
-  * skills.match_detections    — unified detection-corpora fan-out
-  * skills.classify_capabilities — malcontent capability classification
+  * intel.malcontent_rules     - chainguard malcontent capability buckets
+  * intel.eset_families        - ESET malware-ioc family IOC corpus
+  * intel.panther_rules        - panther-analysis cloud detections
+  * intel.splunk_content       - Splunk security_content
+  * intel.mitre_car            - MITRE CAR analytics
+  * intel.emulation_plans      - CTID Adversary Emulation Library
+  * intel.hunter_playbook      - OTRF ThreatHunter-Playbook
+  * intel.ads_framework        - Palantir ADS Framework (always loaded)
+  * intel.forensic_artifacts   - ForensicArtifacts/artifacts
+  * intel.cloud_fixtures       - DataDog grimoire
+  * intel.phishing_db          - Phishing.Database (live feed)
+  * skills.match_detections    - unified detection-corpora fan-out
+  * skills.classify_capabilities - malcontent capability classification
 
 All graceful-missing-corpus paths are exercised. The corpora are
 operator-fetched via scripts/fetch_*.sh; tests just confirm the
@@ -28,7 +28,7 @@ import asyncio
 import pytest
 
 
-# ─── ADS framework (always loaded — no corpus to fetch) ─────────────────────
+# ─── ADS framework (always loaded - no corpus to fetch) ─────────────────────
 def test_ads_framework_has_nine_sections():
     from intel.ads_framework import ADS_SECTIONS, ads_section_outline, ads_headings
     assert len(ADS_SECTIONS) == 9

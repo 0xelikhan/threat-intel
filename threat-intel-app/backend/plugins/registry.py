@@ -1,5 +1,5 @@
 """
-Plugin registry — the central lookup for every registered plugin.
+Plugin registry - the central lookup for every registered plugin.
 
 The registry is populated at import time via two paths:
   1. Auto-discovery: `discover()` walks plugins/analyzers, plugins/
@@ -11,10 +11,10 @@ The registry is populated at import time via two paths:
      modules and registers them explicitly.
 
 Lookups:
-  registry.all()              — every registered plugin
-  registry.get(name)          — by name
-  registry.by_kind(kind)      — all plugins of one kind
-  registry.analyzers_for(t)   — analyzers that support IOC type t
+  registry.all()              - every registered plugin
+  registry.get(name)          - by name
+  registry.by_kind(kind)      - all plugins of one kind
+  registry.analyzers_for(t)   - analyzers that support IOC type t
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ _discovered: bool = False
 
 def register(plugin: Plugin) -> Plugin:
     """Add a plugin instance to the registry. Also usable as a
-    decorator over a plugin class — in which case we instantiate it
+    decorator over a plugin class - in which case we instantiate it
     with no args and register the instance."""
     if isinstance(plugin, type):  # used as decorator over the class
         instance = plugin()
@@ -52,14 +52,14 @@ def register(plugin: Plugin) -> Plugin:
     if not getattr(instance, "name", ""):
         raise ValueError(f"Plugin {instance.__class__.__name__} has no .name")
     if instance.name in _by_name:
-        _log.warning("Plugin %r already registered — overwriting", instance.name)
+        _log.warning("Plugin %r already registered - overwriting", instance.name)
     _by_name[instance.name] = instance
     return instance
 
 
 def discover() -> None:
     """Walk plugin subpackages and import every module so each
-    module-level @register call fires. Idempotent — subsequent calls
+    module-level @register call fires. Idempotent - subsequent calls
     are no-ops."""
     global _discovered
     if _discovered:
@@ -157,5 +157,5 @@ def playbooks() -> List[Playbook]:
 
 
 def descriptors() -> List[PluginDescriptor]:
-    """Serialisable catalog — what /api/plugins returns."""
+    """Serialisable catalog - what /api/plugins returns."""
     return [p.descriptor() for p in all()]

@@ -12,7 +12,7 @@ capa capabilities, suspicious-string hits, MITRE-mapped capabilities,
 verdict) into a SARIF document that an analyst can attach to a GitHub
 PR or upload to their CI.
 
-Output is purely a serializer — no network IO, no LLM. Reads the
+Output is purely a serializer - no network IO, no LLM. Reads the
 analyze_file() result dict; emits a SARIF dict the caller can
 json.dumps() or stream to a downloadable response.
 """
@@ -102,7 +102,7 @@ def to_sarif(analyze_result: Dict[str, Any],
                             f"YARA rule {rule_name} matched.",
             )
         msg = (f"YARA rule {rule_name} matched"
-                + (f" — {m['description']}" if m.get("description") else ""))
+                + (f" - {m['description']}" if m.get("description") else ""))
         # First matched string's snippet, if present
         snippet = ""
         for ms in (m.get("matched_strings") or [])[:1]:
@@ -151,7 +151,7 @@ def to_sarif(analyze_result: Dict[str, Any],
                     msg += f": {t['evidence']}"
                 results.append(_sarif_result(rule_id, default_level, msg, fn))
 
-    # 4) Suspicious strings — surface only critical pattern hits, not every
+    # 4) Suspicious strings - surface only critical pattern hits, not every
     #    interesting string
     for s in (analyze_result.get("suspicious_strings") or [])[:25]:
         if not isinstance(s, dict):

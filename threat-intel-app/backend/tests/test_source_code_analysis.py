@@ -1,9 +1,9 @@
-"""Source-code analysis mode — verify the file scanner switches off
+"""Source-code analysis mode - verify the file scanner switches off
 PE/binary patterns when handed a source file and instead surfaces
 language-specific tradecraft.
 
 Reproducer: the Nim shellcode loader (`custom_load.nim`) pasted into the
-RECON file scanner — VirtualAlloc(PAGE_EXECUTE_READWRITE) + CreateThread
+RECON file scanner - VirtualAlloc(PAGE_EXECUTE_READWRITE) + CreateThread
 + httpclient.downloadFile to an attacker-hosted stager URL. The expected
 behaviour:
 
@@ -28,7 +28,7 @@ if _BACKEND not in sys.path:
 from intel.file_analyzer import analyze_file  # noqa: E402
 
 
-# Real Nim source file — combination of httpclient + winim + VirtualAlloc
+# Real Nim source file - combination of httpclient + winim + VirtualAlloc
 # RWX + CreateThread is the textbook shellcode-loader build seen in
 # off-the-shelf commodity loaders (and red-team training samples). Trimmed
 # to the analytical core; comments preserved because the source patterns
@@ -107,7 +107,7 @@ def test_shellcode_injection_pattern_detected(nim_result):
     sus = {s["pattern"] for s in (nim_result.get("suspicious_strings") or [])}
     assert "src_virtualalloc_rwx" in sus
     assert "src_create_thread" in sus
-    # Both must fire — that's what flips T1055.
+    # Both must fire - that's what flips T1055.
 
 
 def test_http_download_call_detected(nim_result):
@@ -143,11 +143,11 @@ def test_overall_verdict_is_malicious(nim_result):
 
 
 def test_pe_imports_path_not_relied_on(nim_result):
-    # We must reach MALICIOUS without any PE format_specific block — proof
+    # We must reach MALICIOUS without any PE format_specific block - proof
     # that source-code mode does not fall back to PE-import predicates.
     fs = nim_result.get("format_specific") or {}
     assert not fs.get("pe"), (
-        "source file analysis must not produce a PE format-specific block — "
+        "source file analysis must not produce a PE format-specific block - "
         f"got {fs.get('pe')!r}"
     )
 

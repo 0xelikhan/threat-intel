@@ -1,8 +1,8 @@
-"""YARA file scanner — pure-Python via yara-python.
+"""YARA file scanner - pure-Python via yara-python.
 
 Wraps intel/yara_scanner.py in the FileAnalyzer plugin interface so
 every registered scan runs through a uniform result shape. Scans
-every file type ('any') — YARA rules can match PE, ELF, PDF, scripts,
+every file type ('any') - YARA rules can match PE, ELF, PDF, scripts,
 anything.
 """
 

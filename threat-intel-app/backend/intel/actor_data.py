@@ -42,7 +42,7 @@ def _ms_lookup() -> dict:
         lookup[ms_name.lower()] = entry
         for alias in entry["aliases"]:
             if alias:
-                # First-wins on alias collisions — shared aliases like
+                # First-wins on alias collisions - shared aliases like
                 # "WICKED PANDA" map to whichever MS actor is listed first.
                 lookup.setdefault(alias.lower(), entry)
     return lookup
@@ -121,10 +121,10 @@ def match_threat_actors(mitre_techniques: list) -> list:
     """
     Return ranked threat actor matches with MISP galaxy enrichment AND the
     Microsoft weather-naming overlay. Each entry carries:
-      * name          — MITRE/MISP canonical name (kept for backwards compat)
-      * ms_name       — Microsoft weather name (or '' if not in MS taxonomy)
-      * aliases       — full union of MITRE / MISP synonyms / MS aliases
-      * origin        — country (preferring the MS-taxonomy origin string when
+      * name          - MITRE/MISP canonical name (kept for backwards compat)
+      * ms_name       - Microsoft weather name (or '' if not in MS taxonomy)
+      * aliases       - full union of MITRE / MISP synonyms / MS aliases
+      * origin        - country (preferring the MS-taxonomy origin string when
                         present because it covers PSOA / influence-ops / "Group
                         in development" categories that MISP doesn't tag)
 

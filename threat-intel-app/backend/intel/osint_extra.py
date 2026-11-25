@@ -1,5 +1,5 @@
 """
-Extra free OSINT sources — spec §3.
+Extra free OSINT sources - spec §3.
 
 Adds to enrichment.py: full DNS record enumeration (hackertarget), CIRCL BGP
 ranking, VirusTotal graph relationships for hashes, MalwareBazaar similar
@@ -17,7 +17,7 @@ from typing import Dict, List
 _TIMEOUT = aiohttp.ClientTimeout(total=10)
 
 
-# ─── DNS record enumeration (hackertarget — no key) ─────────────────────────────
+# ─── DNS record enumeration (hackertarget - no key) ─────────────────────────────
 async def dns_records(session: aiohttp.ClientSession, domain: str) -> Dict:
     """Returns {records: {A:[…], AAAA:[…], MX:[…], NS:[…], TXT:[…], SOA:[…], CNAME:[…]}}."""
     records: Dict[str, List[str]] = {"A": [], "AAAA": [], "MX": [], "NS": [],
@@ -53,9 +53,9 @@ async def dns_records(session: aiohttp.ClientSession, domain: str) -> Dict:
     return {"records": out, "total_records": sum(len(v) for v in out.values())}
 
 
-# ─── BGP ranking (CIRCL — no key) ──────────────────────────────────────────────
+# ─── BGP ranking (CIRCL - no key) ──────────────────────────────────────────────
 async def bgp_ranking(session: aiohttp.ClientSession, ip: str) -> Dict:
-    """CIRCL BGP Ranking — ASN reputation score. Two-call flow:
+    """CIRCL BGP Ranking - ASN reputation score. Two-call flow:
       1. POST /ipasn_history/  {"ip": X}  →  {"response": {"<ts>": {"asn": X, "prefix": X}}}
       2. POST /json/asn        {"asn": X} →  {"response": {"asn_description": X,
                                                             "ranking": {"rank": F, "position": N,
@@ -102,11 +102,11 @@ async def bgp_ranking(session: aiohttp.ClientSession, ip: str) -> Dict:
         desc     = r2.get("asn_description") or ""
 
         # Derived verdict + human-readable summary. The AI analyst was
-        # reading the raw `rank: 1.82e-06` and calling it "poor" — the
+        # reading the raw `rank: 1.82e-06` and calling it "poor" - the
         # opposite of what a low rank actually means. Emitting a plain
         # verdict + summary makes the semantics impossible to invert.
         #
-        # Position is the primary tier signal — it's normalised against
+        # Position is the primary tier signal - it's normalised against
         # the total ASN count, so it survives CIRCL rebalancing better
         # than raw rank thresholds. Position=1 is the SINGLE WORST ASN
         # (most abuse indicators observed on it that day).
@@ -185,7 +185,7 @@ async def vt_hash_relationships(session: aiohttp.ClientSession, sha: str, key: s
 # ─── MalwareBazaar similar samples by family ───────────────────────────────────
 async def malwarebazaar_similar(session: aiohttp.ClientSession, family: str,
                                  abusech_key: str = "") -> Dict:
-    """Pull recent samples tagged with the same family — useful for pivot."""
+    """Pull recent samples tagged with the same family - useful for pivot."""
     if not family:
         return {}
     headers = {"Content-Type": "application/x-www-form-urlencoded"}

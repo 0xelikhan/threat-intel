@@ -5,7 +5,7 @@ Source: https://github.com/mvt-project/mvt (Apache-2.0). MVT ships
 curated STIX2 IOC bundles for mobile-targeted spyware: Pegasus (NSO
 Group), Predator, RCS Lab, BadBazaar, Stalkerware Hunting Group, etc.
 
-The IOCs live in vendor/mvt/<bundle>.stix2 — each file is a STIX 2.0
+The IOCs live in vendor/mvt/<bundle>.stix2 - each file is a STIX 2.0
 bundle with Indicators carrying patterns like:
 
   [file:hashes.MD5 = '...']
@@ -89,7 +89,7 @@ def _ingest_bundle(path: Path,
                    families:  set) -> None:
     try:
         if path.stat().st_size > 8_000_000:
-            return  # absurdly large STIX bundle — skip
+            return  # absurdly large STIX bundle - skip
         text = path.read_text(encoding="utf-8", errors="ignore")
     except OSError:
         return

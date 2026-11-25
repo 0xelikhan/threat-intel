@@ -1,13 +1,13 @@
 """
 Behavioural tests for the seven round-2 integrations:
 
-  1. EPSS                — pre-existing; covered by tests/test_cve_enrichment.py
-  2. dnstwist            — skills.domain_permutations
-  3. Attack Flow         — intel.attack_flow
-  4. signature-base YARA — pre-existing; intel/yara_scanner.py
-  5. FLARE capa          — intel.capa_runner + skills.analyze_capabilities
-  6. SigmaHQ corpus      — intel.sigma_corpus + skills.match_sigma_rules
-  7. nuclei-templates    — intel.nuclei_index
+  1. EPSS                - pre-existing; covered by tests/test_cve_enrichment.py
+  2. dnstwist            - skills.domain_permutations
+  3. Attack Flow         - intel.attack_flow
+  4. signature-base YARA - pre-existing; intel/yara_scanner.py
+  5. FLARE capa          - intel.capa_runner + skills.analyze_capabilities
+  6. SigmaHQ corpus      - intel.sigma_corpus + skills.match_sigma_rules
+  7. nuclei-templates    - intel.nuclei_index
 
 Each test asserts a small, well-defined behaviour. Heavy integrations
 (capa subprocess, dnstwist with DNS) use the short-circuit paths so the
@@ -24,7 +24,7 @@ import pytest
 def test_domain_permutations_generates_variants_offline():
     """resolve=False must skip DNS and just return the generated permutation
     set so the test stays offline. We assert dnstwist actually emitted
-    variants — not the exact list (it changes between dnstwist versions)."""
+    variants - not the exact list (it changes between dnstwist versions)."""
     from skills import run_skill
     out = asyncio.run(run_skill("domain_permutations", {
         "domain": "microsoft.com", "max_results": 8, "resolve": False,
@@ -73,7 +73,7 @@ def test_attack_flow_emits_extension_definition():
 
 def test_attack_flow_short_circuits_when_no_techniques():
     """No techniques → empty list. We don't want a flow container with
-    no actions in it (invalid per the spec — start_refs would be empty)."""
+    no actions in it (invalid per the spec - start_refs would be empty)."""
     from intel.attack_flow import build_attack_flow_objects
     assert build_attack_flow_objects(
         identity_id="identity--abc",
@@ -109,7 +109,7 @@ def test_capa_runner_short_circuits_on_empty_input():
 
 def test_capa_skill_accepts_b64_input():
     """The skill should base64-decode `file_b64` when raw bytes aren't
-    supplied — that's how the future /api/scan/capa endpoint will send
+    supplied - that's how the future /api/scan/capa endpoint will send
     upload payloads."""
     from skills import run_skill
     out = asyncio.run(run_skill("analyze_capabilities", {
@@ -163,13 +163,13 @@ def test_sigma_match_returns_high_overlap_first():
 @_SIGMA_SKIP
 def test_sigma_match_subtechnique_resolves_to_parent():
     """Asking for T1059.001 should also surface rules tagged only T1059
-    (the parent technique) — our matcher unions the subtech with its
+    (the parent technique) - our matcher unions the subtech with its
     parent before lookup."""
     from intel.sigma_corpus import match_by_techniques
     matches = match_by_techniques(["T1059.001"], max_results=10)
     parent_only = [m for m in matches if "T1059" in (m.get("techniques") or [])
                                        and "T1059.001" not in (m.get("techniques") or [])]
-    # Not all corpora have T1059-only rules, so this is a soft assertion —
+    # Not all corpora have T1059-only rules, so this is a soft assertion  - 
     # we only require that the matcher returned *something* without error.
     assert isinstance(parent_only, list)
     assert len(matches) >= 1
@@ -192,7 +192,7 @@ def test_match_sigma_rules_skill_returns_attribution():
 def test_nuclei_index_handles_missing_corpus():
     """nuclei-templates is operator-fetched via scripts/fetch_nuclei_templates.sh.
     When the dir isn't present, stats() must report the error string and
-    lookup() must return an empty list — never crash."""
+    lookup() must return an empty list - never crash."""
     from intel.nuclei_index import stats, lookup
     s = stats()
     assert s["loaded"] is True

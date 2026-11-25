@@ -3,10 +3,10 @@
  *
  * Every helper here exists because a regression shipped to production
  * before tests caught it:
- *   - smartTruncate          — OTX pulse names were sliced mid-word at
+ *   - smartTruncate          - OTX pulse names were sliced mid-word at
  *                              60 chars ("Enemy of the State: Order in
  *                              the C"). Fix landed in commit ed28795.
- *   - sourceErrorMessage      — circuit_open / auth_failed / timed_out
+ *   - sourceErrorMessage      - circuit_open / auth_failed / timed_out
  *                              were rendered as raw Python dict repr
  *                              ({'error': '...', 'error_type': '...'})
  *                              because the frontend translation table
@@ -22,16 +22,16 @@
  * boundary (avoids leaving a 5-char fragment when a single word eats
  * the whole budget).
  *
- * @param {string} s   — input
- * @param {number} max — cap length (chars)
- * @returns {string}   — truncated with trailing "…" when shortened
+ * @param {string} s   - input
+ * @param {number} max - cap length (chars)
+ * @returns {string}   - truncated with trailing "…" when shortened
  */
 export function smartTruncate(s, max) {
   if (!s) return '';
   if (s.length <= max) return s;
   const cut = s.slice(0, max);
   const sp  = cut.lastIndexOf(' ');
-  // Only honour the word boundary if it's at least 60% of the cap —
+  // Only honour the word boundary if it's at least 60% of the cap  - 
   // otherwise we'd return a tiny prefix when the first word is long.
   return (sp > max * 0.6 ? cut.slice(0, sp) : cut) + '…';
 }
@@ -41,13 +41,13 @@ export function smartTruncate(s, max) {
  * analyst sees. The blob shape comes from agents/enrichment.py and
  * carries {error, error_type, source, skipped?}.
  *
- * Return values are deliberately plain English — the analyst card
+ * Return values are deliberately plain English - the analyst card
  * shows this text directly, no further formatting.
  *
  * @param {{error?: string, error_type?: string}} blob
- * @param {string} sourceLabel — display name for the source (e.g.
+ * @param {string} sourceLabel - display name for the source (e.g.
  *                               "AbuseIPDB"), used in suggestions
- * @returns {string|null} — null when the blob should be hidden
+ * @returns {string|null} - null when the blob should be hidden
  *                          entirely (not_configured), else the
  *                          translated message
  */
@@ -55,27 +55,27 @@ export function sourceErrorMessage(blob, sourceLabel = '') {
   if (!blob || typeof blob !== 'object') return null;
 
   // Sources that simply aren't configured shouldn't pretend they
-  // failed — hide them entirely.
+  // failed - hide them entirely.
   if (blob.error_type === 'not_configured') return null;
 
   const raw = blob.error || '';
 
   switch (blob.error_type) {
     case 'circuit_open':
-      return 'temporarily skipped (recent failures opened the breaker — retry in a few minutes)';
+      return 'temporarily skipped (recent failures opened the breaker - retry in a few minutes)';
     case 'auth_failed':
-      return `couldn't authenticate — verify the ${sourceLabel || 'source'} API key in data/config.json`;
+      return `couldn't authenticate - verify the ${sourceLabel || 'source'} API key in data/config.json`;
     case 'rate_limited':
-      return 'rate-limited (HTTP 429) — daily quota or burst limit reached';
+      return 'rate-limited (HTTP 429) - daily quota or burst limit reached';
     case 'timed_out':
-      return 'request timed out — source may be slow or unreachable';
+      return 'request timed out - source may be slow or unreachable';
     case 'http_error':
-      return `source returned an HTTP error — ${String(raw).slice(0, 100)}`;
+      return `source returned an HTTP error - ${String(raw).slice(0, 100)}`;
     default:
       if (typeof raw === 'string' && raw.toLowerCase() === 'no data') {
         return 'no data returned for this indicator';
       }
-      return `unavailable — ${String(raw).slice(0, 100)}`;
+      return `unavailable - ${String(raw).slice(0, 100)}`;
   }
 }
 
@@ -85,8 +85,8 @@ export function sourceErrorMessage(blob, sourceLabel = '') {
  * day one (boundary off-by-one between MALICIOUS and SUSPICIOUS).
  *
  * @param {number} n
- * @param {number} maliciousAt — count >= this is red
- * @param {number} suspiciousAt — count >= this is orange
+ * @param {number} maliciousAt - count >= this is red
+ * @param {number} suspiciousAt - count >= this is orange
  * @returns {'red'|'orange'|'yellow'|'green'} bucket name
  */
 export function thresholdBucket(n, maliciousAt = 10, suspiciousAt = 3) {
@@ -127,7 +127,7 @@ const _VERDICT_TO_BUCKET = {
  * Map a threat_level value to its color bucket. Case-insensitive.
  * Unknown levels fall back to 'grey' (INFORMATIONAL).
  *
- * @param {string} level — CRITICAL / HIGH / MEDIUM / LOW / INFORMATIONAL
+ * @param {string} level - CRITICAL / HIGH / MEDIUM / LOW / INFORMATIONAL
  * @returns {'red'|'orange'|'yellow'|'blue'|'grey'}
  */
 export function levelBucket(level) {
@@ -139,7 +139,7 @@ export function levelBucket(level) {
 /**
  * Map a verdict value to its color bucket. Case-insensitive.
  * Unknown verdicts fall back to 'grey'. CLEAN_INFRA is intentionally
- * blue (distinct from CLEAN's green) — surfaces the "this is known
+ * blue (distinct from CLEAN's green) - surfaces the "this is known
  * infrastructure but the SPECIFIC TRAFFIC may not be safe" nuance.
  *
  * @param {string} verdict
@@ -166,7 +166,7 @@ function _tokens(s) {
 
 
 /**
- * Token-set overlap ratio between two strings — used by the
+ * Token-set overlap ratio between two strings - used by the
  * AnalystSummary de-dup to detect paraphrased duplicates that a
  * strict string-equal check misses.
  *
@@ -196,8 +196,8 @@ export function tokenOverlap(a, b) {
  * the already-rendered summary paragraph.
  *
  * @param {string[]} candidates
- * @param {string|string[]} against — corpus to compare against
- * @param {number} threshold — 0..1, drop when overlap >= this
+ * @param {string|string[]} against - corpus to compare against
+ * @param {number} threshold - 0..1, drop when overlap >= this
  * @returns {string[]} filtered list
  */
 export function dropOverlapping(candidates, against, threshold = 0.5) {

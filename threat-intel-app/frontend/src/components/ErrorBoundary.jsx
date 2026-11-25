@@ -1,5 +1,5 @@
 /**
- * ErrorBoundary — catches unhandled errors in a subtree and renders a
+ * ErrorBoundary - catches unhandled errors in a subtree and renders a
  * friendly recovery panel matching the RECON dark/cyan aesthetic.
  *
  * Usage (wrap a top-level view OR a major panel within a view):
@@ -8,9 +8,9 @@
  *   </ErrorBoundary>
  *
  * The boundary surfaces three actions to the analyst:
- *   1. Retry — resets the boundary so the child re-renders fresh.
- *   2. Copy Error — copies error + componentStack to clipboard for reporting.
- *   3. Continue Without — hides the broken panel so the rest of the page works.
+ *   1. Retry - resets the boundary so the child re-renders fresh.
+ *   2. Copy Error - copies error + componentStack to clipboard for reporting.
+ *   3. Continue Without - hides the broken panel so the rest of the page works.
  *
  * Special handling for ChunkLoadError (React.lazy chunk fetches that 404
  * after a redeploy invalidated the chunk hashes referenced by the old
@@ -28,7 +28,7 @@ import { alpha as muiAlpha } from '@mui/material/styles';
 import { AlertTriangle, RefreshCcw, Copy, X, RotateCw } from 'lucide-react';
 
 
-// Module-level guard — make sure we only auto-reload ONCE per session so
+// Module-level guard - make sure we only auto-reload ONCE per session so
 // a chunk that's genuinely 404ing on the server doesn't put us in a
 // reload loop. sessionStorage is checked before triggering.
 const _RELOAD_KEY = 'recon:chunkloaderr:reloaded';
@@ -70,7 +70,7 @@ class ErrorBoundary extends React.Component {
 
     // ChunkLoadError auto-reload: the browser is holding a stale index.html
     // that references a chunk hash the new deployment no longer has. The
-    // only fix is to fetch the new index.html, so trigger a hard reload —
+    // only fix is to fetch the new index.html, so trigger a hard reload  - 
     // but only ONCE per session (guarded by sessionStorage) so we don't
     // loop if the chunk is genuinely missing on the server.
     if (_isChunkLoadError(error)) {
@@ -91,7 +91,7 @@ class ErrorBoundary extends React.Component {
 
   retry = () => {
     if (this._reloadTimer) { clearTimeout(this._reloadTimer); this._reloadTimer = null; }
-    // For ChunkLoadError, "Retry" means reload the page — no other path
+    // For ChunkLoadError, "Retry" means reload the page - no other path
     // can succeed when index.html is stale.
     if (_isChunkLoadError(this.state.error)) {
       this._hardReload();
@@ -160,7 +160,7 @@ class ErrorBoundary extends React.Component {
             : <AlertTriangle size={16} color={accent}/>}
           <Typography sx={{ fontSize: 13, fontWeight: 700, color: accent,
             textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            {isChunk ? 'RECON was updated — reloading' : `${label} crashed`}
+            {isChunk ? 'RECON was updated - reloading' : `${label} crashed`}
           </Typography>
         </Stack>
 

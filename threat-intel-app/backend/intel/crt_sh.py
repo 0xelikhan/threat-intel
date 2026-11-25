@@ -1,5 +1,5 @@
 """
-crt.sh — Certificate Transparency log search. Free, no key.
+crt.sh - Certificate Transparency log search. Free, no key.
 
 For a domain, returns every certificate ever issued for it or any
 subdomain. This surfaces:
@@ -58,7 +58,7 @@ async def enrich(session, domain: str) -> Dict[str, Any]:
             "Accept": "application/json"}
 
     # crt.sh's nginx front 502s under load and their Postgres node
-    # occasionally times out on popular queries. Both are transient —
+    # occasionally times out on popular queries. Both are transient  - 
     # one retry after a short backoff clears most of them. Anything
     # else (auth_failed, rate_limited, circuit_open) stops immediately
     # since retrying wouldn't change the outcome.
@@ -70,11 +70,11 @@ async def enrich(session, domain: str) -> Dict[str, Any]:
             await asyncio.sleep(1.5)   # short backoff
         raw = await _get(session, url, headers=hdrs)
         if isinstance(raw, list):
-            break   # success — even [] is fine, means "no certs"
+            break   # success - even [] is fine, means "no certs"
         if isinstance(raw, dict) and raw.get("error"):
             last_err = raw
             if raw.get("error_type") not in _RETRY_TYPES:
-                break   # non-transient — retrying won't help
+                break   # non-transient - retrying won't help
         else:
             break
 
@@ -134,7 +134,7 @@ async def enrich(session, domain: str) -> Dict[str, Any]:
     last_seen  = max(dates).date().isoformat() if dates else None
 
     # SANs that AREN'T the queried domain or an obvious subdomain of it.
-    # These are the pivots — sibling brands, hidden infra, or the
+    # These are the pivots - sibling brands, hidden infra, or the
     # attacker's lookalike sitting under the same cert.
     domain_l = domain.lower().rstrip(".")
     notable = sorted([s for s in sans

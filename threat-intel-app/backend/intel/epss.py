@@ -1,7 +1,7 @@
 """
-EPSS — Exploit Prediction Scoring System (FIRST.org).
+EPSS - Exploit Prediction Scoring System (FIRST.org).
 Daily-updated score per CVE: probability of exploitation in next 30 days.
-Pairs perfectly with CISA KEV — KEV tells you it IS exploited,
+Pairs perfectly with CISA KEV - KEV tells you it IS exploited,
 EPSS tells you HOW LIKELY others will be exploited.
 """
 import csv
@@ -22,7 +22,7 @@ def _index() -> dict:
             # Skip metadata header (first line starts with #model_version)
             first = f.readline()
             if not first.startswith("cve"):
-                pass  # the # line — header is next
+                pass  # the # line - header is next
             reader = csv.DictReader(f)
             # The reader's first record might be the header again if we mis-skipped
             for row in reader:

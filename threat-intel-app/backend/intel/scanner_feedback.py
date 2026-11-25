@@ -1,5 +1,5 @@
 """
-Scanner analyst feedback store + institutional-knowledge loop — spec §2.
+Scanner analyst feedback store + institutional-knowledge loop - spec §2.
 
   POST /api/scan/feedback  → record(scan_id, thumbs, correction, notes)
   When generating new AI analysis, similar-file lookups (by fuzzy hash)
@@ -125,10 +125,10 @@ def institutional_knowledge_prompt(analysis: Dict) -> Optional[str]:
         thumb = e.get("thumbs")
         lines.append(
             f"  - {e['filename'] or e['matched_sha256'][:12]+'…'} "
-            f"({e['match_kind']}) — analyst gave 👎: {', '.join(bits) or 'no specifics'}"
+            f"({e['match_kind']}) - analyst gave 👎: {', '.join(bits) or 'no specifics'}"
             if thumb == "down"
             else f"  - {e['filename'] or e['matched_sha256'][:12]+'…'} "
-                 f"({e['match_kind']}) — analyst gave 👍 (your prior assessment was correct)"
+                 f"({e['match_kind']}) - analyst gave 👍 (your prior assessment was correct)"
         )
         if e.get("notes"):
             lines.append(f"    note: {e['notes'][:200]}")

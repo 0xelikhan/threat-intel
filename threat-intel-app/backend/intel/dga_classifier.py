@@ -175,7 +175,7 @@ def _structural_features(label: str) -> List[float]:
     for c in label:
         counts[c] = counts.get(c, 0) + 1
     entropy = -sum((c / n) * math.log2(c / n) for c in counts.values())
-    # Longest run of consonants (a DGA tell — real words almost never
+    # Longest run of consonants (a DGA tell - real words almost never
     # exceed 4 consonants in a row)
     max_consonant_run = 0
     cur = 0
@@ -207,7 +207,7 @@ def _build_model() -> Optional[Tuple[Any, Any, Any]]:
         from sklearn.preprocessing import StandardScaler
         import numpy as np
     except ImportError as e:
-        _log.warning("sklearn unavailable: %s — DGA classifier disabled", e)
+        _log.warning("sklearn unavailable: %s - DGA classifier disabled", e)
         return None
 
     # Pull additional benign negatives from the Tranco index when the
@@ -306,7 +306,7 @@ def classify(domain: str) -> Dict[str, Any]:
         f" ({confidence} confidence)."
         if is_dga else
         f"DGA classifier: {round(proba * 100, 1)}% likely DGA-generated"
-        f" — below threshold, treat as benign-shaped."
+        f" - below threshold, treat as benign-shaped."
     )
 
     return {

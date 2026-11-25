@@ -11,10 +11,10 @@ mitre_techniques, threat_actor, IOCs) into a CACAO 2.0 playbook JSON
 that SOAR analysts can ingest and execute.
 
 The CACAO schema:
-  - playbook       — top-level container with type, name, description
-  - workflow       — step graph (start_step, end_step, actions in between)
-  - playbook_types — incident-response / detection / investigation
-  - workflow_step  — single action with command, target, on_completion
+  - playbook       - top-level container with type, name, description
+  - workflow       - step graph (start_step, end_step, actions in between)
+  - playbook_types - incident-response / detection / investigation
+  - workflow_step  - single action with command, target, on_completion
 
 For RECON's reactive triage workflow we emit:
   - type:           "playbook"
@@ -23,7 +23,7 @@ For RECON's reactive triage workflow we emit:
   - workflow:       chain of action steps, each referencing the MITRE
                     technique it counters
 
-Output is a pure serializer — no IO, no LLM.
+Output is a pure serializer - no IO, no LLM.
 """
 
 from __future__ import annotations
@@ -109,7 +109,7 @@ def to_cacao(response_summary: Dict[str, Any],
         step_ids.append(sid)
         workflow[sid] = _action_step(name, description, tid)
 
-    # Wire on_completion chain — each step points at the next.
+    # Wire on_completion chain - each step points at the next.
     for i, sid in enumerate(step_ids):
         nxt = step_ids[i + 1] if i + 1 < len(step_ids) else None
         if nxt:
@@ -124,7 +124,7 @@ def to_cacao(response_summary: Dict[str, Any],
     if step_ids:
         workflow[step_ids[-1]]["on_completion"] = end_id
 
-    # MITRE references at the playbook level — surfaces every technique
+    # MITRE references at the playbook level - surfaces every technique
     # the investigation flagged so SOAR engines can route by tactic.
     ext_refs: List[Dict[str, str]] = []
     for t in techniques[:12]:
@@ -143,8 +143,8 @@ def to_cacao(response_summary: Dict[str, Any],
         "type":              "playbook",
         "spec_version":      _CACAO_SPEC_VERSION,
         "id":                f"playbook--{uuid.uuid4()}",
-        "name":              (f"RECON IR Playbook — {verdict}"
-                              + (f" — {actor}" if actor else ""))[:240],
+        "name":              (f"RECON IR Playbook - {verdict}"
+                              + (f" - {actor}" if actor else ""))[:240],
         "description":       (summary or
                               "Auto-generated RECON incident-response playbook.")[:1000],
         "playbook_types":    ["investigation", "mitigation"]

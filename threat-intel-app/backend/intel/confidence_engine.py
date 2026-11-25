@@ -1,5 +1,5 @@
 """
-Transparent confidence-scoring engine — spec §2.
+Transparent confidence-scoring engine - spec §2.
 
 Deterministic per-IOC score computed from the enrichment payload + behavioral
 indicators + feed cache. Independent of the AI assessment so analysts can see
@@ -92,7 +92,7 @@ def score_ip(ioc: str, enrichment: Dict, behavioral: Optional[Dict] = None,
         factors.append(_factor("Bulletproof/abuse hosting ASN", 15,
                                f"matched: {bp_hits[0]}", "context"))
 
-    # ── Behavioral (applies globally — same factors used for any IP in a case)
+    # ── Behavioral (applies globally - same factors used for any IP in a case)
     if behavioral:
         cats = (behavioral.get("categories") or {})
         if any(h.get("name", "").startswith("PowerShell EncodedCommand")
@@ -107,7 +107,7 @@ def score_ip(ioc: str, enrichment: Dict, behavioral: Optional[Dict] = None,
         if cats.get("persistence"):
             factors.append(_factor("Persistence mechanism detected", 15,
                                    f"{len(cats['persistence'])} pattern(s)", "behavioral"))
-        # Malware family from any source — VT file, MalwareBazaar, ThreatFox
+        # Malware family from any source - VT file, MalwareBazaar, ThreatFox
         family = (vt.get("malware_family") or
                   (enrichment.get("malwarebazaar") or {}).get("malware_family") or
                   (enrichment.get("threatfox") or {}).get("malware_family"))
@@ -126,7 +126,7 @@ def score_ip(ioc: str, enrichment: Dict, behavioral: Optional[Dict] = None,
             factors.append(_factor("TAXII feed match", 20,
                                    f"source={src}", "feed"))
 
-    # ── Deception (honeypot / abuse-list hits — see spec §5) ───────────────────
+    # ── Deception (honeypot / abuse-list hits - see spec §5) ───────────────────
     dec = enrichment.get("deception") or {}
     if (dec.get("dshield") or {}).get("flagged"):
         factors.append(_factor("DShield / SANS ISC flagged", 25,
@@ -271,7 +271,7 @@ def _finalize(ioc: str, ioc_type: str, factors: List[Dict]) -> Dict:
 def score_all(enrichments: Dict, behavioral: Optional[Dict] = None,
               feed_cache_lookup=None) -> Dict[str, Dict]:
     """Score every IOC in the enrichments payload. feed_cache_lookup is an
-    optional callable(value) -> dict|None — wires in the unified TAXII+FreshRSS
+    optional callable(value) -> dict|None - wires in the unified TAXII+FreshRSS
     cache lookup so feed hits become a scoring factor."""
     out: Dict[str, Dict] = {}
     scorers = {

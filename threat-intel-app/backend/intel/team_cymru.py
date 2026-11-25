@@ -1,6 +1,6 @@
 """
 Team Cymru Malware Hash Registry (MHR).
-Free DNS-based hash reputation — no API key required.
+Free DNS-based hash reputation - no API key required.
 
 Query pattern: <hash>.malware.hash.cymru.com  →  TXT record
 TXT response : "<unix_first_seen> <detection_percentage>"

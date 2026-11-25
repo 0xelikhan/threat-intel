@@ -1,7 +1,7 @@
 """
 Hatching Triage (tria.ge) hash + URL lookup.
 
-Source: https://tria.ge/ — cloud sandbox + public report corpus by
+Source: https://tria.ge/ - cloud sandbox + public report corpus by
 Hatching. Free API tier available.
 
   Header: Authorization: Bearer <TRIAGE_KEY>

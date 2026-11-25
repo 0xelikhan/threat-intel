@@ -1,5 +1,5 @@
 """
-GenerateHypothesisSkill — produce testable threat-hunting hypotheses
+GenerateHypothesisSkill - produce testable threat-hunting hypotheses
 from a completed RECON analysis (triage + enrichment + investigation).
 
 Prompt adapted from Cisco Talos PEAK-Assistant
@@ -12,7 +12,7 @@ emit 3-5 specific, behaviour-focused hypotheses an analyst can take into
 a hunt. The prompt enforces PEAK's "describe what adversaries ARE DOING,
 not what detection might show" framing.
 
-Runs on the fast model tier (FAST_AI_MODEL) — it's a single short call.
+Runs on the fast model tier (FAST_AI_MODEL) - it's a single short call.
 """
 
 from __future__ import annotations

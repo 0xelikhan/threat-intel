@@ -8,7 +8,7 @@ Sources:
   - https://github.com/splunk/attack_data      (Apache-2.0). Labelled
     Windows event logs, Sysmon, AWS CloudTrail, Linux auditd captures
     organised by ATT&CK technique. Companion to DataDog grimoire (cloud-
-    only) — this one covers the endpoint side.
+    only) - this one covers the endpoint side.
 
 Each attack_data dataset is a folder per ATT&CK technique with a
 README.yaml shape:
@@ -36,7 +36,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 _log = logging.getLogger("recon.intel.attack_datasets")
 
-# Mordor is GPL-3.0 — the path is here only to surface the existence in
+# Mordor is GPL-3.0 - the path is here only to surface the existence in
 # stats(); we never ingest its contents.
 _MORDOR_ROOT      = (Path(__file__).parent.parent.parent
                      / "vendor" / "mordor")

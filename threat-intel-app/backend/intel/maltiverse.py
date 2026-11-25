@@ -1,5 +1,5 @@
 """
-Maltiverse — aggregated threat intel for IP / hostname / hash / URL.
+Maltiverse - aggregated threat intel for IP / hostname / hash / URL.
 Free tier with rate limits (no key required for basic anonymous queries).
 """
 import aiohttp
@@ -45,7 +45,7 @@ async def lookup(ioc_type: str, value: str, api_key: str = "") -> dict | None:
     # Historical-noise gate: Maltiverse aggregates ~40 feeds, so even
     # 8.8.8.8 accumulates a 44-entry `blacklist` array (DNS reflection
     # attacks TARGET public DNS, so those feeds list 8.8.8.8 as an
-    # associated address). Same story with `tag` — Google DNS carries
+    # associated address). Same story with `tag` - Google DNS carries
     # "asyncrat, c2, backdoor" tags derived from historical reflection
     # incidents. When the AI investigation prompt reads that raw blob
     # it writes prose like "Maltiverse associates this IP with AsyncRAT"

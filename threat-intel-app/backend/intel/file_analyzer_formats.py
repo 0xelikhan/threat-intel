@@ -1,5 +1,5 @@
 """
-Format-specific deep analyzers — spec §2 of the all-in-one scanner plan.
+Format-specific deep analyzers - spec §2 of the all-in-one scanner plan.
 
 Dispatched from file_analyzer.analyze_file() based on the detected category.
 Each analyzer is best-effort: missing dependency → empty dict, never raises.
@@ -119,7 +119,7 @@ def analyze_pe(file_bytes: bytes) -> Dict:
     except Exception:
         pass
 
-    # ── imports — grouped + flagged ──────────────────────────────────────────
+    # ── imports - grouped + flagged ──────────────────────────────────────────
     imports: Dict[str, List[str]] = {}
     if hasattr(pe, "DIRECTORY_ENTRY_IMPORT"):
         for entry in pe.DIRECTORY_ENTRY_IMPORT:
@@ -481,7 +481,7 @@ def analyze_script(file_bytes: bytes, filename: str) -> Dict:
     out["source_preview"] = text[:4000]
     out["line_count"]     = text.count("\n") + 1
     out["urls"]           = sorted({u for u in re.findall(r"https?://[^\s\"'<>]+", text)})[:20]
-    # IPv4 octet validation — drop matches where any octet > 255 (Defender
+    # IPv4 octet validation - drop matches where any octet > 255 (Defender
     # / vendor version strings have the same shape but are not IPs).
     def _v4_ok(ip):
         p = ip.split(".")
@@ -507,7 +507,7 @@ def analyze_script(file_bytes: bytes, filename: str) -> Dict:
 # ─── disk image analysis (ISO / IMG / VHD) ────────────────────────────────────
 def analyze_disk_image(file_bytes: bytes) -> Dict:
     out: Dict = {"format": "disk_image", "members": [], "flags": []}
-    # Cheap content peek for autorun.inf — ISO9660 stores filenames in plaintext
+    # Cheap content peek for autorun.inf - ISO9660 stores filenames in plaintext
     text = file_bytes[:200_000].decode("latin-1", errors="ignore").lower()
     if "autorun.inf" in text:
         out["flags"].append("autorun_inf_present")

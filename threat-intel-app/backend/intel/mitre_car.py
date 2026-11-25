@@ -2,7 +2,7 @@
 MITRE Cyber Analytics Repository (CAR) loader.
 
 Source: https://github.com/mitre-attack/car (Apache-2.0). ~100 named
-analytics (CAR-YYYY-MM-NNN.yaml) — each with pseudocode, a Sigma/EQL/
+analytics (CAR-YYYY-MM-NNN.yaml) - each with pseudocode, a Sigma/EQL/
 Splunk implementation, the ATT&CK techniques it covers, and the data-
 source requirements. CAR closes the gap between "we know technique
 T1059.001 is involved" and "here is a vetted analytic that detects it."

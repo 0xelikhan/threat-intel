@@ -1,1 +1,1 @@
-"""Playbook plugins — repeatable analysis workflows chaining plugins."""
+"""Playbook plugins - repeatable analysis workflows chaining plugins."""

@@ -1,4 +1,4 @@
-"""FLARE CAPA — PE / ELF capability extraction with MITRE mapping."""
+"""FLARE CAPA - PE / ELF capability extraction with MITRE mapping."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from plugins import AnalysisResult, FileAnalyzer, register
 
 class CapaFileAnalyzer(FileAnalyzer):
     name = "capa"
-    description = ("FLARE CAPA — identifies capabilities (persistence, "
+    description = ("FLARE CAPA - identifies capabilities (persistence, "
                    "injection, C2 protocol, etc.) by matching rules "
                    "against disassembled binaries, with MITRE ATT&CK "
                    "technique mapping.")

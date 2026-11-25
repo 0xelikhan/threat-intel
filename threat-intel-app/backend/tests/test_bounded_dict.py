@@ -2,7 +2,7 @@
 
 Covers the eviction contract that prevents the in-memory _results /
 _chats stores from growing unbounded (which used to let a long-running
-container accumulate GBs of stale state — see 447deb6 / 5a36e36)."""
+container accumulate GBs of stale state - see 447deb6 / 5a36e36)."""
 
 from __future__ import annotations
 

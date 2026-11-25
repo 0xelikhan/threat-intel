@@ -23,23 +23,23 @@ itsdangerous>=2.0.0
 # dnstwist powers the domain_permutations skill (typosquat / homoglyph
 # enumeration for URL-input alerts). MIT-licensed, pure Python.
 dnstwist>=20240819
-# phonenumbers powers intel/phunter.py — pure Python phone-number parse,
+# phonenumbers powers intel/phunter.py - pure Python phone-number parse,
 # validate, carrier / timezone / line-type extraction. Google-maintained,
 # Apache-2.0, no network dependencies.
 phonenumbers>=8.13.0
-# flare-capa is OPTIONAL — opt-in via RECON_ENABLE_CAPA=1. Pulls ~150 MB
+# flare-capa is OPTIONAL - opt-in via RECON_ENABLE_CAPA=1. Pulls ~150 MB
 # of transitive deps (vivisect, viv-utils, etc.) and spends 5-30s per
 # real PE. The rules-based intel/file_capability_map.py still produces
 # a MITRE technique list from PE imports without it. Comment out if
 # disk / install time is constrained.
 flare-capa>=8.0.0
 # scikit-learn powers the round-14 ML enhancements:
-#   intel/dga_classifier.py          — LogisticRegression over char-ngrams
-#   intel/phishing_url_classifier.py — GradientBoosting over URL features
-#   intel/semantic_search.py         — TF-IDF fallback embedder
+#   intel/dga_classifier.py          - LogisticRegression over char-ngrams
+#   intel/phishing_url_classifier.py - GradientBoosting over URL features
+#   intel/semantic_search.py         - TF-IDF fallback embedder
 # Trained at first call on bundled in-tree datasets (no disk persistence).
 scikit-learn>=1.4.0
-# sentence-transformers is OPTIONAL — when installed, semantic_search.py
+# sentence-transformers is OPTIONAL - when installed, semantic_search.py
 # embeds with all-MiniLM-L6-v2 (~80MB) instead of the TF-IDF fallback.
 # Comment out if disk / install time is constrained.
 # sentence-transformers>=2.7.0

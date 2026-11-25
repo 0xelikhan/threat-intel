@@ -1,5 +1,5 @@
 """
-Signal priority framework — the correlation backbone for the analyst
+Signal priority framework - the correlation backbone for the analyst
 disposition.
 
 The AI response stage was producing internally contradictory verdicts
@@ -7,7 +7,7 @@ The AI response stage was producing internally contradictory verdicts
 "routine sign-in, safe to clear") because the LLM was reasoning IOC-
 first and treating log-content attribution as noise. Public TI is
 naturally clean on nation-state infrastructure, so a "clean reputation"
-reading is expected — not a reason to downgrade the upstream detection.
+reading is expected - not a reason to downgrade the upstream detection.
 
 This module fixes the correlation gap at the data layer, BEFORE the LLM
 sees the evidence pack. We walk the final pipeline state and bucket
@@ -20,7 +20,7 @@ every signal into a priority tier, then:
   2. Expose format_signal_correlation(state) → analyst-readable prose
      summary the LLM can quote verbatim in disposition_reason.
 
-  3. Expose should_block_clear(state) → (blocked, reason) — the safety
+  3. Expose should_block_clear(state) → (blocked, reason) - the safety
      net response.py runs AFTER the LLM disposition. If the model
      picked CLEAR while TIER 1 signals are present, we auto-override
      to ESCALATE and stamp a machine reason. Belt-and-braces with the
@@ -28,7 +28,7 @@ every signal into a priority tier, then:
 
 Tier definitions (calibrated for MDR alert-triage):
 
-  TIER 1 — verdict-determining. Any one → threat_level HIGH minimum,
+  TIER 1 - verdict-determining. Any one → threat_level HIGH minimum,
            disposition MUST be ESCALATE or MONITOR (never CLEAR):
      * Log content names a tracked threat actor (Storm-####, APT##,
        UNC####, TA###, or a named group like Midnight Blizzard,
@@ -44,7 +44,7 @@ Tier definitions (calibrated for MDR alert-triage):
      * MFA bypass / session-token replay / impossible travel
      * ≥5 independent VT engines flagging the SAME IOC
 
-  TIER 2 — corroborating. ≥2 fired → HIGH; single → MEDIUM+:
+  TIER 2 - corroborating. ≥2 fired → HIGH; single → MEDIUM+:
      * 2-4 VT engines on the same IOC
      * AbuseIPDB ≥75 with recent activity
      * Lateral-movement signals (cross-host credential reuse,
@@ -58,7 +58,7 @@ Tier definitions (calibrated for MDR alert-triage):
      * Local blocklist hit + recent activity
      * MalwareBazaar named family match
 
-  TIER 3 — contextual / corroborating only. Doesn't drive verdict alone:
+  TIER 3 - contextual / corroborating only. Doesn't drive verdict alone:
      * 1 VT engine
      * OTX 1-4 pulses
      * Cloud-provider ASN (contextual)
@@ -67,7 +67,7 @@ Tier definitions (calibrated for MDR alert-triage):
      * Suspicious port
      * Bulletproof ASN
 
-  DOWNWEIGHT — reasons to lean lower, ONLY when no TIER 1 fired:
+  DOWNWEIGHT - reasons to lean lower, ONLY when no TIER 1 fired:
      * MISP warninglist match on the IOC
      * Known-good vendor pattern (Dell SupportAssist, MS Defender,
        CrowdStrike agent, SCCM, Intune, etc.) hit in behavioral_indicators
@@ -131,7 +131,7 @@ _TRACKED_ACTOR_PATTERNS = [
 
 # Upstream "High" / "Critical" risk markers common in Defender / Sentinel /
 # Entra ID / Okta / risk-based auth logs.
-# NOTE the `[_ -]?` between compound tokens — Entra emits camelCase
+# NOTE the `[_ -]?` between compound tokens - Entra emits camelCase
 # (`riskState`, `riskLevel`), Sentinel emits snake_case (`risk_state`),
 # and some SIEMs emit space-separated. Make separators optional so all
 # three shapes match.
@@ -172,7 +172,7 @@ _CREDENTIAL_ACCESS_PATTERNS = [
     re.compile(r"/etc/shadow\b.*\b(?:copied|exfiltrated|accessed)", re.I | re.S),
     re.compile(r"(?:cat|scp|curl|wget)\s+.*?~?/\.ssh/id_[a-z0-9_]+\b", re.I),
     re.compile(r"\.ssh/id_rsa\b.*(?:exfiltrated|leaked|read|copied)", re.I | re.S),
-    # macOS credential targets — Keychain, TCC.db (holds sensitive perms)
+    # macOS credential targets - Keychain, TCC.db (holds sensitive perms)
     re.compile(r"\blogin\.keychain(-db)?\b.*(?:accessed|copied|read|dumped)", re.I | re.S),
     re.compile(r"\bsecurity\s+dump-keychain\b", re.I),
     re.compile(r"\bsecurity\s+find-generic-password\b.*-w\b", re.I),
@@ -181,7 +181,7 @@ _CREDENTIAL_ACCESS_PATTERNS = [
 
 # Ransomware behavioural markers.
 _RANSOMWARE_PATTERNS = [
-    # Allow optional .exe suffix — `vssadmin.exe delete shadows` was slipping
+    # Allow optional .exe suffix - `vssadmin.exe delete shadows` was slipping
     # through the old \s+ requirement because `.exe` isn't whitespace.
     re.compile(r"\bvssadmin(?:\.exe)?\s+delete\s+shadows\b", re.I),
     re.compile(r"\bwmic(?:\.exe)?\s+shadowcopy\s+delete\b", re.I),
@@ -192,7 +192,7 @@ _RANSOMWARE_PATTERNS = [
                r"Cl0p|Play\s+Ransom|Rhysida|Akira", re.I),
 ]
 
-# Identity / IAM attack patterns — password spray, MFA fatigue,
+# Identity / IAM attack patterns - password spray, MFA fatigue,
 # privileged role assignment, suspicious service principal creation.
 # Fires TIER 2 in the extractor.
 _IDENTITY_ATTACK_PATTERNS = [
@@ -209,7 +209,7 @@ _IDENTITY_ATTACK_PATTERNS = [
     re.compile(r"\battack\s+tool\s+detected\b", re.I),  # Entra risk detection
     re.compile(r"\bleaked\s+credentials\b", re.I),
     re.compile(r"\bmalware\s+linked\s+ip\b", re.I),
-    # BAV2ROPC user agent — legacy Basic Auth via Resource Owner
+    # BAV2ROPC user agent - legacy Basic Auth via Resource Owner
     # Password Credentials. Almost every credential-stuffing tool
     # uses this UA. Real users don't. Very high-signal.
     re.compile(r"\bBAV2ROPC\b"),
@@ -220,13 +220,13 @@ _IDENTITY_ATTACK_PATTERNS = [
     # is almost always malicious.
     re.compile(r"(?:Unfamiliar(?:ASN|Browser|Device|IP|Location|EASId|TenantIPsubnet|Features)[\"',\s]*){3,}", re.I),
     re.compile(r"riskReasons.*?Unfamiliar.*?Unfamiliar.*?Unfamiliar", re.I | re.S),
-    # MITRE T1078 (Valid Accounts) references — the specific technique
+    # MITRE T1078 (Valid Accounts) references - the specific technique
     # subclasses attackers use for cloud identity compromise
     re.compile(r"\bT1078(?:\.\d{3})?\b"),
     re.compile(r"\bmitreTechniques[\"'\s]*[:=][\"'\s]*[\"']?T1078", re.I),
 ]
 
-# Windows AV detection patterns — Defender detecting HackTool / PUA
+# Windows AV detection patterns - Defender detecting HackTool / PUA
 # variants and Defender action failures. These are TIER 2 corroborating
 # signals: the detection itself is a real signal, and a failed
 # remediation means the artefact is still on disk.
@@ -247,8 +247,8 @@ _DEFENDER_DETECTION_TIER2_PATTERNS = [
     # Any HackTool: / PUA: string in the log (not necessarily prefixed by Name:)
     ("HackTool / PUA family name in log",
      re.compile(r"\b(?:HackTool|PUA|PUABundler|Backdoor|Ransom|Trojan|Exploit)\s*:\s*(?:Script|Win\d\d|MSIL|VBS|JS|HTML|Linux|OSX|MacOS)/", re.I)),
-    # Defender action failed — file still on disk
-    ("Defender action failed — Error Code present",
+    # Defender action failed - file still on disk
+    ("Defender action failed - Error Code present",
      re.compile(r"\bAction\s*:\s*Quarantine\b.*?\bError\s+Code\s*:\s*0x[0-9a-f]+", re.I | re.S)),
     ("Defender ActionSuccess: false",
      re.compile(r"\bActionSuccess\s*:\s*false\b", re.I)),
@@ -278,7 +278,7 @@ _CLOUD_ATTACK_PATTERNS = [
     re.compile(r"\bKeyVault\s+Purge\b", re.I),
     # Azure high-severity incident
     re.compile(r"\bAzure\s+Sentinel\b.*?\bseverity\s*:?\s*(?:high|critical)", re.I | re.S),
-    # AWS root account use — always high signal
+    # AWS root account use - always high signal
     re.compile(r"\broot\s+account\s+(?:login|used|access|activity)", re.I),
     re.compile(r"\buserIdentity[^{]*\btype\s*:\s*[\"']?Root[\"']?", re.I),
     # IAM privilege escalation
@@ -290,36 +290,36 @@ _CLOUD_ATTACK_PATTERNS = [
 ]
 
 # ──────────────────────────────────────────────────────────────────────
-# WINDOWS AD / KERBEROS ATTACK PATTERNS — TIER 1
+# WINDOWS AD / KERBEROS ATTACK PATTERNS - TIER 1
 # ──────────────────────────────────────────────────────────────────────
 _WIN_AD_TIER1_PATTERNS = [
     # Kerberos attacks
     ("Kerberoasting attempt",
      re.compile(r"\bkerberoast(?:ing)?\s+(?:attempt|attack|detected)", re.I)),
-    ("Kerberoasting — RC4-HMAC downgrade + Event 4769",
+    ("Kerberoasting - RC4-HMAC downgrade + Event 4769",
      re.compile(r"(?:event\s+id\s*:?\s*4769.*?RC4[- ]HMAC|RC4[- ]HMAC.*?event\s+id\s*:?\s*4769)", re.I | re.S)),
     ("AS-REP roasting",
      re.compile(r"\bAS[-_ ]REP\s+roast(?:ing)?\b", re.I)),
-    ("AS-REP roasting — DONT_REQ_PREAUTH targeting",
+    ("AS-REP roasting - DONT_REQ_PREAUTH targeting",
      re.compile(r"\bDONT_REQ_PREAUTH\b.*?(?:target|attempt|multiple)", re.I | re.S)),
     ("Golden Ticket usage",
      re.compile(r"\bgolden\s+ticket\b.*?(?:used|usage|suspected|detected)", re.I | re.S)),
-    ("Golden Ticket — unusual TGT lifetime",
+    ("Golden Ticket - unusual TGT lifetime",
      re.compile(r"\bTGT\s+lifetime\s*:?\s*\d+\s*year", re.I)),
     ("Silver Ticket usage",
      re.compile(r"\bsilver\s+ticket\b.*?(?:used|usage|suspected|detected)", re.I | re.S)),
     ("DCSync from non-DC",
      re.compile(r"\bDCSync\s+.*?(?:non[-_ ]DC|workstation|not\s+a\s+domain\s+controller)", re.I | re.S)),
-    ("DCSync — Directory Replication permissions abuse",
+    ("DCSync - Directory Replication permissions abuse",
      re.compile(r"\bDirectory\s+Replication\s+permissions\b.*?(?:granted|abuse)", re.I | re.S)),
     # CVE exploitation
     ("Zerologon exploitation (CVE-2020-1472)",
      re.compile(r"\bzerologon\b|\bCVE-2020-1472\b", re.I)),
-    ("Zerologon — Netlogon NULL session flood",
+    ("Zerologon - Netlogon NULL session flood",
      re.compile(r"\bnetlogon\b.*?NULL\s+session.*?(?:flood|bombardment|attempts?)", re.I | re.S)),
     ("PrintNightmare exploitation (CVE-2021-34527)",
      re.compile(r"\bprintnightmare\b|\bCVE-2021-34527\b", re.I)),
-    ("PrintNightmare — RpcAddPrinterDriver from non-admin",
+    ("PrintNightmare - RpcAddPrinterDriver from non-admin",
      re.compile(r"\bRpcAddPrinterDriver\b.*?(?:remote\s+non-admin|non-privileged|unusual)", re.I | re.S)),
     ("Follina MSDT exploitation (CVE-2022-30190)",
      re.compile(r"\bfollina\b|\bms-msdt\b.*?(?:id=PCWDiagnostic|invoke|exploit)", re.I | re.S)),
@@ -327,26 +327,26 @@ _WIN_AD_TIER1_PATTERNS = [
      re.compile(r"\$\{jndi\s*:\s*(?:ldap|rmi|dns|nis|nds|corba|iiop)\s*:", re.I)),
     ("ProxyShell / ProxyLogon exploitation",
      re.compile(r"\bproxy(?:shell|logon)\b.*?(?:exploitation|attempt|detected)", re.I | re.S)),
-    # Security tooling disabled — high-signal ATT&CK T1562
+    # Security tooling disabled - high-signal ATT&CK T1562
     ("Windows Defender AV disabled",
      re.compile(r"Set-MpPreference\s+.*?-Disable(?:RealtimeMonitoring|BehaviorMonitoring|IntrusionPreventionSystem|IOAVProtection|ScriptScanning)\s+\$?true", re.I)),
-    # Firewall disable — MITRE T1562.004 Impair Defenses. Unambiguously
+    # Firewall disable - MITRE T1562.004 Impair Defenses. Unambiguously
     # malicious in nearly all contexts; even legitimate admin firewall
     # changes usually target specific rules, not disable all profiles.
     # ThreatLocker vendor cert on the parent is a LOGGING ARTIFACT
-    # (their agent shows on system binaries it monitors) — must not
+    # (their agent shows on system binaries it monitors) - must not
     # downweight this signal.
-    ("Firewall disabled — netsh advfirewall set allprofiles state off",
+    ("Firewall disabled - netsh advfirewall set allprofiles state off",
      re.compile(r"netsh(?:\.exe)?\s+.*?advfirewall\s+.*?set\s+allprofiles\s+state\s+off", re.I)),
-    ("Firewall disabled — netsh set profile state off",
+    ("Firewall disabled - netsh set profile state off",
      re.compile(r"netsh(?:\.exe)?\s+.*?advfirewall\s+.*?set\s+(?:currentprofile|publicprofile|domainprofile|privateprofile)\s+state\s+off", re.I)),
-    ("Firewall disabled — legacy netsh firewall set opmode disable",
+    ("Firewall disabled - legacy netsh firewall set opmode disable",
      re.compile(r"netsh(?:\.exe)?\s+.*?firewall\s+set\s+opmode\s+(?:mode\s*=)?\s*disable", re.I)),
-    ("Firewall disabled — Set-NetFirewallProfile -Enabled False",
+    ("Firewall disabled - Set-NetFirewallProfile -Enabled False",
      re.compile(r"Set-NetFirewallProfile\s+.*?-Enabled\s+(?:False|\$false)", re.I)),
     ("Firewall registry policy disabled",
      re.compile(r"HKLM\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy.*?EnableFirewall\s*.*?(?:0x0|dword:0)", re.I | re.S)),
-    ("Firewall registry policy disabled — reg add",
+    ("Firewall registry policy disabled - reg add",
      re.compile(r"reg(?:\.exe)?\s+add\s+.*?FirewallPolicy.*?EnableFirewall\s+/t\s+REG_DWORD\s+/d\s+0", re.I)),
     # WFP / IPsec-based firewall bypass
     ("Firewall service stopped",
@@ -369,15 +369,15 @@ _WIN_AD_TIER1_PATTERNS = [
     # Persistence
     ("WMI event subscription persistence",
      re.compile(r"(?:EventFilter\s*:.*?EventConsumer\s*:|CommandLineEventConsumer.*?FilterToConsumerBinding)", re.I | re.S)),
-    ("WMI persistence — __InstanceModificationEvent watcher",
+    ("WMI persistence - __InstanceModificationEvent watcher",
      re.compile(r"__InstanceModificationEvent\s+.*?WITHIN\s+\d+", re.I | re.S)),
-    ("schtasks persistence — onlogon / onstart with high privilege",
+    ("schtasks persistence - onlogon / onstart with high privilege",
      re.compile(r"\bschtasks(?:\.exe)?\s+/create\s+.*?/sc\s+(?:onlogon|onstart|onidle)", re.I | re.S)),
     ("Registry Run key persistence with suspicious value",
      re.compile(r"HK(?:LM|CU)\\Software\\Microsoft\\Windows\\CurrentVersion\\Run.*?(?:AppData|Public|Temp|ProgramData)\\.*?\.(?:exe|dll|ps1|vbs|bat)", re.I | re.S)),
 ]
 
-# Cloud attacks TIER 1 (additional — beyond critical cloud already in _CRITICAL_CLOUD_TIER1)
+# Cloud attacks TIER 1 (additional - beyond critical cloud already in _CRITICAL_CLOUD_TIER1)
 _CLOUD_ATTACK_TIER1_EXTRA = [
     # Mass secret access
     ("AWS mass GetSecretValue calls",
@@ -394,24 +394,24 @@ _CLOUD_ATTACK_TIER1_EXTRA = [
      re.compile(r"GCP\s+IAM.*?roles?/(?:iam\.securityAdmin|owner|editor|iam\.roleAdmin)\b.*?(?:external|@evil|@attacker)", re.I | re.S)),
     ("GCP roles/Owner or roles/Editor granted externally",
      re.compile(r"\broles/(?:owner|editor|iam\.securityAdmin|iam\.roleAdmin)\s+granted\b.*?(?:external|no\s+approval|no\s+ticket)", re.I | re.S)),
-    # O365 forwarding rule to external — high-signal BEC persistence
+    # O365 forwarding rule to external - high-signal BEC persistence
     ("O365 inbox forwarding rule to external",
      re.compile(r"O365\s+.*?forwarding\s+rule\s+created.*?forward\s+to\s*:\s*.*?@(?!contoso\.com|company\.com)", re.I | re.S)),
-    ("Inbox rule — delete on forward",
+    ("Inbox rule - delete on forward",
      re.compile(r"Delete\s+on\s+forward\s*:\s*true", re.I)),
 ]
 
 # ──────────────────────────────────────────────────────────────────────
 # LINUX ATTACK PATTERNS
 # ──────────────────────────────────────────────────────────────────────
-# TIER 1 — verdict-determining. Reverse shells, container escape,
+# TIER 1 - verdict-determining. Reverse shells, container escape,
 # kernel rootkit indicators, log-tampering. These are unambiguously
 # malicious on any Linux host.
 _LINUX_TIER1_PATTERNS = [
-    # Reverse shells — bash/nc/python/perl/ruby/php/socat variants
+    # Reverse shells - bash/nc/python/perl/ruby/php/socat variants
     ("reverse shell (bash /dev/tcp)",
      re.compile(r"\bbash\s+-i\s*>\s*&\s*/dev/tcp/", re.I)),
-    ("reverse shell (bash /dev/tcp) — alt form",
+    ("reverse shell (bash /dev/tcp) - alt form",
      re.compile(r"/dev/tcp/\d{1,3}(?:\.\d{1,3}){3}/\d{1,5}", re.I)),
     ("reverse shell (nc -e)",
      re.compile(r"\bnc(?:at)?\s+-e\s+(?:/bin/(?:sh|bash|dash)|cmd\.exe)", re.I)),
@@ -427,15 +427,15 @@ _LINUX_TIER1_PATTERNS = [
      re.compile(r"php\s+-r\s+['\"].*?fsockopen\(", re.I | re.S)),
 
     # Container escape indicators
-    ("container escape — /proc/1/root mount",
+    ("container escape - /proc/1/root mount",
      re.compile(r"mount\s+.*?/proc/1/root", re.I)),
-    ("container escape — docker.sock mounted",
+    ("container escape - docker.sock mounted",
      re.compile(r"/var/run/docker\.sock(?:\s+mounted|.*mounted\s+into)", re.I)),
-    ("container escape — privileged container",
+    ("container escape - privileged container",
      re.compile(r"privileged\s*:\s*true\b|--privileged\b", re.I)),
-    ("container escape — hostPath / hostNetwork",
+    ("container escape - hostPath / hostNetwork",
      re.compile(r"\bhostPath\s*:|hostNetwork\s*:\s*true\b|hostPID\s*:\s*true\b", re.I)),
-    ("container escape — cgroups notify_on_release",
+    ("container escape - cgroups notify_on_release",
      re.compile(r"notify_on_release.*release_agent", re.I | re.S)),
 
     # Kernel rootkit / module load
@@ -473,19 +473,19 @@ _LINUX_TIER1_PATTERNS = [
      re.compile(r"\bchmod\s+(?:[+]?4[0-7]{3}|u[+]s)\s+/(?:tmp|home|var/tmp|dev/shm)/", re.I)),
 
     # authorized_keys / SSH persistence
-    ("SSH authorized_keys modified — new key added",
+    ("SSH authorized_keys modified - new key added",
      re.compile(r"authorized_keys\b.*?(?:new\s+ssh\s+key|added\s+by|key\s+added)", re.I | re.S)),
 
     # PAM backdoor
-    ("PAM backdoor — pam_permit.so added",
+    ("PAM backdoor - pam_permit.so added",
      re.compile(r"/etc/pam\.d/\S+\b.*?(?:pam_permit\.so|auth\s+sufficient\s+pam_permit)", re.I | re.S)),
 
-    # /etc/ld.so.preload write — universal LD_PRELOAD alternative
+    # /etc/ld.so.preload write - universal LD_PRELOAD alternative
     ("/etc/ld.so.preload modified",
      re.compile(r"/etc/ld\.so\.preload\b.*?(?:modified|added|written|new\s+entry)", re.I | re.S)),
 
     # sudoers backdoor
-    ("sudoers backdoor — NOPASSWD via web-app or non-admin",
+    ("sudoers backdoor - NOPASSWD via web-app or non-admin",
      re.compile(r"/etc/sudoers\b.*?(?:modified|written|edited).*?NOPASSWD", re.I | re.S)),
     ("sudoers echo append backdoor",
      re.compile(r"echo\s+['\"][^'\"]*NOPASSWD[^'\"]*['\"]\s*>>\s*/etc/sudoers", re.I)),
@@ -524,7 +524,7 @@ _LINUX_TIER1_PATTERNS = [
     ("Docker run --pid=host or --network=host",
      re.compile(r"docker\s+run\s+.*?--(?:pid|network|ipc|uts)=host\b", re.I)),
 
-    # iptables C2 allow — as TIER 1 since it opens attacker's channel
+    # iptables C2 allow - as TIER 1 since it opens attacker's channel
     ("iptables allow outbound to bad IP",
      re.compile(r"iptables\s+.*?-[AI]\s+(?:OUTPUT|FORWARD).*?-d\s+\d{1,3}(?:\.\d{1,3}){3}.*?-j\s+ACCEPT", re.I)),
     ("iptables allow inbound reverse tunnel port",
@@ -537,7 +537,7 @@ _LINUX_TIER1_PATTERNS = [
      re.compile(r"/etc/modprobe\.d/\S+\.conf.*?(?:install|blacklist).*?/tmp/|/dev/shm/", re.I | re.S)),
 ]
 
-# TIER 2 — corroborating Linux attack signals.
+# TIER 2 - corroborating Linux attack signals.
 _LINUX_TIER2_PATTERNS = [
     # auditd EXECVE with suspicious command
     ("auditd EXECVE curl|bash pattern",
@@ -548,7 +548,7 @@ _LINUX_TIER2_PATTERNS = [
     # SELinux AVC denials against sensitive contexts
     ("SELinux AVC denied for shell exec from unusual context",
      re.compile(r"avc:\s+denied\s+\{[^}]*(?:execute|execute_no_trans)[^}]*\}.*?(?:tmp_t|user_tmp_t|var_tmp_t)", re.I | re.S)),
-    ("SELinux AVC denied — passwd/shadow read",
+    ("SELinux AVC denied - passwd/shadow read",
      re.compile(r"avc:\s+denied\s+\{[^}]*read[^}]*\}.*?shadow_t", re.I | re.S)),
 
     # systemd persistence
@@ -613,7 +613,7 @@ _LINUX_TIER2_PATTERNS = [
 # ──────────────────────────────────────────────────────────────────────
 # macOS ATTACK PATTERNS
 # ──────────────────────────────────────────────────────────────────────
-# TIER 1 — LaunchDaemon persistence, TCC.db modification, quarantine
+# TIER 1 - LaunchDaemon persistence, TCC.db modification, quarantine
 # bypass, KEXT loading of unsigned code.
 _MACOS_TIER1_PATTERNS = [
     # LaunchDaemon / LaunchAgent persistence
@@ -631,7 +631,7 @@ _MACOS_TIER1_PATTERNS = [
      re.compile(r"sqlite3\s+.*?TCC\.db\s+.*?(?:INSERT|UPDATE|REPLACE)", re.I | re.S)),
 
     # Quarantine attribute stripped
-    ("Gatekeeper bypass — quarantine xattr removed",
+    ("Gatekeeper bypass - quarantine xattr removed",
      re.compile(r"xattr\s+-d\s+com\.apple\.quarantine\b", re.I)),
     ("Gatekeeper disabled",
      re.compile(r"\bspctl\s+--master-disable\b", re.I)),
@@ -652,7 +652,7 @@ _MACOS_TIER1_PATTERNS = [
     ("macOS reverse shell (bash /dev/tcp)",
      re.compile(r"\bbash\s+-i\s*>\s*&\s*/dev/tcp/", re.I)),  # also caught in Linux
 
-    # DYLD_INSERT_LIBRARIES — macOS equivalent of LD_PRELOAD
+    # DYLD_INSERT_LIBRARIES - macOS equivalent of LD_PRELOAD
     ("DYLD_INSERT_LIBRARIES injection",
      re.compile(r"\bDYLD_INSERT_LIBRARIES\s*=\s*(?:['\"]?/tmp/|/var/tmp/|/Users/[^/]+/(?:Downloads|Library/LaunchAgents)/|['\"]?[^\s]+\.dylib)", re.I)),
     ("DYLD_INSERT_LIBRARIES targeting system binary",
@@ -664,7 +664,7 @@ _MACOS_TIER1_PATTERNS = [
     ("Firmware password disabled",
      re.compile(r"\bfirmwarepasswd\s+-disable-firmware-pw\b", re.I)),
 
-    # Persistence — existing LaunchDaemon plist replaced
+    # Persistence - existing LaunchDaemon plist replaced
     ("Existing LaunchDaemon plist ProgramArguments replaced",
      re.compile(r"/Library/LaunchDaemons/[a-z0-9_.\-]+\.plist\b.*?(?:ProgramArguments\s+changed|replaced|overwritten).*?/tmp/", re.I | re.S)),
     ("periodic script backdoor",
@@ -687,7 +687,7 @@ _MACOS_TIER1_PATTERNS = [
      re.compile(r"authorizationdb\s+write\b.*?system\.privilege\.admin", re.I | re.S)),
 ]
 
-# TIER 2 — corroborating macOS signals.
+# TIER 2 - corroborating macOS signals.
 _MACOS_TIER2_PATTERNS = [
     # Persistence variants
     ("login hook installed",
@@ -756,7 +756,7 @@ _LATERAL_MOVEMENT_PATTERNS = [
     re.compile(r"\bschtasks.*\/s\s+\\\\\S+", re.I),
 ]
 
-# Encoded / obfuscated command-line patterns — high signal for
+# Encoded / obfuscated command-line patterns - high signal for
 # phishing→execution or living-off-the-land malicious activity.
 # Fires TIER 2 by itself; combined with a suspicious parent (below)
 # should elevate the verdict.
@@ -788,7 +788,7 @@ _SUSPICIOUS_PARENT_CHILD_PATTERNS = [
     re.compile(r"parent\s*(?:process)?\s*:\s*acrord32\.exe.*?(?:powershell|cmd|wscript|cscript)", re.I | re.S),
 ]
 
-# LOLBAS abuse — living-off-the-land binaries with red-flag arguments.
+# LOLBAS abuse - living-off-the-land binaries with red-flag arguments.
 # mshta.exe / regsvr32.exe / rundll32.exe with remote URIs or JS is
 # almost always malicious. Fires TIER 2.
 _LOLBAS_ABUSE_PATTERNS = [
@@ -804,7 +804,7 @@ _LOLBAS_ABUSE_PATTERNS = [
     re.compile(r"wmic(?:\.exe)?\s+.*?process\s+call\s+create\b", re.I),
 ]
 
-# Suspicious top-level domains — common in phishing kits + malware
+# Suspicious top-level domains - common in phishing kits + malware
 # infra. Fires TIER 2 when a URL/domain in the raw text uses one of
 # these TLDs. Combined with any other tier signal ⇒ HIGH.
 _SUSPICIOUS_TLD_PATTERNS = [
@@ -812,7 +812,7 @@ _SUSPICIOUS_TLD_PATTERNS = [
     re.compile(r"\b[a-z0-9-]+\.(?:tk|top|icu|xyz|gq|ml|cf|ga|buzz|click|link)\b", re.I),
 ]
 
-# Brand-impersonation typosquat patterns — subdomain / hyphenated
+# Brand-impersonation typosquat patterns - subdomain / hyphenated
 # tokens combined with common brand names in unusual TLDs. Fires
 # TIER 2. Real Microsoft is never on .tk / .top / .icu / .xyz.
 _TYPOSQUAT_PATTERNS = [
@@ -820,28 +820,28 @@ _TYPOSQUAT_PATTERNS = [
     re.compile(r"\b(?:microsoft|office|outlook|onedrive|sharepoint|azure|entra|apple|icloud|google|gmail|amazon|paypal|dropbox|docusign|adobe|netflix|linkedin|instagram|facebook|whatsapp)-[a-z0-9-]+\.(?:com|net|org)\b", re.I),
 ]
 
-# Known-good vendor pattern markers — DOWNWEIGHT signals when they
+# Known-good vendor pattern markers - DOWNWEIGHT signals when they
 # appear in the log. Coverage includes:
 #   * management / EDR agents that generate high volumes of benign alerts
 #   * mainstream browsers + their signing certs (Google LLC, Microsoft
-#     Corporation, Mozilla Corporation) — the common allow-list case
+#     Corporation, Mozilla Corporation) - the common allow-list case
 #     ("chrome.exe signed by Google" is a strong benign-context signal)
-#   * ThreatLocker "(Built-In)" policies — when a ThreatLocker tenant's
+#   * ThreatLocker "(Built-In)" policies - when a ThreatLocker tenant's
 #     built-in policy MATCHES the event, ThreatLocker's own trust team
 #     already vetted the application, so the alert is by-design benign
 #   * tenant permit markers (Action: Permit, Effective Action: Permitted,
-#     Monitor Only: true) — the operator's policy engine already
+#     Monitor Only: true) - the operator's policy engine already
 #     decided this activity is allowed
 _KNOWN_GOOD_VENDOR_PATTERNS = [
     # Management / EDR agents
     re.compile(r"\bDell\s+SupportAssist\b", re.I),
     re.compile(r"\bHP\s+Support\s+Assistant\b", re.I),
     # NOTE: bare "Microsoft Defender" / "Windows Defender Antivirus"
-    # removed as broad downweight patterns — the log source being
+    # removed as broad downweight patterns - the log source being
     # Defender doesn't mean the alert is benign. Defender frequently
     # LOGS threat detections. The specific benign markers
     # (Threat Status: Remediated, ActionSuccess: true, Defender has
-    # removed) below stay in the list — those are true benign signals.
+    # removed) below stay in the list - those are true benign signals.
     re.compile(r"\bWindows\s+Update\b", re.I),
     re.compile(r"\bCrowdStrike\s+Falcon\b", re.I),
     re.compile(r"\bSCCM\s+client\b", re.I),
@@ -853,7 +853,7 @@ _KNOWN_GOOD_VENDOR_PATTERNS = [
     re.compile(r"\bTaniumClient\.exe\b", re.I),
     re.compile(r"\bBigFix\s+agent\b", re.I),
     re.compile(r"\bDatto\s+RMM\b", re.I),   # legit when signed + tenant-managed
-    # Common RMM tools — LOLBAS/vendor process names + install paths.
+    # Common RMM tools - LOLBAS/vendor process names + install paths.
     # These are legitimate remote-management platforms that trigger
     # Defender behavior detections (OpenProcess, remote script exec)
     # in the course of normal operation. False positives when
@@ -891,7 +891,7 @@ _KNOWN_GOOD_VENDOR_PATTERNS = [
     re.compile(r"\bLogMeIn\b", re.I),
     re.compile(r"\bGoToAssist\b", re.I),
     re.compile(r"\bBomgar\b|\bBeyondTrust\s+Remote\s+Support\b", re.I),
-    # Mainstream browsers — process paths + certificate subject lines
+    # Mainstream browsers - process paths + certificate subject lines
     re.compile(r"\\google\\chrome\\application\\chrome\.exe", re.I),
     re.compile(r"\\microsoft\\edge\\application\\msedge\.exe", re.I),
     re.compile(r"\\mozilla firefox\\firefox\.exe", re.I),
@@ -913,7 +913,7 @@ _KNOWN_GOOD_VENDOR_PATTERNS = [
     re.compile(r"o=vmware,?\s+inc\b", re.I),
     re.compile(r"o=cisco\s+systems", re.I),
     re.compile(r"o=palo\s+alto\s+networks", re.I),
-    # Breach and Attack Simulation (BAS) platforms — vendor tools that
+    # Breach and Attack Simulation (BAS) platforms - vendor tools that
     # legitimately drop and execute simulated malware on customer
     # endpoints to test detection efficacy. Defender catching the
     # simulated payload is the TEST SUCCEEDING, not a real threat.
@@ -927,35 +927,35 @@ _KNOWN_GOOD_VENDOR_PATTERNS = [
     re.compile(r"\bVerodin\b", re.I),
     re.compile(r"\bPentera\b", re.I),
     re.compile(r"\bAtomicRedTeam\b|\batomic-red-team\b", re.I),
-    # Simulation path markers — combined with a BAS vendor these
+    # Simulation path markers - combined with a BAS vendor these
     # strongly signal authorized testing.
     re.compile(r"\\Picus\s+Security\\", re.I),
     re.compile(r"\\Simulations?\\Simulation_\d+", re.I),
     re.compile(r"\\BAS\s+Agent\\|/BAS/Agent/", re.I),
     re.compile(r"\\Attack\s+Simulation\\", re.I),
-    # ThreatLocker built-in policy — vetted by the vendor's trust team
+    # ThreatLocker built-in policy - vetted by the vendor's trust team
     re.compile(r"\bPolicy Name\s*:.*\(Built-In\)", re.I),
     re.compile(r"\(Built-In\)\s*$", re.I | re.M),
-    # Defender routine remediation — malware detection with confirmed
+    # Defender routine remediation - malware detection with confirmed
     # removal is a resolved event, not an active compromise. BUT only
-    # when the action ACTUALLY succeeded — a "Quarantine" line with an
+    # when the action ACTUALLY succeeded - a "Quarantine" line with an
     # Error Code means the file is still on disk and this is NOT
     # benign. The downweight list is filtered by the "action failed"
     # TIER 2 check below so a failed remediation doesn't slip through.
     re.compile(r"\bThreat\s+Status\s*:\s*Remediated\b", re.I),
     re.compile(r"\bActionSuccess\s*:\s*true\b", re.I),
     re.compile(r"\bDefender\s+has\s+removed\b", re.I),
-    # Successful Defender remediation event (1117 shape) — Action:
+    # Successful Defender remediation event (1117 shape) - Action:
     # Quarantine + Error Code: 0x00000000 + "The operation completed
     # successfully". This is Defender confirming it removed the file.
     re.compile(r"\bError\s+Code\s*:\s*0x0+\b.*?\boperation\s+completed\s+successfully\b", re.I | re.S),
     re.compile(r"\bAction\s*:\s*Quarantine\b.*?\boperation\s+completed\s+successfully\b", re.I | re.S),
-    # File in RECYCLE.BIN — the artefact is already deleted by the user
+    # File in RECYCLE.BIN - the artefact is already deleted by the user
     # or a prior cleanup pass, so a Defender scan finding it there is
     # low-signal noise (routine trash scanning). Only fires as
     # downweight; doesn't override a real active-threat marker.
     re.compile(r"\$RECYCLE\.BIN\\S-1-5-21-\d+-\d+-\d+-\d+\\", re.I),
-    # Entra IdentityProtection — risk successfully remediated. When
+    # Entra IdentityProtection - risk successfully remediated. When
     # riskState is `remediated` OR the risk was resolved by MFA
     # ("userPassedMFADrivenByRiskBasedPolicy"), Conditional Access
     # did its job: risky signin was challenged, user proved identity,
@@ -965,7 +965,7 @@ _KNOWN_GOOD_VENDOR_PATTERNS = [
     re.compile(r"\buserPassedMFA\b", re.I),
     re.compile(r"\brisk[_ -]?state\s*:?\s*dismissed\b", re.I),  # admin-dismissed risk
     re.compile(r"\brisk[_ -]?state\s*:?\s*confirmedSafe\b", re.I),  # admin-confirmed safe
-    # ThreatLocker Ringfencing block — a policy decision, not a compromise
+    # ThreatLocker Ringfencing block - a policy decision, not a compromise
     re.compile(r"\bRingfencing\b", re.I),
     re.compile(r"\bRingfence\s+Policy\b", re.I),
     # Entra ID clean sign-in
@@ -974,7 +974,7 @@ _KNOWN_GOOD_VENDOR_PATTERNS = [
     re.compile(r"\brisk\s*detail\s*:\s*none\b", re.I),
 ]
 
-# Tenant policy engine markers — separate from vendor known-good so we
+# Tenant policy engine markers - separate from vendor known-good so we
 # can score them independently. When both fire on the same log the
 # alert is essentially a policy-audit event, not a threat.
 _TENANT_PERMIT_PATTERNS = [
@@ -1000,7 +1000,7 @@ def _raw_text(state: Dict[str, Any]) -> str:
 
 
 def _log_only_text(state: Dict[str, Any]) -> str:
-    """The RAW analyst input only — used for actor / upstream-risk
+    """The RAW analyst input only - used for actor / upstream-risk
     detection, so we don't accidentally match on prose the AI itself
     generated (which would create a feedback loop where the AI's own
     'Storm-####' summary blocks the CLEAR it wanted to recommend on the
@@ -1084,7 +1084,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
     # Cyber, Randori, etc.), any malware family detected IS the
     # simulation target. Defender catching it is a test-success signal,
     # not a real incident. Skip the TIER 1 malware-family attribution
-    # in this context — the LLM investigation will still note the
+    # in this context - the LLM investigation will still note the
     # detection, and the BAS pattern already fires as a downweight.
     _bas_markers = [
         r"\bPicus\s+(?:Security|Simulator|Simulation\s+Agent)\b",
@@ -1101,7 +1101,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
         # Only fire TIER 1 for real malware families (LockBit, Emotet,
         # TrickBot, etc.). Microsoft's PUA / HackTool / Adware / Tool /
         # Bundler prefixes are unwanted-software categorizations, not
-        # traditional malware families — those cases are already caught
+        # traditional malware families - those cases are already caught
         # at TIER 2 by the Defender detection patterns.
         _pua_prefixes = ("pua:", "puabundler:", "hacktool:", "tool:",
                           "adware:", "bundler:", "misleading:", "riskware:")
@@ -1112,7 +1112,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
         else:
             # Skip the TIER 2 PUA-family-attributed signal if the same
             # detection is going to fire via the `Name : <prefix>:`
-            # Defender pattern — otherwise a single PUA event fires
+            # Defender pattern - otherwise a single PUA event fires
             # both signals and over-triages via the 2-TIER-2 rule.
             _has_name_prefix_in_log = bool(re.search(
                 r"\bName\s*:\s*(?:HackTool|PUA(?:Bundler)?|Trojan|Backdoor|Ransom|Behavior|Adware|Riskware)\s*:",
@@ -1148,10 +1148,10 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
         _push(tier_1, "confirmed C2 callback (Feodo Tracker)",
               "IP appears on the abuse.ch Feodo Tracker active-C2 list")
 
-    # Critical cloud events — TIER 1 by themselves. These are events
+    # Critical cloud events - TIER 1 by themselves. These are events
     # where the "worst-case" has already happened (data exposed, keys
     # deleted, root credential used) and no confirmation of exploitation
-    # is needed — the exposure IS the incident.
+    # is needed - the exposure IS the incident.
     _CRITICAL_CLOUD_TIER1 = [
         (r"\bS3\s+bucket\s+(?:ACL|policy)\s+changed\s+to\s+public.*?(?:prod|production|backup|customer|pii|hipaa|pci)",
          "public S3 exposure of production/backup data"),
@@ -1172,7 +1172,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
             break
 
     # Windows AD / Kerberos / CVE exploitation / security-tooling
-    # tampering — TIER 1 verdict-determining Windows attacks.
+    # tampering - TIER 1 verdict-determining Windows attacks.
     for name, rx in _WIN_AD_TIER1_PATTERNS:
         m = rx.search(log_text)
         if m:
@@ -1180,7 +1180,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                   f"matched '{m.group(0)[:80]}'")
             break
 
-    # Impacket smbexec / atexec / wmiexec signature — the ADMIN$ share
+    # Impacket smbexec / atexec / wmiexec signature - the ADMIN$ share
     # output redirect with `__<epoch>.<frac>` file naming is unmistakable.
     # Zero legit Windows admin activity uses this pattern; it's Impacket's
     # method of capturing command output for remote execution modules.
@@ -1204,7 +1204,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                   f"matched '{m.group(0)[:80]}'")
             break
 
-    # Linux TIER 1 — reverse shell, container escape, kernel rootkit,
+    # Linux TIER 1 - reverse shell, container escape, kernel rootkit,
     # LD_PRELOAD, log tampering, passwd/shadow write, cryptominer.
     for name, rx in _LINUX_TIER1_PATTERNS:
         m = rx.search(log_text)
@@ -1213,7 +1213,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                   f"matched '{m.group(0)[:80]}'")
             break
 
-    # `curl | bash` / `wget | sh` — download-and-execute of unverified
+    # `curl | bash` / `wget | sh` - download-and-execute of unverified
     # remote code. Textbook malicious pattern regardless of platform.
     # Was TIER 2; promoted to TIER 1 because MONITOR verdict from AI
     # was under-triaging what is unambiguously an execution primitive.
@@ -1222,7 +1222,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
         _push(tier_1, "download-and-execute (curl|bash pattern)",
               "unverified remote code piped to shell")
 
-    # macOS TIER 1 — LaunchDaemon/Agent persistence, TCC.db bypass,
+    # macOS TIER 1 - LaunchDaemon/Agent persistence, TCC.db bypass,
     # Gatekeeper bypass, unsigned KEXT load, osascript exec.
     for name, rx in _MACOS_TIER1_PATTERNS:
         m = rx.search(log_text)
@@ -1272,7 +1272,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                       f"matched '{m.group(0)[:60]}'")
                 break
 
-    # LOLBAS abuse with remote URI / JS payload — mshta / regsvr32 /
+    # LOLBAS abuse with remote URI / JS payload - mshta / regsvr32 /
     # rundll32 / certutil / bitsadmin / wmic with malicious argument
     # shapes. Not the same as the local cross-refs `lolbas` bucket
     # (which fires on just the binary name); this catches the ABUSE
@@ -1284,7 +1284,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                   f"matched '{m.group(0)[:80]}'")
             break
 
-    # Encoded / obfuscated command-line — high-signal for phishing
+    # Encoded / obfuscated command-line - high-signal for phishing
     # execution chains. Fires once even if multiple patterns match.
     for rx in _ENCODED_CMD_PATTERNS:
         m = rx.search(log_text)
@@ -1293,7 +1293,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                   f"matched '{m.group(0)[:80]}'")
             break
 
-    # Suspicious parent → child process chain — email client / browser /
+    # Suspicious parent → child process chain - email client / browser /
     # Office app spawning shell or scripting engine. Classic phishing
     # execution pattern.
     for rx in _SUSPICIOUS_PARENT_CHILD_PATTERNS:
@@ -1303,7 +1303,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                   f"matched '{m.group(0)[:80]}'")
             break
 
-    # Suspicious TLD in URL/domain (.tk / .top / .icu / .xyz / etc.) —
+    # Suspicious TLD in URL/domain (.tk / .top / .icu / .xyz / etc.)  - 
     # these TLDs disproportionately host phishing + malware infra.
     # Only fires when no legit downweight signal is present, and only
     # when there are no verdict-clearing high-signal patterns (avoid
@@ -1315,7 +1315,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                   f"matched '{m.group(0)[:60]}'")
             break
 
-    # Brand-impersonation typosquat — microsoft-secure-update.tk shape.
+    # Brand-impersonation typosquat - microsoft-secure-update.tk shape.
     # Combined with the TLD pattern above, but this fires standalone
     # too when the brand token is in a .com/.net domain with a
     # suspicious hyphenated prefix.
@@ -1326,7 +1326,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                   f"matched '{m.group(0)[:60]}'")
             break
 
-    # Identity / IAM attacks — password spray, MFA fatigue, privileged
+    # Identity / IAM attacks - password spray, MFA fatigue, privileged
     # role assignment, suspicious service principal. These land as
     # narrative text in Entra/Okta/Azure logs and were slipping through
     # the tier framework because none of them touched enrichment
@@ -1335,12 +1335,12 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
     # Exception: when the risk was already remediated by MFA
     # (userPassedMFADrivenByRiskBasedPolicy, riskState: remediated,
     # riskState: dismissed, riskState: confirmedSafe), skip the
-    # generic T1078 / Unfamiliar / anonymized-IP identity signals —
+    # generic T1078 / Unfamiliar / anonymized-IP identity signals  - 
     # Entra IdentityProtection already resolved the incident and
     # firing an identity-attack TIER 2 on a resolved risk introduces
     # analyst confusion. Strong attack markers (password spray, MFA
     # fatigue, Global Admin add, service principal, impossible
-    # travel) still fire — the exemption is scoped to weaker
+    # travel) still fire - the exemption is scoped to weaker
     # generic MITRE / risk-reason patterns.
     _risk_remediated = bool(re.search(
         r"\brisk[_ -]?state\s*:?\s*(?:remediated|dismissed|confirmedSafe)\b"
@@ -1358,14 +1358,14 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
         m = rx.search(log_text)
         if m:
             # If MFA-remediated context and this is only a weak
-            # identity marker, skip it — Entra already resolved this.
+            # identity marker, skip it - Entra already resolved this.
             if _risk_remediated and rx.pattern in _weak_identity_patterns:
                 continue
             _push(tier_2, "identity attack pattern",
                   f"matched '{m.group(0)[:80]}'")
             break
 
-    # Cloud attack patterns — AWS GuardDuty findings, S3 exposure,
+    # Cloud attack patterns - AWS GuardDuty findings, S3 exposure,
     # Azure Key Vault deletion, root-account use, IAM privilege
     # escalation. Fires TIER 2 which combined with a bad-geo indicator
     # (185.220.101.45 / Moscow / etc.) escalates to HIGH.
@@ -1376,7 +1376,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                   f"matched '{m.group(0)[:80]}'")
             break
 
-    # C2 / beaconing / covert channel — Cobalt Strike / Sliver / DNS
+    # C2 / beaconing / covert channel - Cobalt Strike / Sliver / DNS
     # tunneling / Tor exit outbound / known-malicious-IP tags.
     for rx in _C2_BEACON_PATTERNS:
         m = rx.search(log_text)
@@ -1385,7 +1385,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                   f"matched '{m.group(0)[:80]}'")
             break
 
-    # Linux TIER 2 — auditd EXECVE, SELinux AVC, systemd/cron
+    # Linux TIER 2 - auditd EXECVE, SELinux AVC, systemd/cron
     # persistence, SSH tunneling, sudo abuse, Docker socket exposure,
     # K8s privileged pod, fail2ban, package manager, iptables mods,
     # bash history exfil, useradd uid=0.
@@ -1396,7 +1396,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                   f"matched '{m.group(0)[:80]}'")
             break
 
-    # macOS TIER 2 — login/logout hooks, cron, authorization plist,
+    # macOS TIER 2 - login/logout hooks, cron, authorization plist,
     # XProtect/MRT, Endpoint Security, macOS malware families.
     for name, rx in _MACOS_TIER2_PATTERNS:
         m = rx.search(log_text)
@@ -1405,7 +1405,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                   f"matched '{m.group(0)[:80]}'")
             break
 
-    # Defender successful remediation — Error Code: 0x00000000 with
+    # Defender successful remediation - Error Code: 0x00000000 with
     # "operation completed successfully" text means Defender caught
     # AND removed the threat. The severity/family info in the log
     # represents Defender's PRE-remediation assessment; after
@@ -1418,7 +1418,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
     ) or re.search(r"\bAction\s*Status\s*:\s*No\s+additional\s+actions\s+required\b.*?\bError\s+Code\s*:\s*0x0+\b",
                    log_text, re.I | re.S))
 
-    # Vendor + behavior context — computed early so both the family
+    # Vendor + behavior context - computed early so both the family
     # detection block AND the severity block can consult it. Defender
     # Behavior:Win32/... detections are notoriously FP-prone on
     # legitimate management tools (RMM agents, EDRs, backup software).
@@ -1426,16 +1426,16 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
     _is_behavior_only = bool(re.search(r"\bName\s*:\s*Behavior\s*:", log_text, re.I))
     _behavior_fp_context = _has_known_good_vendor and _is_behavior_only
 
-    # Defender AV detection — HackTool / PUA / Trojan / failed
+    # Defender AV detection - HackTool / PUA / Trojan / failed
     # remediation. The patterns split into three semantic groups; we
     # fire at most ONE signal per group to prevent double-counting on
     # a single detection event (which was over-triaging low-severity
     # PUAs). Skipped entirely on successful remediation events.
     #
-    # Group A — the family detection (Name: prefix + generic form
+    # Group A - the family detection (Name: prefix + generic form
     #           are two ways to detect the same thing)
-    # Group B — action / remediation outcome
-    # Group C — severity marker
+    # Group B - action / remediation outcome
+    # Group C - severity marker
     if not _defender_success:
         _det_family_pats = [
             ("Defender HackTool detection",       r"\bName\s*:\s*HackTool\s*:", ),
@@ -1457,7 +1457,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
             ("HackTool / PUA family name in log", r"\b(?:HackTool|PUA|PUABundler|Backdoor|Ransom|Trojan|Exploit|Adware|Riskware|Worm|Spyware|Behavior|VirTool|Constructor|DoS|Dropper|Downloader|TrojanDropper|TrojanDownloader)\s*:\s*(?:Script|Win\d\d|MSIL|VBS|JS|HTML|Linux|OSX|MacOS)/", ),
         ]
         # Defender's heuristic BEHAVIOR detections (Behavior:Win32/...)
-        # are notoriously FP-prone on legitimate management tools —
+        # are notoriously FP-prone on legitimate management tools  - 
         # RMM agents, EDRs, backup software all trigger them via
         # legit OpenProcess / ReadProcessMemory calls. When the log
         # ALSO carries a known-good vendor marker (CentraStage, Datto,
@@ -1476,7 +1476,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                 break   # only ONE family-detection signal fires
 
     _det_action_pats = [
-        ("Defender action failed — Error Code present",
+        ("Defender action failed - Error Code present",
          r"\bAction\s*:\s*Quarantine\b.*?\bError\s+Code\s*:\s*0x[0-9a-f]+"),
         ("Defender ActionSuccess: false",
          r"\bActionSuccess\s*:\s*false\b"),
@@ -1484,7 +1484,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
          r"\b0x800700df\b"),
     ]
     # Only fire action-failure signals when the error code is NON-zero.
-    # Error Code 0x00000000 = success — the file WAS quarantined and
+    # Error Code 0x00000000 = success - the file WAS quarantined and
     # the log's "Action Status: No additional actions required" is
     # accurate. This suppresses false ESCALATE on Defender remediated
     # events (event 1117).
@@ -1519,7 +1519,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
             otx_ge_5 = True
             break
 
-    # LOLBAS binary-name hit alone is TIER 3 context, NOT abuse — reg.exe /
+    # LOLBAS binary-name hit alone is TIER 3 context, NOT abuse - reg.exe /
     # rundll32 / mshta ARE frequently used legitimately by admin tools and
     # signed vendor agents. The actual abuse signature (mshta javascript:,
     # regsvr32 /i:http, rundll32 javascript:, certutil -urlcache, etc.) is
@@ -1578,8 +1578,8 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
             break
 
     # RDP authentication success events (Event 1149 / 4624 with
-    # RDP-specific fields). Alone these are noise — every remote
-    # worker generates them — but they're worth surfacing as TIER 3
+    # RDP-specific fields). Alone these are noise - every remote
+    # worker generates them - but they're worth surfacing as TIER 3
     # context so the analyst summary describes what actually happened
     # instead of falling through to a generic "routine admin
     # maintenance" phrase. Correlation with impossible travel or
@@ -1611,7 +1611,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
                   f"matched '{m.group(0)[:60]}'")
             break
 
-    # Tenant-policy permit markers — the operator's own policy engine
+    # Tenant-policy permit markers - the operator's own policy engine
     # (ThreatLocker, Sentinel allow-list, MDE ASR exclusion, etc.) has
     # already made a decision to permit. Two independent markers ⇒
     # strong signal that this is a policy-audit event, not a threat.
@@ -1625,7 +1625,7 @@ def extract_tier_signals(state: Dict[str, Any]) -> Dict[str, Any]:
               f"{len(_permit_hits)} permit markers in log: "
               + "; ".join(h[:40] for h in _permit_hits[:3]))
 
-    # Every keyed source clean across every IOC = downweight — but
+    # Every keyed source clean across every IOC = downweight - but
     # ONLY when we've checked at least 2 IOCs AND the log text itself
     # doesn't carry positive behavioural markers. A single clean IP
     # with encoded PowerShell in the same log is NOT benign; the old
@@ -1770,19 +1770,19 @@ def format_signal_correlation(state: Dict[str, Any],
     if tiers["tier_1"]:
         lines.append("TIER 1 SIGNALS PRESENT (verdict floor = HIGH, CLEAR is blocked):")
         for s in tiers["tier_1"]:
-            lines.append(f"  • {s['signal']} — {s['evidence']}")
+            lines.append(f"  • {s['signal']} - {s['evidence']}")
     if tiers["tier_2"]:
         lines.append("TIER 2 SIGNALS PRESENT (corroborating):")
         for s in tiers["tier_2"]:
-            lines.append(f"  • {s['signal']} — {s['evidence']}")
+            lines.append(f"  • {s['signal']} - {s['evidence']}")
     if tiers["tier_3"]:
         lines.append("TIER 3 SIGNALS (context only, don't drive verdict):")
         for s in tiers["tier_3"]:
-            lines.append(f"  • {s['signal']} — {s['evidence']}")
+            lines.append(f"  • {s['signal']} - {s['evidence']}")
     if tiers["downweight"]:
         lines.append("DOWNWEIGHT SIGNALS PRESENT:")
         for s in tiers["downweight"]:
-            lines.append(f"  • {s['signal']} — {s['evidence']}")
+            lines.append(f"  • {s['signal']} - {s['evidence']}")
     if not lines:
         return ""
     lines.append(f"=> Deterministic verdict floor: {tiers['verdict_floor']}")
@@ -1800,5 +1800,5 @@ def should_block_clear(state: Dict[str, Any]) -> Tuple[bool, str]:
         return False, ""
     top = (tiers["tier_1"] or tiers["tier_2"])[:2]
     names = ", ".join(s["signal"] for s in top)
-    return True, (f"TIER 1/2 signals fired ({names}) — public-TI 'clean' "
+    return True, (f"TIER 1/2 signals fired ({names}) - public-TI 'clean' "
                   f"is not a downgrade reason.")

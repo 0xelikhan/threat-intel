@@ -1,10 +1,10 @@
 """
-ViriBack Tracker — free CSV, no key. Live at tracker.viriback.com/dump.php.
+ViriBack Tracker - free CSV, no key. Live at tracker.viriback.com/dump.php.
 
 Format:  Family,URL,IP,FirstSeen
 Example: Amadey,http://196.251.107.186/qK3mRv9L/Login.php,196.251.107.186,09-07-2026
 
-Adds per-IOC MALWARE FAMILY attribution — the abuse.ch trio (URLhaus,
+Adds per-IOC MALWARE FAMILY attribution - the abuse.ch trio (URLhaus,
 Feodo, ThreatFox) flag the URL/IP as bad but not always which family;
 Feodo especially is dropper-focused. ViriBack tracks C2 panels + login
 endpoints with clean family labels (RedLine, Lumma, Amadey, StealC,
@@ -30,7 +30,7 @@ _URL = "https://tracker.viriback.com/dump.php"
 _TTL_SECONDS = 12 * 3600
 
 _lock = threading.RLock()  # reentrant: _ensure_loaded holds it, then
-                            # _refresh_sync re-acquires — a plain Lock
+                            # _refresh_sync re-acquires - a plain Lock
                             # deadlocks; RLock is a drop-in fix.
 _state: Dict[str, Any] = {
     "loaded_at":   0.0,
@@ -124,7 +124,7 @@ def _pack(records: list, ip: str = "", url: str = "") -> Dict[str, Any]:
         "first_seen":   latest.get("first_seen"),
         "hit_count":    len(records),
         "sample_url":   latest.get("url") or url,
-        "summary":      (f"ViriBack: {latest.get('family')} C2 panel — "
+        "summary":      (f"ViriBack: {latest.get('family')} C2 panel - "
                           f"observed {len(records)}x, latest {latest.get('first_seen')}"),
     }
 
@@ -133,7 +133,7 @@ def lookup_ip(ip: str) -> Optional[Dict[str, Any]]:
     _ensure_loaded()
     if not isinstance(ip, str) or not ip:
         return None
-    # Read under lock — _refresh_sync rebuilds by_ip and by_url in
+    # Read under lock - _refresh_sync rebuilds by_ip and by_url in
     # separate assignments; unlocked reads can catch a mid-refresh state.
     with _lock:
         recs = (_state.get("by_ip") or {}).get(ip.strip())

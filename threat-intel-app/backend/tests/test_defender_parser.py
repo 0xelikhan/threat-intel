@@ -1,4 +1,4 @@
-"""Regression tests for intel.defender_parser — focus on the inline-Message
+"""Regression tests for intel.defender_parser - focus on the inline-Message
 export shape (Event-Forwarding / Sentinel) that the original line-anchored
 patterns missed.
 
@@ -22,7 +22,7 @@ from intel.defender_parser import parse_defender_event  # noqa: E402
 from agents.triage import extract_iocs                  # noqa: E402
 
 
-# Defender 1116 export with every field crammed onto the Message line —
+# Defender 1116 export with every field crammed onto the Message line  - 
 # the form emitted by Windows Event Forwarding / Sentinel ingestion. Earlier
 # parser versions ignored every Message-body field and matched only the
 # top-level "User : SYSTEM" line.

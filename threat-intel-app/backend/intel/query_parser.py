@@ -37,12 +37,12 @@ Spec quirks honoured:
   - Attribute names are case-sensitive (preserved verbatim in the AST).
   - No spaces required between tokens: `Attr="abc"` and `Attr = "abc"`
     parse identically; `NOTLIKE` (no space) parses the same as `NOT LIKE`.
-  - NOT only combines with IN / LIKE / CONTAINS — never bare `NOT =`.
+  - NOT only combines with IN / LIKE / CONTAINS - never bare `NOT =`.
   - Left-to-right associativity for AND/OR at the same precedence level;
     parens override.
 
 Never raises on user input except via SyntaxError from parse(). The
-evaluator never raises — missing attrs / type mismatches resolve to
+evaluator never raises - missing attrs / type mismatches resolve to
 False rather than blowing up.
 """
 
@@ -103,7 +103,7 @@ class SyntaxError(Exception):
 
 
 # ─── Lexer ──────────────────────────────────────────────────────────────────
-# Keywords are case-insensitive — we lowercase before lookup.
+# Keywords are case-insensitive - we lowercase before lookup.
 _KEYWORDS = {
     "and":      TokenType.AND,
     "or":       TokenType.OR,
@@ -164,7 +164,7 @@ def tokenize(source: str) -> List[Token]:
         if ch == '"' or ch == '“' or ch == '”':
             # Accept ASCII " and smart quotes "/". Many copy-pastes
             # from docs / chat clients silently convert the ASCII quote
-            # to a curly one — refusing those would be unhelpful.
+            # to a curly one - refusing those would be unhelpful.
             start = i
             i += 1
             buf: List[str] = []
@@ -181,7 +181,7 @@ def tokenize(source: str) -> List[Token]:
                         buf.append("\n"); i += 2; continue
                     if nxt == "t":
                         buf.append("\t"); i += 2; continue
-                    # Unknown escape — keep the backslash literal.
+                    # Unknown escape - keep the backslash literal.
                     buf.append(c); i += 1; continue
                 if c == '"' or c == '“' or c == '”':
                     closed = True
@@ -262,7 +262,7 @@ def tokenize(source: str) -> List[Token]:
                 if lower in _KEYWORDS:
                     tokens.append(Token(_KEYWORDS[lower], lower.upper(), start))
                 else:
-                    # Preserve original case for attribute names — the
+                    # Preserve original case for attribute names - the
                     # spec mandates attributes are case-sensitive.
                     tokens.append(Token(TokenType.TEXT, word, start))
             continue
@@ -275,7 +275,7 @@ def tokenize(source: str) -> List[Token]:
 # ─── AST node types ─────────────────────────────────────────────────────────
 @dataclass
 class Comparison:
-    """ATTR cmp_op VALUE — the equality / inequality / numeric ops."""
+    """ATTR cmp_op VALUE - the equality / inequality / numeric ops."""
     attribute: str
     op:        TokenType
     value:     Union[str, int, float]
@@ -442,7 +442,7 @@ class _Parser:
 
 
 def parse(source: str) -> Expr:
-    """Top-level parse — tokenizes then builds the AST. Raises
+    """Top-level parse - tokenizes then builds the AST. Raises
     SyntaxError on any lex/parse failure with a useful column number."""
     return _Parser(tokenize(source), source).parse()
 
@@ -451,7 +451,7 @@ def parse(source: str) -> Expr:
 def _coerce_for_compare(left: Any, right: Any) -> tuple:
     """Best-effort numeric coercion for >, >=, <, <= so the AI can write
     `FileSize > "1048576"` and have it still work. Returns the pair
-    unchanged if coercion fails — the caller falls back to False."""
+    unchanged if coercion fails - the caller falls back to False."""
     if isinstance(left, (int, float)) and isinstance(right, (int, float)):
         return left, right
     try:
@@ -465,7 +465,7 @@ def _coerce_for_compare(left: Any, right: Any) -> tuple:
 def evaluate(ast: Expr, record: Dict[str, Any]) -> bool:
     """Walk the AST against a record (dict of attribute -> value).
     Returns True/False. Missing attributes / type mismatches resolve to
-    False rather than raising — same defensive shape as our enrichment
+    False rather than raising - same defensive shape as our enrichment
     parsers."""
     if ast is None or record is None:
         return False
@@ -510,7 +510,7 @@ def evaluate(ast: Expr, record: Dict[str, Any]) -> bool:
             return needle not in haystack
         if ast.op in (TokenType.LIKE, TokenType.NOT_LIKE):
             try:
-                # search() not fullmatch() — caller anchors with ^ $ if
+                # search() not fullmatch() - caller anchors with ^ $ if
                 # they want full-string match (matches the spec example).
                 hit = re.search(needle, haystack) is not None
             except re.error:

@@ -2,7 +2,7 @@
 DataDog grimoire cloud-audit-log fixture loader.
 
 Source: https://github.com/DataDog/grimoire (Apache-2.0). Companion to
-Stratus Red Team — ships per-attack-technique fixtures of labelled
+Stratus Red Team - ships per-attack-technique fixtures of labelled
 AWS CloudTrail and EKS audit-log samples that show what the technique
 LOOKS LIKE in the data plane.
 
@@ -62,7 +62,7 @@ def _build_index() -> None:
 
     # grimoire's detonators ship .json log-sample bundles. We walk every
     # *.json under the repo and pick out the ones whose path includes
-    # 'detonators' (the real samples) — the rest are go fixtures that
+    # 'detonators' (the real samples) - the rest are go fixtures that
     # don't carry CloudTrail records.
     for path in _GRIMOIRE_ROOT.rglob("*.json"):
         if not path.is_file() or path.stat().st_size > 200_000:

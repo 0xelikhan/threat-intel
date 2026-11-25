@@ -1,6 +1,6 @@
 """
 WHOIS XML API lookup. Returns the registration metadata an analyst cares
-about when triaging a suspicious domain — registrar, who registered it,
+about when triaging a suspicious domain - registrar, who registered it,
 when it was registered (a domain registered hours or days ago is a strong
 phishing/C2 signal), when it expires, name servers, and a derived age
 in days.

@@ -60,7 +60,7 @@ export default function LoginPage({ onAuthed }) {
       backgroundColor: 'background.default',
       // Soft cyan glow behind the card. Two radial gradients (one centred,
       // one offset bottom-right) give the canvas depth without distracting
-      // from the form. Pure CSS — no extra DOM, no asset cost.
+      // from the form. Pure CSS - no extra DOM, no asset cost.
       backgroundImage: `
         radial-gradient(ellipse at 50% 35%, ${muiAlpha('#00b4d8', 0.10)} 0%, transparent 55%),
         radial-gradient(ellipse at 80% 90%, ${muiAlpha('#00b4d8', 0.06)} 0%, transparent 60%)
@@ -88,7 +88,7 @@ export default function LoginPage({ onAuthed }) {
           background: `linear-gradient(90deg, transparent, ${muiAlpha('#00b4d8', 0.6)}, transparent)`,
         },
       }}>
-        {/* Logo — significantly larger than before so it owns the upper half
+        {/* Logo - significantly larger than before so it owns the upper half
             of the card. Soft cyan drop-shadow ties it to the background glow. */}
         <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4.5 }}>
           <Box component="img" src="/logo.png" alt="RECON"

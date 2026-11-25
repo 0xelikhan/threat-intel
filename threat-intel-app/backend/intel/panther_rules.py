@@ -19,7 +19,7 @@ about:
   Runbook:     "..."
   Reference:   "..."
 
-We only consume the metadata — the .py rule bodies are bound to
+We only consume the metadata - the .py rule bodies are bound to
 Panther's runtime helpers and aren't portable. The inverted index keys
 match the same shape as intel/sigma_corpus.py so investigation.py can
 fan out the same lookup pattern across both corpora.

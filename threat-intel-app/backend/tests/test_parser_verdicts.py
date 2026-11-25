@@ -52,7 +52,7 @@ def test_abuse_score_zero_with_reports_is_unknown():
 
 
 def test_abuse_score_low_confidence_range_is_unknown():
-    """1-24 is AbuseIPDB's low-confidence band — they explicitly say
+    """1-24 is AbuseIPDB's low-confidence band - they explicitly say
     not to act on it, so we shouldn't surface it as SUSPICIOUS."""
     for s in (1, 10, 24):
         out = _p_abuse(_abuse_blob(s, 2))

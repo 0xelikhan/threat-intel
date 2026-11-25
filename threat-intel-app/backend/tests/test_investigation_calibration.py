@@ -1,7 +1,7 @@
 """
 Investigation AI calibration tests (Section 8).
 
-These tests don't run the live LLM — that requires a configured Azure
+These tests don't run the live LLM - that requires a configured Azure
 OpenAI key and would be flaky in CI. They verify the three layers of
 the calibration system that DO work without an LLM:
 
@@ -119,7 +119,7 @@ def _apply_calibration(result: dict) -> dict:
         if has_benign and not has_malicious:
             result["threat_level"] = "LOW"
             result["assessment_basis"] = list(_basis) + [
-                "[RECON calibration] threat_level lowered — assessment_basis "
+                "[RECON calibration] threat_level lowered - assessment_basis "
                 "contained only benign indicators and no concrete malicious evidence."
             ]
             if result.get("verdict_classification") in ("MALICIOUS", "LIKELY_MALICIOUS"):
@@ -128,8 +128,8 @@ def _apply_calibration(result: dict) -> dict:
 
 
 def test_calibration_downshifts_high_with_benign_only_basis():
-    """The exact failure mode the user described — HIGH verdict with a
-    Dell-SupportAssist-style benign basis — must be lowered to LOW."""
+    """The exact failure mode the user described - HIGH verdict with a
+    Dell-SupportAssist-style benign basis - must be lowered to LOW."""
     result = {
         "threat_level": "HIGH",
         "assessment_basis": [
@@ -162,7 +162,7 @@ def test_calibration_does_not_downshift_when_malicious_evidence_present():
 
 
 def test_calibration_preserves_low_and_informational_unchanged():
-    """The safety-net only downshifts HIGH/CRITICAL — LOW must pass through."""
+    """The safety-net only downshifts HIGH/CRITICAL - LOW must pass through."""
     for level in ("LOW", "MEDIUM", "INFORMATIONAL"):
         result = {
             "threat_level": level,
@@ -181,7 +181,7 @@ def test_calibration_no_op_when_assessment_basis_missing():
         assert out["threat_level"] == "HIGH"
 
 
-# ─── 4. Prompt regression — calibration text must be present ─────────────────
+# ─── 4. Prompt regression - calibration text must be present ─────────────────
 def test_investigation_prompt_contains_calibration_principles():
     """Verify the calibration system prompt actually loaded into the
     investigation module. If someone reverts the prompt this test will
@@ -192,18 +192,18 @@ def test_investigation_prompt_contains_calibration_principles():
         "evidence before drawing conclusions",  # the "innocent until proven guilty" principle, paraphrased
         "PRINCIPLE 1",
         "PRINCIPLE 3",
-        "PRINCIPLE 6",                          # log-format gotchas — added after the M365 UAL false-positive
+        "PRINCIPLE 6",                          # log-format gotchas - added after the M365 UAL false-positive
         "EVIDENCE STANDARD",
         "INFORMATIONAL",
         "Dell SupportAssist",
         "known-good",
-        # M365 UAL ResultStatus gotcha — explicitly named in PRINCIPLE 6
+        # M365 UAL ResultStatus gotcha - explicitly named in PRINCIPLE 6
         "ResultStatus",
         "audit-pipeline metadata",
         "50057",                                # account disabled error code
         "UserLoginFailed",
     ):
-        # Case-insensitive substring — the prompt's exact wording is what
+        # Case-insensitive substring - the prompt's exact wording is what
         # we're checking; minor capitalisation tweaks shouldn't fail it.
         assert re.search(re.escape(needle), prompt, re.IGNORECASE), (
             f"investigation prompt missing required calibration text: {needle!r}"

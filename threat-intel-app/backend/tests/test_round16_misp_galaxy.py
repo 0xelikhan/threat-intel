@@ -1,8 +1,8 @@
-"""Round-16 tests — MISP Galaxy depth + cross-walk attribution.
+"""Round-16 tests - MISP Galaxy depth + cross-walk attribution.
 
 Covers the three new actor-flavour clusters + cross_walk_actor + the
 existing fuzzy lookups still functioning. We don't pin specific
-actor names (the upstream MISP catalog changes) — instead we exercise
+actor names (the upstream MISP catalog changes) - instead we exercise
 shapes + the cross-walk behaviour against known long-lived names.
 """
 
@@ -40,7 +40,7 @@ def test_lookup_actor_returns_canonical_shape():
     from intel.misp_galaxies import lookup_actor
     a = lookup_actor("APT29")
     if a is None:
-        # Older bundle doesn't include the threat-actor cluster — OK to skip.
+        # Older bundle doesn't include the threat-actor cluster - OK to skip.
         import pytest
         pytest.skip("threat-actor cluster not bundled")
     assert isinstance(a, dict)
@@ -50,7 +50,7 @@ def test_lookup_actor_returns_canonical_shape():
 
 def test_cross_walk_actor_high_confidence_when_multi_source():
     """APT29 / Cozy Bear is documented in MITRE intrusion-set (G0016)
-    AND community threat-actor — when both are present, confidence
+    AND community threat-actor - when both are present, confidence
     should be 'high'."""
     from intel.misp_galaxies import cross_walk_actor
     walk = cross_walk_actor("APT29")
@@ -115,7 +115,7 @@ def test_response_match_actors_attaches_cross_walk():
     matched = _match_actors(["T1059", "T1003", "T1486"])
     if not matched:
         import pytest
-        pytest.skip("no actors matched — actor_data fallback empty")
+        pytest.skip("no actors matched - actor_data fallback empty")
     # Every match either has cross_walk (when MISP galaxy fired) OR
     # at least the original fields preserved (when cross_walk_actor
     # returned None for that name).

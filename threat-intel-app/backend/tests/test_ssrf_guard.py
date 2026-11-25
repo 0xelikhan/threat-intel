@@ -5,7 +5,7 @@ Catches two specific failure modes that the unit suite previously missed:
 1. aiohttp's AbstractResolver export moved between releases. In aiohttp
    3.14 the top-level `aiohttp.AbstractResolver` re-export was removed,
    and the `_PinnedResolver` class definition in main.py crashed at
-   endpoint-eval time — every POST to /api/scan/url returned a blanket
+   endpoint-eval time - every POST to /api/scan/url returned a blanket
    500 BEFORE the SSRF guard could even run. The integration audit caught
    it; nothing in the unit suite did. Pin the resolver location here so
    any future re-export change fails loudly in CI instead of silently in
@@ -13,7 +13,7 @@ Catches two specific failure modes that the unit suite previously missed:
 
 2. The address-classification logic must reject every range an SSRF
    attacker could meaningfully pivot through, including ones Python's
-   own ipaddress module does NOT flag as private — CGNAT (100.64.0.0/10)
+   own ipaddress module does NOT flag as private - CGNAT (100.64.0.0/10)
    contains Alibaba Cloud's metadata endpoint, IPv4-mapped IPv6 hides
    loopback behind `::ffff:127.0.0.1`, decimal/hex/octal forms hide the
    octets entirely. The previous guard let CGNAT through (verified live
@@ -43,7 +43,7 @@ def test_aiohttp_abstract_resolver_importable():
     import inspect
     src = inspect.getsource(__import__("main"))
     assert "from aiohttp.abc import AbstractResolver" in src, (
-        "main.py no longer pins aiohttp.abc.AbstractResolver — when aiohttp "
+        "main.py no longer pins aiohttp.abc.AbstractResolver - when aiohttp "
         "next renames it, the SSRF guard's _PinnedResolver class definition "
         "will crash at request time."
     )
@@ -90,7 +90,7 @@ def _ip_is_internal_under_test(ip_str: str) -> bool:
     ("224.0.0.1",          True),
     ("240.0.0.1",          True),
 
-    # CGNAT — Python's is_private says False, but it IS internal-ish and
+    # CGNAT - Python's is_private says False, but it IS internal-ish and
     # contains Alibaba Cloud's metadata IP at 100.100.100.200.
     ("100.64.0.5",         True),
     ("100.100.100.200",    True),     # Alibaba metadata
@@ -115,12 +115,12 @@ def _ip_is_internal_under_test(ip_str: str) -> bool:
     ("2001:db8::1",        True),     # docs
     ("100::1",             True),     # discard
 
-    # Malformed inputs — fail closed
+    # Malformed inputs - fail closed
     ("",                   True),
     ("not.an.ip",          True),
     ("999.999.999.999",    True),
 
-    # Legitimate public addresses — must NOT be blocked.
+    # Legitimate public addresses - must NOT be blocked.
     ("1.1.1.1",            False),    # Cloudflare DNS
     ("8.8.8.8",            False),    # Google DNS
     ("93.184.216.34",      False),    # example.com (historic)
@@ -147,7 +147,7 @@ def test_main_pinned_extra_internal_nets_in_source():
         '"fd00:ec2::/64"', '"2001:db8::/32"', '"100::/64"',
     ):
         assert cidr in src, (
-            f"main.py's SSRF guard no longer pins {cidr} — the regression "
+            f"main.py's SSRF guard no longer pins {cidr} - the regression "
             f"table in tests/test_ssrf_guard.py expects it. Either reinstate "
             f"the range or update the test table."
         )

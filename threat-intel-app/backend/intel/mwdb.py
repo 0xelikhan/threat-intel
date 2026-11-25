@@ -1,7 +1,7 @@
 """
 MWDB (CERT.pl Malware repository) hash lookup.
 
-Source: https://mwdb.cert.pl/ — CERT Polska's malware repository with
+Source: https://mwdb.cert.pl/ - CERT Polska's malware repository with
 rich metadata, YARA matches, config extraction, and family tags.
 Free account required for API access.
 
@@ -67,7 +67,7 @@ async def lookup_hash(session, hash_val: str, api_key: str = "") -> Dict[str, An
     children_count = len(r.get("children") or [])
     parents_count = len(r.get("parents") or [])
 
-    # MWDB records are malware repository entries by definition — the mere
+    # MWDB records are malware repository entries by definition - the mere
     # presence of a record is a strong "this is malware" signal, especially
     # when a config was extracted.
     verdict = "MALICIOUS" if (family or config) else "SUSPICIOUS"

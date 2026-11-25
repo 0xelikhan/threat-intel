@@ -2,7 +2,7 @@
 Circuit breaker for enrichment sources.
 
 Tracks per-host failure streaks. After `failure_threshold` consecutive
-failures the breaker opens — calls to that host short-circuit with a
+failures the breaker opens - calls to that host short-circuit with a
 synthesized `{"error": "circuit open"}` for `cooldown_s` seconds. After
 the cooldown a single probe call is allowed (half-open); success resets
 the streak, failure re-opens the breaker for another cooldown window.
@@ -58,7 +58,7 @@ class _HostState:
 
 
 class CircuitBreaker:
-    """Thread-safe per-host breaker. Lazy state — hosts only enter the
+    """Thread-safe per-host breaker. Lazy state - hosts only enter the
     table on first failure.
 
     State transitions (per host):
@@ -98,7 +98,7 @@ class CircuitBreaker:
                 # Still inside the cooldown window: closed off entirely.
                 return True
             if st.open_until:
-                # Cooldown elapsed but open_until is still set — we're
+                # Cooldown elapsed but open_until is still set - we're
                 # half-open. First caller wins; everyone else waits for
                 # the probe to resolve.
                 if st.probe_in_flight:
@@ -149,7 +149,7 @@ class CircuitBreaker:
             return out
 
     def reset(self) -> None:
-        """Wipe all state — used by tests."""
+        """Wipe all state - used by tests."""
         with self._lock:
             self._hosts.clear()
 
@@ -163,7 +163,7 @@ def get_breaker() -> CircuitBreaker:
 
 
 def host_of(url: str) -> Optional[str]:
-    """Extract the hostname from a URL — returns None when the URL is
+    """Extract the hostname from a URL - returns None when the URL is
     unparseable so callers can no-op gracefully."""
     try:
         return (urlparse(url).hostname or "").lower() or None

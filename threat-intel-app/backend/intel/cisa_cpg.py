@@ -3,18 +3,18 @@ CISA Cybersecurity Performance Goals (CPG) loader.
 
 Source: https://www.cisa.gov/cpg (US gov, public domain). CISA published
 the Cybersecurity Performance Goals as a baseline-and-essential tiered
-control framework — a federal-government distillation of NIST CSF +
+control framework - a federal-government distillation of NIST CSF +
 ATT&CK + critical infrastructure-sector experience.
 
 Each CPG control is one of:
-  - Baseline    — minimum recommended cybersecurity practice
-  - Essential   — additional priority practice for critical-infra orgs
-  - Enhanced    — stretch goals for mature organisations
+  - Baseline    - minimum recommended cybersecurity practice
+  - Essential   - additional priority practice for critical-infra orgs
+  - Enhanced    - stretch goals for mature organisations
 
 Each is tagged with NIST CSF categories + (where applicable) ATT&CK
 mitigation IDs. This module bundles a compact in-tree map of the
 highest-traffic CPGs keyed to the ATT&CK techniques RECON commonly
-sees. Pairs with intel/nist_800_53.py (which is broader) — CPG adds
+sees. Pairs with intel/nist_800_53.py (which is broader) - CPG adds
 the priority-tier signal NIST 800-53 doesn't carry.
 """
 

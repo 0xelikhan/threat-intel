@@ -2,7 +2,7 @@
 ESET malware-ioc family-keyed IOC corpus loader.
 
 The repo (https://github.com/eset/malware-ioc, BSD-2-Clause) publishes
-per-family folders — agrius, attor, blacklotus, bootkitty, cdrthief,
+per-family folders - agrius, attor, blacklotus, bootkitty, cdrthief,
 danabot, dukes, gamaredon, industroyer, kobalos, lazarus, moustachedbouncer,
 mustang-panda, occamy, oceanlotus, oilrig, polonium, stantinko, sandworm,
 turla, winnti, etc. Each folder mixes CSV IOC lists, .yar rules, .txt
@@ -33,7 +33,7 @@ _log = logging.getLogger("recon.intel.eset_families")
 _ESET_ROOT = (Path(__file__).parent.parent.parent
               / "vendor" / "eset-malware-ioc")
 
-# Module-level state — built once on first call, copied/read concurrently.
+# Module-level state - built once on first call, copied/read concurrently.
 _lock  = threading.Lock()
 _state: Dict[str, Any] = {
     "loaded":         False,
@@ -44,7 +44,7 @@ _state: Dict[str, Any] = {
     "error":          None,
 }
 
-# IOC regexes. Anchored loosely — these run over CSV/TXT lines, not free-
+# IOC regexes. Anchored loosely - these run over CSV/TXT lines, not free-
 # form text, so we can be greedy.
 _HASH_RE   = re.compile(r"\b([A-Fa-f0-9]{32}|[A-Fa-f0-9]{40}|[A-Fa-f0-9]{64})\b")
 _DOMAIN_RE = re.compile(r"\b((?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.){1,}"
@@ -55,7 +55,7 @@ _IP_RE     = re.compile(r"\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.){3}"
 
 def _ioc_files(family_root: Path) -> List[Path]:
     """The IOC-bearing files in an ESET family folder. Skip PDF reports
-    and binary samples — we only scrape text formats."""
+    and binary samples - we only scrape text formats."""
     out: List[Path] = []
     for ext in (".csv", ".txt"):
         out.extend(family_root.rglob(f"*{ext}"))
@@ -78,7 +78,7 @@ def _ingest_file(path: Path, family: str,
     except OSError:
         return
 
-    # Try CSV first — many ESET files are tab/comma separated; the regex
+    # Try CSV first - many ESET files are tab/comma separated; the regex
     # fallback below catches anything the csv reader misses.
     if path.suffix.lower() == ".csv":
         try:
@@ -89,7 +89,7 @@ def _ingest_file(path: Path, family: str,
         except Exception:
             pass
 
-    # Regex sweep over the whole file — captures hashes/domains/IPs
+    # Regex sweep over the whole file - captures hashes/domains/IPs
     # regardless of column shape or whitespace.
     _scan_blob(text, family, hash_idx, dom_idx, ip_idx)
 
@@ -101,7 +101,7 @@ def _scan_blob(blob: str, family: str,
     for h in _HASH_RE.finditer(blob):
         hkey = h.group(1).lower()
         # First-family-wins per IOC. If two ESET families share a hash
-        # that's a notable signal (likely a shared toolset) — we surface
+        # that's a notable signal (likely a shared toolset) - we surface
         # the first index and accept the imprecision; downstream code
         # can call match() and dedupe.
         hash_idx.setdefault(hkey, family)

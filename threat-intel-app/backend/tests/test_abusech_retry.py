@@ -61,7 +61,7 @@ def test_abusech_401_then_200_returns_200_no_breaker_failure():
     r = asyncio.run(_run())
     assert sess.calls == 2, "expected exactly one retry"
     assert r.get("query_status") == "ok"
-    # Breaker sees success — no failure recorded
+    # Breaker sees success - no failure recorded
     stats = get_breaker().stats().get("threatfox-api.abuse.ch") or {}
     assert stats.get("state") == "closed"
 
@@ -101,7 +101,7 @@ def test_non_abusech_401_does_not_retry():
 
 
 def test_abusech_200_first_call_no_retry():
-    """Happy path — first call succeeds. No retry, no wasted latency."""
+    """Happy path - first call succeeds. No retry, no wasted latency."""
     get_breaker().reset()
     sess = _FakeSession([_FakeResp(200, {"query_status": "no_result"})])
     async def _run():

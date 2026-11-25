@@ -1,4 +1,4 @@
-"""Playbook — suspicious IP triage.
+"""Playbook - suspicious IP triage.
 
 A repeatable analysis sequence: run the baseline IP analyzers in
 parallel, aggregate verdicts, and auto-export to TheHive when the
@@ -36,7 +36,7 @@ class SuspiciousIPTriagePlaybook(Playbook):
             return {"error": "playbook only supports IP artifacts",
                     "artifact_type": artifact.type}
 
-        # Stage 1: analyze — run the configured IP analyzers in parallel.
+        # Stage 1: analyze - run the configured IP analyzers in parallel.
         step_names = self.steps[0]["plugins"]
         analyzers = [registry.get(n) for n in step_names]
         analyzers = [a for a in analyzers if a is not None]
@@ -49,7 +49,7 @@ class SuspiciousIPTriagePlaybook(Playbook):
             if isinstance(r, AnalysisResult):
                 results.append(r)
 
-        # Stage 2: aggregate — majority verdict with MALICIOUS short-circuit
+        # Stage 2: aggregate - majority verdict with MALICIOUS short-circuit
         counts = {"MALICIOUS": 0, "SUSPICIOUS": 0, "CLEAN": 0, "UNKNOWN": 0}
         for r in results:
             if r.found and r.verdict in counts:

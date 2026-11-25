@@ -1,5 +1,5 @@
 """
-TAXII Poller — pulls STIX 2.1 IOC bundles from public TAXII feeds.
+TAXII Poller - pulls STIX 2.1 IOC bundles from public TAXII feeds.
 Designed to run as a scheduled job (cron or Azure Function timer trigger).
 Free public feeds included. Add credentials for commercial feeds.
 """
@@ -33,7 +33,7 @@ FEEDS = [
         "url": "https://ais2.cisa.dhs.gov/taxii2/",
         "collection_id": None,  # Enumerate on connect
         "auth": None,           # Requires CISA AIS enrollment
-        "description": "CISA Automated Indicator Sharing — requires free enrollment"
+        "description": "CISA Automated Indicator Sharing - requires free enrollment"
     },
 ]
 
@@ -46,7 +46,7 @@ EXTRACTABLE_TYPES = {
     "campaign",
 }
 
-# Module-level compiled patterns — previously each parse_stix_indicator
+# Module-level compiled patterns - previously each parse_stix_indicator
 # call re-imported re + recompiled one regex per object. With a TAXII
 # poll returning ~2000 objects per feed and 4 feeds, this was 8000
 # wasted compiles per poll cycle.

@@ -1,1 +1,1 @@
-"""Visualizer plugins — frontend render hints for analyser results."""
+"""Visualizer plugins - frontend render hints for analyser results."""

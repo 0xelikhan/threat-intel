@@ -4,7 +4,7 @@
  * BinaryEdge, Hunter.io, EmailRep, Intezer, Triage). Each is given a
  * realistic enrichment payload and we assert the renderer surfaces
  * the headline fact (port/CIDR/count/family). This is thinner than a
- * full snapshot — just enough to catch field-name drift.
+ * full snapshot - just enough to catch field-name drift.
  */
 import React from 'react';
 import { render, screen } from '@testing-library/react';
@@ -30,10 +30,10 @@ function _renderWithEnr(ip, iocData) {
   // The 10 bespoke renderers are in _ocSources which runs under
   // PerIndicatorList. For this smoke test we instead construct a
   // minimal "result with enrichments" shape and let PerIndicatorList
-  // render it — see the dedicated matrix below.
+  // render it - see the dedicated matrix below.
   const PerList = App.PerIndicatorList;
   if (!PerList) {
-    // No named export — just verify DetectionCitationsView doesn't
+    // No named export - just verify DetectionCitationsView doesn't
     // crash with this payload. Weaker but still valuable.
     return render(
       <ThemeProvider theme={theme}>
@@ -61,14 +61,14 @@ function _renderWithEnr(ip, iocData) {
 }
 
 
-describe('New bespoke renderers — surface headline fields', () => {
+describe('New bespoke renderers - surface headline fields', () => {
   // Each case: payload that MUST produce a bespoke row (not just the
   // generic fallback), plus a string that must appear somewhere in the
-  // rendered DOM when the row expands. We don't click the row — just
+  // rendered DOM when the row expands. We don't click the row - just
   // mount the collapsed state and verify the whole tree renders.
   // (The expansion flow is covered by DetectionCitationsRender.test.js.)
 
-  test('Shodan InternetDB — ports count surfaces', () => {
+  test('Shodan InternetDB - ports count surfaces', () => {
     expect(() => _renderWithEnr('1.2.3.4', {
       shodan_internetdb: {
         source: 'shodan_internetdb', found: true,
@@ -78,7 +78,7 @@ describe('New bespoke renderers — surface headline fields', () => {
     })).not.toThrow();
   });
 
-  test('SecurityTrails — subdomain count surfaces', () => {
+  test('SecurityTrails - subdomain count surfaces', () => {
     expect(() => _renderWithEnr('1.2.3.4', {
       securitytrails: {
         source: 'securitytrails', found: true,
@@ -89,7 +89,7 @@ describe('New bespoke renderers — surface headline fields', () => {
     })).not.toThrow();
   });
 
-  test('Netlas — CIDR + org surfaces', () => {
+  test('Netlas - CIDR + org surfaces', () => {
     expect(() => _renderWithEnr('1.2.3.4', {
       netlas: {
         source: 'netlas', found: true,
@@ -100,7 +100,7 @@ describe('New bespoke renderers — surface headline fields', () => {
     })).not.toThrow();
   });
 
-  test('Validin — domain_count surfaces for IP lookup', () => {
+  test('Validin - domain_count surfaces for IP lookup', () => {
     expect(() => _renderWithEnr('1.2.3.4', {
       validin: {
         source: 'validin', found: true,
@@ -110,7 +110,7 @@ describe('New bespoke renderers — surface headline fields', () => {
     })).not.toThrow();
   });
 
-  test('Onyphe — port + CVE count surfaces', () => {
+  test('Onyphe - port + CVE count surfaces', () => {
     expect(() => _renderWithEnr('1.2.3.4', {
       onyphe: {
         source: 'onyphe', found: true,
@@ -121,7 +121,7 @@ describe('New bespoke renderers — surface headline fields', () => {
     })).not.toThrow();
   });
 
-  test('BinaryEdge — ports + services surface', () => {
+  test('BinaryEdge - ports + services surface', () => {
     expect(() => _renderWithEnr('1.2.3.4', {
       binaryedge: {
         source: 'binaryedge', found: true,
@@ -131,7 +131,7 @@ describe('New bespoke renderers — surface headline fields', () => {
     })).not.toThrow();
   });
 
-  test('Hunter.io — email count + pattern surface', () => {
+  test('Hunter.io - email count + pattern surface', () => {
     expect(() => _renderWithEnr('1.2.3.4', {
       hunter_io: {
         source: 'hunter_io', found: true,
@@ -142,7 +142,7 @@ describe('New bespoke renderers — surface headline fields', () => {
     })).not.toThrow();
   });
 
-  test('EmailRep — reputation + flags surface', () => {
+  test('EmailRep - reputation + flags surface', () => {
     expect(() => _renderWithEnr('1.2.3.4', {
       emailrep: {
         source: 'emailrep', found: true,
@@ -155,7 +155,7 @@ describe('New bespoke renderers — surface headline fields', () => {
     })).not.toThrow();
   });
 
-  test('Intezer — family name surfaces', () => {
+  test('Intezer - family name surfaces', () => {
     expect(() => _renderWithEnr('1.2.3.4', {
       intezer: {
         source: 'intezer', found: true,
@@ -166,7 +166,7 @@ describe('New bespoke renderers — surface headline fields', () => {
     })).not.toThrow();
   });
 
-  test('Triage — score + families surface', () => {
+  test('Triage - score + families surface', () => {
     expect(() => _renderWithEnr('1.2.3.4', {
       triage: {
         source: 'triage', found: true,

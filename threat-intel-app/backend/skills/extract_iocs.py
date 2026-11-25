@@ -1,5 +1,5 @@
 """
-ExtractIOCsSkill — regex-based IOC extraction with optional MISP warning-
+ExtractIOCsSkill - regex-based IOC extraction with optional MISP warning-
 list filtering. No LLM required; this is the first stage of the triage
 pipeline ported into a self-contained skill.
 
@@ -22,10 +22,10 @@ import ipaddress
 from .base import Skill
 
 
-# Patterns mirror agents/triage.py — kept in sync so callers get identical
+# Patterns mirror agents/triage.py - kept in sync so callers get identical
 # behaviour whether they hit the legacy agent or the skill.
 _RE_IPV4   = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
-# IPv6 candidate matcher — kept in sync with agents/triage._IPV6_CANDIDATE_RE.
+# IPv6 candidate matcher - kept in sync with agents/triage._IPV6_CANDIDATE_RE.
 # Alternation order matters (trailing :: comes LAST) so the regex engine
 # tries longer compressed-with-suffix forms before falling back to the
 # prefix-only trailing-:: branch.
@@ -56,7 +56,7 @@ _RE_SHA256 = re.compile(r"\b[a-f0-9]{64}\b", re.IGNORECASE)
 
 
 def _noise_ip(ip: str) -> bool:
-    # Loopback / unspecified / link-local / multicast / reserved — works for
+    # Loopback / unspecified / link-local / multicast / reserved - works for
     # both v4 and v6 via the stdlib `ipaddress` module.
     try:
         a = ipaddress.ip_address(ip)
@@ -69,7 +69,7 @@ def _noise_ip(ip: str) -> bool:
 def _valid_ipv4_octets(ip: str) -> bool:
     """Explicit IPv4 octet validation: every octet must be 0-255. Defender
     Security Intelligence Version strings ("AV: 1.451.195.0") match the
-    dotted-quad regex but are not IPs — their second octet exceeds 255."""
+    dotted-quad regex but are not IPs - their second octet exceeds 255."""
     if not ip or ":" in ip:
         return False
     parts = ip.split(".")
@@ -108,7 +108,7 @@ def _strip_defender_versions(text: str) -> str:
 def _extract_ipv6(text: str) -> set:
     """Pull IPv6 addresses out of text and normalise through
     ipaddress.ip_address(). Drops regex-prefix substrings (when both
-    '2606:4700::' and '2606:4700::1111' match, only the longer survives —
+    '2606:4700::' and '2606:4700::1111' match, only the longer survives  - 
     the shorter is a regex artefact of the trailing-:: branch)."""
     raw = []
     for cand in _RE_IPV6_CANDIDATE.findall(text or ""):
@@ -194,7 +194,7 @@ class ExtractIOCsSkill(Skill):
             *(m.lower() for m in _RE_MD5.findall(raw)),
         })
 
-        # MISP warninglist filtering — fail open if the module isn't wired up,
+        # MISP warninglist filtering - fail open if the module isn't wired up,
         # we just return zero suppressed entries.
         suppressed: Dict[str, List[Dict[str, str]]] = {
             "ips": [], "domains": [], "urls": [], "emails": [], "hashes": [],

@@ -58,7 +58,7 @@ def test_wiz_lookup_matches_slug_exact_and_loose():
     assert wiz_cloud_threats.lookup("0ktapus")["match"] == "exact"
     assert wiz_cloud_threats.lookup("TeamTNT")["match"] == "exact"
     assert wiz_cloud_threats.lookup("8220 Gang")["match"] == "exact"
-    # LAPSUS$ punctuation stripped by normaliser but no slug — should miss
+    # LAPSUS$ punctuation stripped by normaliser but no slug - should miss
     assert wiz_cloud_threats.lookup("LAPSUS$") is None
     # Loose containment finds tool by family name
     hit = wiz_cloud_threats.lookup("Amadey")
@@ -68,7 +68,7 @@ def test_wiz_lookup_matches_slug_exact_and_loose():
 
 def test_wiz_lookup_rejects_short_or_empty_query():
     """A 3-letter query like 'apt' would match every APT-actor slug
-    via loose containment — the min-length gate prevents that noise."""
+    via loose containment - the min-length gate prevents that noise."""
     wiz_cloud_threats._state.update({
         "loaded_at": time.time(),
         "by_name":   {"apt29": {"slug": "apt29", "category": "actor",
@@ -77,7 +77,7 @@ def test_wiz_lookup_rejects_short_or_empty_query():
     # Empty and whitespace-only queries
     assert wiz_cloud_threats.lookup("") is None
     assert wiz_cloud_threats.lookup("   ") is None
-    # 3-char query short-circuits loose match — no false positive
+    # 3-char query short-circuits loose match - no false positive
     assert wiz_cloud_threats.lookup("apt") is None
     # 4-char exact still works
     wiz_cloud_threats._state["by_name"]["ta29"] = {
@@ -100,7 +100,7 @@ def test_dfiq_get_questions_scores_by_keyword_overlap():
              "facet_ids": ["F1009"], "keywords": {"recipient", "account", "controlled", "sender"}},
         ],
     })
-    # Phishing seed keywords include 'browser' and 'download' — those
+    # Phishing seed keywords include 'browser' and 'download' - those
     # match Q1001 (2 overlap) and Q1024 (1 overlap).
     hits = dfiq.get_questions(alert_type="phishing", raw_text="", max_results=3)
     ids = [h["id"] for h in hits]
@@ -143,5 +143,5 @@ def test_dfiq_stopwords_do_not_produce_matches():
     q = {"id": "QX", "name": "Was the file the same?",
          "facet_ids": [], "keywords": dfiq._tokenise("Was the file the same?")}
     # After stopword removal only 'file' + 'same' should remain
-    # ('file' is in _STOPWORDS so it's stripped too — leaving just 'same')
+    # ('file' is in _STOPWORDS so it's stripped too - leaving just 'same')
     assert q["keywords"] == {"same"}

@@ -13,7 +13,7 @@ import {
 } from './components/Skeleton';
 import { cookieFetch } from './utils/api';
 
-// MUI-based primitives (adapted from OpenCTI's Tag.tsx + theme) — every chip,
+// MUI-based primitives (adapted from OpenCTI's Tag.tsx + theme) - every chip,
 // card, code-block, copy button now renders through MUI components that inherit
 // the OpenCTI styling overrides defined in theme.js.
 import {
@@ -57,7 +57,7 @@ const EmailComposerView = lazy(() => import('./components/EmailComposerView'));
 const MapTab            = lazy(() => import('./components/MapTab'));
 const LoginPage         = lazy(() => import('./components/LoginPage'));
 
-/* ─── asArray — defensive shape coerce for LLM-emitted list fields ──────────
+/* ─── asArray - defensive shape coerce for LLM-emitted list fields ──────────
    Multiple analyst-summary fields (analysis_assessment, probing_questions,
    confirmed_facts, recommended_actions, …) are LLM-emitted. The model
    occasionally ships them as a string or dict instead of an array; the
@@ -75,7 +75,7 @@ const asArray = (v) => {
   return [];
 };
 
-/* ─── design tokens — exact values from OpenCTI ThemeDark.ts ────────────────
+/* ─── design tokens - exact values from OpenCTI ThemeDark.ts ────────────────
  * Adapted from OpenCTI (AGPL-3.0). Every legacy inline-styled element now
  * inherits the precise OpenCTI palette by referencing this token object.
  */
@@ -98,7 +98,7 @@ const t = {
   fgDim:     '#848592',           // text.tertiary
   fgGhost:   '#75829A',           // text.disabled
 
-  // accent — primary cyan (matches OpenCTI primary.main)
+  // accent - primary cyan (matches OpenCTI primary.main)
   cy:        '#00b4d8',           // THEME_DARK_DEFAULT_PRIMARY
   cyDim:     'rgba(15,188,255,0.1)',
   cyLine:    'rgba(15,188,255,0.3)',
@@ -181,10 +181,10 @@ function Dial({ score, color, size=80 }) {
   );
 }
 
-/* ─── pre-flight banner — shows triage findings INSTANTLY before AI runs ─────── */
+/* ─── pre-flight banner - shows triage findings INSTANTLY before AI runs ─────── */
 function PreFlight({ result }) {
   if (!result) return null;
-  // Hide the banner once the AI verdict has landed — full analysis takes over
+  // Hide the banner once the AI verdict has landed - full analysis takes over
   const hasVerdict = result?.response_summary?.threat_level
     && Object.keys(result?.response_summary?.analyst_summary || {}).length > 0;
   if (hasVerdict) return null;
@@ -234,7 +234,7 @@ function PreFlight({ result }) {
     flags.push({ label: `Kit: ${k.kit}`, color: t.red, detail: '' });
   }
   for (const p of (cr.suspicious_paths || []).slice(0, 2)) {
-    flags.push({ label: `Path: ${p.label.split(' — ')[0]}`, color: t.orange, detail: '' });
+    flags.push({ label: `Path: ${p.label.split(' - ')[0]}`, color: t.orange, detail: '' });
   }
 
   const stageLabel = {
@@ -267,7 +267,7 @@ function PreFlight({ result }) {
           {totalIOCs > 0
             ? Object.entries(counts).filter(([, n]) => n > 0)
                 .map(([k, n]) => `${n} ${k.slice(0, -1)}${n > 1 ? 's' : ''}`).join(' · ')
-            : 'no IOCs extracted — log-content analysis'}
+            : 'no IOCs extracted - log-content analysis'}
         </Typography>
         {triageMs != null && (
           <Typography sx={{ fontSize: 11, color: 'text.tertiary', ml: 'auto' }}>
@@ -431,7 +431,7 @@ function GeopoliticalContext({ result, bare }) {
 
 // Deleted (Hybrid Analysis removal): ProcessTreeNode, SandboxBehavioral.
 // Both read `enrichments.hashes[h].sandbox_deep` which the backend no longer
-// emits — dead subtree once HA was removed.
+// emits - dead subtree once HA was removed.
 
 /* ─── honeypot / deception intelligence (spec §5) ────────────────────────────
  * Per-IP rollup of: DShield SANS ISC, StopForumSpam, Emerging Threats
@@ -513,7 +513,7 @@ function HoneypotActivity({ result, bare }) {
         Threats compromised IPs, and Project Honeypot HTTP:BL.
       </Typography>
       {rows.map(({ ip, dec, full }) => {
-        // ── Per-IP context (ASN / country / ISP / AbuseIPDB) — already
+        // ── Per-IP context (ASN / country / ISP / AbuseIPDB) - already
         // enriched by the analyze pipeline, surfaced here so the analyst
         // sees the IP's identity alongside the deception findings.
         const ipinfo  = full?.ipinfo || {};
@@ -556,7 +556,7 @@ function HoneypotActivity({ result, bare }) {
             border: `1px solid ${muiAlpha('#ffffff', 0.12)}`,
             borderRadius: '4px', p: '12px 14px', mb: 1,
           }}>
-            {/* Header — IP + identity context + flag count + pivots */}
+            {/* Header - IP + identity context + flag count + pivots */}
             <Stack direction="row" alignItems="center" spacing={1}
               sx={{ mb: 1 }} flexWrap="wrap">
               <TypeTag type="ips"/>
@@ -577,7 +577,7 @@ function HoneypotActivity({ result, bare }) {
               </Box>
             </Stack>
 
-            {/* Secondary identity line — ISP / city / abuse history */}
+            {/* Secondary identity line - ISP / city / abuse history */}
             {(isp || city || recentReports || lastReportedAt) && (
               <Stack direction="row" spacing={2} sx={{ mb: 1,
                 fontSize: 11, color: 'text.tertiary',
@@ -768,7 +768,7 @@ function LogTranslation({ result, bare }) {
 // to render the embedded "OSINT" section + label.
 function hasOsintContent(result) {
   // Geopolitical context now lives under the Geolocation card, and
-  // URL detonation lifts to the top of Triage on URL-bearing alerts —
+  // URL detonation lifts to the top of Triage on URL-bearing alerts  - 
   // neither contributes to OSINT-presence anymore.
   const enr = result?.enrichments || {};
   const hasRows = ['ips', 'domains', 'hashes'].some(cat =>
@@ -840,7 +840,7 @@ function InfrastructureIntel({ result, bare, hideUrlscan = false, hideGeopolitic
                   BGP ranking · CIRCL
                 </Typography>
                 <Typography sx={{ fontSize: 12, color: 'text.primary' }}>
-                  {bgp.summary || `AS${bgp.asn} — ${bgp.asn_description}`}
+                  {bgp.summary || `AS${bgp.asn} - ${bgp.asn_description}`}
                 </Typography>
                 {bgp.rank != null && (
                   <Typography sx={{ fontSize: 10, color: 'text.disabled', mt: 0.375 }}>
@@ -954,7 +954,7 @@ function InfrastructureIntel({ result, bare, hideUrlscan = false, hideGeopolitic
         </Box>
       )}
       {/* JA3/JA4 network detection lives under the Detection Rules card
-          now — Sigma + KQL snippets belong with the other detection
+          now - Sigma + KQL snippets belong with the other detection
           content, not OSINT. */}
       {hasUrlscan && (
         <Box sx={divSx(rows.length || hasGeo || hasHoneypot)}>
@@ -973,8 +973,8 @@ function InfrastructureIntel({ result, bare, hideUrlscan = false, hideGeopolitic
   );
 }
 
-// Recommended actions from the AI investigation — flat list of imperative
-// strings. Restored after being dropped in c56e28b — Behavior was left as
+// Recommended actions from the AI investigation - flat list of imperative
+// strings. Restored after being dropped in c56e28b - Behavior was left as
 // pure observation with no "so what." Filters out the well-known fallback
 // strings the backend emits when the AI call fails so we don't render
 // useless placeholders ("Review enrichment data manually." etc.).
@@ -984,7 +984,7 @@ const _AI_FALLBACK_ACTIONS = new Set([
 ]);
 
 // Senior-analyst context paragraph. Stored as a string on rs.analyst_notes
-// per investigation.py:865 — render as a soft prose block, not a textarea.
+// per investigation.py:865 - render as a soft prose block, not a textarea.
 // Named `AnalystContext` to avoid colliding with the `AnalystNotes` panel
 // that renders the analysis / gap / caveat bullets in the Summary card.
 function AnalystContext({ rs, bare }) {
@@ -1001,13 +1001,13 @@ function AnalystContext({ rs, bare }) {
 }
 
 /* ─── suppressed IOCs (MISP warninglist matches) ─────────────────────────────
- * Spec §4 — show analysts exactly what was filtered out before enrichment so
+ * Spec §4 - show analysts exactly what was filtered out before enrichment so
  * they can spot false-negative filters (e.g., a Tor exit IP swallowed by a
  * datacenter list).
  */
 // Triage: log normalization + MISP-warninglist false-positive filtering +
 // OSINT + behavioral signals + AI recommendations, all in one card. Folded
-// here because the standalone Behavior card hid itself in too many cases —
+// here because the standalone Behavior card hid itself in too many cases  - 
 // keeping the content in a section the analyst will actually open makes the
 // TTPs / cross-refs / sandbox findings discoverable.
 function Triage({ result, rs }) {
@@ -1026,12 +1026,12 @@ function Triage({ result, rs }) {
     (cr.loldrivers || []).length || (cr.rmm_abuse || []).length ||
     (cr.suspicious_paths || []).length);
   // URL detonation gets its own top-of-Triage section whenever the
-  // alert contained URLs — analysts want the URLScan verdict + screenshot
+  // alert contained URLs - analysts want the URLScan verdict + screenshot
   // ahead of everything else.
   const hasUrlscan = !!(result?.iocs?.urls || []).length;
 
   // Recommended actions moved to the Summary card as a Next Steps
-  // block — analysts need to see "what to do" immediately, not buried
+  // block - analysts need to see "what to do" immediately, not buried
   // inside Triage. Only analyst_notes stays here for context prose.
   const hasNotes = !!(rs?.analyst_notes || '').trim();
 
@@ -1060,14 +1060,14 @@ function Triage({ result, rs }) {
   //  2. Did anything immediately match known-bad? (KEV / LOLBAS / kits)
   //  3. What tradecraft is in play? + how to defend (TTPs + D3FEND).
   //  4. Runtime behaviour if we have it (sandbox process tree).
-  //  5. Infrastructure context (OSINT — BGP, DNS, VT graph).
-  //  6. What did the FP filter strip? (MISP — audit trail, lowest urgency).
+  //  5. Infrastructure context (OSINT - BGP, DNS, VT graph).
+  //  6. What did the FP filter strip? (MISP - audit trail, lowest urgency).
   //  7. What to do next (AI recommended actions).
   //  8. Senior-analyst context paragraph (analyst notes).
   return (
     <Card title="Triage" accent="#00b4d8" defaultOpen={false}>
       {/* URL detonation ALWAYS sits at the top of Triage when the alert
-          contained URLs — analysts want the URLScan verdict + screenshot
+          contained URLs - analysts want the URLScan verdict + screenshot
           before anything else. Hidden if no URLs were extracted. */}
       <Section show={hasUrlscan}  label="Live URL detonation · URLScan.io">
         <URLScanLive result={result} bare/></Section>
@@ -1145,7 +1145,7 @@ function SignalBanners({ result }) {
   const banners = [];
   const enr = result?.enrichments || {};
 
-  // Helper — build a one-line "context tail" with WHOIS + hosting info
+  // Helper - build a one-line "context tail" with WHOIS + hosting info
   // we have for a domain so the banner text quotes the same data the
   // analyst would otherwise have to dig for in the per-domain card.
   const _domainContext = (d) => {
@@ -1155,7 +1155,7 @@ function SignalBanners({ result }) {
       if (w.registrar) bits.push(`registrar ${w.registrar}`);
       if (w.registrant_country) bits.push(w.registrant_country);
     }
-    // ASN of the A-record IP — flag Cloudflare / known abused hosters
+    // ASN of the A-record IP - flag Cloudflare / known abused hosters
     // explicitly. Falls back to the generic ASN description when not
     // recognised. Looks at the first A record returned by dns_records.
     const aRecords = d?.osint?.dns_records?.records?.A || [];
@@ -1185,7 +1185,7 @@ function SignalBanners({ result }) {
       banners.push({
         kind: 'critical',
         title: 'Domain registered TODAY',
-        text:  `${domain} was registered ${nrd.age_hours}h ago (${nrd.created})${ctx}. This is a high-confidence phishing signal — legitimate businesses don't operate from same-day domains.`,
+        text:  `${domain} was registered ${nrd.age_hours}h ago (${nrd.created})${ctx}. This is a high-confidence phishing signal - legitimate businesses don't operate from same-day domains.`,
       });
     } else if (nrd?.is_this_week) {
       banners.push({
@@ -1194,7 +1194,7 @@ function SignalBanners({ result }) {
         text:  `${domain} is ${nrd.age_days} days old (${nrd.created})${ctx}. New domains under one week are common in active phishing campaigns.`,
       });
     } else if (nrd?.is_nrd && nrd?.age_days != null && nrd.age_days < 30) {
-      // 7–29 days — still flag, slightly lower urgency. CDN-fronted
+      // 7-29 days - still flag, slightly lower urgency. CDN-fronted
       // newly-registered domains are a textbook clickfix / phishing
       // pattern (mentioned by analyst feedback).
       banners.push({
@@ -1203,7 +1203,7 @@ function SignalBanners({ result }) {
         text:  `${domain} is ${nrd.age_days} days old (${nrd.created})${ctx}. NRDs under 30 days are commonly used for short-lived phishing pages, especially when fronted by a CDN.`,
       });
     }
-    // Spamhaus DBL listing — independent confirmation
+    // Spamhaus DBL listing - independent confirmation
     if (d?.spamhaus_dbl?.hit) {
       const v = d.spamhaus_dbl.verdict;
       banners.push({
@@ -1241,22 +1241,22 @@ function SignalBanners({ result }) {
       banners.push({
         kind: 'critical',
         title: `${k.cve} is actively exploited in ransomware`,
-        text:  `${k.vendor} ${k.product} — ${k.name}. Patch required per CISA KEV.`,
+        text:  `${k.vendor} ${k.product} - ${k.name}. Patch required per CISA KEV.`,
       });
     }
   }
 
-  // RMM tool detected — heavy abuse-by-ransomware signal
+  // RMM tool detected - heavy abuse-by-ransomware signal
   for (const r of result?.response_summary?.cross_refs?.rmm_abuse || []) {
     banners.push({
       kind: 'high',
       title: `RMM tool detected: ${r.binary}`,
-      text:  `${r.vendor} — abused by ${(r.groups || []).slice(0, 3).join(', ')}. Verify whether install was authorized by IT and review parent process / install source.`,
+      text:  `${r.vendor} - abused by ${(r.groups || []).slice(0, 3).join(', ')}. Verify whether install was authorized by IT and review parent process / install source.`,
     });
   }
 
-  // Ransomware.live — the named group posted victims in the last 30 days.
-  // Freshness signal — the group is operating right now, not archived.
+  // Ransomware.live - the named group posted victims in the last 30 days.
+  // Freshness signal - the group is operating right now, not archived.
   const rl = result?.response_summary?.ransomware_live
           || result?.ransomware_live;
   if (rl && rl.group && rl.victims_30d > 0) {
@@ -1264,7 +1264,7 @@ function SignalBanners({ result }) {
                     .map(v => v.victim).filter(Boolean).join(', ');
     banners.push({
       kind:  'critical',
-      title: `${rl.group} is active — ${rl.victims_30d} new victim${rl.victims_30d === 1 ? '' : 's'} in last 30 days`,
+      title: `${rl.group} is active - ${rl.victims_30d} new victim${rl.victims_30d === 1 ? '' : 's'} in last 30 days`,
       text:  (`Leak site posted latest ${rl.latest || ''}${sample ? ` · recent victims: ${sample}` : ''}. `
              + `Treat as an in-progress campaign, not a legacy threat.`),
     });
@@ -1319,7 +1319,7 @@ const SCORE_TIERS = [
 const tierFor = (score) =>
   SCORE_TIERS.find(t => (score || 0) >= t.min) || SCORE_TIERS[SCORE_TIERS.length - 1];
 
-// Threat-score block — one prominent dial showing the worst-scoring indicator,
+// Threat-score block - one prominent dial showing the worst-scoring indicator,
 // a tier chip below it, a per-tier distribution mini-chart so the analyst sees
 // at a glance "one bad IOC vs a pattern", and a compact per-IOC list sorted
 // by score. Rendered inside the Summary card.
@@ -1407,7 +1407,7 @@ function ThreatScore({ result }) {
         </Box>
       </Block>
 
-      {/* Per-indicator list — click a row to expand the per-source breakdown
+      {/* Per-indicator list - click a row to expand the per-source breakdown
           so the analyst sees WHICH TI source said what (VirusTotal ratio,
           AbuseIPDB abuse %, Maltiverse classification + tags, OTX pulses,
           etc.) without leaving the Summary. */}
@@ -1422,7 +1422,7 @@ function ThreatScore({ result }) {
 // said something useful about this IOC. When sourceUrls.js knows a deep
 // link for (source, ioc, iocType), the source label becomes a clickable
 // anchor that opens the source's web UI prefilled with the indicator.
-function SourceVerdict({ source, label, why, color = '#00b4d8', ioc, iocType }) {
+function SourceVerdict({ source, label, color = '#00b4d8', ioc, iocType }) {
   const href = sourceUrl(source, ioc, iocType);
   const labelEl = href ? (
     <Box
@@ -1438,7 +1438,7 @@ function SourceVerdict({ source, label, why, color = '#00b4d8', ioc, iocType }) 
         textTransform: 'uppercase', letterSpacing: '0.06em',
         textDecoration: 'none', cursor: 'pointer',
         transition: 'color 0.15s ease',
-        // Show the link affordance only on the row's hover — keeps the
+        // Show the link affordance only on the row's hover - keeps the
         // resting state clean, makes the icon a directional cue when the
         // analyst is scanning.
         '& .recon-src-arrow': {
@@ -1486,20 +1486,6 @@ function SourceVerdict({ source, label, why, color = '#00b4d8', ioc, iocType }) 
         }}>
           {label}
         </Typography>
-        {why && (
-          <Typography sx={{
-            fontSize: 10.5,
-            color: 'text.tertiary',
-            lineHeight: 1.5,
-            mt: 0.25,
-            // Italic to visually separate "interpretation" from the
-            // hard-data label above.
-            fontStyle: 'italic',
-            wordBreak: 'break-word',
-          }}>
-            {why}
-          </Typography>
-        )}
       </Box>
     </Box>
   );
@@ -1512,7 +1498,7 @@ function SourceVerdict({ source, label, why, color = '#00b4d8', ioc, iocType }) 
 function _ocSources(result, ioc, type) {
   const enr = result?.enrichments || {};
   // Backend emits ioc_type as 'ip' | 'domain' | 'url' | 'file' (file for
-  // hashes — historical name). The enrichment buckets are plural; map
+  // hashes - historical name). The enrichment buckets are plural; map
   // each ioc_type to its bucket. Falls through to a no-op for unknown
   // types so the row stays clickable-but-empty rather than crashing.
   const bucket =
@@ -1531,7 +1517,7 @@ function _ocSources(result, ioc, type) {
   const red = '#EE3838', orange = '#E6700F', yellow = '#E1B823',
         green = '#16AD34', cyan = '#00b4d8', tert = '#848592';
 
-  // VirusTotal — show ratio + popular family/name when available.
+  // VirusTotal - show ratio + popular family/name when available.
   if (d.virustotal && !d.virustotal.error) {
     const v = d.virustotal;
     const mal = v.malicious ?? 0;
@@ -1543,7 +1529,7 @@ function _ocSources(result, ioc, type) {
       const extra = v.name ? ` · ${v.name}` : v.popular_family ? ` · ${v.popular_family}` : '';
       const why =
           mal >= 5 ? 'High-confidence malicious: 5+ AV engines independently flagged this indicator.'
-        : mal >= 1 ? 'Partial AV detection — at least one engine flagged this. Cross-check before acting.'
+        : mal >= 1 ? 'Partial AV detection - at least one engine flagged this. Cross-check before acting.'
         : susp >= 3 ? 'No malicious detection, but several engines flagged suspicious behaviour.'
         :            'No AV engine flagged this indicator (clean by consensus).';
       out.push({ source: 'VirusTotal', label: `${flagged}/${total} flagged${extra}`, color: c, why });
@@ -1554,7 +1540,7 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // AbuseIPDB — abuse confidence %.
+  // AbuseIPDB - abuse confidence %.
   if (d.abuseipdb && !d.abuseipdb.error) {
     const a = d.abuseipdb;
     const score = a.abuseScore ?? a.abuse_confidence ?? null;
@@ -1563,14 +1549,14 @@ function _ocSources(result, ioc, type) {
       const reports = a.totalReports ? ` · ${a.totalReports} reports` : '';
       const why =
           score >= 75 ? 'Confirmed abuser. AbuseIPDB ≥75% means multiple admins have reported this IP for attacks; safe to block.'
-        : score >= 25 ? 'Recent abuse reports but not yet conclusive — verify ASN / recent activity before blocking.'
-        : score > 0  ? 'A small number of historical reports — likely noise, but cross-check with other sources.'
-        :              'No abuse reports on file — IP is not currently flagged by AbuseIPDB.';
+        : score >= 25 ? 'Recent abuse reports but not yet conclusive - verify ASN / recent activity before blocking.'
+        : score > 0  ? 'A small number of historical reports - likely noise, but cross-check with other sources.'
+        :              'No abuse reports on file - IP is not currently flagged by AbuseIPDB.';
       out.push({ source: 'AbuseIPDB', label: `${score}% confidence${reports}`, color: c, why });
     }
   }
 
-  // MISP feeds — community-curated hash matches (CIRCL OSINT / DigitalSide /
+  // MISP feeds - community-curated hash matches (CIRCL OSINT / DigitalSide /
   // Botvrij). A hit here means the hash is in a published MISP event, which
   // is high-signal corroborating evidence.
   if (d.misp_feeds && d.misp_feeds.matched_feeds?.length > 0) {
@@ -1580,7 +1566,7 @@ function _ocSources(result, ioc, type) {
                why: 'Indicator is in published MISP community events. High-signal corroboration of malicious intent.' });
   }
 
-  // OTX — pulse count + a top pulse name when present. Even when the
+  // OTX - pulse count + a top pulse name when present. Even when the
   // count is 0 we still emit a row so the analyst sees that OTX WAS
   // queried and confirmed no community attribution; without this, the
   // common case (no hits) makes OTX silently disappear from the source
@@ -1601,9 +1587,9 @@ function _ocSources(result, ioc, type) {
       };
       const topStr = top ? _trunc(String(top), 140) : '';
       const why =
-          pulses >= 20 ? `Listed in ${pulses} AlienVault OTX community threat-intel pulses — broadly recognised as a known-bad indicator.`
-        : pulses >= 5  ? `Listed in ${pulses} OTX pulses — multiple researchers have correlated this with malicious activity.`
-        :                `Listed in ${pulses} OTX pulse${pulses === 1 ? '' : 's'} — emerging signal; review the pulse context.`;
+          pulses >= 20 ? `Listed in ${pulses} AlienVault OTX community threat-intel pulses - broadly recognised as a known-bad indicator.`
+        : pulses >= 5  ? `Listed in ${pulses} OTX pulses - multiple researchers have correlated this with malicious activity.`
+        :                `Listed in ${pulses} OTX pulse${pulses === 1 ? '' : 's'} - emerging signal; review the pulse context.`;
       out.push({ source: 'OTX',
                  label: `${pulses} pulse${pulses === 1 ? '' : 's'}${topStr ? ` · ${topStr}` : ''}`,
                  color: pulses >= 5 ? red : pulses >= 1 ? orange : tert, why });
@@ -1615,7 +1601,7 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // Maltiverse — classification + tags.
+  // Maltiverse - classification + tags.
   if (d.maltiverse && !d.maltiverse.error) {
     const m = d.maltiverse;
     const cls = m.classification || '';
@@ -1626,14 +1612,14 @@ function _ocSources(result, ioc, type) {
       const tags = (m.tag || []).slice(0, 3).join(', ');
       const why =
           /malicious/i.test(cls)  ? 'Maltiverse confirms this indicator is malicious; tags surface the specific category (e.g. tor, botnet, banker).'
-        : /suspicious/i.test(cls) ? 'Maltiverse flagged this indicator as suspicious — partial signal; review tags for context.'
+        : /suspicious/i.test(cls) ? 'Maltiverse flagged this indicator as suspicious - partial signal; review tags for context.'
         : /benign/i.test(cls)     ? 'Maltiverse confirms this indicator is benign or on a known-good list.'
         :                            'Maltiverse has classification data for this indicator; tags surface the category.';
       out.push({ source: 'Maltiverse', label: `${cls}${tags ? ` · ${tags}` : ''}`, color: c, why });
     }
   }
 
-  // ThreatFox — malware family + first seen.
+  // ThreatFox - malware family + first seen.
   if (d.threatfox && !d.threatfox.error) {
     const t = d.threatfox;
     const malware = t.malware || t.malware_alias || '';
@@ -1644,7 +1630,7 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // MalwareBazaar — file-family lookup (hashes).
+  // MalwareBazaar - file-family lookup (hashes).
   if (d.malwarebazaar && !d.malwarebazaar.error) {
     const mb = d.malwarebazaar;
     const family = mb.malwareName || mb.signature || mb.malware_family || '';
@@ -1652,7 +1638,7 @@ function _ocSources(result, ioc, type) {
                            why: 'abuse.ch curates submitted malware samples with confirmed family attribution. A hit means analysts have studied and labelled this sample.' });
   }
 
-  // URLScan — verdict + first scan.
+  // URLScan - verdict + first scan.
   if (d.urlscan && !d.urlscan.error) {
     const u = d.urlscan;
     const verdict = u.verdict || u.score_verdict || '';
@@ -1662,14 +1648,14 @@ function _ocSources(result, ioc, type) {
               : /benign|safe/i.test(verdict) ? green : tert;
       const why =
           /malicious/i.test(verdict)  ? 'URLScan sandboxed this URL and flagged it malicious based on rendered content + network behaviour.'
-        : /suspicious/i.test(verdict) ? 'URLScan saw suspicious indicators when it rendered this URL — review the screenshot.'
+        : /suspicious/i.test(verdict) ? 'URLScan saw suspicious indicators when it rendered this URL - review the screenshot.'
         : /benign|safe/i.test(verdict)? 'URLScan rendered this URL and found nothing suspicious.'
         :                                'URLScan has a prior public scan for this URL.';
       out.push({ source: 'URLScan.io', label: verdict, color: c, why });
     }
   }
 
-  // Pulsedive — risk level.
+  // Pulsedive - risk level.
   if (d.pulsedive && !d.pulsedive.error) {
     const p = d.pulsedive;
     const risk = p.risk || p.score_label || '';
@@ -1682,15 +1668,15 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // Spamhaus DBL — domain blocklist.
+  // Spamhaus DBL - domain blocklist.
   if (d.spamhaus_dbl?.hit) {
     out.push({ source: 'Spamhaus DBL',
                label: `${d.spamhaus_dbl.verdict || 'listed'}${d.spamhaus_dbl.code ? ` · ${d.spamhaus_dbl.code}` : ''}`,
                color: red,
-               why: 'On the Spamhaus Domain Block List. Used industry-wide for email + DNS filtering — high-confidence malicious.' });
+               why: 'On the Spamhaus Domain Block List. Used industry-wide for email + DNS filtering - high-confidence malicious.' });
   }
 
-  // Criminal IP — inbound/outbound threat scoring.
+  // Criminal IP - inbound/outbound threat scoring.
   if (d.criminal_ip && !d.criminal_ip.error) {
     const cip = d.criminal_ip;
     const inb = cip.inbound_score, outb = cip.outbound_score;
@@ -1716,7 +1702,7 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // IPInfo — ASN + country + org. Always has data for any public IP,
+  // IPInfo - ASN + country + org. Always has data for any public IP,
   // so always render a row (was being queried but never surfaced).
   if (d.ipinfo && !d.ipinfo.error && (d.ipinfo.country || d.ipinfo.asn || d.ipinfo.org)) {
     const i = d.ipinfo;
@@ -1730,7 +1716,7 @@ function _ocSources(result, ioc, type) {
                why: 'Geolocation + ASN (autonomous system) ownership. Not a threat verdict; useful for spotting impossible-travel or unexpected hosting providers.' });
   }
 
-  // Censys — open ports / services / certs on the host. The backend
+  // Censys - open ports / services / certs on the host. The backend
   // returns services as an array of dicts {port, transport, service,
   // product, banner}; pull just the port numbers for the label.
   if (d.censys && !d.censys.error) {
@@ -1743,12 +1729,12 @@ function _ocSources(result, ioc, type) {
     if (portNums.length) meta.push(`ports ${portNums.join(', ')}`);
     if (meta.length) {
       out.push({ source: 'Censys', label: meta.join(' · '), color: tert,
-                 why: 'Censys continuously scans the public internet. Open ports show what services the host exposes — Tor relay ports (9001-9004), open SMB, exposed databases, etc. all tell you what the host actually does.' });
+                 why: 'Censys continuously scans the public internet. Open ports show what services the host exposes - Tor relay ports (9001-9004), open SMB, exposed databases, etc. all tell you what the host actually does.' });
     }
   }
 
-  // Robtex — ASN + passive DNS summary. Parser key is `asnName` (camel),
-  // not `as_name` — the snake-case version never existed, which silently
+  // Robtex - ASN + passive DNS summary. Parser key is `asnName` (camel),
+  // not `as_name` - the snake-case version never existed, which silently
   // dropped the org name from the label.
   if (d.robtex && !d.robtex.error && (d.robtex.asn || d.robtex.asnName)) {
     const r = d.robtex;
@@ -1757,7 +1743,7 @@ function _ocSources(result, ioc, type) {
                         why: 'ASN ownership + BGP route. Tells you who runs the network. Bulletproof / abuse-tolerant hosters tend to show up repeatedly across malicious investigations.' });
   }
 
-  // Hackertarget — reverse-IP (other hostnames on the same IP). The
+  // Hackertarget - reverse-IP (other hostnames on the same IP). The
   // backend parser returns `rows` + `record_count`; was checking the
   // wrong field name and the row never rendered.
   if (d.hackertarget && !d.hackertarget.error) {
@@ -1772,7 +1758,7 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // ProxyCheck — VPN / proxy / Tor / hosting-IP classification. Backend
+  // ProxyCheck - VPN / proxy / Tor / hosting-IP classification. Backend
   // queries proxycheck.io when PROXYCHECK_KEY is configured; parser
   // returns {proxy, type, provider, country, asn, risk}. Was being
   // queried but had no UI emitter, so the data never reached the
@@ -1796,11 +1782,11 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // Feodo Tracker — abuse.ch active-C2 list match.
+  // Feodo Tracker - abuse.ch active-C2 list match.
   if (d.feodo_tracker && d.feodo_tracker.hit) {
     out.push({ source: 'Feodo Tracker',
                label: 'on active C2 list', color: red,
-               why: 'abuse.ch maintains a curated list of active botnet C2 servers (Emotet, Dridex, TrickBot, QakBot). A hit means active malicious infrastructure — block immediately.' });
+               why: 'abuse.ch maintains a curated list of active botnet C2 servers (Emotet, Dridex, TrickBot, QakBot). A hit means active malicious infrastructure - block immediately.' });
   }
 
   // Local offline feeds (firehol / ipsum / phishing.db). High-signal
@@ -1812,7 +1798,7 @@ function _ocSources(result, ioc, type) {
                why: 'Matched a public threat-intel blocklist (firehol / ipsum / phishing-db). The source name shows which list; appearing on multiple lists raises confidence.' });
   }
 
-  // URLhaus URL hit — abuse.ch malware-distribution database.
+  // URLhaus URL hit - abuse.ch malware-distribution database.
   if (d.urlhaus_url && !d.urlhaus_url.error) {
     const u = d.urlhaus_url;
     out.push({
@@ -1823,7 +1809,7 @@ function _ocSources(result, ioc, type) {
     });
   }
 
-  // URLhaus payload hit — same database, payload (hash) endpoint.
+  // URLhaus payload hit - same database, payload (hash) endpoint.
   if (d.urlhaus_payload && !d.urlhaus_payload.error) {
     const u = d.urlhaus_payload;
     out.push({
@@ -1834,10 +1820,10 @@ function _ocSources(result, ioc, type) {
     });
   }
 
-  // CIRCL hashlookup — three branches: known-good (NSRL hit), known-bad
+  // CIRCL hashlookup - three branches: known-good (NSRL hit), known-bad
   // (CIRCL explicitly flags it, e.g. EICAR), or just-known (metadata
   // present but no verdict attached). Trust is provenance confidence on
-  // the metadata, not a clean/dirty signal — high trust on a malicious
+  // the metadata, not a clean/dirty signal - high trust on a malicious
   // sample still means malicious.
   if (d.circl_hashlookup && !d.circl_hashlookup.error) {
     const h = d.circl_hashlookup;
@@ -1846,32 +1832,32 @@ function _ocSources(result, ioc, type) {
         source: 'CIRCL hashlookup',
         label: `known-good${h.ProductName ? ` · ${h.ProductName}` : ''}${h.FileName ? ` · ${h.FileName}` : ''}`,
         color: green,
-        why: 'Hash is in the NIST National Software Reference Library (NSRL) — confirmed legitimate software. Safe to dismiss as a false positive.',
+        why: 'Hash is in the NIST National Software Reference Library (NSRL) - confirmed legitimate software. Safe to dismiss as a false positive.',
       });
     } else if (h.known_malicious) {
       out.push({
         source: 'CIRCL hashlookup',
         label: `known-malicious${h.FileName ? ` · ${h.FileName}` : ''}`,
         color: red,
-        why: 'CIRCL explicitly flags this hash as known-malicious — independent corroboration alongside VT / MalwareBazaar.',
+        why: 'CIRCL explicitly flags this hash as known-malicious - independent corroboration alongside VT / MalwareBazaar.',
       });
     } else if (h.trust != null) {
       // Trust ≥80 + a filename means CIRCL recognises the file by name
       // from a curated source. That's identifier context, not a clean
-      // signal — verdict still depends on VT / MalwareBazaar.
+      // signal - verdict still depends on VT / MalwareBazaar.
       const named = h.trust >= 80 && h.FileName;
       out.push({
         source: 'CIRCL hashlookup',
         label: `trust ${h.trust}${h.FileName ? ` · ${h.FileName}` : ''}`,
         color: tert,
         why: named
-          ? 'CIRCL recognises this file by name from a curated source. Useful identifier context — verdict still depends on VirusTotal / MalwareBazaar.'
+          ? 'CIRCL recognises this file by name from a curated source. Useful identifier context - verdict still depends on VirusTotal / MalwareBazaar.'
           : 'CIRCL has metadata for this hash but neither known-good nor known-bad. Cross-check with VirusTotal / MalwareBazaar.',
       });
     }
   }
 
-  // Team Cymru Malware Hash Registry — DNS-based hash reputation. Backend
+  // Team Cymru Malware Hash Registry - DNS-based hash reputation. Backend
   // returns first_seen + detection_pct only when MHR has the hash, so
   // presence is the hit signal (no .found field).
   if (d.team_cymru_mhr && !d.team_cymru_mhr.error) {
@@ -1885,7 +1871,7 @@ function _ocSources(result, ioc, type) {
     });
   }
 
-  // OpenCTI — operator's own CTI instance. Backend's lookup_observable
+  // OpenCTI - operator's own CTI instance. Backend's lookup_observable
   // returns {found, score, labels, description, created, report_url}
   // when there's a hit (skipped when OpenCTI isn't configured), so any
   // payload with found=true is a real match.
@@ -1897,11 +1883,11 @@ function _ocSources(result, ioc, type) {
     if (labels.length) bits.push(labels.join(', '));
     if (!bits.length) bits.push('matched observable');
     out.push({ source: 'OpenCTI', label: bits.join(' · '), color: red,
-               why: 'Match in your OpenCTI instance — this indicator has been previously analysed or tracked by your team. Highest-value internal signal.' });
+               why: 'Match in your OpenCTI instance - this indicator has been previously analysed or tracked by your team. Highest-value internal signal.' });
   }
 
   // ─── Domain-specific rows ────────────────────────────────────────────
-  // Wayback Machine — closest snapshot date (parser returns
+  // Wayback Machine - closest snapshot date (parser returns
   // has_snapshots + closest_snapshot; first/last variants don't exist).
   // Surface the "no snapshots" case too, since a brand-new domain
   // missing from the Wayback Machine is itself a useful signal.
@@ -1914,11 +1900,11 @@ function _ocSources(result, ioc, type) {
                  why: 'Internet Archive snapshot history. Long history = established legitimate site; brand-new or no snapshots = newly stood up (consistent with phishing or C2 staging).' });
     } else if (w.has_snapshots === false) {
       out.push({ source: 'Wayback', label: 'no archive history', color: orange,
-                 why: 'Domain has zero Wayback Machine snapshots — never archived by the Internet Archive. Consistent with newly-registered phishing/C2 staging infrastructure.' });
+                 why: 'Domain has zero Wayback Machine snapshots - never archived by the Internet Archive. Consistent with newly-registered phishing/C2 staging infrastructure.' });
     }
   }
 
-  // Typosquat detector — flags lookalikes of well-known brands.
+  // Typosquat detector - flags lookalikes of well-known brands.
   if (d.typosquat && d.typosquat.brand) {
     out.push({
       source: 'Typosquat',
@@ -1928,7 +1914,7 @@ function _ocSources(result, ioc, type) {
     });
   }
 
-  // Domain heuristics — DGA score / newly-registered / IDN homoglyph.
+  // Domain heuristics - DGA score / newly-registered / IDN homoglyph.
   if (d.heuristics && typeof d.heuristics === 'object') {
     const h = d.heuristics;
     const bits = [];
@@ -1946,16 +1932,16 @@ function _ocSources(result, ioc, type) {
       const whyBits = [];
       if (h.nrd?.is_same_day) whyBits.push('Same-day registration is near-certain phishing/C2 staging.');
       else if (h.nrd?.age_days != null && h.nrd.age_days < 30)
-        whyBits.push('Domains <30 days old are the single strongest phishing/FP signal — well above the noise floor.');
+        whyBits.push('Domains <30 days old are the single strongest phishing/FP signal - well above the noise floor.');
       if (h.dga?.score != null && h.dga.score >= 0.6)
         whyBits.push('High DGA score = the domain name looks algorithmically generated (botnet C2 pattern).');
-      if (h.idn) whyBits.push('IDN homoglyph uses Unicode chars that visually mimic ASCII — classic brand-impersonation trick.');
+      if (h.idn) whyBits.push('IDN homoglyph uses Unicode chars that visually mimic ASCII - classic brand-impersonation trick.');
       out.push({ source: 'Heuristics', label: bits.join(' · '), color: c,
                  why: whyBits.join(' ') });
     }
   }
 
-  // DNS records (subset of osint) — A/AAAA/MX/NS visibility. Parser
+  // DNS records (subset of osint) - A/AAAA/MX/NS visibility. Parser
   // returns {records: {A:[…], AAAA:[…], MX:[…], NS:[…]}} (uppercase
   // type keys, nested under `records`). Earlier code read dns.a /
   // dns.aaaa / dns.mx / dns.ns directly, which never matched.
@@ -1968,11 +1954,11 @@ function _ocSources(result, ioc, type) {
     if ((recs.NS   || []).length) counts.push(`${recs.NS.length} NS`);
     if (counts.length) {
       out.push({ source: 'DNS records', label: counts.join(' · '), color: tert,
-                 why: 'Live DNS query — what record types the domain currently resolves. MX = receives email; NS = its own nameservers. Useful for triaging email-based attacks.' });
+                 why: 'Live DNS query - what record types the domain currently resolves. MX = receives email; NS = its own nameservers. Useful for triaging email-based attacks.' });
     }
   }
 
-  // Google Safe Browsing — phishing/malware classification. Parser sets
+  // Google Safe Browsing - phishing/malware classification. Parser sets
   // {match_count, threat_types, verdict}; `matched` boolean never
   // existed. Trigger on match_count > 0 (verdict==='MALICIOUS' would
   // also work but match_count is the primary signal).
@@ -1983,13 +1969,13 @@ function _ocSources(result, ioc, type) {
         source: 'Google Safe Browsing',
         label: `flagged: ${(g.threat_types || []).join(', ') || 'unsafe'}`,
         color: red,
-        why: 'Google\'s safe-browsing API actively flags this URL/domain. Browsers warn users on visit — high-confidence malicious classification.',
+        why: 'Google\'s safe-browsing API actively flags this URL/domain. Browsers warn users on visit - high-confidence malicious classification.',
       });
     }
   }
 
   // ─── URL-specific rows ───────────────────────────────────────────────
-  // NVD CVE — score + severity + description summary.
+  // NVD CVE - score + severity + description summary.
   if (d.nvd && !d.nvd.error && d.nvd.found) {
     const n = d.nvd;
     const score = n.cvss_v3_score;
@@ -2002,11 +1988,11 @@ function _ocSources(result, ioc, type) {
       source: 'NVD',
       label: `CVSS ${score ?? '?'} ${sev || 'unrated'}${n.affected_products?.length ? ` · ${n.affected_products.slice(0,2).join(', ')}` : ''}`,
       color: c,
-      why: 'NIST National Vulnerability Database — CVSS score is the standardised severity (10 = maximum impact). HIGH/CRITICAL warrant immediate patching/mitigation.',
+      why: 'NIST National Vulnerability Database - CVSS score is the standardised severity (10 = maximum impact). HIGH/CRITICAL warrant immediate patching/mitigation.',
     });
   }
 
-  // EPSS — exploitation probability percentile.
+  // EPSS - exploitation probability percentile.
   if (d.epss && !d.epss.error && d.epss.found) {
     const e = d.epss;
     const c = e.score >= 0.7 ? red
@@ -2020,7 +2006,7 @@ function _ocSources(result, ioc, type) {
     });
   }
 
-  // CISA KEV — actively exploited check.
+  // CISA KEV - actively exploited check.
   if (d.cisa_kev && !d.cisa_kev.error) {
     const k = d.cisa_kev;
     if (k.in_kev) {
@@ -2028,7 +2014,7 @@ function _ocSources(result, ioc, type) {
         source: 'CISA KEV',
         label: `ACTIVELY EXPLOITED · added ${k.date_added || '?'}${k.ransomware_use ? ' · ransomware use' : ''}`,
         color: red,
-        why: 'CISA confirms this vulnerability is being actively exploited in the wild. US federal agencies have a deadline to patch — your org should treat it as a P0.',
+        why: 'CISA confirms this vulnerability is being actively exploited in the wild. US federal agencies have a deadline to patch - your org should treat it as a P0.',
       });
     } else {
       out.push({
@@ -2040,7 +2026,7 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // URLScan screenshot — prior public scan for this URL.
+  // URLScan screenshot - prior public scan for this URL.
   if (d.urlscan_screenshot && !d.urlscan_screenshot.error
       && d.urlscan_screenshot.found) {
     const u = d.urlscan_screenshot;
@@ -2056,7 +2042,7 @@ function _ocSources(result, ioc, type) {
     });
   }
 
-  // WHOIS — registrar + age + registrant. Domain age is the single
+  // WHOIS - registrar + age + registrant. Domain age is the single
   // strongest FP-vs-real signal: < 30 d is highly suspicious, < 1 d is
   // near-certain phishing/C2 staging. Show it color-coded by age band.
   if (d.whois && typeof d.whois === 'object' && !d.whois.error) {
@@ -2075,8 +2061,8 @@ function _ocSources(result, ioc, type) {
               : age < 180 ? yellow
               :             green;
       const why =
-          age == null  ? 'Domain registration data. Registrar + registrant info — useful for attribution and bulk-registration patterns.'
-        : age < 1      ? 'Registered today — near-certain phishing or C2 staging. The strongest single FP-vs-real signal.'
+          age == null  ? 'Domain registration data. Registrar + registrant info - useful for attribution and bulk-registration patterns.'
+        : age < 1      ? 'Registered today - near-certain phishing or C2 staging. The strongest single FP-vs-real signal.'
         : age < 30     ? 'Newly registered (<30 days). Highly suspicious; legitimate orgs rarely use brand-new domains.'
         : age < 180    ? 'Recently registered (<6 months). Worth a closer look but not by itself damning.'
         :                'Established domain (>6 months). Lower phishing/C2 staging probability.';
@@ -2084,10 +2070,10 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // Round-14 DGA classifier — domain-only. Renders the trained-model
+  // Round-14 DGA classifier - domain-only. Renders the trained-model
   // verdict alongside reputation sources so analysts can compare the
   // probability to TI hits. Skips when probability is exactly 0 (label
-  // too short to classify — see intel/dga_classifier.classify).
+  // too short to classify - see intel/dga_classifier.classify).
   if (d.dga_classifier && typeof d.dga_classifier === 'object') {
     const dc = d.dga_classifier;
     const pct = typeof dc.probability === 'number' ? dc.probability : 0;
@@ -2106,7 +2092,7 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // Round-14 phishing URL classifier — URL-only. Surfaces the GradientBoosting
+  // Round-14 phishing URL classifier - URL-only. Surfaces the GradientBoosting
   // verdict + the strongest structural drivers (brand-confusable SLD, IP-in-URL,
   // abused TLD, etc.) so analysts see WHY the model flagged.
   if (d.phishing_classifier && typeof d.phishing_classifier === 'object') {
@@ -2138,7 +2124,7 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // Round-15 M365 tenant recon — domain-only. Surfaces tenant ID, brand,
+  // Round-15 M365 tenant recon - domain-only. Surfaces tenant ID, brand,
   // federation type, SharePoint / Azure App Service presence.
   if (d.m365_tenant && typeof d.m365_tenant === 'object' && d.m365_tenant.is_m365) {
     const m = d.m365_tenant;
@@ -2160,7 +2146,7 @@ function _ocSources(result, ioc, type) {
     });
   }
 
-  // Round-15 Admin endpoint classifier — URL-only. Surfaces admin / panel
+  // Round-15 Admin endpoint classifier - URL-only. Surfaces admin / panel
   // / customer-service endpoints flagged by subdomain prefix, path
   // segment, or localised CJK keyword. Scam-TLD amplifier bumps color.
   if (d.admin_endpoint && typeof d.admin_endpoint === 'object') {
@@ -2178,7 +2164,7 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // OFAC SDN — sanctioned crypto address / email / entity. Applies to
+  // OFAC SDN - sanctioned crypto address / email / entity. Applies to
   // both email and crypto buckets.
   if (d.ofac_sdn && !d.ofac_sdn.error && d.ofac_sdn.found) {
     const o = d.ofac_sdn;
@@ -2187,11 +2173,11 @@ function _ocSources(result, ioc, type) {
       source: 'OFAC SDN',
       label:  `${o.entity || 'sanctioned entity'}${progs ? ` · ${progs}` : ''}`,
       color:  red,
-      why:    o.summary || 'US Treasury OFAC Specially Designated Nationals list — sanctioned identifier. Any interaction may violate US sanctions.',
+      why:    o.summary || 'US Treasury OFAC Specially Designated Nationals list - sanctioned identifier. Any interaction may violate US sanctions.',
     });
   }
 
-  // Ransomwhe.re — crypto payment-address family attribution.
+  // Ransomwhe.re - crypto payment-address family attribution.
   if (d.ransomwhere && !d.ransomwhere.error && d.ransomwhere.found) {
     const rw = d.ransomwhere;
     const seen = rw.first_seen ? ` · first seen ${String(rw.first_seen).slice(0, 10)}` : '';
@@ -2203,7 +2189,7 @@ function _ocSources(result, ioc, type) {
     });
   }
 
-  // HIBP breach-by-domain — email-only. Exposure signal without needing
+  // HIBP breach-by-domain - email-only. Exposure signal without needing
   // the paid per-account endpoint.
   if (d.hibp_breaches && !d.hibp_breaches.error) {
     const h = d.hibp_breaches;
@@ -2219,7 +2205,7 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // crt.sh Certificate Transparency — domain-only. Recent cert bursts +
+  // crt.sh Certificate Transparency - domain-only. Recent cert bursts +
   // unrelated SANs signal phishing infra prep. Verdict comes from the
   // backend (SUSPICIOUS when >= 20 in 30d or >= 5 unrelated SANs).
   if (d.crt_sh && !d.crt_sh.error && d.crt_sh.found) {
@@ -2236,7 +2222,7 @@ function _ocSources(result, ioc, type) {
     });
   }
 
-  // CIRCL CVE-Search failover — CVE-only. Only surfaces when NVD was
+  // CIRCL CVE-Search failover - CVE-only. Only surfaces when NVD was
   // thin/unavailable; the row is otherwise identical to the NVD one so
   // the analyst still sees a CVSS score + description.
   if (d.cve_search && !d.cve_search.error && d.cve_search.cve_id) {
@@ -2250,12 +2236,12 @@ function _ocSources(result, ioc, type) {
         source: 'CIRCL CVE-Search',
         label:  `CVSS ${cs.cvss_v3_score} ${sev}`,
         color:  c,
-        why:    'CIRCL CVE-Search — NVD failover. NVD was slow/unavailable, this is the same CVE record from a mirror.',
+        why:    'CIRCL CVE-Search - NVD failover. NVD was slow/unavailable, this is the same CVE record from a mirror.',
       });
     }
   }
 
-  // CISA Vulnrichment ADP — CVE-only. CWE + refined CVSS + SSVC decision
+  // CISA Vulnrichment ADP - CVE-only. CWE + refined CVSS + SSVC decision
   // when CISA has enriched the record. SSVC 'Act' outranks anything the
   // CNA scored.
   if (d.vulnrichment && !d.vulnrichment.error) {
@@ -2268,11 +2254,11 @@ function _ocSources(result, ioc, type) {
       source: 'CISA Vulnrichment',
       label:  v.summary || 'CISA ADP record',
       color:  c,
-      why:    'CISA Vulnrichment ADP — CWE mapping + refined CVSS + SSVC decision. SSVC Exploitation=active means confirmed in-the-wild.',
+      why:    'CISA Vulnrichment ADP - CWE mapping + refined CVSS + SSVC decision. SSVC Exploitation=active means confirmed in-the-wild.',
     });
   }
 
-  // DNSTwister — domain-only. Which of the algorithmic typo permutations
+  // DNSTwister - domain-only. Which of the algorithmic typo permutations
   // are currently registered (someone owns the lookalike right now).
   if (d.dnstwister && !d.dnstwister.error && d.dnstwister.found) {
     const t = d.dnstwister;
@@ -2284,7 +2270,7 @@ function _ocSources(result, ioc, type) {
     });
   }
 
-  // ThreatView.io — high-confidence Cobalt Strike team-server IPs.
+  // ThreatView.io - high-confidence Cobalt Strike team-server IPs.
   // Framework-specific attribution the abuse.ch trio doesn't provide.
   if (d.threatview_c2 && !d.threatview_c2.error && d.threatview_c2.found) {
     const tv = d.threatview_c2;
@@ -2292,11 +2278,11 @@ function _ocSources(result, ioc, type) {
       source: 'ThreatView CS C2',
       label:  `${tv.framework || 'Cobalt Strike'} team server`,
       color:  red,
-      why:    tv.summary || 'ThreatView.io Proactive Hunter — high-confidence Cobalt Strike team-server IP. Framework identification beyond the abuse.ch trio.',
+      why:    tv.summary || 'ThreatView.io Proactive Hunter - high-confidence Cobalt Strike team-server IP. Framework identification beyond the abuse.ch trio.',
     });
   }
 
-  // ViriBack — malware C2 panel index with family attribution. Adds
+  // ViriBack - malware C2 panel index with family attribution. Adds
   // per-IOC family tags when Feodo/ThreatFox/URLhaus lack them.
   if (d.viriback && !d.viriback.error && d.viriback.found) {
     const vb = d.viriback;
@@ -2304,11 +2290,11 @@ function _ocSources(result, ioc, type) {
       source: 'ViriBack',
       label:  vb.summary,
       color:  red,
-      why:    'ViriBack Tracker — malware C2 panel index. Provides family attribution (RedLine / Lumma / Amadey / StealC / Vidar / MetaStealer / etc.) for IPs and URLs where abuse.ch just says \'malicious\'.',
+      why:    'ViriBack Tracker - malware C2 panel index. Provides family attribution (RedLine / Lumma / Amadey / StealC / Vidar / MetaStealer / etc.) for IPs and URLs where abuse.ch just says \'malicious\'.',
     });
   }
 
-  // StopForumSpam — IP + email spam-source reputation. Independent of
+  // StopForumSpam - IP + email spam-source reputation. Independent of
   // AbuseIPDB (which is IPS-focused). SFS's `torexit` flag is a
   // secondary Tor signal alongside intel.deception.
   if (d.stopforumspam && !d.stopforumspam.error && d.stopforumspam.found) {
@@ -2319,11 +2305,11 @@ function _ocSources(result, ioc, type) {
       source: 'StopForumSpam',
       label:  sfs.summary,
       color:  c,
-      why:    'StopForumSpam — community-maintained spam-source database. `appears=1` means a real user report; `confidence` is SFS\'s own model estimate.',
+      why:    'StopForumSpam - community-maintained spam-source database. `appears=1` means a real user report; `confidence` is SFS\'s own model estimate.',
     });
   }
 
-  // OpenSanctions — superset of OFAC. Only fires when OFAC didn't hit
+  // OpenSanctions - superset of OFAC. Only fires when OFAC didn't hit
   // (backend suppresses it otherwise). Same visual weight as OFAC.
   if (d.opensanctions && !d.opensanctions.error && d.opensanctions.found) {
     const os = d.opensanctions;
@@ -2332,7 +2318,7 @@ function _ocSources(result, ioc, type) {
       source: 'OpenSanctions',
       label:  `${os.entity || 'sanctioned entity'}${progs ? ` · ${progs}` : ''}`,
       color:  red,
-      why:    os.summary || 'OpenSanctions — aggregate of 40+ sanctions bodies (UN / EU / UK / national). Matched when OFAC did not.',
+      why:    os.summary || 'OpenSanctions - aggregate of 40+ sanctions bodies (UN / EU / UK / national). Matched when OFAC did not.',
     });
   }
 
@@ -2340,7 +2326,7 @@ function _ocSources(result, ioc, type) {
   // The blocks above only push a row when a source returned USEFUL data
   // (no error AND non-empty). That meant a source which returned an
   // error (auth failure, rate limit, circuit-breaker-open, timeout) was
-  // silently hidden — the analyst couldn't tell whether the source ran
+  // silently hidden - the analyst couldn't tell whether the source ran
   // and said clean, vs ran and got blocked, vs never ran at all. The
   // complaint that triggered this: an IP with 100% AbuseIPDB confidence
   // didn't show because the AbuseIPDB call had errored out and the
@@ -2364,7 +2350,7 @@ function _ocSources(result, ioc, type) {
     censys: 'Censys',
     feodo_tracker: 'Feodo Tracker',
     misp_feeds: 'MISP Feeds',
-    // Previously omitted from this map — when these sources errored
+    // Previously omitted from this map - when these sources errored
     // (timeout, auth fail, circuit-open) the failure was hidden from
     // the analyst entirely. Adding them surfaces the failure state in
     // the same dimmed "source-status" row format as the others.
@@ -2372,7 +2358,7 @@ function _ocSources(result, ioc, type) {
     team_cymru_mhr: 'Team Cymru MHR',   hackertarget: 'Hackertarget',
     robtex: 'Robtex',                   wayback: 'Wayback',
     urlscan_screenshot: 'URLScan screenshot',
-    // Round-14 trained classifiers — listed so an error state (sklearn
+    // Round-14 trained classifiers - listed so an error state (sklearn
     // unavailable, heuristic fallback active) is rendered consistently.
     dga_classifier:      'DGA classifier',
     phishing_classifier: 'Phishing URL classifier',
@@ -2395,7 +2381,7 @@ function _ocSources(result, ioc, type) {
     // Round-18 Yeti-mined sources.
     threatview_c2:       'ThreatView CS C2',
     viriback:            'ViriBack',
-    // Phase 1 TI source additions — labels used by both the error-row
+    // Phase 1 TI source additions - labels used by both the error-row
     // fallback below AND the generic positive-result renderer at the
     // bottom of this function.
     yaraify:          'YARAify',
@@ -2445,18 +2431,18 @@ function _ocSources(result, ioc, type) {
     : v === 'CLEAN'      ? green
     :                      tert;
 
-  // GitHub code search — hits in public repos = shadow IT / leaked secrets
+  // GitHub code search - hits in public repos = shadow IT / leaked secrets
   if (d.githubcode?.found && !d.githubcode.error) {
     const g = d.githubcode;
     out.push({
       source: 'GitHub code',
       label: `${g.total} hit${g.total !== 1 ? 's' : ''} across ${g.repo_count} repo${g.repo_count !== 1 ? 's' : ''}`,
       color: orange,
-      why: 'Target domain appears in public GitHub code — common indicator for leaked API tokens, config files, or shadow repos.',
+      why: 'Target domain appears in public GitHub code - common indicator for leaked API tokens, config files, or shadow repos.',
     });
   }
 
-  // Hudson Rock — infostealer-compromised credentials. Any hit is credential compromise.
+  // Hudson Rock - infostealer-compromised credentials. Any hit is credential compromise.
   if (d.hudsonrock?.found && !d.hudsonrock.error) {
     const h = d.hudsonrock;
     out.push({
@@ -2467,7 +2453,7 @@ function _ocSources(result, ioc, type) {
     });
   }
 
-  // PhishTank — confirmed phish vs pending
+  // PhishTank - confirmed phish vs pending
   if (d.phishtank?.found && !d.phishtank.error) {
     const p = d.phishtank;
     const confirmed = p.valid && p.verified;
@@ -2476,7 +2462,7 @@ function _ocSources(result, ioc, type) {
       label: confirmed ? 'confirmed phishing URL' : 'submitted (pending verification)',
       color: confirmed ? red : yellow,
       why: confirmed
-        ? 'Community verified phishing — strong signal to block + alert end-users.'
+        ? 'Community verified phishing - strong signal to block + alert end-users.'
         : 'Pending community verification. Treat with suspicion; cross-check against PhishStats and URLhaus.',
     });
   }
@@ -2484,7 +2470,7 @@ function _ocSources(result, ioc, type) {
   // (URLhaus is already handled by a dedicated block further up in
   // this function; no duplicate render here.)
 
-  // Vulners — public exploits + wild-exploitation
+  // Vulners - public exploits + wild-exploitation
   if (d.vulners?.found && !d.vulners.error) {
     const v = d.vulners;
     const bits = [];
@@ -2496,14 +2482,14 @@ function _ocSources(result, ioc, type) {
       label: bits.join(' · ') || 'CVE catalogued',
       color: v.wild_exploited ? red : (v.exploit_count > 0 ? orange : tert),
       why: v.wild_exploited
-        ? 'Vulners flags this CVE as actively exploited in the wild — treat as emergency patch.'
+        ? 'Vulners flags this CVE as actively exploited in the wild - treat as emergency patch.'
         : v.exploit_count
           ? 'Vulners indexes public PoC / exploit code for this CVE.'
           : 'Vulners has this CVE catalogued but no public exploits are indexed.',
     });
   }
 
-  // Hybrid Analysis — threat score + MITRE
+  // Hybrid Analysis - threat score + MITRE
   if (d.hybrid_analysis?.found && !d.hybrid_analysis.error) {
     const h = d.hybrid_analysis;
     const bits = [];
@@ -2518,7 +2504,7 @@ function _ocSources(result, ioc, type) {
     });
   }
 
-  // LeakIX — exposed services + leaks
+  // LeakIX - exposed services + leaks
   if (d.leakix?.found && !d.leakix.error) {
     const l = d.leakix;
     const bits = [];
@@ -2529,11 +2515,11 @@ function _ocSources(result, ioc, type) {
       source: 'LeakIX',
       label: bits.join(' · '),
       color: _vColor(l.verdict),
-      why: 'LeakIX indexes exposed services + config leaks per host — misconfigured S3/Elasticsearch/MongoDB, open panels, etc.',
+      why: 'LeakIX indexes exposed services + config leaks per host - misconfigured S3/Elasticsearch/MongoDB, open panels, etc.',
     });
   }
 
-  // YARAify — YARA + ClamAV hits for the sample
+  // YARAify - YARA + ClamAV hits for the sample
   if (d.yaraify?.found && !d.yaraify.error) {
     const y = d.yaraify;
     const yc = (y.yara_rules || []).length;
@@ -2546,7 +2532,7 @@ function _ocSources(result, ioc, type) {
     });
   }
 
-  // ThreatFox — malware family IOC
+  // ThreatFox - malware family IOC
   if (d.threatfox && !d.threatfox.error && d.threatfox.count) {
     const t = d.threatfox;
     const first = (t.iocs || [])[0] || {};
@@ -2558,7 +2544,7 @@ function _ocSources(result, ioc, type) {
     });
   }
 
-  // CIRCL hashlookup — known-good short-circuit (clean verdict)
+  // CIRCL hashlookup - known-good short-circuit (clean verdict)
   if (d.circl_hashlookup && !d.circl_hashlookup.error) {
     const c = d.circl_hashlookup;
     if (c.verdict === 'CLEAN') {
@@ -2566,7 +2552,7 @@ function _ocSources(result, ioc, type) {
         source: 'CIRCL hashlookup',
         label: `known-good: ${c.FileName || c.ProductName || 'trusted file'}`,
         color: green,
-        why: 'File is in the NIST NSRL / trusted-software whitelist — safe to short-circuit further hash enrichment.',
+        why: 'File is in the NIST NSRL / trusted-software whitelist - safe to short-circuit further hash enrichment.',
       });
     } else if (c.known_malicious) {
       out.push({
@@ -2578,8 +2564,8 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // Shodan InternetDB — exposed ports / CVEs / risky tags (keyless).
-  // Backend key is `shodan_internetdb` — the free endpoint; the paid
+  // Shodan InternetDB - exposed ports / CVEs / risky tags (keyless).
+  // Backend key is `shodan_internetdb` - the free endpoint; the paid
   // Shodan endpoint keys live elsewhere. SUSPICIOUS when any known-bad
   // tag (tor, proxy, honeypot, malware) or ≥3 CVEs are present.
   if (d.shodan_internetdb && !d.shodan_internetdb.error && d.shodan_internetdb.found) {
@@ -2596,12 +2582,12 @@ function _ocSources(result, ioc, type) {
         source: 'Shodan',
         label: bits.join(' · ') + (topPort ? ` · :${topPort}+` : ''),
         color: c,
-        why: 'Shodan InternetDB (keyless) — passive view of what the host exposes. Risky tags = anonymity / malware infrastructure; CVE count = known exploitable services.',
+        why: 'Shodan InternetDB (keyless) - passive view of what the host exposes. Risky tags = anonymity / malware infrastructure; CVE count = known exploitable services.',
       });
     }
   }
 
-  // SecurityTrails — subdomain count + current A record visibility.
+  // SecurityTrails - subdomain count + current A record visibility.
   // Big subdomain footprint on a brand-new domain is a sprawl /
   // phishing-prep signal; many MX hosts suggests a mail-serving tenant.
   if (d.securitytrails?.found && !d.securitytrails.error) {
@@ -2620,7 +2606,7 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // Netlas — IP whois (CIDR + org). Attribution context, not a verdict.
+  // Netlas - IP whois (CIDR + org). Attribution context, not a verdict.
   if (d.netlas?.found && !d.netlas.error) {
     const n = d.netlas;
     const bits = [];
@@ -2633,12 +2619,12 @@ function _ocSources(result, ioc, type) {
         source: 'Netlas',
         label: bits.join(' · '),
         color: tert,
-        why: 'Netlas whois lookup. CIDR + organisation ownership — useful when AbuseIPDB / Robtex are thin. Abuse contacts live in the expanded view.',
+        why: 'Netlas whois lookup. CIDR + organisation ownership - useful when AbuseIPDB / Robtex are thin. Abuse contacts live in the expanded view.',
       });
     }
   }
 
-  // Validin — passive-DNS history. On an IP: how many distinct domains
+  // Validin - passive-DNS history. On an IP: how many distinct domains
   // historically pointed here. On a domain: how many IPs it resolved to.
   if (d.validin?.found && !d.validin.error) {
     const v = d.validin;
@@ -2649,12 +2635,12 @@ function _ocSources(result, ioc, type) {
         source: 'Validin',
         label: `${n} historical ${kind}${n !== 1 ? 's' : ''}`,
         color: tert,
-        why: 'Passive-DNS history — Validin shows every domain/IP pairing ever observed. Many shared on one IP = bulk hosting; few + specific = dedicated infrastructure (higher attribution value).',
+        why: 'Passive-DNS history - Validin shows every domain/IP pairing ever observed. Many shared on one IP = bulk hosting; few + specific = dedicated infrastructure (higher attribution value).',
       });
     }
   }
 
-  // Onyphe — internet-scan aggregate (ports + CVEs across categories).
+  // Onyphe - internet-scan aggregate (ports + CVEs across categories).
   // Any CVE presence promotes to SUSPICIOUS (same semantics as Shodan).
   if (d.onyphe?.found && !d.onyphe.error) {
     const o = d.onyphe;
@@ -2668,12 +2654,12 @@ function _ocSources(result, ioc, type) {
         source: 'Onyphe',
         label: bits.join(' · '),
         color: c,
-        why: 'Onyphe aggregates internet-scan data (ports, DNS, SSL, CVEs). Overlaps with Shodan + Censys — a signal appearing on 2+ scanners is more durable than one.',
+        why: 'Onyphe aggregates internet-scan data (ports, DNS, SSL, CVEs). Overlaps with Shodan + Censys - a signal appearing on 2+ scanners is more durable than one.',
       });
     }
   }
 
-  // BinaryEdge — alt scanner (ports + services, or subdomain enum).
+  // BinaryEdge - alt scanner (ports + services, or subdomain enum).
   if (d.binaryedge?.found && !d.binaryedge.error) {
     const b = d.binaryedge;
     const bits = [];
@@ -2685,12 +2671,12 @@ function _ocSources(result, ioc, type) {
         source: 'BinaryEdge',
         label: bits.join(' · '),
         color: tert,
-        why: 'BinaryEdge internet-scan corpus — a third opinion alongside Shodan / Censys / Onyphe. Divergence between scanners can expose stale or masked exposure.',
+        why: 'BinaryEdge internet-scan corpus - a third opinion alongside Shodan / Censys / Onyphe. Divergence between scanners can expose stale or masked exposure.',
       });
     }
   }
 
-  // Hunter.io — email enumeration + pattern. BEC/phishing recon value is
+  // Hunter.io - email enumeration + pattern. BEC/phishing recon value is
   // the pattern (lets attackers construct plausible emails for employees
   // not in the enumerated set). Disposable + webmail promote to orange.
   if (d.hunter_io?.found && !d.hunter_io.error) {
@@ -2706,13 +2692,13 @@ function _ocSources(result, ioc, type) {
         label: bits.join(' · '),
         color: flagged ? orange : tert,
         why: flagged
-          ? 'Hunter.io enumerated emails + flagged disposable/webmail — these domains are overrepresented in phishing / throwaway identities.'
+          ? 'Hunter.io enumerated emails + flagged disposable/webmail - these domains are overrepresented in phishing / throwaway identities.'
           : 'Hunter.io enumerated public emails + the org\'s address pattern. Pattern lets you predict any employee\'s address (strong BEC-recon signal).',
       });
     }
   }
 
-  // EmailRep — email reputation (malicious_activity + breaches + flags).
+  // EmailRep - email reputation (malicious_activity + breaches + flags).
   // Verdict comes from the backend; just surface the strongest flag.
   if (d.emailrep?.found && !d.emailrep.error) {
     const e = d.emailrep;
@@ -2733,7 +2719,7 @@ function _ocSources(result, ioc, type) {
     }
   }
 
-  // Intezer — code-reuse-based family attribution. Family name is the
+  // Intezer - code-reuse-based family attribution. Family name is the
   // high-signal field; verdict comes from the backend's normalisation.
   if (d.intezer?.found && !d.intezer.error) {
     const i = d.intezer;
@@ -2746,12 +2732,12 @@ function _ocSources(result, ioc, type) {
         source: 'Intezer',
         label: bits.join(' · '),
         color: _vColor(i.verdict),
-        why: 'Intezer uses binary code-reuse analysis to attribute samples to known families — orthogonal to signature-based AV detection. A family name here is strong attribution.',
+        why: 'Intezer uses binary code-reuse analysis to attribute samples to known families - orthogonal to signature-based AV detection. A family name here is strong attribution.',
       });
     }
   }
 
-  // Triage (tria.ge) — Hatching sandbox score + families.
+  // Triage (tria.ge) - Hatching sandbox score + families.
   if (d.triage?.found && !d.triage.error) {
     const t = d.triage;
     const bits = [];
@@ -2763,7 +2749,7 @@ function _ocSources(result, ioc, type) {
         source: 'Triage',
         label: bits.join(' · '),
         color: _vColor(t.verdict),
-        why: 'tria.ge (Hatching) cloud sandbox — score 0-10. ≥8 is confidently malicious; family tags come from Yara + behavioural rules observed during detonation.',
+        why: 'tria.ge (Hatching) cloud sandbox - score 0-10. ≥8 is confidently malicious; family tags come from Yara + behavioural rules observed during detonation.',
       });
     }
   }
@@ -2804,15 +2790,15 @@ function _ocSources(result, ioc, type) {
     if (!err) continue;
     // Skip sources that have nothing actionable to report. Three classes
     // get hidden because the analyst can't do anything with them:
-    //   * not_configured  — operator hasn't added the key yet
-    //   * rate_limited    — free-tier daily / burst quota (Pulsedive 1/sec,
+    //   * not_configured  - operator hasn't added the key yet
+    //   * rate_limited    - free-tier daily / burst quota (Pulsedive 1/sec,
     //                       who-dat WHOIS burst, etc.).
     //                       Real verdicts come back from the OTHER sources;
     //                       a "rate-limited" row is just noise.
-    //   * timed_out       — upstream slowness; production has per-host
+    //   * timed_out       - upstream slowness; production has per-host
     //                       overrides, the smoke probe is the only thing
     //                       that ever reads this for non-actionable hosts.
-    //   * circuit_open    — recent failures triggered the breaker; analyst
+    //   * circuit_open    - recent failures triggered the breaker; analyst
     //                       can't fix it in this run, and the breaker
     //                       half-opens on its own.
     if (['not_configured', 'rate_limited', 'timed_out', 'circuit_open']
@@ -2821,20 +2807,20 @@ function _ocSources(result, ioc, type) {
     let status;
     if (blob.error_type === 'auth_failed') {
       // abuse.ch issues a unified Auth-Key that all three of its APIs
-      // share — when it expires/rotates, ThreatFox/MalwareBazaar/URLhaus
+      // share - when it expires/rotates, ThreatFox/MalwareBazaar/URLhaus
       // all fail together. Point the analyst at the right rotation
       // surface instead of the generic "edit config.json" hint.
       const isAbuseCh = ['ThreatFox', 'MalwareBazaar', 'URLhaus', 'URLhaus payload', 'Feodo Tracker']
         .includes(label);
       status = isAbuseCh
-        ? `couldn't authenticate — rotate the abuse.ch Auth-Key at https://auth.abuse.ch and update ABUSECH_AUTH_KEY in Settings`
-        : `couldn't authenticate — verify the ${label} API key in Settings`;
+        ? `couldn't authenticate - rotate the abuse.ch Auth-Key at https://auth.abuse.ch and update ABUSECH_AUTH_KEY in Settings`
+        : `couldn't authenticate - verify the ${label} API key in Settings`;
     } else if (blob.error_type === 'http_error') {
-      status = `source returned an HTTP error — ${String(err).slice(0, 100)}`;
+      status = `source returned an HTTP error - ${String(err).slice(0, 100)}`;
     } else if (typeof err === 'string' && err.toLowerCase() === 'no data') {
       status = `no data returned for this indicator`;
     } else {
-      status = `unavailable — ${String(err).slice(0, 100)}`;
+      status = `unavailable - ${String(err).slice(0, 100)}`;
     }
     out.push({ source: label, label: status, color: tert });
   }
@@ -2855,7 +2841,7 @@ function PerIndicatorList({ sorted, result }) {
     // older runs cached in memory before this commit.
     const iocType = d.ioc_type || d.type;
     const sources = _ocSources(result, ioc, iocType);
-    // Inline breach + screenshot summaries — surfaced PROMINENTLY in the
+    // Inline breach + screenshot summaries - surfaced PROMINENTLY in the
     // row (not buried behind the expand toggle) since both directly
     // influence threat-level reasoning.
     const enrBucket =
@@ -2936,7 +2922,7 @@ function PerIndicatorList({ sorted, result }) {
           }}>
             {sources.length > 0 ? (
               sources.map((s, j) => (
-                <SourceVerdict key={j} source={s.source} label={s.label} why={s.why}
+                <SourceVerdict key={j} source={s.source} label={s.label}
                   color={s.color} ioc={ioc} iocType={iocType}/>
               ))
             ) : (
@@ -2944,7 +2930,7 @@ function PerIndicatorList({ sorted, result }) {
                 No source-level enrichment data available for this indicator.
               </Typography>
             )}
-            {/* URLScan screenshot — embed the thumbnail inline so the analyst
+            {/* URLScan screenshot - embed the thumbnail inline so the analyst
                 sees what the page looks like without visiting it. The link
                 opens the full scan in a new tab. */}
             {urlScreenshot?.found && urlScreenshot?.screenshot_url && (
@@ -3021,7 +3007,7 @@ function PerIndicatorList({ sorted, result }) {
   });
 }
 
-// Attribution chip — when the response agent matched threat-actor TTPs, show
+// Attribution chip - when the response agent matched threat-actor TTPs, show
 // the canonical Microsoft name with origin + every alias the analyst might
 // see in vendor reports (CrowdStrike/FireEye/MITRE/Microsoft). Aliases hide
 // behind a click so the chip stays compact when there are 12 of them.
@@ -3047,7 +3033,7 @@ function AttributionChip({ actor }) {
   const huntSw     = Array.isArray(huntTtps.software)      ? huntTtps.software      : [];
   const hasHunt    = huntBefore.length + huntAfter.length + huntProcs.length + huntSw.length > 0;
 
-  // Tab model — one tab visible at a time so the chip never sprawls.
+  // Tab model - one tab visible at a time so the chip never sprawls.
   const tabs = [
     hasEvidence && { id: 'evidence', label: `Log evidence · ${evidenceCount}` },
     hasHunt     && { id: 'hunt',     label: 'Hunt for' },
@@ -3067,7 +3053,7 @@ function AttributionChip({ actor }) {
     .trim();
   const playbook = cleanProse(actor?.description || '');
 
-  // Malware-typed software entries — these are the rows we want hash
+  // Malware-typed software entries - these are the rows we want hash
   // pivots for. Filenames that look like Windows-native binaries get
   // skipped per analyst request (no Ping.exe / net.exe / tasklist.exe
   // hash pulls because those aren't worth a MalwareBazaar query).
@@ -3110,7 +3096,7 @@ function AttributionChip({ actor }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showHunt, malwareSw.length]);
 
-  // Now safe to bail — all hooks have already run.
+  // Now safe to bail - all hooks have already run.
   if (!actor) return null;
 
   return (
@@ -3121,7 +3107,7 @@ function AttributionChip({ actor }) {
       borderLeft: `3px solid #00b4d8`,
       borderRadius: '4px', p: '10px 14px', mb: 1.5, maxWidth: '100%',
     }}>
-      {/* Header — name, country, score. Compact, no aliases counter here. */}
+      {/* Header - name, country, score. Compact, no aliases counter here. */}
       <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
         <Typography sx={{ fontSize: 10, color: 'text.tertiary', fontWeight: 600,
           textTransform: 'uppercase', letterSpacing: '0.07em' }}>
@@ -3188,7 +3174,7 @@ function AttributionChip({ actor }) {
         </Stack>
       )}
 
-      {/* Single tab strip — click to reveal one section at a time. */}
+      {/* Single tab strip - click to reveal one section at a time. */}
       {tabs.length > 0 && (
         <Stack direction="row" spacing={0.75} flexWrap="wrap"
           sx={{ rowGap: 0.5 }}>
@@ -3232,7 +3218,7 @@ function AttributionChip({ actor }) {
         </Box>
       )}
 
-      {/* Log evidence — only render entries that actually have evidence
+      {/* Log evidence - only render entries that actually have evidence
           attached. No "X additional techniques matched but no evidence"
           footer; that was noise. */}
       {showEvidence && hasEvidence && (
@@ -3266,7 +3252,7 @@ function AttributionChip({ actor }) {
         </Stack>
       )}
 
-      {/* Hunt guidance — three blocks now:
+      {/* Hunt guidance - three blocks now:
             1. How they attack (playbook narrative from MITRE/MISP)
             2. Processes / binaries (red mono chips)
             3. Malware hashes from MalwareBazaar (lazy-fetched on tab open) */}
@@ -3409,7 +3395,7 @@ function AttributionChip({ actor }) {
 function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeedbackComplete }) {
   const a = rs?.analyst_summary;
   // The Summary card is the new front-page for an investigation, so we show
-  // it whenever there's *any* AI output OR per-IOC scoring — not just when
+  // it whenever there's *any* AI output OR per-IOC scoring - not just when
   // a disposition exists. The threat-score block carries the card when the
   // AI hasn't returned a verdict yet.
   const hasGti = !!result?.gti_scores && Object.keys(result.gti_scores).length > 0;
@@ -3420,7 +3406,7 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
                   : a?.disposition === 'ESCALATE' ? '#F14337'
                   :                                  '#E1B823';
   const summary = (rs?.summary || '').trim();
-  // Attribution gate — precision-style score (matched / N_alert_techniques)
+  // Attribution gate - precision-style score (matched / N_alert_techniques)
   // saturates at 100% the moment we observe 3 generic ransomware techniques
   // (T1486 + T1490 + T1083), which every ransomware group uses, so a
   // hash-only paste produces bogus "100% TTP overlap" attribution to
@@ -3434,15 +3420,15 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
       && a.score >= 75
       && (a.matchedTechniques?.length || 0) >= 5
   ) || null;
-  // Plain-English summary from log_translator — written like an MDR analyst
+  // Plain-English summary from log_translator - written like an MDR analyst
   // briefing note (what / context / verdict / recommendation). Top of the
   // card so the analyst gets the human-readable read before the dial.
   const plainEnglish = (result?.log_translation?.normalized_summary || '').trim();
 
   // Summary structure rebuilt for prose flow:
-  //   1. Disposition rendered as a coloured chip + reason — visually
+  //   1. Disposition rendered as a coloured chip + reason - visually
   //      separate from the AI prose so we don't have to bolt
-  //      "Recommended action: X — Y" into the middle of the paragraph.
+  //      "Recommended action: X - Y" into the middle of the paragraph.
   //   2. Plain-English + AI summary fused into ONE flowing paragraph,
   //      with aggressive de-dupe so the two AI calls don't repeat each
   //      other's content.
@@ -3452,7 +3438,7 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
   const enrichLine = (() => {
     const line = (rs?.enrichment_summary?.line || '').trim();
     // Hide the mono footer when there's nothing to summarise. The
-    // ThreatScore dial above already conveys "no IOCs, clean" — a
+    // ThreatScore dial above already conveys "no IOCs, clean" - a
     // second sentence saying "0 IOCs enriched, 0 flagged" is noise.
     if (!line) return '';
     if (/^\s*0\s+IOCs?\b/i.test(line) && !/flagged\s+[1-9]/i.test(line)) {
@@ -3468,7 +3454,7 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
     const inter = [...a_].filter(t => b_.has(t)).length;
     return inter / Math.max(1, Math.min(a_.size, b_.size));
   };
-  // Drop overlapping pieces — plainEnglish vs summary, summary vs
+  // Drop overlapping pieces - plainEnglish vs summary, summary vs
   // dispReason. Threshold 50% catches paraphrased duplicates the old
   // 60% threshold missed.
   let _summary    = summary;
@@ -3476,7 +3462,7 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
   if (_overlap(plainEnglish, _summary)    >= 0.5) _summary = '';
   if (_overlap(plainEnglish, _dispReason) >= 0.5) _dispReason = '';
   if (_overlap(_summary, _dispReason)     >= 0.5) {
-    // Keep whichever is longer — usually disp_reason is denser/more useful.
+    // Keep whichever is longer - usually disp_reason is denser/more useful.
     if ((_summary || '').length > (_dispReason || '').length) _dispReason = '';
     else _summary = '';
   }
@@ -3485,7 +3471,7 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
     if (!t) return '';
     return /[.!?]$/.test(t) ? t : t + '.';
   };
-  // Case-score trailing sentence — folded INTO the prose paragraph
+  // Case-score trailing sentence - folded INTO the prose paragraph
   // instead of taking a dedicated block. Only added when the score
   // actually fired (drivers > 0 or score > 0), otherwise it's noise.
   const _cs = rs?.case_score;
@@ -3505,9 +3491,9 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
   return (
     <Card title="Summary" accent="#00b4d8" badge={a?.disposition?.toLowerCase()} defaultOpen>
       {/* Order per analyst request:
-            1. Threat score (top — the empirical headline)
+            1. Threat score (top - the empirical headline)
             2. Possible attribution (only shows when TTP overlap ≥ 75%)
-            3. Disposition pill (when set) — visual separator, not prose
+            3. Disposition pill (when set) - visual separator, not prose
             4. Flowing AI prose paragraph (plain-English + AI summary +
                disposition reason, de-duplicated)
             5. Enrichment-summary mono footer
@@ -3532,14 +3518,14 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
         </Stack>
       )}
 
-      {/* Tier signals strip — the deterministic "why" at a glance. Red
+      {/* Tier signals strip - the deterministic "why" at a glance. Red
           chips are TIER 1 (verdict-determining: named actor, upstream
           High-risk, ransomware behaviour, credential access, KEV+active
           exploitation, ≥5 VT engines on one IOC). Orange chips are TIER 2
           (corroborating: 2-4 VT engines, AbuseIPDB ≥75, LOLBAS abuse,
           MalwareBazaar family match, phishing-classifier ≥85%). Grey
           chips are DOWNWEIGHT (MISP warninglist, signed-vendor process
-          paths, tenant policy permit). TIER 3 is deliberately omitted —
+          paths, tenant policy permit). TIER 3 is deliberately omitted  - 
           it's context-only per the framework, so it would be noise here.
           Analyst reads this in 2 seconds and knows WHY without touching
           prose. */}
@@ -3587,14 +3573,14 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
         </Typography>
       )}
 
-      {/* NEXT STEPS — consolidated action guidance. Two AI-produced
+      {/* NEXT STEPS - consolidated action guidance. Two AI-produced
           lists are merged here so the analyst sees "what to do" in one
           place, deduped, right under the reasoning:
-            * escalation_steps  — concrete steps from the disposition
+            * escalation_steps  - concrete steps from the disposition
                                    prompt when disposition == ESCALATE
                                    (e.g. "Query Entra ID sign-in logs
                                     for user X 24h back")
-            * recommended_actions — from the investigation prompt;
+            * recommended_actions - from the investigation prompt;
                                    analyst-facing action guidance
                                    regardless of disposition
           Previously escalation_steps rendered NOWHERE and
@@ -3605,7 +3591,7 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
         const recActs = asArray(rs?.recommended_actions)
           .filter(s => typeof s === 'string' && s.trim()
                         && !_AI_FALLBACK_ACTIONS.has(s.trim()));
-        // Dedup — escalation_steps and recommended_actions occasionally
+        // Dedup - escalation_steps and recommended_actions occasionally
         // overlap when the LLM is being redundant. Simple token-overlap
         // check drops the recommended_action when it's basically the
         // same as an escalation step.
@@ -3677,7 +3663,7 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
         </Box>
       )}
 
-      {/* Train-on-false-positives inline form — pinned directly under
+      {/* Train-on-false-positives inline form - pinned directly under
           the AI analysis so the analyst can correct a wrong verdict
           without scrolling further. Renders nothing when there's no
           raw_input on the result (e.g. hash-only lookups). */}
@@ -3688,15 +3674,15 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
         onComplete={onFeedbackComplete}
       />
 
-      {/* FINDINGS — evidence-backed facts only. Prose overlap is
+      {/* FINDINGS - evidence-backed facts only. Prose overlap is
           dropped so a fact already stated in the summary paragraph
           doesn't repeat as a bullet below it.
 
-          ANALYST NOTES — interpretation on top of the facts:
-            ○ Analysis  (inference)   — dropped when it overlaps the
+          ANALYST NOTES - interpretation on top of the facts:
+            ○ Analysis  (inference)   - dropped when it overlaps the
                                         prose or a confirmed fact
-            ? Gap       (unknown)     — kept as-is; gaps rarely dup
-            ! Caveat    (disclaimer)  — kept as-is; caveats rarely dup
+            ? Gap       (unknown)     - kept as-is; gaps rarely dup
+            ! Caveat    (disclaimer)  - kept as-is; caveats rarely dup
        */}
       {(() => {
         const _proseCorpus = [combined, _dispReason, dispReason]
@@ -3728,7 +3714,7 @@ function AnalystSummary({ result, rs, onFeedbackStart, onFeedbackPartial, onFeed
   );
 }
 
-/* ─── analyst override — POSTs to /api/calibration/override ────────────
+/* ─── analyst override - POSTs to /api/calibration/override ────────────
    Drives the calibration log used to spot prompt regressions.
    Surfaced as a quiet link under the summary so analysts who agree
    with the AI never see a visible "DISAGREE?" button shouting at them. */
@@ -3815,7 +3801,7 @@ function VerdictOverride({ result, rs }) {
       <Box component="textarea"
         value={reason}
         onChange={e => setReason(e.target.value)}
-        placeholder="Why? (optional — e.g. 'Known internal RMM, not C2')"
+        placeholder="Why? (optional - e.g. 'Known internal RMM, not C2')"
         rows={2}
         sx={{ width: '100%', boxSizing: 'border-box',
           fontSize: 11, p: 1, fontFamily: '"JetBrains Mono", monospace',
@@ -3847,23 +3833,23 @@ function VerdictOverride({ result, rs }) {
   );
 }
 
-// WhyThisRating removed — the AI's threat_level field was producing
+// WhyThisRating removed - the AI's threat_level field was producing
 // internally contradictory output (badge MEDIUM, prose "This alert is
 // INFORMATIONAL.") and the analyst-facing surface added more confusion
 // than value. The combined Summary block in AnalystSummary already
 // conveys the rating in plain English via the AI's summary + the
 // recommended-disposition tail.
 
-/* ─── Findings + Analyst notes — two visually separated blocks
+/* ─── Findings + Analyst notes - two visually separated blocks
        Findings      = evidence-backed facts (every row is confirmed by
                        enrichment; no per-row label since the header
                        already says "Findings").
        Analyst notes = interpretation the AI added on top of the facts.
                        Kind markers survive here because the mix is
                        heterogeneous:
-                         ○ Analysis  — inference from the evidence
-                         ? Gap       — unknown / needs telemetry
-                         ! Caveat    — methodology disclaimer            */
+                         ○ Analysis  - inference from the evidence
+                         ? Gap       - unknown / needs telemetry
+                         ! Caveat    - methodology disclaimer            */
 function Findings({ items }) {
   const rows = (Array.isArray(items) ? items : []).filter(Boolean);
   if (!rows.length) return null;
@@ -3946,7 +3932,7 @@ function AnalystNotes({ analysis, gaps, caveats }) {
        analystFeedback set so the investigation prompt prepends an
        "ANALYST VERDICT AND CONTEXT" block as the highest-weight input;
        streamed result replaces the visible analysis via onPartial /
-       onComplete. No Card wrapper, no explanatory copy — just a clear
+       onComplete. No Card wrapper, no explanatory copy - just a clear
        header strip + input + button so the feedback surface sits flush
        in the Summary without taking the analyst out of context.       */
 function FeedbackInline({ result, onStart, onPartial, onComplete }) {
@@ -4090,7 +4076,7 @@ function ChatWithRecon({ result, bare,
   const textareaRef = useRef(null);
   // In-flight SSE readers for the chat send + feedback re-analyze paths.
   // Cancelled on unmount so a tab close mid-stream doesn't keep the
-  // backend writing tokens nobody reads — matches the AgentPipeline
+  // backend writing tokens nobody reads - matches the AgentPipeline
   // unmount cleanup pattern from 5e80017.
   const chatReaderRef     = useRef(null);
   const feedbackReaderRef = useRef(null);
@@ -4103,7 +4089,7 @@ function ChatWithRecon({ result, bare,
 
   const runId = result?.runId;
   const rs    = result?.response_summary || {};
-  // Surface every AI-generated probing question the investigation produced —
+  // Surface every AI-generated probing question the investigation produced  - 
   // don't drop the plain ones for lacking if_yes/if_no metadata; the render
   // below already hides those chips when they're missing. We keep zero
   // hardcoded fallbacks here so the analyst only ever sees questions specific
@@ -4112,7 +4098,7 @@ function ChatWithRecon({ result, bare,
 
   // ─── Feedback mode (folded into the chat input as a selectable toggle) ──
   // When feedbackMode is on, the same Send button submits the chat input as
-  // analyst feedback — re-running /api/analyze with the original raw log
+  // analyst feedback - re-running /api/analyze with the original raw log
   // plus the analyst statement, and replacing the visible analysis result.
   // Toggle sits to the LEFT of the Send button so the analyst can train the
   // AI on false positives without leaving the chat surface.
@@ -4165,7 +4151,7 @@ function ChatWithRecon({ result, bare,
               setMessages(m => [
                 ...m,
                 { role: 'assistant',
-                  content: 'Got it — re-ran the analysis with your context.',
+                  content: 'Got it - re-ran the analysis with your context.',
                   _from_card: true,
                   timestamp: new Date().toISOString() },
               ]);
@@ -4220,7 +4206,7 @@ function ChatWithRecon({ result, bare,
   const send = async (msgOverride) => {
     const rawText = (msgOverride ?? input).trim();
     if (!rawText || sending || feedbackSending) return;
-    // Feedback-mode short-circuit — submit the chat input as analyst feedback
+    // Feedback-mode short-circuit - submit the chat input as analyst feedback
     // instead of a chat message and replace the analysis result.
     if (feedbackMode && originalLog) {
       if (!msgOverride) setInput('');
@@ -4299,8 +4285,8 @@ function ChatWithRecon({ result, bare,
           const payload = line.slice(6).trim();
           if (payload === '[DONE]') break;
           // Parse the event first. The inner try used to wrap the whole
-          // event handling block — including `throw new Error(ev.error)`
-          // — which meant backend error events got silently swallowed
+          // event handling block - including `throw new Error(ev.error)`
+          // - which meant backend error events got silently swallowed
           // and the chat looked frozen with the analyst's message stuck
           // mid-stream.
           let ev = null;
@@ -4342,7 +4328,7 @@ function ChatWithRecon({ result, bare,
                   content: hasContent
                     ? last.content
                     : (hasTools
-                        ? 'I ran the checks above but didn\'t produce a written reply — try asking again or rephrasing.'
+                        ? 'I ran the checks above but didn\'t produce a written reply - try asking again or rephrasing.'
                         : 'No reply came back. Try sending the message again.'),
                   _streaming: false,
                 };
@@ -4370,7 +4356,7 @@ function ChatWithRecon({ result, bare,
   const body = (
     <>
       {/* Small purple chip when this run was re-analysed with analyst
-          feedback. No header text — just the quoted statement so the
+          feedback. No header text - just the quoted statement so the
           analyst sees what was applied. */}
       {feedbackUpdated && (
         <Typography sx={{
@@ -4548,12 +4534,12 @@ function ChatWithRecon({ result, bare,
         </Box>
       )}
 
-      {/* Train-on-false-positives toggle removed — the feedback workflow
+      {/* Train-on-false-positives toggle removed - the feedback workflow
           lives in <TrainOnFalsePositive> directly under the Summary card
           so it doesn't get buried at the bottom of a long chat. This
           card stays chat-only. */}
 
-      {/* Input row — chat-only after the feedback split. */}
+      {/* Input row - chat-only after the feedback split. */}
       <Stack direction="row" spacing={1}>
         <MuiTextField
           inputRef={textareaRef}
@@ -4566,8 +4552,8 @@ function ChatWithRecon({ result, bare,
           placeholder={feedbackMode
             ? 'If the AI analysis is wrong, teach it what is right.'
             : (pendingQuestion
-              ? 'Type what you found when checking this — RECON will interpret your answer…'
-              : 'Ask anything — "Is this likely a vulnerability scanner?", "Look up this hash in sandbox"…')}
+              ? 'Type what you found when checking this - RECON will interpret your answer…'
+              : 'Ask anything - "Is this likely a vulnerability scanner?", "Look up this hash in sandbox"…')}
           sx={{ flex:1,
             '& .MuiOutlinedInput-input': { fontSize:13, lineHeight:1.5 },
             ...(feedbackMode ? {
@@ -4937,11 +4923,11 @@ function CrossRefs({ rs, bare }) {
   );
 }
 
-/* ─── detection rules (multi-SIEM) — MUI Tabs + CodeBlock ─────────────────── */
+/* ─── detection rules (multi-SIEM) - MUI Tabs + CodeBlock ─────────────────── */
 function Detection({ result }) {
   const rs    = result?.response_summary || {};
   const mitre = asArray(rs?.mitre_techniques);
-  // On-demand generation state — detection content is generated from the
+  // On-demand generation state - detection content is generated from the
   // Detection card via /api/detection rather than auto-generated every run.
   // Now fans out to every supported platform (Sigma, KQL, Splunk SPL,
   // Elastic EQL, Snort/Suricata, Chronicle YARA-L, CrowdStrike FQL, YARA)
@@ -4983,7 +4969,7 @@ function Detection({ result }) {
       }).then(r => r.json()).catch(() => ({ result: '', error: 'request failed' }));
 
       // Fire every detection-rule format in parallel. The YARA call is
-      // only useful when we have a malware family — backend returns a
+      // only useful when we have a malware family - backend returns a
       // generic rule otherwise, which we skip on the frontend.
       const familyKnown = !!analysis.malwareFamily;
       const calls = {
@@ -5003,7 +4989,7 @@ function Detection({ result }) {
         const v = out[i] || {};
         if (k === 'sigma') {
           next.sigma = v.result; next.sigma_valid = v.valid;
-          // Backend's sigma path also returns a piggy-backed SPL — only
+          // Backend's sigma path also returns a piggy-backed SPL - only
           // overwrite if the dedicated SPL call didn't succeed.
           if (v.splunk_spl && !next.spl) next.spl = v.splunk_spl;
         } else if (k === 'spl' && v.result) {
@@ -5064,7 +5050,7 @@ function Detection({ result }) {
         </Box>
       )}
 
-      {/* MUI Tabs strip — inherits indicator color + lowercase styling from theme */}
+      {/* MUI Tabs strip - inherits indicator color + lowercase styling from theme */}
       <MuiTabs value={cur.id} onChange={(_, v) => setActive(v)} variant="scrollable" scrollButtons="auto"
         sx={{ minHeight:36, mb:1.25, borderBottom: `1px solid ${muiAlpha('#ffffff', 0.12)}` }}>
         {tabs.map(tab => <MuiTab key={tab.id} value={tab.id} label={tab.label} sx={{ minHeight:36, py:0 }}/>)}
@@ -5079,7 +5065,7 @@ function Detection({ result }) {
         <CopyBtn text={cur.content}/>
       </Box>
       <MuiCodeBlock>{cur.content}</MuiCodeBlock>
-      {/* JA3 / JA4 TLS fingerprints — moved out of OSINT into Detection
+      {/* JA3 / JA4 TLS fingerprints - moved out of OSINT into Detection
           Rules since they ARE detection rules (Sigma + KQL snippets
           analysts can append to their existing rules). Renders nothing
           when no relevant frameworks were matched. */}
@@ -5106,7 +5092,7 @@ function Detection({ result }) {
   );
 }
 
-/* ─── DetectionCitationsView — round-2..7 detection-corpora citations ─────────
+/* ─── DetectionCitationsView - round-2..7 detection-corpora citations ─────────
    Surfaces matches from SigmaHQ + Panther + Splunk + MITRE-CAR + OTRF +
    Sublime + Chronicle + olafhartong + falco + Stratus + ET-Open/Snort.
    Round-14: also hosts the natural-language search bar that hits
@@ -5142,7 +5128,7 @@ export function DetectionCitationsView({ result, bare = false }) {
   const dc = result?.investigation_result?.detection_corpora ||
               result?.detection_corpora || null;
   // Surface the card once an investigation has produced ANY detection
-  // payload — even an empty one. The semantic-search bar still has
+  // payload - even an empty one. The semantic-search bar still has
   // value when there are zero exact technique matches. In `bare` mode
   // (nested inside the Detection card) we'll render even without dc so
   // the search bar is always reachable next to the generated rules.
@@ -5174,7 +5160,7 @@ export function DetectionCitationsView({ result, bare = false }) {
 
   // In bare mode the card renders even with dc === null (so the
   // semantic-search bar stays reachable). The sources-with-hits
-  // counter has to tolerate that too — previously threw TypeError
+  // counter has to tolerate that too - previously threw TypeError
   // "Cannot read properties of null (reading 'sigma')".
   const sourcesWithHits = _DETECTION_SOURCES
     .filter(s => (((dc || {})[s.key]) || []).length).length;
@@ -5192,7 +5178,7 @@ export function DetectionCitationsView({ result, bare = false }) {
         </Typography>
       )}
 
-      {/* Round-14 semantic-search bar — fuzzy lookup by analyst description
+      {/* Round-14 semantic-search bar - fuzzy lookup by analyst description
           instead of MITRE technique ID. */}
       <Box component="form" onSubmit={runSearch}
         sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2,
@@ -5231,7 +5217,7 @@ export function DetectionCitationsView({ result, bare = false }) {
             backgroundColor: muiAlpha('#16AD34', 0.05) }}>
           <Typography sx={{ fontSize: 12, color: 'text.primary',
               fontWeight: 600, mb: 0.75 }}>
-            Search results — {searchData.total} match{searchData.total === 1 ? '' : 'es'}
+            Search results - {searchData.total} match{searchData.total === 1 ? '' : 'es'}
             <Typography component="span" sx={{ color: 'text.tertiary',
                 fontSize: 11, ml: 1 }}>
               ({searchData.backend === 'sentence_transformers'
@@ -5336,7 +5322,7 @@ export function DetectionCitationsView({ result, bare = false }) {
 }
 
 
-/* ─── DomainPermutationsView — dnstwist lookalike enumeration ──────────────────
+/* ─── DomainPermutationsView - dnstwist lookalike enumeration ──────────────────
    Pick a domain from the IOC set and surface live-registered typo-squats /
    homoglyphs / TLD-swaps. The Cisco-AS-of-which research found dnstwist;
    wraps the new /api/hunt/permutations endpoint. */
@@ -5451,7 +5437,7 @@ function DomainPermutationsView({ result, bare = false }) {
                     fontSize: 12, color: 'text.primary',
                     fontFamily: '"JetBrains Mono", monospace',
                     borderColor: muiAlpha('#ffffff', 0.06),
-                  }}>{r.dns_a || '—'}</MuiTableCell>
+                  }}>{r.dns_a || ' - '}</MuiTableCell>
                 </MuiTableRow>
               ))}
             </MuiTableBody>
@@ -5504,10 +5490,10 @@ function NetworkDetection({ result, bare }) {
                 <MuiTableCell sx={{ color: 'text.primary', fontWeight: 500 }}>{f.framework}</MuiTableCell>
                 <MuiTableCell sx={{
                   fontFamily: '"JetBrains Mono", monospace', fontSize: 11, color: 'primary.main',
-                }}>{f.ja3 || '—'}</MuiTableCell>
+                }}>{f.ja3 || ' - '}</MuiTableCell>
                 <MuiTableCell sx={{
                   fontFamily: '"JetBrains Mono", monospace', fontSize: 11, color: '#B286FF',
-                }}>{f.ja4 || '—'}</MuiTableCell>
+                }}>{f.ja4 || ' - '}</MuiTableCell>
                 <MuiTableCell sx={{ fontSize: 11, color: 'text.tertiary', maxWidth: 280 }}>{f.notes}</MuiTableCell>
               </MuiTableRow>
             ))}
@@ -5518,7 +5504,7 @@ function NetworkDetection({ result, bare }) {
         <Box sx={{ mb: 1.5 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
             <Typography sx={{ fontSize: 12, fontWeight: 600, color: 'text.primary' }}>
-              Sigma — JA3/JA4 selection
+              Sigma - JA3/JA4 selection
             </Typography>
             <CopyBtn text={sigma}/>
           </Box>
@@ -5529,7 +5515,7 @@ function NetworkDetection({ result, bare }) {
         <Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
             <Typography sx={{ fontSize: 12, fontWeight: 600, color: 'text.primary' }}>
-              KQL — let statements for Sentinel
+              KQL - let statements for Sentinel
             </Typography>
             <CopyBtn text={kql}/>
           </Box>
@@ -5549,7 +5535,7 @@ function NetworkDetection({ result, bare }) {
 
 
 /* ─── sidebar ─────────────────────────────────────────────────────────────────
- * Adapted from OpenCTI (AGPL-3.0) — LeftBar.jsx pattern.
+ * Adapted from OpenCTI (AGPL-3.0) - LeftBar.jsx pattern.
  * Uses MUI Drawer with the OpenCTI nav width/styling, hosting the input area
  * (drop zone + textarea + AgentPipeline) and the extracted-IOCs panel.
  */
@@ -5567,28 +5553,28 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
   useEffect(() => {
     const handler = (e) => {
       const inField = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
-      // Ctrl+Enter — submit analysis (works even while typing)
+      // Ctrl+Enter - submit analysis (works even while typing)
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         e.preventDefault();
         document.querySelector('[data-recon-analyze]')?.click();
       }
-      // Ctrl+N — clear textarea + result for new investigation
+      // Ctrl+N - clear textarea + result for new investigation
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n') {
         e.preventDefault();
         setLogText('');
         onResult(null);
       }
-      // Ctrl+S — trigger Print/Save PDF on the Report card if present
+      // Ctrl+S - trigger Print/Save PDF on the Report card if present
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
         const btn = document.querySelector('[data-recon-print]');
         if (btn) { e.preventDefault(); btn.click(); }
       }
-      // ? — toggle shortcut help (only when not typing in a field)
+      // ? - toggle shortcut help (only when not typing in a field)
       if (e.key === '?' && !inField) {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent('recon:toggle-shortcuts'));
       }
-      // Escape — close shortcut help / clear focus
+      // Escape - close shortcut help / clear focus
       if (e.key === 'Escape') {
         window.dispatchEvent(new CustomEvent('recon:close-overlays'));
       }
@@ -5615,7 +5601,7 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
         },
       }}
     >
-      {/* Logo header — click to fully reset: clears the main view (scan /
+      {/* Logo header - click to fully reset: clears the main view (scan /
           email / result) and every sidebar input. */}
       <Box
         onClick={() => {
@@ -5623,7 +5609,7 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
           setDragOver(false);
           onHome?.();
         }}
-        title="Back to main — clears everything"
+        title="Back to main - clears everything"
         sx={{
           p: '18px 14px 16px',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -5640,7 +5626,7 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
 
       {/* Input area + pipeline */}
       <Box sx={{ p: '18px 16px 16px', flex: 1, overflowY: 'auto' }}>
-        {/* Comprehensive file-analyzer drop zone — POSTs /api/scan/file.
+        {/* Comprehensive file-analyzer drop zone - POSTs /api/scan/file.
             When scanning starts the main view auto-replaces the analysis
             output with the scanner result panel until dismissed. */}
         <Box
@@ -5692,7 +5678,7 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
           </Typography>
         )}
 
-        {/* Back-to-Analysis pill — only shown when there's a completed or
+        {/* Back-to-Analysis pill - only shown when there's a completed or
             in-flight analysis AND the main view is currently taken over by
             another workspace (Email or File Analyzer). Single click bounces
             the analyst back to the analysis result without losing it. */}
@@ -5728,7 +5714,7 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
           </Box>
         )}
 
-        {/* Email composer entry point — opens the dedicated composer view */}
+        {/* Email composer entry point - opens the dedicated composer view */}
         <Box
           onClick={() => { setLogText(''); onOpenEmail?.(); }}
           sx={{
@@ -5755,7 +5741,7 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
           </Typography>
         </Box>
 
-        {/* Single textarea — accepts a log on its own OR a log mixed with
+        {/* Single textarea - accepts a log on its own OR a log mixed with
             analyst commentary ("This is from a scheduled scan", "User was on
             sanctioned RMM tool during this window", etc.). The investigation
             prompt sees the full block as raw_input and reasons over the
@@ -5803,11 +5789,11 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
           )}
         </Box>
 
-        {/* Hash + URL lookups now live inside the Analyze textarea — the
+        {/* Hash + URL lookups now live inside the Analyze textarea - the
             AgentPipeline button detects a bare URL and routes to
             /api/scan/url, otherwise it runs the log-analysis pipeline. */}
 
-        {/* Progressive rendering — each pipeline stage emits a
+        {/* Progressive rendering - each pipeline stage emits a
             partial_result over the SSE stream and mergePartial (up in
             the parent) shallow-merges it into `result`, which flips the
             main panel from Skeleton to the real cards as data lands.
@@ -5860,7 +5846,7 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
         )}
       </Box>
 
-      {/* Signed-in footer — username + Logout. Pinned to the bottom of the
+      {/* Signed-in footer - username + Logout. Pinned to the bottom of the
           sidebar so it doesn't scroll out of reach when the IOC list is long. */}
       {authUser && (
         <Box sx={{
@@ -5890,7 +5876,7 @@ function Sidebar({ onResult, onPartialResult, onAnalyzing, currentResult, onScan
   );
 }
 
-/* ─── empty state (minimal — analyst pastes into the sidebar to begin) ───────── */
+/* ─── empty state (minimal - analyst pastes into the sidebar to begin) ───────── */
 function Empty() {
   return null;
 }
@@ -5913,7 +5899,7 @@ function IOCPivot({ result }) {
       badge={`${pivots.length} indicator${pivots.length === 1 ? '' : 's'} seen before`}>
       <Typography sx={{ fontSize: 12, color: 'text.tertiary', mb: 1.25, lineHeight: 1.6 }}>
         These indicators have appeared in previous investigations during this session. Consider whether the
-        cases are related — same actor, same campaign, or rolling reinvestigation.
+        cases are related - same actor, same campaign, or rolling reinvestigation.
       </Typography>
       {pivots.map((p, i) => (
         <Box key={i} sx={{
@@ -6034,11 +6020,11 @@ function BulkTable({ result }) {
                   }}>{r.ioc}</MuiTableCell>
                   <MuiTableCell><Verdict verdict={r.verdict} size="small"/></MuiTableCell>
                   <MuiTableCell sx={{ color:c, fontWeight:600, fontVariantNumeric:'tabular-nums' }}>
-                    {r.score ?? '—'}
+                    {r.score ?? ' - '}
                   </MuiTableCell>
-                  <MuiTableCell sx={{ color:'text.tertiary', fontSize:11 }}>{r.country || '—'}</MuiTableCell>
-                  <MuiTableCell sx={{ color:'warning.main', fontSize:11 }}>{r.meta || '—'}</MuiTableCell>
-                  <MuiTableCell sx={{ color:'text.tertiary', fontSize:11, maxWidth:280 }}>{r.reason || '—'}</MuiTableCell>
+                  <MuiTableCell sx={{ color:'text.tertiary', fontSize:11 }}>{r.country || ' - '}</MuiTableCell>
+                  <MuiTableCell sx={{ color:'warning.main', fontSize:11 }}>{r.meta || ' - '}</MuiTableCell>
+                  <MuiTableCell sx={{ color:'text.tertiary', fontSize:11, maxWidth:280 }}>{r.reason || ' - '}</MuiTableCell>
                 </MuiTableRow>
               );
             })}
@@ -6132,24 +6118,24 @@ function AppMain({ authUser, setAuthState }) {
   // results will land while waiting on the first stream event.
   const [analyzing, setAnalyzing] = useState(false);
   const [view, setView] = useState('detail'); // 'detail' | 'table'
-  // Bumped on "go home" (logo) to remount the Sidebar — this clears its local
+  // Bumped on "go home" (logo) to remount the Sidebar - this clears its local
   // input state AND the AgentPipeline's internal trace/pipeline, which would
   // otherwise linger under the Analyze input after returning home.
   const [homeNonce, setHomeNonce] = useState(0);
   const rs = result?.response_summary;
 
-  // Comprehensive file-analyzer state — lifted from FileScannerView so the
+  // Comprehensive file-analyzer state - lifted from FileScannerView so the
   // sidebar can drive scans (file drop / hash lookup / URL fetch). When
   // there's active scan state, the main view shows the scanner results
   // instead of the analysis view.
   const [scanState, setScanState] = useState({
     scanning: false, result: null, error: null, progressStep: 0,
   });
-  // Email composer takeover — when truthy, main view shows the composer.
+  // Email composer takeover - when truthy, main view shows the composer.
   // Holds optional { log, parsed } seed so the analyze/scanner pipelines
   // can pre-populate the composer with the current investigation context.
   const [emailState, setEmailState] = useState(null);
-  // Settings view toggle — single bool because the page is its own
+  // Settings view toggle - single bool because the page is its own
   // overlay; opening it dismisses email + scanner like the analyze
   // view does.
   // Show scanner whenever there's scan activity in flight or a result on hand
@@ -6176,7 +6162,7 @@ function AppMain({ authUser, setAuthState }) {
   }, []);
 
   const _runScan = useCallback(async (fetchFn) => {
-    // Any new scan immediately switches the main view to the scanner —
+    // Any new scan immediately switches the main view to the scanner  - 
     // clear the email composer so the new action owns the canvas. The
     // analyze result is intentionally PRESERVED so the analyst can
     // return to it via the "Analysis" sidebar pill while the scan runs.
@@ -6199,7 +6185,7 @@ function AppMain({ authUser, setAuthState }) {
         let tries = 0;
         const poll = async () => {
           tries += 1;
-          if (tries > 60) return;   // ~3 min cap (60 × 3s) — bail rather than spin forever
+          if (tries > 60) return;   // ~3 min cap (60 × 3s) - bail rather than spin forever
           try {
             const r = await cookieFetch(`/api/scan/by-hash/${sha}`);
             if (r.ok) {
@@ -6242,7 +6228,7 @@ function AppMain({ authUser, setAuthState }) {
     }));
   }, [_runScan]);
 
-  // Stream merge — each stage of the pipeline pushes a partial result;
+  // Stream merge - each stage of the pipeline pushes a partial result;
   // we shallow-merge into the existing result so sections render as data arrives.
   const mergePartial = useCallback((partial) => {
     if (!partial) return;
@@ -6284,7 +6270,7 @@ function AppMain({ authUser, setAuthState }) {
         onOpenEmail={() => {
           // Open the email composer with a blank slate. The analyze
           // result is intentionally PRESERVED so the analyst can come
-          // back to it via the "Analysis" sidebar pill — only a fresh
+          // back to it via the "Analysis" sidebar pill - only a fresh
           // Analyze run wipes the prior result (via AgentPipeline's
           // onStart hook). The scanner gets dismissed because it doesn't
           // share state with anything else.
@@ -6311,7 +6297,7 @@ function AppMain({ authUser, setAuthState }) {
         onLogout={async () => {
           try {
             await cookieFetch('/api/auth/logout', { method: 'POST' });
-          } catch { /* logout is best-effort — even if the request fails, we drop client-side */ }
+          } catch { /* logout is best-effort - even if the request fails, we drop client-side */ }
           setAuthState('out');
         }}
       />
@@ -6407,7 +6393,7 @@ function AppMain({ authUser, setAuthState }) {
                     <MapTab result={result}/>
                   </Suspense>
                 </ErrorBoundary>
-                {/* Geopolitical context — country + ASN breakdown +
+                {/* Geopolitical context - country + ASN breakdown +
                     nation-state attribution hints. Rolled into the
                     Geolocation card so geographic signals live in one
                     place. Renders nothing when there's no data. */}
@@ -6441,14 +6427,14 @@ function AppMain({ authUser, setAuthState }) {
                 follow-up tools (Geolocation, Ask RECON). */}
             <CardDefaultOpenContext.Provider value={false} key={result.runId || 'detail'}>
             {/* Card order (analyst-flow):
-                1. Summary  — verdict + threat score + train-on-false-positives
+                1. Summary  - verdict + threat score + train-on-false-positives
                               (the feedback form is inline at the bottom of Summary
                               so the analyst sees the verdict and the correction
                               surface together)
-                2. Ask RECON — interactive probing questions
-                3. Triage    — deep evidence dive
-                4. Geolocation — map (only when IPs are present)
-                5. Detection  — SIEM-ready rules
+                2. Ask RECON - interactive probing questions
+                3. Triage    - deep evidence dive
+                4. Geolocation - map (only when IPs are present)
+                5. Detection  - SIEM-ready rules
                 EmailAnalysis still slots in when an EML is present. */}
             <ErrorBoundary label="Summary">
               <AnalystSummary
@@ -6475,7 +6461,7 @@ function AppMain({ authUser, setAuthState }) {
                     <MapTab result={result}/>
                   </Suspense>
                 </ErrorBoundary>
-                {/* Geopolitical context — country + ASN breakdown +
+                {/* Geopolitical context - country + ASN breakdown +
                     nation-state attribution hints. Rolled into the
                     Geolocation card so geographic signals live in one
                     place. Renders nothing when there's no data. */}
@@ -6508,7 +6494,7 @@ function AppMain({ authUser, setAuthState }) {
       </Box>
       )}
 
-      {/* Global keyframes — MUI CssBaseline doesn't include @keyframes */}
+      {/* Global keyframes - MUI CssBaseline doesn't include @keyframes */}
       <style>{`
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
         @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}

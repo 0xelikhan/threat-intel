@@ -38,7 +38,7 @@ def test_jarm_lookup_rejects_invalid_length():
 
 def test_jarm_get_for_alert_type_returns_only_relevant():
     """A 'ransomware' alert type should return every entry whose
-    alert_types include 'ransomware' — but not the pure banking or
+    alert_types include 'ransomware' - but not the pure banking or
     exfiltration-only rows."""
     hits = jarm.get_for_alert_type("ransomware")
     assert len(hits) > 0
@@ -127,7 +127,7 @@ def test_sfs_rejects_non_email_input():
 # ─── CIRCL BGP Ranking (2-call flow) ──────────────────────────────────
 def test_bgp_ranking_walks_ipasn_then_asn_rank():
     """The current CIRCL API needs two POSTs: IP → ASN, then ASN → rank.
-    The old bgpranking-ng endpoint was retired — the module was
+    The old bgpranking-ng endpoint was retired - the module was
     silently 404ing before this fix."""
     step1 = {"meta": {"ip": "8.8.8.8"},
              "response": {"2026-07-04T12:00:00": {
@@ -168,7 +168,7 @@ def test_bgp_ranking_walks_ipasn_then_asn_rank():
     assert r["total_known_asns"] == 13677
     # Verdict + summary are load-bearing: earlier commits let the raw
     # rank leak into the AI analyst report, which then called an ASN
-    # with rank=0.00017 "poor reputation" — the inverse of the truth.
+    # with rank=0.00017 "poor reputation" - the inverse of the truth.
     # Assert both the verdict tier AND the summary phrasing so the
     # regression can't reappear.
     assert r["verdict"] == "CLEAN"

@@ -1,4 +1,4 @@
-"""Reference analyzer — SANS ISC / DShield IP lookup.
+"""Reference analyzer - SANS ISC / DShield IP lookup.
 
 Shows the full migration pattern from intel/dshield.py to the plugin
 framework: unchanged lookup logic, wrapped in a formal Analyzer
@@ -14,7 +14,7 @@ from intel.dshield import lookup as _legacy_lookup
 class DShieldAnalyzer(Analyzer):
     name = "dshield"
     description = (
-        "SANS ISC DShield — volunteer-firewall sensor network. "
+        "SANS ISC DShield - volunteer-firewall sensor network. "
         "Reports attack counts, first/last seen, aggregated threatfeed hits."
     )
     supported_ioc_types = ["ipv4", "ipv6"]

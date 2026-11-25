@@ -8,7 +8,7 @@ to GitHub repos, exploit-db entries, gist URLs, and articles
 demonstrating exploitation.
 
 This index gives RECON a much sharper "weaponisation" signal than
-EPSS alone — "EPSS = X%" is probability, but "5 public PoCs exist on
+EPSS alone - "EPSS = X%" is probability, but "5 public PoCs exist on
 GitHub today" is reality.
 
 We walk the cloned repo at `vendor/trickest-cve/`, parse each markdown

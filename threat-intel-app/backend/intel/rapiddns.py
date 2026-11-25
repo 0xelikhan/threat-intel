@@ -1,4 +1,4 @@
-"""RapidDNS — passive DNS subdomain enumeration via HTML scrape.
+"""RapidDNS - passive DNS subdomain enumeration via HTML scrape.
 
   GET https://rapiddns.io/subdomain/{domain}?full=1#result
 

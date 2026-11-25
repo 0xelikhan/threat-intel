@@ -1,5 +1,5 @@
 """
-EnrichIOCSkill — per-IOC enrichment against every configured TI source.
+EnrichIOCSkill - per-IOC enrichment against every configured TI source.
 
 Wraps the existing agents.enrichment functions (enrich_ip / enrich_domain /
 enrich_hash / enrich_url) and re-shapes the output into a deterministic
@@ -77,7 +77,7 @@ class EnrichIOCSkill(Skill):
             "PULSEDIVE_KEY", "MALTIVERSE_KEY",
             "IPINFO_TOKEN", "WHOISXML_KEY",
             "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY",
-            # Canonical Censys names — PAT first, legacy v2 pair as fallback.
+            # Canonical Censys names - PAT first, legacy v2 pair as fallback.
             # Both are registered in config.py.
             "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET",
             "CRIMINAL_IP_KEY", "PROXYCHECK_KEY",
@@ -115,7 +115,7 @@ class EnrichIOCSkill(Skill):
                 else:
                     return {"ioc": ioc_value, "type": ioc_type, "verdict": "UNKNOWN",
                             "score": 0, "sources": {}, "summary": ["unknown ioc_type"]}
-            # Only cache on a real payload — never store an empty/error-only
+            # Only cache on a real payload - never store an empty/error-only
             # response or we'd serve the failure forever.
             if data and isinstance(data, dict) and any(
                 k for k in data if k != "error"

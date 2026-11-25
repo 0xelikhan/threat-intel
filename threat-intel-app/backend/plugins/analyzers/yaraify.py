@@ -1,4 +1,4 @@
-"""Reference analyzer — abuse.ch YARAify hash lookup."""
+"""Reference analyzer - abuse.ch YARAify hash lookup."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from intel.yaraify import lookup as _legacy_lookup
 class YaraifyAnalyzer(Analyzer):
     name = "yaraify"
     description = (
-        "abuse.ch YARAify — YARA + ClamAV scan results per sample. "
+        "abuse.ch YARAify - YARA + ClamAV scan results per sample. "
         "Shares the abuse.ch Auth-Key with URLhaus / ThreatFox / MalwareBazaar."
     )
     supported_ioc_types = ["md5", "sha1", "sha256"]

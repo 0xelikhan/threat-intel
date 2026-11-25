@@ -1,7 +1,7 @@
 """
 Polyswarm multi-AV + IOC search lookup.
 
-Source: https://polyswarm.io/ — decentralised marketplace of AV
+Source: https://polyswarm.io/ - decentralised marketplace of AV
 engines; hash lookups return per-engine verdicts (microengines) +
 first/last-seen. Domain/IP lookups return known-host matches. Free
 tier: 5k events/month.

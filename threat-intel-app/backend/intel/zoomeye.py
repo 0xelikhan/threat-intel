@@ -1,7 +1,7 @@
 """
 ZoomEye host search.
 
-Source: https://www.zoomeye.org/ — Chinese internet-scan engine
+Source: https://www.zoomeye.org/ - Chinese internet-scan engine
 alternative to Shodan with broad fingerprint coverage. Requires
 API key.
 

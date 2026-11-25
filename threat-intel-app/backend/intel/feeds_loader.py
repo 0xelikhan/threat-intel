@@ -120,13 +120,13 @@ def phishing_domains() -> set:
 
 
 def check_ip(ip: str) -> dict | None:
-    """Fast O(1) check — is this IP on any local blocklist?"""
+    """Fast O(1) check - is this IP on any local blocklist?"""
     hit = malicious_ips().get(ip)
     return {"hit": True, "source": hit} if hit else None
 
 
 def check_domain(domain: str) -> dict | None:
-    """Fast O(1) check — is this domain in the phishing database?"""
+    """Fast O(1) check - is this domain in the phishing database?"""
     d = (domain or "").lower().strip().lstrip(".")
     if not d:
         return None
@@ -163,7 +163,7 @@ def stats() -> dict:
 # Previously feodo data came from `vendor/firehol/feodo.ipset` which
 # wasn't shipped in the production container, so agents/enrichment.py's
 # `from intel.feeds_loader import check_feodo` was a latent ImportError
-# guarded by try/except — Feodo never fired in prod. Bringing the fetch
+# guarded by try/except - Feodo never fired in prod. Bringing the fetch
 # in-process restores the signal.
 
 _FEODO_URL = "https://feodotracker.abuse.ch/downloads/ipblocklist.txt"
@@ -172,14 +172,14 @@ _feodo_state: dict = {"ips": set(), "fetched_at": 0.0, "error": None}
 # Protect _feodo_state against concurrent refresh+lookup. Without this
 # two async tasks both seeing stale state would issue duplicate HTTP
 # requests AND race on the dict write. RLock so a single thread can
-# re-enter (defensive — the current code doesn't but future callers
+# re-enter (defensive - the current code doesn't but future callers
 # might).
 _feodo_lock = threading.RLock()
 
 
 # In-flight guard: a second caller that arrives while the first is
 # fetching shouldn't fire a duplicate HTTP request, but it also shouldn't
-# block — we hold the lock only long enough to claim the slot, then
+# block - we hold the lock only long enough to claim the slot, then
 # release before the network call. Failed-fetch backoff (60 s) stops a
 # retry storm if Feodo Tracker is down.
 _feodo_inflight   = False
@@ -189,7 +189,7 @@ _FEODO_ERROR_BACKOFF_S = 60
 
 def refresh_feodo_now() -> None:
     """Force-refresh the Feodo Tracker blocklist. Safe to call repeatedly
-    — concurrent callers coalesce. The network fetch happens OUTSIDE the
+    - concurrent callers coalesce. The network fetch happens OUTSIDE the
     lock so per-IOC lookups never stall behind a slow upstream."""
     global _feodo_inflight, _feodo_last_error
     with _feodo_lock:
@@ -240,7 +240,7 @@ def _refresh_feodo_if_stale() -> None:
 def check_feodo(ip: str) -> dict | None:
     """Return {"hit": True, "source": "feodo_tracker", ...} when the IP
     appears on the Feodo Tracker active-C2 list. None on miss. Never
-    raises and never blocks the event loop on the network fetch — the
+    raises and never blocks the event loop on the network fetch - the
     refresh path runs the urlopen call without holding any lock and the
     pre-warm + periodic background task keep the cache hot."""
     if not ip:

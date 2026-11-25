@@ -1,7 +1,7 @@
 """
 PhishTank URL phishing verdict lookup.
 
-Source: https://www.phishtank.com/api_info.php — PhishTank's /checkurl/
+Source: https://www.phishtank.com/api_info.php - PhishTank's /checkurl/
 endpoint. Keyless-usable: the endpoint doesn't validate the `app_key`
 field server-side, but anonymous POSTs (no app_key field at all) hit
 Cloudflare bot protection. We send a static identifier so the request

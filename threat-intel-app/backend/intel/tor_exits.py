@@ -1,15 +1,15 @@
 """
-Tor Exit Nodes — official Tor Project Onionoo API, free, no key.
+Tor Exit Nodes - official Tor Project Onionoo API, free, no key.
 
 Onionoo publishes every currently-known Tor relay + bridge. We filter
 to Exit-flagged relays (the ones actually egress-capable) and index by
-BOTH `exit_addresses` and the IP portion of `or_addresses` — a relay
+BOTH `exit_addresses` and the IP portion of `or_addresses` - a relay
 often accepts exit traffic on a different IP than its OR socket, and
 either can appear as the source of a real-world sign-in.
 
 RECON's existing warninglists include a Tor exit list from MISP but
 that snapshot is stale (updated ad-hoc). Onionoo is the canonical
-Tor Project feed — hourly-fresh, includes verified reverse-DNS names
+Tor Project feed - hourly-fresh, includes verified reverse-DNS names
 + ASN context, and lets us distinguish a real exit from a random
 Tor bridge or relay that happens to share ASN with an exit.
 
@@ -37,7 +37,7 @@ _URL = ("https://onionoo.torproject.org/details"
 _TTL_SECONDS = 6 * 3600
 
 _lock = threading.RLock()  # reentrant: _ensure_loaded holds it, then
-                            # _refresh_sync re-acquires — a plain Lock
+                            # _refresh_sync re-acquires - a plain Lock
                             # deadlocks; RLock is a drop-in fix.
 _state: Dict[str, Any] = {
     "loaded_at":     0.0,
@@ -79,7 +79,7 @@ def _refresh_sync() -> None:
     except Exception as e:
         with _lock:
             _state["error"] = str(e)[:200]
-            # Short backoff — retry in ~60s instead of stalling for
+            # Short backoff - retry in ~60s instead of stalling for
             # the full 6h TTL. See threatview_c2.py for the same
             # pattern + rationale.
             _state["loaded_at"] = time.time() - _TTL_SECONDS + 60
@@ -135,7 +135,7 @@ def lookup(ip: str) -> Optional[Dict[str, Any]]:
     _ensure_loaded()
     if not isinstance(ip, str) or not ip:
         return None
-    # Read under lock — _refresh_sync replaces the entire by_ip dict
+    # Read under lock - _refresh_sync replaces the entire by_ip dict
     # atomically but the .get() would return a stale reference if we
     # dereferenced between assignment and the actual read.
     with _lock:

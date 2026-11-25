@@ -2,7 +2,7 @@
 Round-13 polish tests:
 
   * intel/network_timing histogram via agents.enrichment._record_timing
-  * /api/status/timings/reset endpoint (logic only — no HTTP test here)
+  * /api/status/timings/reset endpoint (logic only - no HTTP test here)
   * Settings UI flow is React-side, covered manually
 """
 
@@ -26,7 +26,7 @@ def test_record_timing_counts_ok_and_errors():
     assert by_host["api.example.com"]["errors"] == 1
     # Mean is (120.5 + 85.3 + 250.0) / 3 ≈ 151.9
     assert 145 <= by_host["api.example.com"]["mean_ms"] <= 160
-    # Snapshot is sorted by mean_ms descending — the slow host is on top
+    # Snapshot is sorted by mean_ms descending - the slow host is on top
     assert snap[0]["host"] == "slow.example.org"
 
 

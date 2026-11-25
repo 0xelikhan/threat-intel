@@ -1,5 +1,5 @@
 """
-File-analysis engine — spec §1-6 from the all-in-one scanner plan.
+File-analysis engine - spec §1-6 from the all-in-one scanner plan.
 
 Entry point: analyze_file(file_bytes, filename) → comprehensive analysis dict.
 
@@ -13,7 +13,7 @@ Order of operations:
   6. Format-specific deep analysis (delegated to format_*.py modules)
   7. MITRE behavioral mapping (delegated to mitre_capability_map)
   8. YARA scanning (delegated to intel.yara_scanner)
-  9. Threat-intel correlation (caller wires this — needs aiohttp session + keys)
+  9. Threat-intel correlation (caller wires this - needs aiohttp session + keys)
 
 All sub-analyses are optional and best-effort: a missing dependency yields a
 graceful empty section, never a hard failure.
@@ -61,7 +61,7 @@ _EXTENSION_TYPE_HINTS = {
     "py":  "text/x-python",
     "sh":  "text/x-shellscript",
     "eml": "message/rfc822",
-    # Source-code extensions — analysts upload these when triaging
+    # Source-code extensions - analysts upload these when triaging
     # commodity loaders / red-team samples / GitHub-borrowed snippets.
     # The bytes are plain ASCII with no PE header, so analysis switches
     # to source-mode patterns instead of PE-import predicates.
@@ -145,7 +145,7 @@ def _detect_type(file_bytes: bytes, filename: str) -> Dict:
         "mismatch":        mismatch,
         "mismatch_summary": (
             f"File claims .{claimed_ext} ({claimed}) but bytes detect as {mime}. "
-            "Common malware tactic — verify the file before trusting it."
+            "Common malware tactic - verify the file before trusting it."
             if mismatch else None
         ),
         "category":        _category_from_mime(mime, claimed_ext),
@@ -157,7 +157,7 @@ def _detect_type(file_bytes: bytes, filename: str) -> Dict:
 def _detect_source_code(file_bytes: bytes, claimed_ext: str, mime: str) -> Tuple[bool, str]:
     """Source-code detection. Two signals, either is sufficient:
 
-      1. Claimed extension is in `_SOURCE_LANG_BY_EXT` — analyst literally
+      1. Claimed extension is in `_SOURCE_LANG_BY_EXT` - analyst literally
          told us this is `foo.nim`.
       2. The bytes start with neither MZ/ELF/PK/PDF/OLE/RAR/7z/gzip nor any
          other recognised binary magic AND >95% of the head is printable
@@ -193,7 +193,7 @@ def _detect_source_code(file_bytes: bytes, claimed_ext: str, mime: str) -> Tuple
         return False, ""
 
     # Email-header sniff for extensionless inputs. RFC822 messages start
-    # with one or more `Header-Name: value` lines — if the first 200
+    # with one or more `Header-Name: value` lines - if the first 200
     # bytes look like that AND contain at least one canonical email header
     # (From / Subject / To / Date / Received / Return-Path), this is mail,
     # not source. Same downstream concern as the EML-extension path above.
@@ -218,7 +218,7 @@ def _detect_source_code(file_bytes: bytes, claimed_ext: str, mime: str) -> Tuple
 
     # Minimum size gate. A 1-byte file `a` technically scores 100%
     # printable and would otherwise fall into the generic "Source Code"
-    # branch — but the smallest real source file (a Bash shebang +
+    # branch - but the smallest real source file (a Bash shebang +
     # one-liner) is still tens of bytes. Anything smaller is either
     # an unusual test file or noise; don't tag it as source.
     if len(file_bytes) < 32:
@@ -302,8 +302,8 @@ def _category_from_mime(mime: str, ext: str) -> str:
     # python-magic returns for a real EML) or the `.eml` extension. The
     # file_analyzer_formats dispatcher doesn't have an EML branch yet, so
     # for the moment this just stops the EML from being misrouted as
-    # `binary` (which produced empty format_specific) or — after my
-    # fall-through ASCII heuristic — as `source_code` (which double-
+    # `binary` (which produced empty format_specific) or - after my
+    # fall-through ASCII heuristic - as `source_code` (which double-
     # labelled and bypassed the IOC-extraction-on-headers path). Once a
     # dedicated EML analyzer lands it'll hook on `email`.
     if "rfc822" in mime or ext == "eml":
@@ -320,7 +320,7 @@ def _all_hashes(b: bytes) -> Dict:
         "sha256": hashlib.sha256(b).hexdigest(),
         "sha512": hashlib.sha512(b).hexdigest(),
     }
-    # TLSH (cross-platform fuzzy hash) — gracefully skip if not installed
+    # TLSH (cross-platform fuzzy hash) - gracefully skip if not installed
     try:
         import tlsh
         h = tlsh.hash(b)
@@ -328,7 +328,7 @@ def _all_hashes(b: bytes) -> Dict:
             out["tlsh"] = h
     except Exception:
         out["tlsh"] = None
-    # ssdeep — also optional (Windows wheels are flaky)
+    # ssdeep - also optional (Windows wheels are flaky)
     try:
         import ssdeep
         out["ssdeep"] = ssdeep.hash(b)
@@ -351,7 +351,7 @@ def _entropy_analysis(b: bytes, window: int = 4096) -> Dict:
         return {"overall": 0.0, "band": "empty", "windows": [], "flag": None}
     overall = _shannon_entropy(b)
     band, flag = _entropy_band(overall)
-    # Per-window for visualization — cap at 256 windows for big files
+    # Per-window for visualization - cap at 256 windows for big files
     step = max(window, len(b) // 256 if len(b) > window * 256 else window)
     windows = []
     for off in range(0, len(b), step):
@@ -376,7 +376,7 @@ def _entropy_band(e: float) -> Tuple[str, Optional[str]]:
 # ─── strings ───────────────────────────────────────────────────────────────────
 _PRINTABLE = set(range(0x20, 0x7F))
 # Cache compiled extractors per min_len. Matching with a C-level regex over the
-# raw bytes is orders of magnitude faster than a Python byte-by-byte loop — the
+# raw bytes is orders of magnitude faster than a Python byte-by-byte loop - the
 # difference is seconds on a 50 MB sample. Output is identical: runs of printable
 # ASCII (≥ min_len), and UTF-16LE runs (printable byte followed by a NUL).
 _STRING_RES: Dict[int, Tuple] = {}
@@ -393,7 +393,7 @@ def _string_extractors(min_len: int):
 
 
 def _extract_strings(b: bytes, min_len: int = 6) -> Dict:
-    """Returns {ascii, unicode, total} — capped lists."""
+    """Returns {ascii, unicode, total} - capped lists."""
     ascii_re, utf16_re = _string_extractors(min_len)
 
     ascii_matches = ascii_re.findall(b)
@@ -401,7 +401,7 @@ def _extract_strings(b: bytes, min_len: int = 6) -> Dict:
 
     # Decode only the strings we actually keep (after the cap), not every match.
     ascii_hits = [m.decode("ascii", "replace") for m in ascii_matches[:3000]]
-    # UTF-16LE match is interleaved with NUL bytes — take every other byte.
+    # UTF-16LE match is interleaved with NUL bytes - take every other byte.
     uni_hits = [m[::2].decode("ascii", "replace") for m in utf16_matches[:1500]]
 
     return {
@@ -415,7 +415,7 @@ def _extract_strings(b: bytes, min_len: int = 6) -> Dict:
 _RE_IP     = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 _RE_DOMAIN = re.compile(r"\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,24}\b")
 # URL regex: scheme + RFC 3986 unreserved + sub-delims + reserved character
-# set. The earlier `[^\s'\"<>]` was too permissive — on a PE binary it
+# set. The earlier `[^\s'\"<>]` was too permissive - on a PE binary it
 # extracted URLs like `http://ocsp.digicert.com0A` / `0C` / `0X` because the
 # DER-encoded ASN.1 length+tag bytes immediately following the OCSP URL
 # happen to be printable ASCII characters that pass `[^\s'\"<>]`. Restrict
@@ -433,14 +433,14 @@ _RE_PATH   = re.compile(r"(?:[a-zA-Z]:\\|\\\\|/usr/|/etc/|/var/|/home/|%APPDATA%
 _RE_B64    = re.compile(r"\b[A-Za-z0-9+/]{40,}={0,2}\b")
 _RE_HEX    = re.compile(r"\b(?:[0-9a-fA-F]{2}){16,}\b")
 
-# Noise patterns that flood IOC extraction from binaries — drop these
+# Noise patterns that flood IOC extraction from binaries - drop these
 _IOC_NOISE_DOMAINS = {
     "microsoft.com", "windows.com", "schemas.microsoft.com",
     "schemas.openxmlformats.org", "schemas.xmlsoap.org", "w3.org",
     "example.com", "github.com",
 }
 
-# Filename extensions the domain regex catches as `something.exe` etc. — never
+# Filename extensions the domain regex catches as `something.exe` etc. - never
 # real domains, almost always library / executable references.
 _NON_DOMAIN_TLDS = {
     "exe", "dll", "sys", "bat", "cmd", "ps1", "vbs", "js", "py", "sh", "pdb",
@@ -451,7 +451,7 @@ _NON_DOMAIN_TLDS = {
 
 def _is_noise_domain(d: str) -> bool:
     d = d.lower()
-    # filename-shaped — last segment is an executable / library extension
+    # filename-shaped - last segment is an executable / library extension
     tld = d.rsplit(".", 1)[-1] if "." in d else ""
     if tld in _NON_DOMAIN_TLDS:
         return True
@@ -465,14 +465,14 @@ def _is_noise_domain(d: str) -> bool:
 
 def _is_version_shaped_ip(ip: str) -> bool:
     """True for dotted-quads that look like Windows / .NET version strings
-    rather than IPs. PE binaries are loaded with these — `6.0.0.0`,
-    `10.0.19041.0`, `5.1.2600.0`, `4.0.30319.0`, `1.0.0.0` — and the
+    rather than IPs. PE binaries are loaded with these - `6.0.0.0`,
+    `10.0.19041.0`, `5.1.2600.0`, `4.0.30319.0`, `1.0.0.0` - and the
     existing prefix filter (`0.`, `127.`, `169.254.`) doesn't catch them.
 
     Two heuristics:
-      1. Trailing `.0` AND middle `.0.` — `X.0.Y.0` is overwhelmingly a
+      1. Trailing `.0` AND middle `.0.` - `X.0.Y.0` is overwhelmingly a
          build-number, not a host. Catches 6.0.0.0, 5.0.0.0, 1.0.0.0.
-      2. Any octet > 255 — guaranteed not an IPv4 address. Catches the
+      2. Any octet > 255 - guaranteed not an IPv4 address. Catches the
          four-part Defender signature versions like 1.451.195.0 that
          iocextract / iocextract-style scans pick up. Same protection
          the triage agent's _valid_ipv4_octets already enforces.
@@ -486,7 +486,7 @@ def _is_version_shaped_ip(ip: str) -> bool:
         return True
     if any(o > 255 for o in octets):
         return True
-    # X.0.Y.0 pattern — overwhelmingly version-shaped on PE binaries
+    # X.0.Y.0 pattern - overwhelmingly version-shaped on PE binaries
     if octets[1] == 0 and octets[3] == 0:
         return True
     return False
@@ -496,7 +496,7 @@ def _is_valid_url_netloc(url: str) -> bool:
     """Strip trailing junk that slipped past the (now tighter) URL regex.
 
     PE binaries embed OCSP URLs immediately followed by DER ASN.1 length
-    + tag bytes that often spell printable ASCII — extracting
+    + tag bytes that often spell printable ASCII - extracting
     `http://ocsp.digicert.com0A` from a binary where the next bytes are
     `0x30 0x0A` for example. Even with the regex tightened, URLs ending
     in junk-suffix that doesn't fit URL grammar are almost certainly
@@ -550,9 +550,9 @@ def _extract_iocs_from_text(text: str) -> Dict[str, List[str]]:
 
 
 def _printable_ascii_ratio(s: str) -> float:
-    """Fraction of characters that are printable ASCII (0x20–0x7E) or common
+    """Fraction of characters that are printable ASCII (0x20-0x7E) or common
     whitespace (tab / newline / carriage-return). CJK and other non-ASCII code
-    points count as non-printable — that's what keeps mojibake out."""
+    points count as non-printable - that's what keeps mojibake out."""
     if not s:
         return 0.0
     ok = sum(1 for c in s if 0x20 <= ord(c) <= 0x7E or c in "\t\n\r")
@@ -575,8 +575,8 @@ def _render_decoded_bytes(raw: bytes) -> Optional[Tuple[str, Optional[str]]]:
     """Decide how to present a chunk of decoded bytes.
 
     Returns ``(display, scan_text)`` where:
-      • ``display``   — what the UI shows for this payload.
-      • ``scan_text`` — text to feed back into IOC extraction, or ``None``.
+      • ``display``   - what the UI shows for this payload.
+      • ``scan_text`` - text to feed back into IOC extraction, or ``None``.
 
     If the bytes decode to mostly-printable-ASCII text (>90%) we show the text
     and scan it for IOCs. Otherwise the content is binary: we show a "binary
@@ -599,13 +599,13 @@ def _render_decoded_bytes(raw: bytes) -> Optional[Tuple[str, Optional[str]]]:
             return text[:800], text[:800]
     # Non-printable → binary. Show a hex dump rather than garbled text.
     shown = min(len(raw), 64)
-    banner = f"[binary content detected — {len(raw)} bytes, showing first {shown}]"
+    banner = f"[binary content detected - {len(raw)} bytes, showing first {shown}]"
     return f"{banner}\n{_hex_dump(raw, 64)}", None
 
 
 def _decode_base64_candidates(text: str, max_decodes: int = 25) -> List[Tuple[str, Optional[str]]]:
     """base64-decode each long-enough b64-shaped run. Each element is
-    ``(display, scan_text)`` from :func:`_render_decoded_bytes` — printable
+    ``(display, scan_text)`` from :func:`_render_decoded_bytes` - printable
     payloads render as text, binary payloads render as a hex dump."""
     out: List[Tuple[str, Optional[str]]] = []
     for m in _RE_B64.findall(text)[:max_decodes]:
@@ -636,7 +636,7 @@ def _decode_hex_candidates(text: str, max_decodes: int = 10) -> List[Tuple[str, 
 def _joined_strings(strings_dict: Dict) -> str:
     """Concatenate every extracted string into one corpus for regex scans.
     Cached on the dict via a sentinel key so _all_iocs and
-    _suspicious_string_hits don't each pay the join cost — the joined
+    _suspicious_string_hits don't each pay the join cost - the joined
     string for a 50 MB sample can be hundreds of KB, doubled when the
     pipeline calls both consumers in sequence."""
     cached = strings_dict.get("_joined_cache")
@@ -654,7 +654,7 @@ def _all_iocs(strings_dict: Dict) -> Dict:
 
     decoded = _decode_base64_candidates(joined) + _decode_hex_candidates(joined)
     if decoded:
-        # Only re-scan the genuinely-decoded *text* for IOCs — never the binary
+        # Only re-scan the genuinely-decoded *text* for IOCs - never the binary
         # hex-dump banners (their hex/ASCII gutter would create phantom IOCs).
         scan_text = "\n".join(t for _, t in decoded if t)
         if scan_text:
@@ -690,7 +690,7 @@ _SUSPICIOUS_PATTERNS = [
 # PE imports.
 _SOURCE_PATTERNS = [
     # VirtualAlloc / VirtualAllocEx with PAGE_EXECUTE_READWRITE protection
-    # — the classic RWX shellcode allocator. The DOTALL match lets the
+    # - the classic RWX shellcode allocator. The DOTALL match lets the
     # protection constant sit on the next line from the call.
     ("src_virtualalloc_rwx",   re.compile(
         r"VirtualAlloc(?:Ex)?\b[^;{}]*PAGE_EXECUTE_READWRITE", re.IGNORECASE | re.DOTALL)),
@@ -711,12 +711,12 @@ _SOURCE_PATTERNS = [
         r"urlretrieve\(|requests\.get\(|http\.Get\(|"
         r"\bcurl\s+[-a-zA-Z0-9]*\s*['\"]?https?://|\bwget\s+['\"]?https?://",
         re.IGNORECASE)),
-    # Nim + winim — Nim's Windows API binding pulled into a source file
+    # Nim + winim - Nim's Windows API binding pulled into a source file
     # is a strong "this targets Windows internals" signal. Not malicious
     # on its own but raises the prior on shellcode patterns.
     ("src_nim_winim",          re.compile(
         r"^\s*import\s+winim\b|^\s*import\s+winim/", re.IGNORECASE | re.MULTILINE)),
-    # PowerShell IEX cradle — Invoke-Expression on a DownloadString result
+    # PowerShell IEX cradle - Invoke-Expression on a DownloadString result
     # is the canonical `iex (New-Object Net.WebClient).DownloadString(...)`
     # download-and-execute payload.
     ("src_ps_iex_download",    re.compile(
@@ -726,21 +726,21 @@ _SOURCE_PATTERNS = [
     # signal when paired with base64 decoding (next pattern).
     ("src_py_subprocess",      re.compile(
         r"\bsubprocess\.(?:Popen|run|call|check_output|check_call)\b", re.IGNORECASE)),
-    # Python base64 decode. Same — benign alone, malicious when paired
+    # Python base64 decode. Same - benign alone, malicious when paired
     # with subprocess execution of the decoded payload.
     ("src_py_b64_decode",      re.compile(
         r"\bbase64\.(?:b64decode|standard_b64decode|urlsafe_b64decode)\b",
         re.IGNORECASE)),
-    # ctypes-loaded WinAPI + memory-protection constants — Python loader
+    # ctypes-loaded WinAPI + memory-protection constants - Python loader
     # shape (ctypes.windll.kernel32.VirtualAlloc + RWX).
     ("src_py_ctypes_winapi",   re.compile(
         r"ctypes\.windll\.kernel32\.|ctypes\.WINFUNCTYPE\b", re.IGNORECASE)),
-    # C / C++ low-level memory + thread primitives — same loader shape
+    # C / C++ low-level memory + thread primitives - same loader shape
     # without language-specific framing.
     ("src_memcpy_rwx",         re.compile(
         r"\b(?:memcpy|RtlCopyMemory|copyMem)\b[^;]{0,80}\bPAGE_EXECUTE",
         re.IGNORECASE | re.DOTALL)),
-    # Inline-assembly markers — strong signal a source file embeds shellcode.
+    # Inline-assembly markers - strong signal a source file embeds shellcode.
     ("src_inline_asm",         re.compile(
         r"\b__asm__\b|\b__asm\b|\basm\s*\(", re.IGNORECASE)),
 ]
@@ -755,7 +755,7 @@ def _suspicious_string_hits(strings_dict: Dict, source_code: bool = False) -> Li
             hits.append({"pattern": name, "match": m.group(0)[:140]})
     # Source-code patterns run unconditionally on text/source files. They're
     # specific enough (RWX VirtualAlloc, IEX DownloadString, ctypes.windll,
-    # …) that false positives on real binaries are vanishingly rare — but
+    # …) that false positives on real binaries are vanishingly rare - but
     # we still gate on source_code so we don't pay the regex cost on big
     # PE blobs.
     if source_code:
@@ -769,7 +769,7 @@ def _suspicious_string_hits(strings_dict: Dict, source_code: bool = False) -> Li
 # ─── public entry point ────────────────────────────────────────────────────────
 def _capa_eligible(type_info: Dict, size: int) -> bool:
     """capa supports PE (incl. .NET), ELF, and raw shellcode. Skip
-    everything else (PDF, Office, scripts, archives, source code) — capa
+    everything else (PDF, Office, scripts, archives, source code) - capa
     will just print 'unsupported' and waste ~500ms on subprocess spawn.
     Also gate on a minimum size so capa isn't invoked on truncated stubs."""
     if size < 1024:
@@ -779,7 +779,7 @@ def _capa_eligible(type_info: Dict, size: int) -> bool:
     mime = (type_info.get("detected_mime") or "").lower()
     cat  = (type_info.get("category") or "").lower()
     desc = (type_info.get("detected_desc") or "").lower()
-    # Positive matches first — anything that smells like PE / ELF / .NET.
+    # Positive matches first - anything that smells like PE / ELF / .NET.
     if any(s in mime for s in ("x-executable", "x-dosexec", "x-msdownload",
                                "x-pe", "x-elf", "x-sharedlib", "x-mach-binary")):
         return True
@@ -792,7 +792,7 @@ def _capa_eligible(type_info: Dict, size: int) -> bool:
 
 
 def analyze_file(file_bytes: bytes, filename: str = "uploaded") -> Dict:
-    """Synchronous static analysis — TI correlation runs separately (needs aiohttp).
+    """Synchronous static analysis - TI correlation runs separately (needs aiohttp).
 
     Returns a dict with these top-level keys:
       filename, size, analyzed_at,
@@ -828,14 +828,14 @@ def analyze_file(file_bytes: bytes, filename: str = "uploaded") -> Dict:
         if lang == "Source Code":
             file_type_label = "source code"
             file_type_banner = (
-                "Source code detected — performing static code analysis "
+                "Source code detected - performing static code analysis "
                 "(string patterns, hardcoded IOCs, dangerous API "
                 "combinations) rather than PE / ELF byte analysis."
             )
         else:
             file_type_label = f"{lang} source code"
             file_type_banner = (
-                f"{lang} source code detected — performing static code "
+                f"{lang} source code detected - performing static code "
                 f"analysis (string patterns, hardcoded IOCs, dangerous API "
                 f"combinations) rather than PE / ELF byte analysis."
             )
@@ -859,7 +859,7 @@ def analyze_file(file_bytes: bytes, filename: str = "uploaded") -> Dict:
         "strings":            {
             "ascii_count":   len(strings.get("ascii", [])),
             "unicode_count": len(strings.get("unicode", [])),
-            # Send a sample only — full lists go in dedicated endpoint
+            # Send a sample only - full lists go in dedicated endpoint
             "ascii_sample":  strings.get("ascii", [])[:300],
             "unicode_sample": strings.get("unicode", [])[:200],
         },
@@ -899,7 +899,7 @@ def analyze_file(file_bytes: bytes, filename: str = "uploaded") -> Dict:
     except Exception as e:
         result["capabilities"] = {"error": str(e)}
 
-    # FLARE capa — 5-30s subprocess per PE. Off by default for speed;
+    # FLARE capa - 5-30s subprocess per PE. Off by default for speed;
     # operator flips RECON_ENABLE_CAPA=1 in Settings for deep static
     # analysis when they want capability tagging on every uploaded
     # binary. The rules-based file_capability_map already produces a
@@ -966,7 +966,7 @@ def _synthesize_verdict(result: Dict) -> Tuple[str, int]:
     score = min(100, score)
     # Capability MALICIOUS already encodes the holistic high-signal read
     # (T1055 / T1003 / T1486 etc. via the file_capability_map elevator).
-    # Trust it directly — the per-signal score above only adds
+    # Trust it directly - the per-signal score above only adds
     # corroboration; it should not contradict the capability verdict by
     # downgrading to SUSPICIOUS just because YARA didn't match a known-
     # malware rule (modern source-code loaders / commodity payloads
@@ -977,7 +977,7 @@ def _synthesize_verdict(result: Dict) -> Tuple[str, int]:
 
     # Authenticode-signed binaries that didn't trip the capability map's
     # MALICIOUS elevator are very rarely real malware. The previous code
-    # path could land at MALICIOUS purely from raw YARA match count — a
+    # path could land at MALICIOUS purely from raw YARA match count - a
     # legitimate signed `python.exe` matched 17 generic PE-characteristic
     # rules (`IsPE64`, `HasOverlay`, `HasRichSignature`, `anti_dbg`, ...)
     # which alone contributed 70 points and forced MALICIOUS at the >= 75

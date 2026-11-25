@@ -4,27 +4,27 @@ Known-good software pattern library.
 Curated patterns for legitimate enterprise software whose behaviour
 LOOKS unusual in isolation but is completely normal in context. Used
 by the investigation pipeline to apply the "innocent until proven
-guilty" standard — when a process / path / parent / command line
+guilty" standard - when a process / path / parent / command line
 matches a known-good pattern, the AI is explicitly told and weighs
 that context heavily in its threat-level assessment.
 
 The catalogue covers:
-  * OEM maintenance tools — Dell SupportAssist, HP Support Assistant,
+  * OEM maintenance tools - Dell SupportAssist, HP Support Assistant,
     Lenovo Vantage, etc.
-  * Microsoft built-in maintenance — Defender, Windows Update, MoUSO,
+  * Microsoft built-in maintenance - Defender, Windows Update, MoUSO,
     sfc, dism, reg.exe administrative use.
-  * Endpoint security — CrowdStrike Falcon, Carbon Black, Microsoft
+  * Endpoint security - CrowdStrike Falcon, Carbon Black, Microsoft
     Defender for Endpoint, SentinelOne, Cortex XDR, Sophos, ESET.
-  * Management / deployment — SCCM (CcmExec), Intune (IntuneManagement
+  * Management / deployment - SCCM (CcmExec), Intune (IntuneManagement
     Extension), Tanium, BigFix, Jamf, Splunk forwarders, NinjaOne,
     Datto RMM, Atera.
-  * Backup / recovery — Veeam, Rubrik, Cohesity, CommVault.
-  * Browser / vendor auto-update — Chrome, Edge, Firefox, Adobe,
+  * Backup / recovery - Veeam, Rubrik, Cohesity, CommVault.
+  * Browser / vendor auto-update - Chrome, Edge, Firefox, Adobe,
     Java, Zoom updaters.
 
 `match(context)` evaluates all rules against a context dict and returns
 a list of human-readable hits the AI prompt can quote. The structure
-is conservative — every pattern requires multiple corroborating fields
+is conservative - every pattern requires multiple corroborating fields
 when one would be ambiguous (a path alone isn't enough; the process
 plus the path plus the parent build evidence).
 """
@@ -42,12 +42,12 @@ from typing import Any, Dict, List, Tuple
 #   {
 #     "vendor":            "Dell",
 #     "product":           "SupportAssist",
-#     "process":           [regex, ...],   # optional — basename of the process exe
-#     "parent_process":    [regex, ...],   # optional — basename of the parent
-#     "path":              [regex, ...],   # optional — process full path
-#     "command_line":      [regex, ...],   # optional — substring/regex of cmdline
-#     "destination_path":  [regex, ...],   # optional — files written / output paths
-#     "user_context":      [regex, ...],   # optional — running user (e.g. SYSTEM)
+#     "process":           [regex, ...],   # optional - basename of the process exe
+#     "parent_process":    [regex, ...],   # optional - basename of the parent
+#     "path":              [regex, ...],   # optional - process full path
+#     "command_line":      [regex, ...],   # optional - substring/regex of cmdline
+#     "destination_path":  [regex, ...],   # optional - files written / output paths
+#     "user_context":      [regex, ...],   # optional - running user (e.g. SYSTEM)
 #     "category":          "oem_maintenance",
 #     "rationale":         "<one-line why-this-is-normal>",
 #   }
@@ -68,7 +68,7 @@ _KNOWN_GOOD: List[Dict[str, Any]] = [
         "category": "oem_maintenance",
         "rationale": "Dell SupportAssist runs scheduled diagnostics that export "
                      "system state (registry, firewall, drivers) to its own "
-                     "ProgramData directory for support ticket bundling — normal "
+                     "ProgramData directory for support ticket bundling - normal "
                      "vendor maintenance, not data exfiltration.",
     },
     {
@@ -98,7 +98,7 @@ _KNOWN_GOOD: List[Dict[str, Any]] = [
         "rationale": "reg.exe export/query/save under SYSTEM is the standard way "
                      "Windows administrative tools and vendor installers snapshot "
                      "registry state for backup, troubleshooting, or transfer. "
-                     "Not inherently suspicious — context (target hive, "
+                     "Not inherently suspicious - context (target hive, "
                      "destination path) determines intent.",
     },
     {
@@ -112,7 +112,7 @@ _KNOWN_GOOD: List[Dict[str, Any]] = [
         "category": "endpoint_security",
         "rationale": "Microsoft Defender / Defender for Endpoint runs as SYSTEM "
                      "and performs many actions that look unusual in isolation "
-                     "(LSASS access, registry queries, process inspection) — "
+                     "(LSASS access, registry queries, process inspection) - "
                      "those are its intended security functions.",
     },
     {
@@ -133,7 +133,7 @@ _KNOWN_GOOD: List[Dict[str, Any]] = [
         "category": "management_tools",
         "rationale": "PowerShell running as SYSTEM under a management agent "
                      "(SCCM, Intune, Tanium, MDE) is how those platforms execute "
-                     "their playbooks — the parent process establishes the intent.",
+                     "their playbooks - the parent process establishes the intent.",
     },
 
     # ── ENDPOINT SECURITY ──────────────────────────────────────────────────────
@@ -152,7 +152,7 @@ _KNOWN_GOOD: List[Dict[str, Any]] = [
         "process":           [r"\\carbonblack", r"\\cb\.exe$", r"\\repmgr\.exe$"],
         "path":              [r"\\carbonblack\\", r"\\confer\\"],
         "category": "endpoint_security",
-        "rationale": "Carbon Black EDR — privileged process / file inspection "
+        "rationale": "Carbon Black EDR - privileged process / file inspection "
                      "is its intended behaviour.",
     },
     {
@@ -160,7 +160,7 @@ _KNOWN_GOOD: List[Dict[str, Any]] = [
         "process":           [r"\\sentinelagent\.exe$", r"\\sentinelone"],
         "path":              [r"\\sentinelone\\", r"\\sentinel agent\\"],
         "category": "endpoint_security",
-        "rationale": "SentinelOne agent — endpoint security operations.",
+        "rationale": "SentinelOne agent - endpoint security operations.",
     },
     {
         "vendor": "Palo Alto", "product": "Cortex XDR",
@@ -193,7 +193,7 @@ _KNOWN_GOOD: List[Dict[str, Any]] = [
         "path":              [r"\\windows\\ccm\\", r"\\windows\\ccmcache\\",
                               r"\\windows\\ccmsetup\\"],
         "category": "management_tools",
-        "rationale": "Microsoft Endpoint Configuration Manager (SCCM) — software "
+        "rationale": "Microsoft Endpoint Configuration Manager (SCCM) - software "
                      "deployment, patching, and policy enforcement.",
     },
     {
@@ -202,7 +202,7 @@ _KNOWN_GOOD: List[Dict[str, Any]] = [
                               r"\\microsoft\.management\.services"],
         "path":              [r"\\program files \(x86\)\\microsoft intune management extension\\"],
         "category": "management_tools",
-        "rationale": "Intune device management — application deployment, policy "
+        "rationale": "Intune device management - application deployment, policy "
                      "enforcement, configuration tasks.",
     },
     {
@@ -248,7 +248,7 @@ _KNOWN_GOOD: List[Dict[str, Any]] = [
         "rationale": "msiexec.exe installing or removing an .msi package is "
                      "the standard Windows software deployment mechanism. "
                      "Treat as legitimate UNLESS the package is unsigned OR "
-                     "the publisher is unknown / malicious — verify Authenticode "
+                     "the publisher is unknown / malicious - verify Authenticode "
                      "signature before flagging.",
     },
     {
@@ -263,7 +263,7 @@ _KNOWN_GOOD: List[Dict[str, Any]] = [
                      "directories (AppData\\Local\\Microsoft, "
                      "SoftwareDistribution, CCMcache, catroot2) is by-product "
                      "of normal Windows / SCCM / Intune operation and is not "
-                     "in itself suspicious — additional corroborating evidence "
+                     "in itself suspicious - additional corroborating evidence "
                      "(unknown publisher, unusual parent process, network "
                      "egress to suspicious IP) is required to flag.",
     },
@@ -291,7 +291,7 @@ _KNOWN_GOOD: List[Dict[str, Any]] = [
         "path":              [r"\\program files\\veeam\\"],
         "category": "backup_tools",
         "rationale": "Veeam moves large volumes of data and accesses VSS / "
-                     "system files — that's its job.",
+                     "system files - that's its job.",
     },
     {
         "vendor": "Rubrik", "product": "Connector",
@@ -310,7 +310,7 @@ _KNOWN_GOOD: List[Dict[str, Any]] = [
                               r"\\program files\\google\\chrome\\"],
         "parent_process":    [r"\\msiexec\.exe$"],
         "category": "vendor_updater",
-        "rationale": "Google Chrome / Update — auto-update writes to ProgramData "
+        "rationale": "Google Chrome / Update - auto-update writes to ProgramData "
                      "and modifies install directory under msiexec.",
     },
     {
@@ -319,7 +319,7 @@ _KNOWN_GOOD: List[Dict[str, Any]] = [
         "path":              [r"\\program files \(x86\)\\microsoft\\edge\\",
                               r"\\program files \(x86\)\\microsoft\\edgeupdate\\"],
         "category": "vendor_updater",
-        "rationale": "Microsoft Edge / Edge Update — same pattern as Chrome.",
+        "rationale": "Microsoft Edge / Edge Update - same pattern as Chrome.",
     },
     {
         "vendor": "Mozilla", "product": "Firefox / Update",
@@ -342,7 +342,7 @@ _KNOWN_GOOD: List[Dict[str, Any]] = [
         "process":           [r"\\zoom\.exe$", r"\\zoomupdate", r"\\zoom_launcher"],
         "path":              [r"\\appdata\\roaming\\zoom\\"],
         "category": "vendor_updater",
-        "rationale": "Zoom auto-update / launcher — writes to AppData\\Roaming "
+        "rationale": "Zoom auto-update / launcher - writes to AppData\\Roaming "
                      "as part of its user-mode update model.",
     },
 ]
@@ -393,12 +393,12 @@ def match(context: Dict[str, str]) -> List[Dict[str, Any]]:
     """Evaluate every rule against `context` and return the list of hits.
 
     Context fields the matcher understands (all optional):
-      * process          — process basename (e.g. "reg.exe")
-      * parent_process   — parent process basename
-      * path             — full process image path
-      * command_line     — full command line
-      * destination_path — files written / output paths
-      * user_context     — running user (e.g. "NT AUTHORITY\\SYSTEM")
+      * process          - process basename (e.g. "reg.exe")
+      * parent_process   - parent process basename
+      * path             - full process image path
+      * command_line     - full command line
+      * destination_path - files written / output paths
+      * user_context     - running user (e.g. "NT AUTHORITY\\SYSTEM")
     """
     hits: List[Dict[str, Any]] = []
     if not context:
@@ -413,13 +413,13 @@ def match(context: Dict[str, str]) -> List[Dict[str, Any]]:
 def extract_context_from_state(state: Dict[str, Any]) -> Dict[str, str]:
     """Pull the fields known_good.match() cares about out of the
     LangGraph state. Returns an empty-ish dict when nothing is parseable
-    — that's a normal outcome for IOC-only inputs.
+    - that's a normal outcome for IOC-only inputs.
 
     Looks in:
-      * state["behavioral_indicators"] — process / parent / command_line
+      * state["behavioral_indicators"] - process / parent / command_line
         extracted by intel.behavior_extractor
-      * state["iocs"]["paths"]         — file paths the regex picked up
-      * raw_input                       — regex over the text itself for
+      * state["iocs"]["paths"]         - file paths the regex picked up
+      * raw_input                       - regex over the text itself for
         common path / user patterns the structured extractor missed
     """
     out: Dict[str, str] = {
@@ -428,7 +428,7 @@ def extract_context_from_state(state: Dict[str, Any]) -> Dict[str, str]:
     }
     raw = state.get("raw_input") or ""
 
-    # Process / parent / command-line — look for canonical Windows log
+    # Process / parent / command-line - look for canonical Windows log
     # field formats. The behavior_extractor lifts MITRE indicators but
     # not these flat fields, so regex over the raw text is the safest
     # source.
@@ -443,12 +443,12 @@ def extract_context_from_state(state: Dict[str, Any]) -> Dict[str, str]:
     m = re.search(r"(?:user|account[_ ]?name|subject[_ ]?user[_ ]?name)\s*[:=]\s*([^\s,;|]+)", raw, re.IGNORECASE)
     if m: out["user_context"] = m.group(1).strip().strip('"\'')
 
-    # Destination paths — the IOC extractor picks them up generically.
+    # Destination paths - the IOC extractor picks them up generically.
     paths = (state.get("iocs") or {}).get("paths") or []
     if paths:
         out["destination_path"] = " | ".join(str(p) for p in paths[:8])
 
-    # SYSTEM-context shorthand — appears in many EDR log formats.
+    # SYSTEM-context shorthand - appears in many EDR log formats.
     if "nt authority\\system" in raw.lower() or " system " in raw.lower():
         out["user_context"] = out["user_context"] or "NT AUTHORITY\\SYSTEM"
 

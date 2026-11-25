@@ -93,7 +93,7 @@ def test_descriptors_serialise_cleanly():
 # ─── AnalysisResult wrapping ───────────────────────────────────────────────
 
 def test_from_legacy_dict_handles_empty():
-    """Empty/None legacy returns map to found=False — a bare {} means
+    """Empty/None legacy returns map to found=False - a bare {} means
     the upstream module had nothing to say, not that it succeeded.
     This matters because many legacy intel/*.py modules short-circuit
     with return None on no-data; the wrapper boxes that to {} before
@@ -107,7 +107,7 @@ def test_from_legacy_dict_handles_empty():
 
 def test_from_legacy_dict_content_dict_is_found():
     """A dict with any real content (keys beyond the reserved set)
-    counts as a hit — the common 'module returned enrichment' path."""
+    counts as a hit - the common 'module returned enrichment' path."""
     from plugins.data_models import AnalysisResult
     r = AnalysisResult.from_legacy_dict(
         {"source": "foo", "country": "US", "org": "ExampleCorp"},

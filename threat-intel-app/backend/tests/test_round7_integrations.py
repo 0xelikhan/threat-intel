@@ -45,7 +45,7 @@ def test_firehol_handles_missing_corpus():
 # ─── Cloud provider IP ranges ───────────────────────────────────────────────
 def test_cloud_ip_ranges_returns_none_when_not_loaded():
     from intel.cloud_ip_ranges import lookup
-    # Feed isn't fetched in tests — lookup should return None gracefully
+    # Feed isn't fetched in tests - lookup should return None gracefully
     assert lookup("198.51.100.1") is None or isinstance(
         lookup("198.51.100.1"), dict
     )
@@ -265,7 +265,7 @@ def test_etw_providers_via_fallback():
     assert any("Security-Auditing" in p["name"] for p in provs)
 
 
-# ─── Unified match_detections — now spans 11 corpora ────────────────────────
+# ─── Unified match_detections - now spans 11 corpora ────────────────────────
 def test_match_detections_returns_eleven_source_keys():
     from skills import run_skill
     out = asyncio.run(run_skill("match_detections", {

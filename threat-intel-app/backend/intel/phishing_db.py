@@ -1,10 +1,10 @@
 """
-mitchellkrogza/Phishing.Database — live phishing-domain feed.
+mitchellkrogza/Phishing.Database - live phishing-domain feed.
 
 Source: https://github.com/mitchellkrogza/Phishing.Database (MIT). The
 repo publishes hourly-refreshed text files of validated phishing
-domains. We poll the `ACTIVE` list — domains confirmed to currently
-resolve to phishing infrastructure by PyFunceble — and keep an
+domains. We poll the `ACTIVE` list - domains confirmed to currently
+resolve to phishing infrastructure by PyFunceble - and keep an
 in-memory set.
 
 Triage's domain branch calls `is_known_phish(domain)` so a hit lifts
@@ -14,7 +14,7 @@ The feed is poll-once-then-cache for an hour. We use the existing
 `intel.cache` TTLCache namespace so refreshes happen on the same
 cadence as other live TI sources. The fetch goes through the shared
 `agents/enrichment._get` helper so it inherits the per-host circuit
-breaker — a GitHub outage can't stall triage.
+breaker - a GitHub outage can't stall triage.
 """
 
 from __future__ import annotations
@@ -26,12 +26,12 @@ from typing import Any, Dict, Optional, Set
 
 _log = logging.getLogger("recon.intel.phishing_db")
 
-# Phishing-domain feeds. Domains union from both sources — diversity
+# Phishing-domain feeds. Domains union from both sources - diversity
 # matters because Phishing.Database and OpenPhish ingest different
 # upstream submissions, so each catches what the other misses.
 _FEED_URL = ("https://raw.githubusercontent.com/mitchellkrogza/"
              "Phishing.Database/master/phishing-domains-ACTIVE.txt")
-# OpenPhish community feed — free, no key. Lines are full URLs; we
+# OpenPhish community feed - free, no key. Lines are full URLs; we
 # extract the host portion to match the in-memory set.
 _OPENPHISH_URL = "https://openphish.com/feed.txt"
 
@@ -88,12 +88,12 @@ def _extract_host(line: str) -> str:
 
 async def _refresh(session) -> None:
     """Fetch BOTH the Phishing.Database ACTIVE list and the OpenPhish
-    community feed; union the host set. Either feed failing is fine —
+    community feed; union the host set. Either feed failing is fine  - 
     we keep whatever we got."""
     domains: Set[str] = set()
     sources_loaded: int = 0
 
-    # Phishing.Database — mitchellkrogza, hourly-refreshed validated set
+    # Phishing.Database - mitchellkrogza, hourly-refreshed validated set
     try:
         text = await _fetch_text(session, _FEED_URL)
         if text:
@@ -105,7 +105,7 @@ async def _refresh(session) -> None:
     except Exception as e:
         _log.debug("phishing_db: Phishing.Database fetch failed: %s", e)
 
-    # OpenPhish community feed — independent submissions
+    # OpenPhish community feed - independent submissions
     try:
         text = await _fetch_text(session, _OPENPHISH_URL)
         if text:
@@ -131,7 +131,7 @@ async def _refresh(session) -> None:
 async def ensure_loaded(session) -> None:
     """Lifespan-warmable + per-call idempotent loader. The lifespan
     handler can fire-and-forget a single call at startup, and triage
-    can keep calling it — only the first within the TTL window does
+    can keep calling it - only the first within the TTL window does
     actual work."""
     async with _LOAD_LOCK:
         age = time.time() - _state["loaded_at"]

@@ -1,4 +1,4 @@
-"""Androguard — Android APK static analysis.
+"""Androguard - Android APK static analysis.
 
 Package name, main activity, permissions, requested intents, DEX
 summary. Reverses the package of IntelOwl's Androguard analyzer
@@ -35,7 +35,7 @@ _DANGEROUS = {
 
 class AndroguardApkAnalyzer(FileAnalyzer):
     name = "androguard_apk"
-    description = ("Androguard — static APK analysis: package name, "
+    description = ("Androguard - static APK analysis: package name, "
                    "activity, permissions, intents, DEX summary.")
     supported_file_types = ["apk"]
     max_file_size = 100 * 1024 * 1024

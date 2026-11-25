@@ -31,7 +31,7 @@ _PSL_FILE = (Path(__file__).parent.parent.parent
              / "vendor" / "publicsuffix" / "list.dat")
 
 # Built-in fallback covers the highest-traffic suffixes RECON sees in
-# practice — the operator can drop the full list at the path above for
+# practice - the operator can drop the full list at the path above for
 # accuracy on rarer TLDs.
 _FALLBACK_SUFFIXES: Set[str] = {
     # 2-label IANA-style suffixes
@@ -61,13 +61,13 @@ _FALLBACK_SUFFIXES: Set[str] = {
     "cdn.cloudflare.net", "akamaitechnologies.com",
 }
 
-# Exception rules (PSL "!" prefix) — domains explicitly registrable
+# Exception rules (PSL "!" prefix) - domains explicitly registrable
 # despite their parent being a suffix.
 _EXCEPTIONS: Set[str] = {
     "www.ck",
 }
 
-# Wildcard suffixes — every immediate subdomain is itself a suffix. PSL
+# Wildcard suffixes - every immediate subdomain is itself a suffix. PSL
 # lines starting with "*." indicate this.
 _WILDCARDS: Set[str] = {
     "ck",   # *.ck except www.ck
@@ -165,7 +165,7 @@ def public_suffix(domain: str) -> Optional[str]:
         candidate = ".".join(labels[i:])
         if candidate in exceptions:
             # The exception means the parent IS a suffix but THIS is registrable
-            # — we should return its parent instead.
+            # - we should return its parent instead.
             if i + 1 < len(labels):
                 parent = ".".join(labels[i + 1:])
                 if parent in suffixes or parent in wildcards:
@@ -178,7 +178,7 @@ def public_suffix(domain: str) -> Optional[str]:
             parent = ".".join(labels[i + 1:])
             if parent in wildcards:
                 return candidate
-    # No match — single-label TLD is implicitly a suffix.
+    # No match - single-label TLD is implicitly a suffix.
     return labels[-1] if labels else None
 
 

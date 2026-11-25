@@ -1,5 +1,5 @@
 """
-Wiz Threat Landscape — free, no key. https://threats.wiz.io
+Wiz Threat Landscape - free, no key. https://threats.wiz.io
 
 Wiz publishes a cloud-native threat catalog covering:
   - all-actors      threat groups active in cloud environments
@@ -10,12 +10,12 @@ Wiz publishes a cloud-native threat catalog covering:
   - all-incidents   named incidents with narrative context
 
 RECON's existing MISP galaxy + actor_data are on-prem/APT-focused.
-Wiz fills the cloud-attribution gap — when an AI investigation names
+Wiz fills the cloud-attribution gap - when an AI investigation names
 an actor or family that matches a Wiz slug, we can tag the alert as
 "cloud-tracked" and link to the Wiz page for context.
 
 Data access: Wiz threats.wiz.io uses Next.js App Router (React Server
-Components) — no __NEXT_DATA__ JSON blob to parse. But the four `/all-*`
+Components) - no __NEXT_DATA__ JSON blob to parse. But the four `/all-*`
 index pages embed every slug as `/all-{category}/{slug}` href attrs.
 We regex-harvest those into an in-memory index. The RSC hydration
 means slug names are stable across page refreshes even if the layout
@@ -43,7 +43,7 @@ _TTL_SECONDS = 24 * 3600
 _SLUG_RE = re.compile(r'"/all-([a-z]+)/([a-z0-9][a-z0-9\-]{1,120})"')
 
 _lock = threading.RLock()  # reentrant: _ensure_loaded holds it, then
-                            # _refresh_sync re-acquires — a plain Lock
+                            # _refresh_sync re-acquires - a plain Lock
                             # deadlocks; RLock is a drop-in fix.
 _state: Dict[str, Any] = {
     "loaded_at":     0.0,
@@ -82,7 +82,7 @@ def _refresh_sync() -> None:
         for m in _SLUG_RE.finditer(html):
             page_cat = m.group(1)   # actors / tools / techniques / incidents
             slug     = m.group(2)
-            # Only accept slugs from the category page we're on — the
+            # Only accept slugs from the category page we're on - the
             # rendered HTML cross-links between categories (e.g. incident
             # page lists actors), which would poison the index.
             if page_cat != cat:
@@ -157,7 +157,7 @@ def lookup(name: str) -> Optional[Dict[str, Any]]:
         # Exact match after normalisation
         if q in by_name:
             return {**by_name[q], "match": "exact"}
-        # Loose containment — either direction — but only when the shorter
+        # Loose containment - either direction - but only when the shorter
         # side is >= 4 chars so a 3-letter query like "apt" doesn't match
         # every APT slug.
         if len(q) >= 4:

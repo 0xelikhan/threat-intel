@@ -1,12 +1,12 @@
 """
 Round-8 OSS integrations:
 
-  * intel.ofac_sdn           — US Treasury OFAC SDN list
-  * intel.endoflife          — endoflife.date EOL lookups
-  * intel.hsts_preload       — Chromium HSTS preload list (built-in fallback)
-  * intel.wadcoms            — WADComs Windows-AD attack reference
-  * intel.owasp_cheats       — OWASP Cheat Sheet Series
-  * intel.mozilla_observatory — Mozilla Observatory web grader (live API)
+  * intel.ofac_sdn           - US Treasury OFAC SDN list
+  * intel.endoflife          - endoflife.date EOL lookups
+  * intel.hsts_preload       - Chromium HSTS preload list (built-in fallback)
+  * intel.wadcoms            - WADComs Windows-AD attack reference
+  * intel.owasp_cheats       - OWASP Cheat Sheet Series
+  * intel.mozilla_observatory - Mozilla Observatory web grader (live API)
 
 Offline graceful-missing + built-in fallback coverage.
 """
@@ -53,7 +53,7 @@ def test_hsts_preload_via_fallback():
     assert is_preloaded("google.com") is True
     assert is_preloaded("microsoft.com") is True
     assert is_preloaded("github.com") is True
-    # Subdomain inheritance — paypal.com is in fallback
+    # Subdomain inheritance - paypal.com is in fallback
     assert is_preloaded("api.paypal.com") is True
     # Random domain should NOT be preloaded
     assert is_preloaded("random-attacker-domain-12345.xyz") is False
@@ -90,16 +90,16 @@ def test_mozilla_observatory_rejects_blank_hostname():
 
 def test_mozilla_observatory_handles_url_input():
     """A URL with protocol should be normalised to a hostname before
-    being sent to Observatory — exercised via the host-extraction path."""
-    # Direct test of the URL-stripping logic — call with None session
+    being sent to Observatory - exercised via the host-extraction path."""
+    # Direct test of the URL-stripping logic - call with None session
     # so we exercise the input-cleanup branch without network IO.
     from intel.mozilla_observatory import scan
-    # Won't actually reach the network — the None session will fail the
+    # Won't actually reach the network - the None session will fail the
     # async-with, but we only care that the input normalisation didn't
     # raise before that point.
     try:
         asyncio.run(scan(None, "https://Example.com/path"))
     except Exception:
-        # Expected — None session raises. The important thing is that
+        # Expected - None session raises. The important thing is that
         # we got past the blank-check, which the previous test covers.
         pass

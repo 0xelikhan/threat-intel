@@ -1,10 +1,10 @@
 """
 Round-14 ML enhancement tests.
 
-  * intel.dga_classifier            — DGA / benign separation
-  * intel.phishing_url_classifier   — phish / benign URL separation
-  * intel.semantic_search           — search returns hits ordered by score
-  * skills.semantic_search_detections — skill envelope shape
+  * intel.dga_classifier            - DGA / benign separation
+  * intel.phishing_url_classifier   - phish / benign URL separation
+  * intel.semantic_search           - search returns hits ordered by score
+  * skills.semantic_search_detections - skill envelope shape
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ def test_dga_classifier_label_extraction_strips_subdomains():
     from intel.dga_classifier import classify
     a = classify("login.microsoft.com")
     b = classify("microsoft.com")
-    # Both should land in the same verdict tier — the SLD is identical.
+    # Both should land in the same verdict tier - the SLD is identical.
     assert a["verdict"] == b["verdict"]
 
 
@@ -86,7 +86,7 @@ def test_semantic_search_returns_results():
     from intel.semantic_search import search, stats
     s = stats()
     # Even with zero corpora loaded (none of the .sigma / .panther dirs
-    # present in CI), the index builder shouldn't crash — it just
+    # present in CI), the index builder shouldn't crash - it just
     # returns no rules. We don't assert rule_count > 0.
     assert "backend" in s
     out = search("powershell encoded command office macro", top_k=5)
@@ -117,7 +117,7 @@ def test_semantic_search_skill_registered():
 def test_semantic_search_skill_returns_envelope():
     from skills import run_skill
     # asyncio.run manages the loop lifecycle (create, run, drain, close)
-    # correctly — the earlier hand-rolled loop.close() left aiohttp
+    # correctly - the earlier hand-rolled loop.close() left aiohttp
     # transports pending, which surfaced as ResourceWarning during test
     # collection.
     out = asyncio.run(

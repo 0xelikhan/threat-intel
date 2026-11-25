@@ -3,18 +3,18 @@ Microsoft 365 / Entra tenant recon.
 
 Unauthenticated fingerprinting of M365-hosted domains. Adapted from
 cti-expert (MIT, Hieu Ngo, chongluadao.vn) techniques/microsoft-tenant-recon.md
-— our value-add is a pure-Python implementation that lives in the same
+ -  our value-add is a pure-Python implementation that lives in the same
 async aiohttp session as the rest of enrichment (no msftrecon subprocess
 required) and a fail-open gate that skips the work entirely when the
 domain isn't M365.
 
 Endpoints probed (zero auth required, all read-only):
-  1. login.microsoftonline.com/getuserrealm.srf — federation type +
+  1. login.microsoftonline.com/getuserrealm.srf - federation type +
      brand name + federation provider (AD FS / Okta / Ping / …)
   2. login.microsoftonline.com/{domain}/v2.0/.well-known/openid-configuration
-     — tenant ID (GUID via `issuer` field), cloud instance
-  3. {tenant}.sharepoint.com — SharePoint tenant existence
-  4. {tenant}.azurewebsites.net — Azure App Service tenant existence
+     - tenant ID (GUID via `issuer` field), cloud instance
+  3. {tenant}.sharepoint.com - SharePoint tenant existence
+  4. {tenant}.azurewebsites.net - Azure App Service tenant existence
 
 Output shape lines up with every other RECON enrichment source so it
 drops into per-source rendering without special casing:
@@ -139,7 +139,7 @@ async def _probe_userrealm(session, domain: str) -> Dict[str, Any]:
 
 
 async def _probe_sharepoint(session, tenant: str) -> Dict[str, Any]:
-    """SharePoint tenant existence — HEAD to {tenant}.sharepoint.com.
+    """SharePoint tenant existence - HEAD to {tenant}.sharepoint.com.
     401/403 = exists (auth required to read), 404 = no such tenant."""
     if not tenant:
         return {"ok": False, "endpoint": ""}
@@ -157,7 +157,7 @@ async def _probe_sharepoint(session, tenant: str) -> Dict[str, Any]:
 
 
 async def _probe_azure_app(session, tenant: str) -> Dict[str, Any]:
-    """Azure App Service tenant — {tenant}.azurewebsites.net. 404 means
+    """Azure App Service tenant - {tenant}.azurewebsites.net. 404 means
     no app, 403 / 200 / 502 means the slug is taken."""
     if not tenant:
         return {"ok": False, "endpoint": ""}
@@ -196,7 +196,7 @@ def _derive_federation_provider(federation_url: str) -> Optional[str]:
 
 async def enrich(session, domain: str) -> Dict[str, Any]:
     """Run the full 4-probe pass against a domain. Caller is expected
-    to gate the call — see `is_m365_candidate` below."""
+    to gate the call - see `is_m365_candidate` below."""
     if not isinstance(domain, str) or not domain.strip():
         return {"is_m365": False, "source": "m365_tenant_recon",
                 "verdict": "CLEAN", "summary": "empty domain"}
@@ -264,7 +264,7 @@ async def enrich(session, domain: str) -> Dict[str, Any]:
     summary = (
         f"Microsoft 365 tenant fingerprinted ({domain}). "
         + " · ".join(bits)
-        + (". Federated tenants share trust with the IdP — extend the "
+        + (". Federated tenants share trust with the IdP - extend the "
            "investigation to that provider." if verdict == "SUSPICIOUS" else ".")
     )
 
@@ -319,10 +319,10 @@ def is_m365_candidate(per_source_enrichment: Dict[str, Any]) -> bool:
 
 
 def stats() -> Dict[str, Any]:
-    """Available for /api/status. No persistent index — every call is
+    """Available for /api/status. No persistent index - every call is
     a live network probe."""
     return {
         "loaded":           True,
         "endpoints_probed": 4,
-        "note":             "Live probe, no cache — caller should respect breaker.",
+        "note":             "Live probe, no cache - caller should respect breaker.",
     }

@@ -3,7 +3,7 @@
 Each service module (docker/sidecars/*_service.py) exposes a Flask
 app at module scope so `gunicorn service:app` works inside its
 container. These tests exercise the shared `_base_wrapper.build_app`
-+ the module-level `app` binding using Flask's test client — no
++ the module-level `app` binding using Flask's test client - no
 Docker required.
 
 Covers:

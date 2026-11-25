@@ -1,5 +1,5 @@
 """
-AnalyzeCapabilitiesSkill — FLARE capa wrapper.
+AnalyzeCapabilitiesSkill - FLARE capa wrapper.
 
 Runs capa on file bytes and returns a normalised list of capabilities +
 the MITRE techniques they map to. The skill is the programmatic entry

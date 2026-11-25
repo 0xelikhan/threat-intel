@@ -1,5 +1,5 @@
 """
-AI calibration tracking — record every analyst override of the AI verdict.
+AI calibration tracking - record every analyst override of the AI verdict.
 
 Each override is a labeled training signal: the AI said X, the human
 said Y. We hold a per-process in-memory ring buffer so the running
@@ -24,7 +24,7 @@ Each record shape:
       "threat_level": "LOW",
       "reason":       "Internal admin tool, not C2",
     },
-    "prompt_version": "g6753cc5",       # short SHA — see prompt_version()
+    "prompt_version": "g6753cc5",       # short SHA - see prompt_version()
     "alert_type":     "edr_audit",
     "agreed":         False             # False on every override row
                                          # (placeholder for future
@@ -46,7 +46,7 @@ from pathlib import Path
 from typing import Any, Deque, Dict, List, Optional
 
 
-# In-memory ring buffer — last 5000 override records. Cleared on restart
+# In-memory ring buffer - last 5000 override records. Cleared on restart
 # by design (analyst-derived data is not persisted; see the platform
 # no-persistence policy).
 _RECORDS: Deque[Dict[str, Any]] = deque(maxlen=5000)
@@ -78,7 +78,7 @@ def prompt_version() -> str:
 
 
 def input_hash(raw_input: str) -> str:
-    """Deterministic ID for a particular alert paste — lets us spot a
+    """Deterministic ID for a particular alert paste - lets us spot a
     re-overridden case across multiple analyses of the same input."""
     if not raw_input:
         return "empty"

@@ -1,5 +1,5 @@
 /**
- * Centralized API client — exponential-backoff retry, configurable
+ * Centralized API client - exponential-backoff retry, configurable
  * timeouts, structured error parsing, request-ID extraction, global
  * error event bus for toast subscribers.
  *
@@ -15,15 +15,15 @@
  *   onApiError(err => showToast(err.message, err.requestId));
  *
  * Errors thrown by apiFetch carry:
- *   err.message      — human-readable, from backend `detail` / `error`
- *   err.error_code   — backend machine slug (Section 5 registry)
- *   err.requestId    — X-Request-ID header for log correlation
- *   err.status       — HTTP status
- *   err.fixHint      — when the backend included one in `fix_hint`
+ *   err.message      - human-readable, from backend `detail` / `error`
+ *   err.error_code   - backend machine slug (Section 5 registry)
+ *   err.requestId    - X-Request-ID header for log correlation
+ *   err.status       - HTTP status
+ *   err.fixHint      - when the backend included one in `fix_hint`
  *
  * Retry policy:
  *   * Network errors + 5xx → 3 attempts total, sleeping 1s, 2s, 4s
- *   * 4xx                  → no retry (deterministic — your fault)
+ *   * 4xx                  → no retry (deterministic - your fault)
  *   * Timeouts             → counted as a retry trigger
  */
 
@@ -55,11 +55,11 @@ function _isRetryable(status) {
  * @param {string} url
  * @param {object} [options]
  * @param {string|object|FormData} [options.body]
- * @param {string} [options.method]               — defaults to GET
+ * @param {string} [options.method]               - defaults to GET
  * @param {object} [options.headers]
- * @param {number} [options.timeout]              — ms; default 30_000, use 300_000 for AI calls
- * @param {number} [options.maxAttempts]          — default 3
- * @param {boolean} [options.suppressToast]       — set true for fire-and-forget background polls
+ * @param {number} [options.timeout]              - ms; default 30_000, use 300_000 for AI calls
+ * @param {number} [options.maxAttempts]          - default 3
+ * @param {boolean} [options.suppressToast]       - set true for fire-and-forget background polls
  */
 export async function apiFetch(url, options = {}) {
   const {
@@ -83,7 +83,7 @@ export async function apiFetch(url, options = {}) {
     ...rest,
   };
 
-  // 1s, 2s, 4s — exponential backoff per the spec.
+  // 1s, 2s, 4s - exponential backoff per the spec.
   const backoffs = [1000, 2000, 4000];
   let lastError = null;
 
@@ -96,7 +96,7 @@ export async function apiFetch(url, options = {}) {
 
       const requestId = resp.headers.get('X-Request-ID') || null;
 
-      // Parse body — try JSON, fall back to text.
+      // Parse body - try JSON, fall back to text.
       let parsed = null;
       const ct = resp.headers.get('content-type') || '';
       if (ct.includes('json')) {
@@ -131,7 +131,7 @@ export async function apiFetch(url, options = {}) {
       throw err;
     } catch (e) {
       clearTimeout(tid);
-      // Network failure / abort — retry if attempts remain.
+      // Network failure / abort - retry if attempts remain.
       if (e?.name === 'ApiError') throw e;
       const isAbort = e?.name === 'AbortError';
       const err = new Error(isAbort
@@ -154,14 +154,14 @@ export async function apiFetch(url, options = {}) {
     }
   }
 
-  // Defensive — shouldn't reach here, the loop always returns or throws.
+  // Defensive - shouldn't reach here, the loop always returns or throws.
   const err = lastError || new Error('Unknown API error');
   if (!suppressToast) _emit(err);
   throw err;
 }
 
 
-// Convenience wrappers — match the most common patterns in App.js so call
+// Convenience wrappers - match the most common patterns in App.js so call
 // sites can migrate one line at a time without changing call shape.
 export const apiGet  = (url, opts = {}) => apiFetch(url, { method: 'GET',  ...opts });
 export const apiPost = (url, data, opts = {}) => apiFetch(url, {
@@ -174,7 +174,7 @@ export const apiPost = (url, data, opts = {}) => apiFetch(url, {
 /**
  * Drop-in replacement for `fetch(...)` that always carries the auth cookie.
  *
- * Same shape as native fetch — returns a Response, throws nothing extra,
+ * Same shape as native fetch - returns a Response, throws nothing extra,
  * preserves the caller's existing error handling. The ONLY difference is
  * `credentials: 'include'` is merged into the init dict so cross-origin
  * deployments don't strip the session cookie.

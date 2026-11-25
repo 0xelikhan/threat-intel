@@ -4,15 +4,15 @@ Shared blocking HTTP helper for intel modules.
 Every offline / periodic-refresh module (`tor_exits`, `viriback`,
 `threatview_c2`, `wiz_cloud_threats`, `dfiq`, `ransomware_live`, plus
 the OFAC/Ransomwhere loaders) fetches large blobs at lifespan warm
-time via urllib. That path is DELIBERATELY blocking — it runs on a
-worker thread via `asyncio.to_thread` in the lifespan handler — so
+time via urllib. That path is DELIBERATELY blocking - it runs on a
+worker thread via `asyncio.to_thread` in the lifespan handler - so
 the async `agents.enrichment._get` machinery (rate limit, circuit
 breaker, aiohttp pool) doesn't apply.
 
 Before this helper existed each module built its own
 `urllib.request.Request(url, headers={"User-Agent": ..., "Accept": ...})`
 and called `urlopen(req, timeout=X)`. A timeout tweak or a change to the
-User-Agent had to be applied in seven places — and drifted at least
+User-Agent had to be applied in seven places - and drifted at least
 once (round-18 ThreatView used a slightly different UA than Onionoo,
 caught only by grep).
 
@@ -21,7 +21,7 @@ Two forms:
   fetch_json (url, *, timeout=30)               -> dict | list
 
 Both raise urllib.error.URLError / HTTPError / TimeoutError on
-failure — callers are already inside a try/except that logs + records
+failure - callers are already inside a try/except that logs + records
 `_state["error"]`.
 """
 

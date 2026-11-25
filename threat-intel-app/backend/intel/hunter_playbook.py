@@ -48,7 +48,7 @@ _state: Dict[str, Any] = {
 
 def _extract_md_from_notebook(text: str) -> str:
     """Concatenate every markdown cell from a Jupyter notebook into
-    a single string. We don't render — just grep for headings/queries."""
+    a single string. We don't render - just grep for headings/queries."""
     try:
         nb = json.loads(text)
     except Exception:
@@ -99,7 +99,7 @@ def _build_index() -> None:
         techniques: List[str] = list({m.group(1).upper()
                                        for m in _TECHNIQUE_RE.finditer(md)})
         if not techniques:
-            # Skip notebooks that don't reference a technique — these
+            # Skip notebooks that don't reference a technique - these
             # are usually intro / scaffolding notebooks.
             continue
 

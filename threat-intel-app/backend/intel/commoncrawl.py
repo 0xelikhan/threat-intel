@@ -1,4 +1,4 @@
-"""Common Crawl index — passive subdomain mining from the public
+"""Common Crawl index - passive subdomain mining from the public
 web-scale crawl archive.
 
 Catalog:        https://index.commoncrawl.org/collinfo.json

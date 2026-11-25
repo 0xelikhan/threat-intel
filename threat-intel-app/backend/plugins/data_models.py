@@ -33,11 +33,11 @@ PluginKind = Literal[
 ]
 
 
-# ─── Artifact — the thing being analysed ────────────────────────────────────
+# ─── Artifact - the thing being analysed ────────────────────────────────────
 
 class Artifact(BaseModel):
     """A representation of an IOC or file that can be analysed multiple
-    times. IntelOwl's `artifacts` concept — the stable handle a user
+    times. IntelOwl's `artifacts` concept - the stable handle a user
     event can attach to."""
     id: str                              # stable ID (sha256 of value+type)
     type: IOCType
@@ -48,7 +48,7 @@ class Artifact(BaseModel):
     tags: List[str] = Field(default_factory=list)
 
 
-# ─── UserEvent — human annotation attached to an artifact ───────────────────
+# ─── UserEvent - human annotation attached to an artifact ───────────────────
 
 class UserEvent(BaseModel):
     """Analyst-added evaluation on an artifact. Think: 'this is actually
@@ -62,7 +62,7 @@ class UserEvent(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-# ─── AnalysisResult — unified analyzer output ──────────────────────────────
+# ─── AnalysisResult - unified analyzer output ──────────────────────────────
 
 class AnalysisResult(BaseModel):
     """What every analyzer returns. Matches the dict shape the existing
@@ -95,7 +95,7 @@ class AnalysisResult(BaseModel):
           * Explicit `found` key present  → use it as-is
           * Error present                 → found=False
           * Dict is empty / None          → found=False  (upstream returned
-            no data — bare dict with no fields means "nothing to say";
+            no data - bare dict with no fields means "nothing to say";
             many legacy modules short-circuit to None on no-data and the
             caller wraps as {} before passing here)
           * Dict has content, no error    → found=True
@@ -125,7 +125,7 @@ class AnalysisResult(BaseModel):
         )
 
 
-# ─── PluginDescriptor — registry metadata ──────────────────────────────────
+# ─── PluginDescriptor - registry metadata ──────────────────────────────────
 
 class PluginDescriptor(BaseModel):
     """What the plugin registry exposes about each registered plugin.

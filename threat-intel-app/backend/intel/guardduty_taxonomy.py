@@ -12,7 +12,7 @@ finding types mapped to MITRE techniques + a short description. When
 the analyst input mentions a GuardDuty finding name, the Investigation
 agent can cite the canonical TTP context.
 
-The list is intentionally NOT exhaustive — we cover the 60 most-
+The list is intentionally NOT exhaustive - we cover the 60 most-
 referenced finding types per the AWS docs frequency surveys. The
 operator can extend by dropping a JSON at vendor/guardduty/types.json
 with the shape {finding_type: {severity, mitre, description}}.
@@ -49,7 +49,7 @@ _TAXONOMY: Dict[str, Dict[str, Any]] = {
     "Recon:IAMUser/MaliciousIPCaller": {
         "severity": "Medium",
         "mitre":    ["T1078"],
-        "description": "API call from a known malicious IP — credential abuse likely.",
+        "description": "API call from a known malicious IP - credential abuse likely.",
     },
     "Recon:IAMUser/TorIPCaller": {
         "severity": "Medium",
@@ -96,7 +96,7 @@ _TAXONOMY: Dict[str, Dict[str, Any]] = {
     "Policy:IAMUser/RootCredentialUsage": {
         "severity": "Low",
         "mitre":    ["T1078.004"],
-        "description": "Root account API usage — generally policy-violating.",
+        "description": "Root account API usage - generally policy-violating.",
     },
     # --- Persistence ----------------------------------------------------
     "Persistence:IAMUser/AnomalousBehavior": {
@@ -108,7 +108,7 @@ _TAXONOMY: Dict[str, Dict[str, Any]] = {
     "Stealth:IAMUser/CloudTrailLoggingDisabled": {
         "severity": "Low",
         "mitre":    ["T1562.008"],
-        "description": "CloudTrail logging disabled — defence evasion.",
+        "description": "CloudTrail logging disabled - defence evasion.",
     },
     "Stealth:IAMUser/PasswordPolicyChange": {
         "severity": "Low",

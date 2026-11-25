@@ -20,7 +20,7 @@ describe('sourceUrl', () => {
   });
 
   test('returns null when a known source has no builder for that IOC type', () => {
-    // AbuseIPDB only ships an IP builder — no domain page.
+    // AbuseIPDB only ships an IP builder - no domain page.
     expect(sourceUrl('AbuseIPDB', 'example.com', 'domain')).toBeNull();
   });
 
@@ -46,7 +46,7 @@ describe('sourceUrl', () => {
     const out = sourceUrl('VirusTotal', u, 'url');
     const prefix = 'https://www.virustotal.com/gui/url/';
     expect(out.startsWith(prefix)).toBe(true);
-    // The id portion only — must use base64url alphabet, no padding,
+    // The id portion only - must use base64url alphabet, no padding,
     // no '+' or '/' (the URL prefix itself contains slashes; assert
     // only on what btoa produced).
     const id = out.slice(prefix.length);
@@ -92,7 +92,7 @@ describe('sourceUrl', () => {
     const cve = 'CVE-2024-12345';
     expect(sourceUrl('NVD', cve, 'cve'))
       .toBe(`https://nvd.nist.gov/vuln/detail/${cve}`);
-    // EPSS uses the api.first.org JSON endpoint — the canonical
+    // EPSS uses the api.first.org JSON endpoint - the canonical
     // place to view the score and percentile for a CVE in a browser.
     expect(sourceUrl('EPSS', cve, 'cve'))
       .toContain('api.first.org');

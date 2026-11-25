@@ -1,12 +1,12 @@
-"""Round-15 tests — cti-expert integrations.
+"""Round-15 tests - cti-expert integrations.
 
 Covers the four new backend modules + their wire-points:
 
-  * intel/admin_endpoint_classifier.py — pure-function classifier
-  * intel/m365_tenant_recon.py         — gate + module shape (no live HTTP)
-  * intel/maltego_export.py            — GraphML serialiser
-  * intel/case_score.py                — case-level rollup
-  * /api/export/maltego/{run_id}       — HTTP endpoint covered via TestClient
+  * intel/admin_endpoint_classifier.py - pure-function classifier
+  * intel/m365_tenant_recon.py         - gate + module shape (no live HTTP)
+  * intel/maltego_export.py            - GraphML serialiser
+  * intel/case_score.py                - case-level rollup
+  * /api/export/maltego/{run_id}       - HTTP endpoint covered via TestClient
 
 The M365 module's actual HTTP probes hit Microsoft endpoints, so we
 only test the shape + gate function here. End-to-end M365 verification
@@ -199,7 +199,7 @@ def test_maltego_export_ioc_nodes_and_edges():
 
 
 def test_maltego_export_is_valid_xml():
-    """Defensive parse — the GraphML output must round-trip through an
+    """Defensive parse - the GraphML output must round-trip through an
     XML parser without raising."""
     from intel.maltego_export import to_graphml
     import xml.etree.ElementTree as ET

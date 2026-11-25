@@ -20,7 +20,7 @@ CIDR lists in memory, and exposes:
 
 When triage / enrichment surfaces a cloud-belonging IP, the verdict
 scorer treats it as "well-known infrastructure" rather than attacker
-infra — same trust-signal class as Tranco for domains.
+infra - same trust-signal class as Tranco for domains.
 """
 
 from __future__ import annotations

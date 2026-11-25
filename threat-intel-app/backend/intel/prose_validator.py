@@ -5,18 +5,18 @@ Mechanical enforcement of the rules the prompt asks the model to follow.
 The prompt is the first line of defence; this module is the second so
 that bugs which slip past the prompt don't reach the analyst:
 
-  1. Cross-field prose overlap — if `analysis_assessment` sentences
+  1. Cross-field prose overlap - if `analysis_assessment` sentences
      paraphrase content already in `summary` / `confirmed_facts`, drop
      them. Replaces a frontend-only de-dup that ran AFTER the data left
      the server, so non-frontend consumers (MCP, email composer, API
      callers) didn't get the benefit.
 
-  2. Schema-shape sanity — strip keys the prompt forbids the model
+  2. Schema-shape sanity - strip keys the prompt forbids the model
      from emitting (`log_correlation`, etc.) and coerce wrong-typed
      fields into the contract the rest of the platform reads. Same
      spirit as the em-dash strip that's been server-side for a while.
 
-  3. Sentence-cap enforcement — `summary` is documented as MAX 2
+  3. Sentence-cap enforcement - `summary` is documented as MAX 2
      sentences; LLM ignores this when "feeling chatty". A regex-based
      cap brings it back to spec before the analyst sees a 5-sentence
      restatement of the log.
@@ -33,7 +33,7 @@ from typing import Any, Dict, Iterable, List, Optional
 _log = logging.getLogger("recon.prose_validator")
 
 
-# Same token regex the frontend dropOverlapping uses — keeps the two
+# Same token regex the frontend dropOverlapping uses - keeps the two
 # implementations in semantic lock-step.
 _TOKEN_RE = re.compile(r"[a-z0-9@.-]{4,}")
 
@@ -117,7 +117,7 @@ def strip_forbidden_keys(result: Dict[str, Any]) -> Dict[str, Any]:
 # ─── Public API: validate_investigation_result ──────────────────────────
 def validate_investigation_result(result: Dict[str, Any]) -> Dict[str, Any]:
     """Run every server-side validator over an investigation-stage AI
-    result. Returns the same dict (mutated in place for performance —
+    result. Returns the same dict (mutated in place for performance  - 
     the agent already passes it through the em-dash strip which mutates
     too). Idempotent: running this twice produces the same output as
     once.

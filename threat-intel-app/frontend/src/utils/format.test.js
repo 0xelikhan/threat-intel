@@ -20,7 +20,7 @@ describe('smartTruncate', () => {
     const long = 'Enemy of the State Order in the Court of King Henry';
     const out  = smartTruncate(long, 30);
     expect(out.endsWith('…')).toBe(true);
-    // The cut must land on a whitespace boundary in the source — so
+    // The cut must land on a whitespace boundary in the source - so
     // the char immediately before the ellipsis should be the last
     // letter of a complete word, not a mid-word slice.
     expect(out).toBe('Enemy of the State Order in…');
@@ -31,7 +31,7 @@ describe('smartTruncate', () => {
   });
 
   test('falls back to hard slice when no space is reachably close', () => {
-    // First word eats the whole budget — hard-slice with ellipsis.
+    // First word eats the whole budget - hard-slice with ellipsis.
     const out = smartTruncate('Supercalifragilisticexpialidocious', 10);
     expect(out).toBe('Supercalif…');
   });
@@ -167,7 +167,7 @@ describe('verdictBucket', () => {
   test('CLEAN_INFRA is BLUE not GREEN', () => {
     // Known-good hosting infra (Cloudflare / cloud CDN / etc.) gets its
     // own blue bucket so the analyst can see "known infra, NOT safe
-    // traffic" — attackers spin up VMs in these clouds routinely.
+    // traffic" - attackers spin up VMs in these clouds routinely.
     expect(verdictBucket('CLEAN_INFRA')).toBe('blue');
     expect(verdictBucket('CLEAN_INFRA')).not.toBe('green');
   });

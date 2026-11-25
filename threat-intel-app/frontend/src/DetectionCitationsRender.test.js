@@ -3,7 +3,7 @@
  *
  * The companion DetectionCitations.test.js covers the specific
  * defensive pattern (sourcesWithHits with null dc) at the logic
- * level. This test exercises the actual React component via RTL —
+ * level. This test exercises the actual React component via RTL  - 
  * ensuring a structural refactor of the JSX can't reintroduce the
  * null-dc crash without a test failure.
  *
@@ -18,7 +18,7 @@ import theme from './theme';
 
 
 // Silence fetch(network) calls that happen behind the semantic-search
-// bar — the test shouldn't hit the backend.
+// bar - the test shouldn't hit the backend.
 beforeEach(() => {
   global.fetch = jest.fn(() => Promise.resolve({
     ok: false, status: 404,
@@ -43,10 +43,10 @@ function _renderDC(props) {
 }
 
 
-describe('DetectionCitationsView — React render', () => {
+describe('DetectionCitationsView - React render', () => {
   // The component uses `useMemo`/`useState`/`useEffect` + MUI
   // components; rendering it with null investigation data must
-  // never throw — the bug this guards against was a `dc[s.key]`
+  // never throw - the bug this guards against was a `dc[s.key]`
   // dereference on null `dc`.
 
   test('renders without crashing when result is null and bare', () => {
@@ -80,7 +80,7 @@ describe('DetectionCitationsView — React render', () => {
       },
     };
     _renderDC({ result, bare: true });
-    // Match either the title or the SigmaHQ source label — both
+    // Match either the title or the SigmaHQ source label - both
     // render inside the component when hits are present.
     expect(screen.getByText(/suspicious PowerShell/i)).toBeInTheDocument();
   });

@@ -5,14 +5,14 @@ IntelOwl ships Phoneinfoga as a Docker-based service running several
 backend scanners (numverify, googlecse, ovh, local). RECON implements
 the two useful network-bound ones natively:
 
-  • NumVerify (apilayer.net) — commercial, free 100 req/month.
+  • NumVerify (apilayer.net) - commercial, free 100 req/month.
     GET http://apilayer.net/api/validate?access_key=<KEY>&number=<E.164>&format=1
-  • OVH — France Telecom carrier database; free, no key. Only useful
+  • OVH - France Telecom carrier database; free, no key. Only useful
     for FR / European numbers.
     GET https://api.ovh.com/1.0/telephony/number/detailedZones?country=fr
 
 For local / GoogleCSE we rely on intel.phunter + a Google-search
-details_url — those don't need a dedicated module.
+details_url - those don't need a dedicated module.
 """
 
 from __future__ import annotations
@@ -77,14 +77,14 @@ async def lookup_numverify(session, phone: str, api_key: str = "") -> Dict[str, 
         "details_url":    f"https://numverify.com/dashboard",
         "verdict":        verdict,
         "summary":        (f"NumVerify: {'valid' if is_valid else 'invalid'} number"
-                           + (f" — {r.get('carrier')}" if r.get("carrier") else "")
+                           + (f" - {r.get('carrier')}" if r.get("carrier") else "")
                            + (f" ({r.get('country_name')})"
                               if r.get("country_name") else "")),
     }
 
 
 async def lookup(session, phone: str, numverify_key: str = "") -> Dict[str, Any]:
-    """Phoneinfoga aggregator — dispatches to each configured backend
+    """Phoneinfoga aggregator - dispatches to each configured backend
     and merges results. Right now only NumVerify is wired. OVH's free
     endpoint only resolves French (+33) numbers and is best called
     conditionally; we'll add that in a follow-up."""

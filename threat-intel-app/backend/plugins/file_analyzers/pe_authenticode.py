@@ -73,7 +73,7 @@ class PEAuthenticodeAnalyzer(FileAnalyzer):
 
         if valid:
             verdict = "CLEAN"
-            summary = f"PE Authenticode: valid signature{(' — ' + signer) if signer else ''}"
+            summary = f"PE Authenticode: valid signature{(' - ' + signer) if signer else ''}"
         else:
             verdict = "MALICIOUS"
             summary = f"PE Authenticode: invalid signature ({err_msg or 'verification failed'})"

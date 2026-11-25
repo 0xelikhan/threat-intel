@@ -5,7 +5,7 @@ file-scanner audit:
     file_type=source_code and file_type_label="Source Code source code"
     (doubled wording). The source-code heuristic in _detect_source_code
     triggered on the RFC822 message because EMLs are >95% printable
-    ASCII with no binary magic — the negative path needed an explicit
+    ASCII with no binary magic - the negative path needed an explicit
     "known non-source extension" branch.
   * EML files also fell into category=binary (the dispatcher in
     file_analyzer_formats had no `email` branch), so format_specific
@@ -51,14 +51,14 @@ def test_eml_not_classified_as_source_code():
     is_source, lang = _detect_source_code(_EML_BODY, "eml", "message/rfc822")
     assert not is_source, (
         f"EML wrongly classified as source code (lang={lang!r}). "
-        "RFC822 messages are plain ASCII headers + body — the .eml "
+        "RFC822 messages are plain ASCII headers + body - the .eml "
         "extension branch must short-circuit before the printable ratio."
     )
 
 
 def test_extensionless_email_headers_not_classified_as_source_code():
     """An EML pasted without the .eml extension still needs to bypass
-    the source-code heuristic — the header sniff catches it."""
+    the source-code heuristic - the header sniff catches it."""
     from intel.file_analyzer import _detect_source_code
     is_source, lang = _detect_source_code(_EML_BODY, "", "")
     assert not is_source, (
@@ -102,7 +102,7 @@ def test_eml_end_to_end_through_analyze_file():
 # ─── Edge cases the live audit caught ──────────────────────────────────
 def test_tiny_file_not_classified_as_source_code():
     """A 1-byte file like `a` is 100% printable ASCII and would otherwise
-    fall into the generic Source Code branch — but real source files
+    fall into the generic Source Code branch - but real source files
     aren't that small. Minimum-size gate must reject sub-32-byte inputs."""
     from intel.file_analyzer import _detect_source_code
     for body in (b"a", b"abc", b"hello world\n",

@@ -1,9 +1,9 @@
 """
-TTLCache — per-key TTL, thread-safe, lazy eviction, hit/miss tracking.
+TTLCache - per-key TTL, thread-safe, lazy eviction, hit/miss tracking.
 
 Single concern: prevent redundant external API calls for IOCs that were
 recently enriched. Backed by a plain dict with monotonic-time expiries;
-no background sweeper thread — entries are checked for expiry on every
+no background sweeper thread - entries are checked for expiry on every
 get() and the dead ones are evicted in place.
 
 Public API:
@@ -18,9 +18,9 @@ Module-level singleton + helpers:
     cache_for(namespace) -> TTLCache       # one cache per logical bucket
     global_stats() -> dict                 # rollup across every namespace
 
-Namespaces let us tune TTL per source class — see DEFAULT_TTL_BY_NAMESPACE
+Namespaces let us tune TTL per source class - see DEFAULT_TTL_BY_NAMESPACE
 below (MITRE / warninglists / KEV live for a day; live TI sources for an
-hour). Sources never need to know about TTLs — they just call
+hour). Sources never need to know about TTLs - they just call
 `cache_for("virustotal").get(...)`.
 """
 
@@ -34,7 +34,7 @@ from typing import Any, Dict, Optional
 # ─── per-namespace defaults ───────────────────────────────────────────────────
 #
 # Static reference data is cheap to keep around for a day. Live TI sources
-# rotate fast — an hour is the sweet spot between freshness and saving API
+# rotate fast - an hour is the sweet spot between freshness and saving API
 # quota. Tune via env-overrides at the call site when needed.
 DEFAULT_TTL_BY_NAMESPACE: Dict[str, int] = {
     "mitre":         86400,
@@ -111,7 +111,7 @@ class TTLCache:
             # a ~6 MB string allocation per status call. A periodic
             # frontend healthcheck doing 1 req/s would burn measurable
             # CPU on the estimate alone. Sample the first 50 entries
-            # instead and extrapolate — same signal ("is this growing
+            # instead and extrapolate - same signal ("is this growing
             # unboundedly?") at constant cost.
             _SAMPLE_N = 50
             sampled = 0
@@ -135,7 +135,7 @@ class TTLCache:
                 "hit_rate":  round(hit_rate, 1),
                 "miss_rate": round(100 - hit_rate, 1) if total else 0.0,
                 # Stable signal for "is this cache growing unbounded?"
-                # — extrapolated from a small sample, not exact.
+                # - extrapolated from a small sample, not exact.
                 "bytes_estimate": bytes_estimate,
             }
 

@@ -5,7 +5,7 @@ A small sklearn GradientBoostingClassifier over structural URL features.
 Used in RECON's URL scan path to upgrade the heuristic phishing score
 to a learned one without external API calls.
 
-Features (all derived from the URL string — no network I/O):
+Features (all derived from the URL string - no network I/O):
   * URL length, hostname length, path depth
   * Subdomain depth (how many dots in the hostname)
   * Special-char counts: @, -, %, =, ?, &
@@ -13,7 +13,7 @@ Features (all derived from the URL string — no network I/O):
   * IP-in-URL flag (raw IPv4 host instead of a domain)
   * Non-standard port flag
   * Brand-distance min Levenshtein to a curated brand list (Tranco-top
-    flavoured) — a 1-char delta from "paypal" or "microsoft" is the
+    flavoured) - a 1-char delta from "paypal" or "microsoft" is the
     classic phish telltale
   * TLD-tier flag (free / abused TLDs like .tk, .top, .xyz, .gq)
   * Presence of brand keyword inside the path or query (a brand name
@@ -23,11 +23,11 @@ Features (all derived from the URL string — no network I/O):
 Output shape matches `dga_classifier.classify(...)`:
   {
     "is_phish":     bool,
-    "probability":  0.0–1.0,
+    "probability":  0.0-1.0,
     "confidence":   "low" | "medium" | "high",
     "verdict":      "CLEAN" | "SUSPICIOUS" | "MALICIOUS",
     "summary":      one-line analyst-readable verdict,
-    "features":     dict (the underlying numeric features — useful in
+    "features":     dict (the underlying numeric features - useful in
                     the analyst report for "WHY did the model flag this"),
     "source":       "phishing_url_classifier"
   }
@@ -44,7 +44,7 @@ from urllib.parse import urlparse
 _log = logging.getLogger("recon.intel.phishing_url_classifier")
 
 
-# Curated brand list — common phishing impersonation targets. Used for
+# Curated brand list - common phishing impersonation targets. Used for
 # the brand-distance feature and the "brand-in-path" check.
 _BRAND_LIST: List[str] = [
     "google", "gmail", "youtube", "facebook", "instagram", "whatsapp",
@@ -130,12 +130,12 @@ _BENIGN_URLS: List[str] = [
     # Short
     "https://t.co/abc123",
     "https://goo.gl/maps/abc",
-    "https://bit.ly/3xY9zQ",   # short URLs CAN be benign — model should
+    "https://bit.ly/3xY9zQ",   # short URLs CAN be benign - model should
                                 # learn that brevity alone isn't phishy
 ]
 
 # Positives: classic phishing URL patterns. NOT from PhishTank/OpenPhish
-# (no licence to redistribute) — these are pattern-faithful synthetic
+# (no licence to redistribute) - these are pattern-faithful synthetic
 # samples drawn from years of phish IOC reports.
 _PHISH_URLS: List[str] = [
     # Brand-in-subdomain
@@ -262,7 +262,7 @@ def _extract_features(url: str) -> Dict[str, float]:
     is_ip = bool(host and _IPV4_RE.match(host))
     nonstd_port = bool(parsed.port and parsed.port not in (80, 443))
 
-    # Brand distance — min edit distance from the SLD to any brand
+    # Brand distance - min edit distance from the SLD to any brand
     if sld and not is_ip:
         brand_dist = min(_lev(sld, b) for b in _BRAND_LIST)
         # Confusable-but-not-equal: distance 1-2 is the phish sweet spot
@@ -339,7 +339,7 @@ def _build_model() -> Optional[Tuple[Any, Any]]:
         from sklearn.preprocessing import StandardScaler
         import numpy as np
     except ImportError as e:
-        _log.warning("sklearn unavailable: %s — phishing URL classifier disabled", e)
+        _log.warning("sklearn unavailable: %s - phishing URL classifier disabled", e)
         return None
 
     X_raw = [_features_vec(u) for u in _BENIGN_URLS] + \
@@ -399,7 +399,7 @@ def classify(url: str) -> Dict[str, Any]:
 
     is_phish = proba >= 0.6
     pct = round(proba * 100, 1)
-    # Pick the strongest driver to mention in the summary — the analyst
+    # Pick the strongest driver to mention in the summary - the analyst
     # report cares about WHY more than the raw number.
     drivers = []
     if feats.get("brand_confusable"):
@@ -419,7 +419,7 @@ def classify(url: str) -> Dict[str, Any]:
     driver_str = ("; drivers: " + ", ".join(drivers[:3])) if drivers else ""
     summary = (f"Phishing classifier: {pct}% likely phish ({confidence} confidence)"
                f"{driver_str}.") if is_phish else \
-              (f"Phishing classifier: {pct}% likely phish — below threshold.")
+              (f"Phishing classifier: {pct}% likely phish - below threshold.")
 
     return {
         "is_phish":    is_phish,

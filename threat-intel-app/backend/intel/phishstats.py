@@ -1,7 +1,7 @@
 """
 PhishStats URL / domain / IP phishing database lookup.
 
-Source: https://phishstats.info/ — PhishStats aggregates phishing URL
+Source: https://phishstats.info/ - PhishStats aggregates phishing URL
 reports from multiple feeds, scored by heuristics. Free, no key.
 
   GET https://api.phishstats.info/api/phishing?_where=<filter>&_sort=-date
@@ -9,7 +9,7 @@ reports from multiple feeds, scored by heuristics. Free, no key.
 Supported filters:
   URL:    (url,like,~<string>~)
   IP:     (ip,eq,<ip>)
-  Domain: (url,like,~<domain>~)   # same as URL — PhishStats indexes
+  Domain: (url,like,~<domain>~)   # same as URL - PhishStats indexes
                                    # full URLs, so we match substring
 
 Response: a JSON array of records. Each record has:

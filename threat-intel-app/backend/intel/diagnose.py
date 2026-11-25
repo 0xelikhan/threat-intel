@@ -6,9 +6,9 @@ Runs at startup and on demand via GET /api/diagnose. Each check returns
 fix, not a vague "something's wrong".
 
 Status values:
-  * ok       — check passed
-  * warn     — degraded but the platform still runs
-  * fail     — required functionality is unavailable
+  * ok       - check passed
+  * warn     - degraded but the platform still runs
+  * fail     - required functionality is unavailable
 
 Public surface:
   run_all_checks()              -> dict   (full report; called by /api/diagnose)
@@ -36,14 +36,14 @@ from intel.error_messages import lookup as _err
 
 _log = logging.getLogger("recon.diagnose")
 
-# Path constants — anchored to the backend/ directory.
+# Path constants - anchored to the backend/ directory.
 _BACKEND_DIR    = Path(__file__).resolve().parents[1]
 _MITRE_PATH     = _BACKEND_DIR / "intel" / "mitre" / "enterprise-attack.json"
 _WARNINGS_DIR   = _BACKEND_DIR.parents[0] / "vendor" / "misp-warninglists" / "lists"
 _DATA_DIR       = _BACKEND_DIR / "data"
 _FRONTEND_BUILD = _BACKEND_DIR.parents[0] / "frontend" / "build" / "index.html"
 
-# In-memory health snapshot — updated by the background loop and the
+# In-memory health snapshot - updated by the background loop and the
 # initial startup run. `/api/health` reads this; staleness is encoded
 # in the `as_of` timestamp.
 _HEALTH: Dict[str, Any] = {"as_of": None, "checks": [], "summary": {"ok": 0, "warn": 0, "fail": 0}}
@@ -59,10 +59,10 @@ def _check(name: str, status: str, message: str, fix_hint: str = "",
 def check_required_packages() -> Dict[str, Any]:
     """Every package this backend reaches for at runtime.
 
-    'required' packages are imported unconditionally — missing one is a
+    'required' packages are imported unconditionally - missing one is a
     fail. 'optional' packages are wrapped in try/except ImportError at
     every call site (YARA scanning degrades to a no-op when yara-python
-    isn't installed, etc.) — missing one is a warn, not a fail.
+    isn't installed, etc.) - missing one is a warn, not a fail.
     """
     required = ("openai", "aiohttp", "fastapi", "starlette", "pydantic",
                 "bcrypt", "itsdangerous", "taxii2client",
@@ -70,7 +70,7 @@ def check_required_packages() -> Dict[str, Any]:
     # 'yara' is yara-python; the YARA rule scanner falls back to a no-op
     # when it isn't installed (every import is guarded). 'feedparser' was
     # in the required list historically but nothing in the codebase
-    # imports it — removed entirely.
+    # imports it - removed entirely.
     optional = ("yara",)
 
     missing_req = []
@@ -100,7 +100,7 @@ def check_required_packages() -> Dict[str, Any]:
             f"All {len(required)} required packages importable. "
             f"Optional packages missing: {', '.join(missing_opt)} "
             f"(features that depend on them degrade to no-op).",
-            fix_hint=f"Optional — install with `pip install {' '.join(missing_opt)}` "
+            fix_hint=f"Optional - install with `pip install {' '.join(missing_opt)}` "
                      f"to enable: yara → YARA file-scan rules.",
             detail={"optional_missing": missing_opt},
         )
@@ -239,7 +239,7 @@ async def check_api_key_reachability(config_module) -> List[Dict[str, Any]]:
             elif status in (401, 403):
                 e = _err("SOURCE_AUTH_FAILED")
                 results.append(_check(f"source.{name}", "fail",
-                                      f"{name}: returned {status} — {e['detail']}",
+                                      f"{name}: returned {status} - {e['detail']}",
                                       fix_hint=e["fix_hint"]))
             elif status == 429:
                 e = _err("SOURCE_RATE_LIMITED")
@@ -251,7 +251,7 @@ async def check_api_key_reachability(config_module) -> List[Dict[str, Any]]:
             else:
                 results.append(_check(f"source.{name}", "warn",
                                       f"{name}: server error (HTTP {status}).",
-                                      fix_hint="Source is returning a server error — likely temporary."))
+                                      fix_hint="Source is returning a server error - likely temporary."))
     return results
 
 
@@ -340,7 +340,7 @@ async def run_startup_checks() -> Dict[str, Any]:
         icon = {"ok": "✓", "warn": "!", "fail": "✗"}[c["status"]]
         _log.log(
             logging.INFO if c["status"] == "ok" else (logging.WARNING if c["status"] == "warn" else logging.ERROR),
-            "[%s] %s — %s", icon, c["name"], c["message"],
+            "[%s] %s - %s", icon, c["name"], c["message"],
         )
     s = report["summary"]
     _log.info("self-diagnosis summary: %d ok, %d warn, %d fail (%dms)",

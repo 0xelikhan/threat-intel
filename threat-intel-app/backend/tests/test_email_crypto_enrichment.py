@@ -72,7 +72,7 @@ def test_enrich_email_rejects_non_email_input():
 
 
 def test_enrich_email_skips_hibp_on_public_mail_provider():
-    """Free HIBP breach-by-domain adds noise for public providers —
+    """Free HIBP breach-by-domain adds noise for public providers  - 
     every gmail / yahoo / hotmail address 'is in' every breach on the
     internet. Provider list is hardcoded; the HIBP request should not
     fire (other free lookups like OpenSanctions can still run)."""
@@ -83,7 +83,7 @@ def test_enrich_email_skips_hibp_on_public_mail_provider():
             async def _capture(_session, url, **_k):
                 if "haveibeenpwned.com" in url:
                     hibp_calls["n"] += 1
-                # Return an empty list — safe default that maps to
+                # Return an empty list - safe default that maps to
                 # 'no breaches' / 'no sanctions'.
                 return []
 

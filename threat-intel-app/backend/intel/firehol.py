@@ -115,7 +115,7 @@ def lookup(ip: str) -> List[str]:
     direct = by_ip.get(ip)
     if direct:
         return sorted(direct)
-    # CIDR walk — only for IPv4 (FireHOL is v4-only in practice).
+    # CIDR walk - only for IPv4 (FireHOL is v4-only in practice).
     try:
         addr = ipaddress.ip_address(ip)
     except ValueError:

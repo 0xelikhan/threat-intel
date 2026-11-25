@@ -1,4 +1,4 @@
-"""subdomain.center — community-sourced subdomain enumeration.
+"""subdomain.center - community-sourced subdomain enumeration.
 
   GET https://api.subdomain.center/?domain={word}
 

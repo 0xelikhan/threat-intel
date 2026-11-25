@@ -57,7 +57,7 @@ def test_extract_iocs_coexists_with_other_buckets():
     text = ("Attack from 185.220.101.5 against evil.example.com, "
             "contact +1 415 555 1234 for ransom.")
     iocs = extract_iocs(text)
-    # All three buckets populated — phones didn't steal from the rest
+    # All three buckets populated - phones didn't steal from the rest
     assert "185.220.101.5" in iocs["ips"]
     assert "evil.example.com" in iocs["domains"]
     assert any("+1" in p for p in iocs["phones"])

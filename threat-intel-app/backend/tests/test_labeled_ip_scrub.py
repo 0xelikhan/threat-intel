@@ -65,7 +65,7 @@ def test_extract_iocs_drops_iocextract_url_fabrication():
         "defanged dotted-quad shapes."
     )
 
-    # And no IP either — _valid_ipv4_octets backstops the regex too.
+    # And no IP either - _valid_ipv4_octets backstops the regex too.
     assert "1.453.161.0" not in iocs.get("ips", []), (
         f"version 1.453.161.0 leaked into IP IOCs: {iocs.get('ips')!r}"
     )
@@ -89,7 +89,7 @@ def test_clean_for_analysis_wipes_labeled_invalid_ip_fields():
         f"sentinel <invalid> so the alert structure stays grep-able. "
         f"Cleaned text:\n{cleaned!r}"
     )
-    # The actual triggering filename + detection name MUST survive —
+    # The actual triggering filename + detection name MUST survive  - 
     # those are the bits the analyst needs to see.
     assert "FileZilla_BundleInstaller" in cleaned
     assert "OneDrive.exe" in cleaned
@@ -132,8 +132,8 @@ def test_url_host_invalid_quad_gate(url, is_invalid):
 
 def test_url_host_octet_gate_catches_defanged_fabrications():
     """The URL gate must catch every shape iocextract emits when it
-    refangs defanged quads — different ports, paths, trailing query
-    strings — so none reach iocs[urls]."""
+    refangs defanged quads - different ports, paths, trailing query
+    strings - so none reach iocs[urls]."""
     from agents.triage import extract_iocs
 
     samples = [

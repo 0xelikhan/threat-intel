@@ -2,14 +2,14 @@
 MITRE D3FEND defensive countermeasure mapping.
 
 Source: https://d3fend.mitre.org + https://github.com/d3fend/d3fend-public
-(Apache-2.0). D3FEND extends ATT&CK with a *defensive* ontology — every
+(Apache-2.0). D3FEND extends ATT&CK with a *defensive* ontology - every
 offensive technique (T####) maps to one or more defensive techniques
 (D3-####) that detect, isolate, or remediate it.
 
 We bundle a compact `attack_to_defend.json` (extracted from D3FEND's
 SPARQL-exported JSON-LD) so the response stage can answer:
 
-  "T1059.001 PowerShell — defend with:
+  "T1059.001 PowerShell - defend with:
    - D3-PMAD (Process Memory Anomaly Detection)
    - D3-FBA  (File Binary Analysis)
    - D3-EALA (Execution Argument Log Analysis)"

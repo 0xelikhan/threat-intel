@@ -3,7 +3,7 @@ Emerging Threats Open + Snort Community IDS/IPS rule corpus loader.
 
 Sources:
   - https://rules.emergingthreats.net/open/ (Proofpoint, MIT/BSD on
-    the data — ET Open rules are freely usable for any purpose).
+    the data - ET Open rules are freely usable for any purpose).
   - https://www.snort.org/downloads/community/ (Cisco, GPL on engine
     but VRT Community rules are explicitly redistributable).
 

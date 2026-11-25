@@ -1,5 +1,5 @@
 """
-OpenSanctions — free API, no key.
+OpenSanctions - free API, no key.
 
 Superset of OFAC SDN. Aggregates 40+ sanctions lists worldwide:
   - US OFAC SDN + CAPTA + BIS Entity List
@@ -10,7 +10,7 @@ Superset of OFAC SDN. Aggregates 40+ sanctions lists worldwide:
   - Canada, Australia, Japan, individual EU member states
   - PEP (politically exposed persons) rollup
 
-Live API at api.opensanctions.org — free tier is generous
+Live API at api.opensanctions.org - free tier is generous
 (~500 req/day, no auth required). We wrap the /search endpoint for
 identifier-typed queries: crypto address, email, entity name.
 
@@ -85,7 +85,7 @@ async def lookup_crypto(session, address: str) -> Optional[Dict[str, Any]]:
     if not top:
         return None
     props = top.get("properties") or {}
-    # The address must actually appear on the entity — otherwise the
+    # The address must actually appear on the entity - otherwise the
     # /search fuzzy-match will return random near-matches.
     addrs = []
     for k in ("cryptoWallets", "wallet", "walletAddress", "cryptoAddress"):

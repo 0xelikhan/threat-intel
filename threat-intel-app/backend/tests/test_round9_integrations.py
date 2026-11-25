@@ -1,12 +1,12 @@
 """
 Round-9 OSS integrations:
 
-  * intel.dataplane         — DataPlane.org honeypot feeds
-  * intel.dshield           — SANS Internet Storm Center
-  * intel.spamhaus_drop     — Spamhaus DROP/EDROP
-  * intel.sarif_output      — SARIF 2.1.0 serializer for file scans
-  * intel.cacao_output      — OASIS CACAO 2.0 playbook serializer
-  * intel.cisa_cpg          — CISA Cybersecurity Performance Goals
+  * intel.dataplane         - DataPlane.org honeypot feeds
+  * intel.dshield           - SANS Internet Storm Center
+  * intel.spamhaus_drop     - Spamhaus DROP/EDROP
+  * intel.sarif_output      - SARIF 2.1.0 serializer for file scans
+  * intel.cacao_output      - OASIS CACAO 2.0 playbook serializer
+  * intel.cisa_cpg          - CISA Cybersecurity Performance Goals
 
 Offline shape tests + built-in fallback assertions.
 """

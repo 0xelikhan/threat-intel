@@ -4,7 +4,7 @@ Maltego GraphML export for RECON investigation results.
 Adapted from cti-expert (MIT, Hieu Ngo, chongluadao.vn) connectors/
 maltego-export.md. Analyst teams that live in Maltego CE / XL can
 import this file and get the case as a node-edge graph for link
-analysis — RECON's existing STIX / SARIF / CACAO exports are great
+analysis - RECON's existing STIX / SARIF / CACAO exports are great
 for SOAR / SIEM / scanning pipelines but don't render as a graph.
 
 We use the standard `maltego.*` entity types (Domain / IPv4Address /
@@ -29,7 +29,7 @@ Shape of the produced GraphML:
         actor  → attributed_to → ioc
         family → distributed_via → ioc
 
-We don't pull every field — Maltego graphs get unreadable past ~150
+We don't pull every field - Maltego graphs get unreadable past ~150
 nodes. Cap each IOC type at 50 nodes; this matches the analyst's
 practical link-analysis budget.
 """
@@ -45,7 +45,7 @@ _log = logging.getLogger("recon.intel.maltego_export")
 
 
 # How many of each IOC type we emit. Past these caps the Maltego canvas
-# becomes a hairball — the analyst will pull more on demand via Maltego
+# becomes a hairball - the analyst will pull more on demand via Maltego
 # transforms on the seed nodes we DO emit.
 _CAPS = {
     "ips":     50,
@@ -110,8 +110,8 @@ def _emit_edge(
 
 def _summarise_ioc(per_source: Dict[str, Any]) -> Tuple[str, str]:
     """Compress one IOC's per-source enrichment into (confidence, note)
-    for the Maltego node. We pull the strongest signal — VirusTotal
-    detections, AbuseIPDB confidence — into the note so the graph view
+    for the Maltego node. We pull the strongest signal - VirusTotal
+    detections, AbuseIPDB confidence - into the note so the graph view
     is informative without expanding every node."""
     if not isinstance(per_source, dict):
         return "Low", ""
@@ -136,7 +136,7 @@ def _summarise_ioc(per_source: Dict[str, Any]) -> Tuple[str, str]:
 def to_graphml(result: Dict[str, Any]) -> str:
     """Serialise a RECON investigation result dict to a Maltego GraphML
     document. `result` is the same dict the SSE `event: complete`
-    payload carries — iocs / enrichments / response_summary /
+    payload carries - iocs / enrichments / response_summary /
     matched_actors / malware_family."""
     if not isinstance(result, dict):
         result = {}
@@ -234,7 +234,7 @@ def to_graphml(result: Dict[str, Any]) -> str:
             evidence=f"Match score {actor.get('score')}",
         )
 
-    # IOC nodes — IPs / domains / URLs / hashes / emails
+    # IOC nodes - IPs / domains / URLs / hashes / emails
     def _ioc_bucket(kind: str, type_name: str, cap_key: str):
         ids: Dict[str, str] = {}
         bucket = iocs.get(kind) or []

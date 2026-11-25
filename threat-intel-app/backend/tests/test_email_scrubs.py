@@ -1,7 +1,7 @@
 """Email composer post-processor tests.
 
 The compose_ai prompt forbids greetings, team self-references, closing
-courtesy lines, and bulleted lists — but LLMs occasionally produce them
+courtesy lines, and bulleted lists - but LLMs occasionally produce them
 anyway. These tests pin the regex safety-nets in email_composer.py.
 """
 
@@ -60,7 +60,7 @@ def test_our_team_with_plural_verb_rewritten():
 
 def test_orphan_auxiliary_sentences_dropped():
     """The team-strip fallback can leave 'The team is monitoring' as bare
-    ' is monitoring' — that orphan sentence must be dropped."""
+    ' is monitoring' - that orphan sentence must be dropped."""
     body = ("The endpoint was isolated. The team is monitoring for further "
             "activity. Sign-in logs were captured.")
     out = _strip_filler_phrases(body)
@@ -145,7 +145,7 @@ def test_bullet_glyph_stripped():
 
 # ─── capitalisation after sentence-level rewrites ────────────────────────────
 def test_capitalisation_after_team_rewrite():
-    """The verb-rewrite produces lowercase 'the notification was cleared' —
+    """The verb-rewrite produces lowercase 'the notification was cleared'  - 
     when that sits at sentence start it must be capitalised."""
     body = "Our MDR team cleared the notification."
     out = _strip_filler_phrases(body)
@@ -211,7 +211,7 @@ def test_user_agent_identified_for_this_request():
 
 
 def test_two_adjacent_closing_sentences_both_stripped():
-    """The lookbehind fix — both back-to-back closing-courtesy sentences
+    """The lookbehind fix - both back-to-back closing-courtesy sentences
     must be removed, not just the first."""
     body = ("Some real content here. "
             "We will continue monitoring your environment for any related activity. "
@@ -226,7 +226,7 @@ def test_two_adjacent_closing_sentences_both_stripped():
 
 
 def test_closing_courtesy_at_top_of_body():
-    """The lookbehind doesn't cover position 0 — verify the
+    """The lookbehind doesn't cover position 0 - verify the
     top-of-body closing-courtesy strip catches it."""
     body = "Please contact us if you have questions. The real content follows."
     out = _strip_filler_phrases(body)
@@ -241,7 +241,7 @@ def test_for_any_related_activity_stripped():
 
 
 def test_robotic_email_sample_user_complained_about():
-    """Integration test — the exact robotic sample the user pasted must
+    """Integration test - the exact robotic sample the user pasted must
     come out without the worst offenders."""
     bad = (
         "The user agent identified for this request was BAV2ROPC, and the "

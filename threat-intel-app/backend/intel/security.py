@@ -1,5 +1,5 @@
 """
-Platform hardening helpers — spec §9.
+Platform hardening helpers - spec §9.
 
 Provides:
   - security_headers_middleware: ASGI middleware that adds CSP, X-Frame-Options,
@@ -8,7 +8,7 @@ Provides:
   - safe_data_path(path, root): resolves a user-supplied path inside the data
     directory and refuses to escape it (path traversal guard).
   - audit_log(event, **fields): emits a structured record to the
-    application's stdout logger (no disk write — see no-persistence
+    application's stdout logger (no disk write - see no-persistence
     policy; operator log shipping is what makes this durable).
   - encrypt_value / decrypt_value: Fernet-based at-rest encryption for API
     keys when RECON_SECRET env var is set. If RECON_SECRET is missing the
@@ -42,8 +42,8 @@ _DATA_DIR.mkdir(parents=True, exist_ok=True)
 # _AUDIT_LOG used to point at backend/data/audit.log when audit records
 # were persisted. The platform's no-persistence policy now routes them
 # through the structured logger to stdout, so there is no on-disk
-# audit file — the constant stays only for back-compat references.
-_MAX_FILE = 50 * 1024 * 1024   # 50 MB — the authoritative file-upload cap
+# audit file - the constant stays only for back-compat references.
+_MAX_FILE = 50 * 1024 * 1024   # 50 MB - the authoritative file-upload cap
                                 # the scan endpoints enforce after the
                                 # multipart body has been parsed.
 
@@ -54,7 +54,7 @@ _MAX_FILE = 50 * 1024 * 1024   # 50 MB — the authoritative file-upload cap
 # add ~250 bytes for a single-file form but more for multi-file), still
 # passes through to the handler's authoritative len(data) > 50 MiB check.
 # The point of THIS cap is to refuse multi-GB DOS bodies, not to
-# microscopically enforce the file limit — that's the handler's job.
+# microscopically enforce the file limit - that's the handler's job.
 _MAX_BODY = (50 * 1024 * 1024) + (1 * 1024 * 1024)
 
 
@@ -80,7 +80,7 @@ SECURITY_HEADERS = {
     "Referrer-Policy":        "strict-origin-when-cross-origin",
     "Permissions-Policy":     "camera=(), microphone=(), geolocation=()",
     # Force HTTPS for two years + include subdomains + preload-list
-    # eligible. Only sent in production — local dev runs over plain
+    # eligible. Only sent in production - local dev runs over plain
     # HTTP and an HSTS header would brick the browser's localhost
     # bookmark for two years.
     # (Conditional injection happens in the middleware below.)
@@ -135,7 +135,7 @@ def safe_data_path(path: str, root: Optional[Path] = None) -> Optional[Path]:
 # Redaction-safe by construction: every string value in `fields` is passed
 # through the redactor before it reaches disk. That means an analyst-pasted
 # IOC, customer log line, or accidentally-included credential never ends up
-# in audit.log — only the typed placeholders survive. The redaction-rejected
+# in audit.log - only the typed placeholders survive. The redaction-rejected
 # case still logs the request envelope (path / status / client) so we have
 # a trail, just with the body replaced by a marker.
 _REDACT_AUDIT_FIELDS = {"error", "body", "log", "raw", "input", "message"}
@@ -146,7 +146,7 @@ def _redact_audit_value(field: str, value):
     the field name is in the sensitive set. Non-string types pass through.
     Redactor failures fail closed (return a marker) AND surface a separate
     audit_system_error event so the operator notices that audits are no
-    longer being fully sanitised — silently swapping in a placeholder
+    longer being fully sanitised - silently swapping in a placeholder
     used to hide real outages."""
     if not isinstance(value, str) or not value:
         return value
@@ -189,7 +189,7 @@ def audit_log(event: str, **fields) -> None:
     try:
         logger.info("audit %s %s", event, json.dumps(safe, default=str)[:1500])
     except Exception as _e:
-        # Audit log gaps are security-relevant — never let them be silent.
+        # Audit log gaps are security-relevant - never let them be silent.
         # Fall back to a degraded form that emits at least the event name
         # and the failure reason so SIEM tail rules still see the marker.
         try:
@@ -203,7 +203,7 @@ def _audit_client_ip(request) -> Optional[str]:
     """Return the IP we should attribute this request to in the audit log.
     Behind a TLS-terminating proxy (Azure Container Apps, nginx,
     Cloudflare), request.client.host is always the proxy's internal
-    address — useless for forensics. Honour X-Forwarded-For only when
+    address - useless for forensics. Honour X-Forwarded-For only when
     RECON_TRUST_PROXY is set so a dev box doesn't accidentally believe
     a client-supplied header. Returns at most 64 chars; left-most XFF
     entry is the originating client per RFC 7239 conventions."""
@@ -233,7 +233,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
         # HTTP client would need a per-chunk read+abort path at the ASGI
         # layer to block, which we don't have. The file-scan endpoints
         # that take genuinely large bodies do their OWN size check during
-        # the upload stream — those stay correct even on chunked uploads.
+        # the upload stream - those stay correct even on chunked uploads.
         cl = request.headers.get("content-length")
         if cl is not None:
             try:
@@ -269,7 +269,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
                                 "status":     413}
                     return JSONResponse(body, status_code=413)
             except (TypeError, ValueError):
-                # Malformed Content-Length — let the downstream parser
+                # Malformed Content-Length - let the downstream parser
                 # reject the request rather than guessing at intent.
                 pass
 
@@ -344,7 +344,7 @@ def validate_ioc_value(value: str, ioc_type: str) -> bool:
         return False
     rex = _PATTERNS.get(ioc_type)
     if not rex:
-        return True  # unknown type — let downstream handle
+        return True  # unknown type - let downstream handle
     return bool(rex.match(value))
 
 

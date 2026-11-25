@@ -1,5 +1,5 @@
 """
-Ransomware.live — recent ransomware victim postings scraped from leak
+Ransomware.live - recent ransomware victim postings scraped from leak
 sites. Free API, no key.
 
 Answers a question static intel can't:
@@ -7,7 +7,7 @@ Answers a question static intel can't:
 
 The static family list in intel/misp_galaxies is authoritative for
 attribution but says nothing about who's still operating. A hit here
-means the group's leak site was updated in the last ~48 hours — that
+means the group's leak site was updated in the last ~48 hours - that
 directly changes the recommended actions the analyst produces.
 
 Cached hourly. All lookups are keyed by lowercased family/group name.
@@ -32,7 +32,7 @@ _URLS = {
 }
 
 _lock = threading.RLock()  # reentrant: _ensure_loaded holds it, then
-                            # _refresh_sync re-acquires — a plain Lock
+                            # _refresh_sync re-acquires - a plain Lock
                             # deadlocks; RLock is a drop-in fix.
 _state: Dict[str, Any] = {
     "loaded_at":    0.0,
@@ -55,7 +55,7 @@ def _refresh_sync() -> None:
     except Exception as e:
         _log.warning("ransomware.live recent-victims fetch failed: %s", e)
         _state["error"] = str(e)[:200]
-        # Short backoff — retry in ~60s, not the full 1h TTL. See
+        # Short backoff - retry in ~60s, not the full 1h TTL. See
         # threatview_c2.py for the same pattern + rationale.
         _state["loaded_at"] = time.time() - _TTL_SECONDS + 60
         return
@@ -130,14 +130,14 @@ def lookup_group(name: str) -> Optional[Dict[str, Any]]:
     if not isinstance(name, str) or not name:
         return None
     key = name.strip().lower()
-    # Read under lock — iterating by_group.items() while _refresh_sync
+    # Read under lock - iterating by_group.items() while _refresh_sync
     # replaces the dict would raise RuntimeError.
     with _lock:
         by_group = _state.get("by_group") or {}
         hit = by_group.get(key)
         if hit:
             return hit
-        # Loose match — many families have suffix variants
+        # Loose match - many families have suffix variants
         # ('LockBit3', 'lockbit-3').
         for g, row in by_group.items():
             if key in g or g in key:

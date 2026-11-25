@@ -6,12 +6,12 @@ The platform already had offline KEV + EPSS catalogs cached at startup
 calls for a per-investigation live fetch so the CVE intelligence is
 fresh every time. This module does that:
 
-  * nvd_cve(cve_id)       — services.nvd.nist.gov per-CVE detail
+  * nvd_cve(cve_id)       - services.nvd.nist.gov per-CVE detail
                             (description, CVSS v3 score + severity,
                              affected products)
-  * epss(cve_id)          — api.first.org per-CVE exploitation
+  * epss(cve_id)          - api.first.org per-CVE exploitation
                             probability + percentile
-  * cisa_kev_check(cve_id) — once-per-investigation live download of the
+  * cisa_kev_check(cve_id) - once-per-investigation live download of the
                               CISA KEV catalog, cached in a module-level
                               dict for the lifetime of the asyncio
                               context. Never written to disk. Returns
@@ -94,7 +94,7 @@ def _parse_nvd(r: Any, cve_id: str) -> Dict[str, Any]:
     score    = cvss_data.get("baseScore")
     severity = (cvss_data.get("baseSeverity") or "").upper()
 
-    # Affected products — collected from CPE matches; cap to keep payload tight
+    # Affected products - collected from CPE matches; cap to keep payload tight
     affected = set()
     for cfg in (cve.get("configurations") or []):
         for node in (cfg.get("nodes") or []):
@@ -125,8 +125,8 @@ def _parse_nvd(r: Any, cve_id: str) -> Dict[str, Any]:
         "last_modified":     cve.get("lastModified"),
         "verdict":           verdict,
         "summary":           (f"{cve_id}: CVSS {score or 'unknown'} ({severity or 'unknown'})"
-                              + (f" — {description[:140]}…" if len(description) > 140
-                                 else (f" — {description}" if description else ""))),
+                              + (f" - {description[:140]}…" if len(description) > 140
+                                 else (f" - {description}" if description else ""))),
     }
 
 
@@ -409,7 +409,7 @@ def _parse_msrc(r: Any, cve_id: str) -> Dict[str, Any]:
 # call this run fetches + populates the module-level cache; subsequent
 # calls in the same investigation use the cached dict.
 #
-# The cache TTL is 60 minutes — short enough to pick up new KEV entries
+# The cache TTL is 60 minutes - short enough to pick up new KEV entries
 # during a busy day, long enough to avoid hammering CISA on every IOC.
 # Never persisted to disk per the user spec.
 
@@ -471,7 +471,7 @@ async def cisa_kev_check(session, cve_id: str) -> Dict[str, Any]:
     same investigation via the module-level cache."""
     by_cve = await _ensure_kev_loaded(session)
     if not by_cve:
-        # KEV download failed (offline / 5xx) — fail soft so the rest of
+        # KEV download failed (offline / 5xx) - fail soft so the rest of
         # the CVE enrichment still runs.
         return {"source": "cisa_kev", "cve_id": cve_id,
                 "error": "KEV catalog unavailable",
@@ -503,7 +503,7 @@ async def cisa_kev_check(session, cve_id: str) -> Dict[str, Any]:
         "summary":             (f"{cve_id} is ACTIVELY EXPLOITED per CISA KEV "
                                 f"(added {entry.get('dateAdded')}, "
                                 f"due {entry.get('dueDate')})"
-                                + (" — ransomware use confirmed"
+                                + (" - ransomware use confirmed"
                                    if entry.get("knownRansomwareCampaignUse") == "Known"
                                    else "")),
     }

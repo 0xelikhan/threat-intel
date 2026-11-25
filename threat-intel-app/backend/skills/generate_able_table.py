@@ -1,5 +1,5 @@
 """
-GenerateAbleTableSkill — produce a PEAK ABLE (Actor, Behavior, Location,
+GenerateAbleTableSkill - produce a PEAK ABLE (Actor, Behavior, Location,
 Evidence) table for a given hunt hypothesis.
 
 Prompt adapted from Cisco Talos PEAK-Assistant
@@ -39,7 +39,7 @@ pieces of a hunt:
 Given the hypothesis and the RECON analysis below, produce a single PEAK ABLE
 table in Markdown.
 
-## Output format (Markdown — start with the title, nothing before it)
+## Output format (Markdown - start with the title, nothing before it)
 
 # PEAK ABLE Table: <short common name for the technique>
 

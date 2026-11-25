@@ -1,5 +1,5 @@
 """
-Error message registry — every analyst-facing error in one place with a
+Error message registry - every analyst-facing error in one place with a
 plain-English explanation and an actionable fix hint.
 
 Usage:
@@ -9,7 +9,7 @@ Usage:
     #    "fix_hint": "Open Settings and add your Azure OpenAI key..."}
 
 The keys are stable string identifiers. Call sites pass them by name
-rather than re-spelling the message — adds one place to update wording
+rather than re-spelling the message - adds one place to update wording
 across the platform.
 
 For raw exceptions, `lookup_for_exception(exc)` walks the registry and
@@ -37,7 +37,7 @@ _REGISTRY: Dict[str, Dict[str, str]] = {
     "OPENAI_BASE_URL_MISSING": {
         "detail":    "Azure OpenAI endpoint is not configured.",
         "error_code": "openai_base_url_missing",
-        "fix_hint":  ("Open Settings and add OPENAI_BASE_URL — the endpoint URL "
+        "fix_hint":  ("Open Settings and add OPENAI_BASE_URL - the endpoint URL "
                       "from the Azure Portal → your OpenAI resource → Keys and "
                       "Endpoint (looks like https://<name>.openai.azure.com/)."),
     },
@@ -104,7 +104,7 @@ _REGISTRY: Dict[str, Dict[str, str]] = {
         "fix_hint":  ("Open Settings and add CENSYS_API_KEY (the v3 Personal "
                       "Access Token, recommended) from your Censys account → "
                       "API page. If you're still on the legacy v2 API, set "
-                      "BOTH CENSYS_ID and CENSYS_SECRET — one without the "
+                      "BOTH CENSYS_ID and CENSYS_SECRET - one without the "
                       "other won't authenticate."),
     },
     "VT_KEY_MISSING": {
@@ -148,7 +148,7 @@ _REGISTRY: Dict[str, Dict[str, str]] = {
         "detail":    "Generated Sigma rule has a syntax error.",
         "error_code": "sigma_validation_failed",
         "fix_hint":  ("The AI will retry automatically. If this keeps happening "
-                      "try a more specific log input — sparse alerts produce "
+                      "try a more specific log input - sparse alerts produce "
                       "rules that sigma-cli rejects."),
     },
     "SIGMA_CLI_MISSING": {
@@ -170,7 +170,7 @@ _REGISTRY: Dict[str, Dict[str, str]] = {
     "UNSUPPORTED_FILE_TYPE": {
         "detail":    "RECON doesn't have a format-specific parser for this file type.",
         "error_code": "unsupported_file_type",
-        "fix_hint":  ("Basic hashes, entropy, and string extraction still ran — "
+        "fix_hint":  ("Basic hashes, entropy, and string extraction still ran - "
                       "format-specific (PE / Office / PDF / archive) checks were "
                       "skipped because this format isn't supported."),
     },
@@ -228,7 +228,7 @@ _EXC_PATTERNS = (
     (("APITimeoutError", "TimeoutError"), ("",),                 "OPENAI_TIMEOUT"),
     # JSON parse failures from the LLM
     (("JSONDecodeError", "ValueError"), ("json",),               "OPENAI_BAD_JSON"),
-    # Aiohttp HTTP failures — mapped by status text
+    # Aiohttp HTTP failures - mapped by status text
     (("ClientError",),               ("401", "403", "unauthorized", "forbidden"), "SOURCE_AUTH_FAILED"),
     (("ClientError",),               ("429", "rate limit"),                       "SOURCE_RATE_LIMITED"),
     (("ClientError", "TimeoutError"), ("timeout", "timed out"),                   "SOURCE_TIMEOUT"),
@@ -251,6 +251,6 @@ def lookup_for_exception(exc: BaseException) -> Dict[str, str]:
 
 
 def all_keys() -> Dict[str, Dict[str, str]]:
-    """Return the full registry — used by the /api/diagnose endpoint to
+    """Return the full registry - used by the /api/diagnose endpoint to
     enumerate every well-known error code."""
     return {k: dict(v) for k, v in _REGISTRY.items()}

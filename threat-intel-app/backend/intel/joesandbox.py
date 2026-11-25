@@ -1,7 +1,7 @@
 """
 Joe Sandbox Cloud hash + URL lookup.
 
-Source: https://www.joesandbox.com/ — commercial sandbox with free
+Source: https://www.joesandbox.com/ - commercial sandbox with free
 tier (Joe Sandbox Cloud Basic). API key passed as a form field, not
 a header.
 

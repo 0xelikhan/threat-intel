@@ -20,7 +20,7 @@ attack scripts:
     - Generic base64 blocks       (printable-ascii filter)    -> plaintext
     - String.split(...).reverse().join("") tricks             -> rebuilt
 
-  Detected only (need a JS engine to fully decode — we surface the
+  Detected only (need a JS engine to fully decode - we surface the
   detection so the analyst knows the payload is obfuscated and can
   paste it into a sandbox):
     - JSFuck                      "[][[]]+[+!![]]+..."  (chars: [ ] ( ) ! +)
@@ -35,7 +35,7 @@ Public API:
 
   detect_obfuscation_types(text) -> [type, ...]   (cheap detect-only)
 
-Never raises — invalid input returns {"detected": [], "decoded": []}.
+Never raises - invalid input returns {"detected": [], "decoded": []}.
 Output is capped (decoded text truncated to 4 KB, max 8 decodes per
 type) so a single huge alert can't blow up downstream pipelines.
 """
@@ -263,7 +263,7 @@ def _decode_base64_generic(text: str) -> List[Tuple[str, str]]:
     return out
 
 
-# ─── 10. JSFuck — detect-only  (chars: [ ] ( ) ! +)  ────────────────────────
+# ─── 10. JSFuck - detect-only  (chars: [ ] ( ) ! +)  ────────────────────────
 # Long runs (>= 80 chars) where the ratio of JSFuck chars is > 95%.
 _JSFUCK_CHARSET = set("[]()!+")
 _JSFUCK_MIN_LEN = 80
@@ -296,7 +296,7 @@ def _detect_jsfuck(text: str) -> Optional[Tuple[float, str]]:
     return ratio, best_run[:200]
 
 
-# ─── 11. AAEncode — detect-only  (Japanese full-width emoji art)  ───────────
+# ─── 11. AAEncode - detect-only  (Japanese full-width emoji art)  ───────────
 # Signature: heavy use of ｲｱｳ ﾟ ω ﾉ ｻ characters and the literal token
 # "(ﾟДﾟ)" or "(ﾟｪﾟ=" near the start.
 _AAENCODE_SIG = re.compile(
@@ -311,7 +311,7 @@ def _detect_aaencode(text: str) -> Optional[Tuple[float, str]]:
     return 1.0, text[max(0, m.start() - 20):m.start() + 200]
 
 
-# ─── 12. JJEncode — detect-only  (heavy $ / _ tokens)  ─────────────────────
+# ─── 12. JJEncode - detect-only  (heavy $ / _ tokens)  ─────────────────────
 # Signature: leading `$=~[];$={...}` boilerplate.
 _JJENCODE_SIG = re.compile(r"\$\s*=\s*~\s*\[\s*\]\s*;\s*\$\s*=\s*\{")
 
@@ -325,7 +325,7 @@ def _detect_jjencode(text: str) -> Optional[Tuple[float, str]]:
 
 # ─── public API ─────────────────────────────────────────────────────────────
 def detect_obfuscation_types(text: str) -> List[str]:
-    """Cheap detection-only pass — returns the obfuscation types present
+    """Cheap detection-only pass - returns the obfuscation types present
     in the text without spending time decoding. Used by the orchestrator
     to tag alerts as 'obfuscated' for prioritisation."""
     if not text or not isinstance(text, str):
@@ -364,7 +364,7 @@ def deobfuscate(text: str) -> Dict[str, List[Dict[str, Any]]]:
                 "preview": s[:160],
             })
 
-    # Decoders (each is a safe string transform — no eval)
+    # Decoders (each is a safe string transform - no eval)
     _push_decoded("hex_escape",      _decode_hex_escapes(text))
     _push_decoded("unicode_escape",  _decode_unicode_escapes(text))
     _push_decoded("octal_escape",    _decode_octal_escapes(text))
@@ -438,7 +438,7 @@ def deobfuscate(text: str) -> Dict[str, List[Dict[str, Any]]]:
 
 
 # ────────────────────────────────────────────────────────────────────────────
-# CyberChef "Magic" — recursive auto-decoder
+# CyberChef "Magic" - recursive auto-decoder
 #
 # Idea: try each whole-input decoder, score the result on a
 # "how decoded does this look?" metric, pick the winner, recurse. Stop
@@ -452,7 +452,7 @@ def deobfuscate(text: str) -> Dict[str, List[Dict[str, Any]]]:
 #     ciphertext / random bytes)
 # ────────────────────────────────────────────────────────────────────────────
 
-# Common short English words — cheap dictionary check. Designed to flag
+# Common short English words - cheap dictionary check. Designed to flag
 # typical analyst-relevant decoded content: HTTP / cmd / config / log
 # fragments. Not meant as a full English detector.
 _ENGLISH_HINTS = frozenset((
@@ -467,7 +467,7 @@ _ENGLISH_HINTS = frozenset((
 
 
 def _shannon(bts: bytes) -> float:
-    """Shannon entropy in bits/byte — quick proxy for 'is this random?'.
+    """Shannon entropy in bits/byte - quick proxy for 'is this random?'.
     English text is ~4.2, base64 is ~5.5-6, random bytes ~8."""
     if not bts:
         return 0.0
@@ -483,26 +483,26 @@ def _decode_score(s: str) -> float:
     penalty into a single 0-100ish score. Higher = more 'decoded'.
     Returns 0 on pathological / very short inputs.
 
-    Weighting notes — every other ranking we tried failed on this case:
+    Weighting notes - every other ranking we tried failed on this case:
       base64( hex( english ) )
     All three layers are 100%-printable ASCII so a printable-only
     scorer can't tell them apart. Entropy alone mis-rewards hex strings
     (16 unique chars = lower entropy than English's 50+, which the
     naive 'lower entropy is better' bonus would call MORE text-like).
     The only signal that cleanly orders these three layers in the right
-    direction is recognised-word density — so it dominates the score.
+    direction is recognised-word density - so it dominates the score.
     """
     if not s or len(s) < 4:
         return 0.0
     pr = _printable_ratio(s)
-    # Cheap English-word density — the dominant signal of 'decoded'.
+    # Cheap English-word density - the dominant signal of 'decoded'.
     toks = re.findall(r"[A-Za-z]{3,}", s.lower())
     if toks:
         hits = sum(1 for t in toks if t in _ENGLISH_HINTS)
         eng_ratio = hits / max(1, len(toks))
     else:
         eng_ratio = 0.0
-    # Cardinality bonus — strings with too FEW unique chars (hex / base32)
+    # Cardinality bonus - strings with too FEW unique chars (hex / base32)
     # are still partially-encoded, even if printable. Penalise narrow
     # alphabets so unwrapping hex of a base64 of a string outscores the
     # intermediate hex layer.
@@ -590,7 +590,7 @@ def _magic_rot13(s: str) -> Optional[str]:
 
 
 def _magic_rot47(s: str) -> Optional[str]:
-    """ROT47 — same idea as ROT13 but operates on the full printable
+    """ROT47 - same idea as ROT13 but operates on the full printable
     ASCII range 33-126. Common in CTF challenges + occasional malware."""
     if not s:
         return None
@@ -610,7 +610,7 @@ def _magic_reverse(s: str) -> Optional[str]:
 
 def _magic_gzip(s: str) -> Optional[str]:
     """Try gzip-decompress the input as bytes. Useful when an attacker
-    base64-encoded gzip output — Magic catches it after the base64 step
+    base64-encoded gzip output - Magic catches it after the base64 step
     succeeds and recurses."""
     if not s:
         return None
@@ -652,7 +652,7 @@ def _magic_html(s: str) -> Optional[str]:
 
 def _magic_xor_brute(s: str) -> Optional[str]:
     """Single-byte XOR brute. Tries every key 1-255, picks the BEST
-    scoring candidate (not the first over a threshold — the order-
+    scoring candidate (not the first over a threshold - the order-
     dependent variant could return a mediocre key when a stronger one
     came later in the loop). Common in droppers + simple loaders
     ("XOR with key 0x37")."""
@@ -681,7 +681,7 @@ def _magic_xor_brute(s: str) -> Optional[str]:
     return None
 
 
-# Registry — order matters only for tie-breaks (we pick the best
+# Registry - order matters only for tie-breaks (we pick the best
 # scorer each round, but if two ops score identically we prefer the
 # earlier entry, which is the more common one in real payloads).
 _MAGIC_OPS: List[Tuple[str, Callable[[str], Optional[str]]]] = [
@@ -704,7 +704,7 @@ def _best_one_step_score(text: str) -> float:
     """Single-step lookahead: best score achievable by applying any
     single operation to `text`, OR the score of `text` itself if no
     operation improves it. Used by magic_decode to evaluate candidate
-    branches one level deeper — fixes the bug where multi-layer
+    branches one level deeper - fixes the bug where multi-layer
     chains (base64 of hex of english) stop early because the
     intermediate layer scores below the input."""
     base = _decode_score(text)
@@ -731,7 +731,7 @@ def magic_decode(text: str, max_depth: int = 4,
     `min_improvement` or after `max_depth` rounds.
 
     Lookahead is what makes multi-layer encodings work: a hex layer
-    sandwiched between base64 and english scores below both — but
+    sandwiched between base64 and english scores below both - but
     looking one step ahead reveals that decoding the hex produces a
     very-high-scoring english string, so the algorithm correctly
     descends through it.
@@ -742,7 +742,7 @@ def magic_decode(text: str, max_depth: int = 4,
         "final_score":  best achieved score,
         "final_output": best decoded text (truncated to 4KB),
         "chain": [{"op": str, "score": float, "preview": str}, ...],
-        "improved": bool — True iff final_score > input_score + threshold
+        "improved": bool - True iff final_score > input_score + threshold
       }
     """
     if not text or not isinstance(text, str):

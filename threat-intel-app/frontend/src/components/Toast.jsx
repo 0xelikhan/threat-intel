@@ -7,7 +7,7 @@
  *   * the human-readable error message
  *   * the X-Request-ID for log correlation (when present)
  *   * a Retry button (re-fires the original request callback when
- *     supplied via err._retry — most call sites don't set this and
+ *     supplied via err._retry - most call sites don't set this and
  *     the button is omitted)
  *   * a fix hint when the backend included one (Section 5 registry)
  *

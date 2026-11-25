@@ -1,14 +1,14 @@
 """
 Behavioural tests for the round-5 OSS integrations:
 
-  * intel.d3fend             — MITRE D3FEND defensive countermeasures
-  * intel.stratus_techniques — DataDog Stratus Red Team TTP catalogue
-  * intel.falco_rules        — Sysdig falco-rules container detection
-  * intel.owasp_crs          — OWASP ModSecurity Core Rule Set
-  * intel.tranco             — Tranco top-1M ranked domains
-  * intel.malapi             — MalAPI.io Windows-API map
-  * intel.ghsa               — GitHub Security Advisories database
-  * intel.codeql_queries     — CodeQL query catalog
+  * intel.d3fend             - MITRE D3FEND defensive countermeasures
+  * intel.stratus_techniques - DataDog Stratus Red Team TTP catalogue
+  * intel.falco_rules        - Sysdig falco-rules container detection
+  * intel.owasp_crs          - OWASP ModSecurity Core Rule Set
+  * intel.tranco             - Tranco top-1M ranked domains
+  * intel.malapi             - MalAPI.io Windows-API map
+  * intel.ghsa               - GitHub Security Advisories database
+  * intel.codeql_queries     - CodeQL query catalog
 
 All graceful-missing-corpus paths exercised offline. The unified
 match_detections skill is verified to fan into all 10 sources.
@@ -25,7 +25,7 @@ def test_d3fend_fallback_covers_top_techniques():
     s = stats()
     assert s["loaded"] is True
     assert s["source"] in ("vendored", "fallback")
-    # T1059.001 PowerShell — must have at least one countermeasure in the
+    # T1059.001 PowerShell - must have at least one countermeasure in the
     # built-in fallback.
     cms = countermeasures_for("T1059.001")
     assert cms
@@ -85,7 +85,7 @@ def test_malapi_classifies_injection_apis_via_fallback():
     s = stats()
     assert s["loaded"] is True
     # VirtualAllocEx + WriteProcessMemory + CreateRemoteThread is the
-    # canonical injection triad — fallback must catch it.
+    # canonical injection triad - fallback must catch it.
     out = classify_apis([
         "VirtualAllocEx", "WriteProcessMemory", "CreateRemoteThread",
         "InternetOpen", "GetAsyncKeyState",
@@ -121,7 +121,7 @@ def test_codeql_fallback_returns_known_queries():
     from intel.codeql_queries import lookup_cwe, queries_for_language, stats
     s = stats()
     assert s["loaded"] is True
-    # CWE-89 is SQL injection — fallback has multiple language coverage
+    # CWE-89 is SQL injection - fallback has multiple language coverage
     sqli = lookup_cwe("CWE-89")
     assert sqli
     assert any(q["language"] == "python" for q in sqli)
@@ -137,7 +137,7 @@ def test_codeql_normalises_cwe_prefix():
     assert a == b
 
 
-# ─── Unified match_detections — now spans 10 corpora ────────────────────────
+# ─── Unified match_detections - now spans 10 corpora ────────────────────────
 def test_match_detections_returns_ten_source_keys():
     from skills import run_skill
     out = asyncio.run(run_skill("match_detections", {

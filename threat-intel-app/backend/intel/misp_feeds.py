@@ -4,7 +4,7 @@ MISP-format flat IOC feed lookup.
 Several MISP communities publish a `hashes.csv` flat dump alongside the
 per-event MISP JSON. Each row is `sha1,sha256,md5,event_uuid,filename`.
 That gives us a fast, free, daily-refreshing set-membership check for
-file hashes against curated threat-intel — no MISP server required.
+file hashes against curated threat-intel - no MISP server required.
 
 Feeds polled (all public, no key, MISP-recommended in
 https://www.misp-project.org/feeds/):
@@ -19,7 +19,7 @@ Lookup contract:
 
 Refresh cadence: 6 hours (TTL in the namespaced cache module).
 Fetch is lazy on first call and never blocks startup. If any feed fails
-the whole module continues with whatever feeds succeeded — degrades
+the whole module continues with whatever feeds succeeded - degrades
 gracefully like every other source in the enrichment fan-out.
 """
 
@@ -41,7 +41,7 @@ _TTL_SECONDS = 6 * 3600
 _FETCH_TIMEOUT = aiohttp.ClientTimeout(total=30)
 _USER_AGENT = "RECON-MDR-Platform/1.0 (+misp-feed-poller)"
 
-# (display_name, base_url) — the hashes.csv lives at base_url + "/hashes.csv"
+# (display_name, base_url) - the hashes.csv lives at base_url + "/hashes.csv"
 # for every MISP feed that publishes a flat dump.
 _FEEDS = [
     ("CIRCL OSINT",
@@ -83,7 +83,7 @@ def _stale(feed_state: Dict[str, Any]) -> bool:
 async def _fetch_one(session: aiohttp.ClientSession,
                      feed_name: str, base_url: str) -> None:
     """Fetch a single feed's hashes.csv and rebuild its in-memory set.
-    Never raises — failures land in _state[feed_name]["error"]."""
+    Never raises - failures land in _state[feed_name]["error"]."""
     url = f"{base_url}/hashes.csv"
     try:
         async with session.get(url, timeout=_FETCH_TIMEOUT,
@@ -130,7 +130,7 @@ def _refresh_sync() -> None:
 
     If a loop is already running in the caller's thread (e.g. a test
     calls this directly from an async coroutine), fall back to
-    scheduling the refresh — the caller should await it themselves,
+    scheduling the refresh - the caller should await it themselves,
     but at least we don't raise."""
     _ensure_state()
     if not any(_stale(_state[n]) for n, _ in _FEEDS):
@@ -138,7 +138,7 @@ def _refresh_sync() -> None:
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        # No running loop — fresh loop is safe.
+        # No running loop - fresh loop is safe.
         try:
             asyncio.run(_refresh_if_stale())
         except Exception as e:
@@ -162,7 +162,7 @@ def _schedule_bg_refresh_if_stale() -> None:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         return
-    # A single background task suffices — _refresh_if_stale is guarded
+    # A single background task suffices - _refresh_if_stale is guarded
     # by an asyncio.Lock so parallel schedule calls collapse into one
     # real fetch. Detach the task; we intentionally don't track it.
     loop.create_task(_refresh_if_stale())
@@ -176,7 +176,7 @@ async def _refresh_if_stale() -> None:
     if not any(_stale(_state[n]) for n, _ in _FEEDS):
         return
     async with _load_lock:
-        # Re-check after acquiring the lock — another coroutine may have
+        # Re-check after acquiring the lock - another coroutine may have
         # already refreshed while we were waiting.
         to_fetch = [(n, b) for (n, b) in _FEEDS if _stale(_state[n])]
         if not to_fetch:
@@ -191,13 +191,13 @@ async def _refresh_if_stale() -> None:
 async def lookup_hash(value: str) -> List[Dict[str, Any]]:
     """Look up a hash across every loaded MISP feed. Returns one entry
     per feed that has the hash. Empty list = no matches (or all feeds
-    failed to load — analyst can still rely on other enrichment sources).
+    failed to load - analyst can still rely on other enrichment sources).
 
     Perf: the first hash lookup in a fresh process used to await
     _refresh_if_stale(), which downloads three multi-MB hashes.csv
     feeds. That blocked the enrichment fan-out for ~30 s on cold
     start (measured 2026-07). We now fire the refresh in the
-    background and serve whatever's already indexed — for the very
+    background and serve whatever's already indexed - for the very
     first hash the analyst may get an empty result from this source,
     but every source in the fan-out is best-effort by design. The
     lifespan pre-warm in main.py primes the feeds at startup so most

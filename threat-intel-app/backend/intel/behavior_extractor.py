@@ -1,5 +1,5 @@
 """
-Behavioral / TTP extractor — spec §1.
+Behavioral / TTP extractor - spec §1.
 
 Pre-enrichment regex + pattern matching against raw log input. Surfaces
 behavioral indicators that won't show up in IOC-based enrichment (PowerShell
@@ -45,60 +45,60 @@ _PATTERNS = [
     # ── PowerShell ─────────────────────────────────────────────────────────────
     (re.compile(r"-(?:enc|encoded|encodedcommand)\s+[a-zA-Z0-9+/=]{16,}", re.IGNORECASE),
      "powershell", "PowerShell EncodedCommand", "T1059.001", "HIGH",
-     "Base64-encoded PowerShell payload — common technique to obfuscate malicious commands and evade simple string-based detection."),
+     "Base64-encoded PowerShell payload - common technique to obfuscate malicious commands and evade simple string-based detection."),
     (re.compile(r"-(?:ep|executionpolicy)\s+bypass", re.IGNORECASE),
      "powershell", "PowerShell -ExecutionPolicy Bypass", "T1059.001", "MEDIUM",
      "Bypasses PowerShell's execution policy to allow unsigned scripts to run; benign admin tools rarely need this."),
     (re.compile(r"-windowstyle\s+hidden", re.IGNORECASE),
      "powershell", "PowerShell -WindowStyle Hidden", "T1564.003", "MEDIUM",
-     "Hides the PowerShell window from the user — strong indicator of stealth execution."),
+     "Hides the PowerShell window from the user - strong indicator of stealth execution."),
     (re.compile(r"-noninteractive", re.IGNORECASE),
      "powershell", "PowerShell -NonInteractive", "T1059.001", "LOW",
      "Suppresses interactive prompts; often combined with other obfuscation flags in automated attacks."),
     (re.compile(r"(?:iex|invoke-expression)\s*\(", re.IGNORECASE),
      "powershell", "PowerShell IEX download cradle", "T1059.001", "HIGH",
-     "Dynamically evaluates a string as code — classic download-and-execute cradle."),
+     "Dynamically evaluates a string as code - classic download-and-execute cradle."),
     (re.compile(r"downloadstring\s*\(", re.IGNORECASE),
      "powershell", "WebClient.DownloadString", "T1105", "HIGH",
-     "Fetches remote content over HTTP and returns it as a string — typically chained with IEX to execute."),
+     "Fetches remote content over HTTP and returns it as a string - typically chained with IEX to execute."),
     (re.compile(r"downloadfile\s*\(", re.IGNORECASE),
      "powershell", "WebClient.DownloadFile", "T1105", "HIGH",
-     "Downloads a file to disk — used for staging second-stage payloads."),
+     "Downloads a file to disk - used for staging second-stage payloads."),
     (re.compile(r"new-object\s+(?:net\.)?webclient", re.IGNORECASE),
      "powershell", "New-Object Net.WebClient", "T1105", "MEDIUM",
-     "Constructs a WebClient — typically the first step of a download cradle."),
+     "Constructs a WebClient - typically the first step of a download cradle."),
     (re.compile(r"\[ref\]\.assembly\.gettype\(.{0,80}amsi", re.IGNORECASE),
      "powershell", "AMSI bypass via reflection", "T1562.001", "CRITICAL",
-     "Reflectively patches the Anti-Malware Scan Interface to silence detection — strong attacker signal."),
+     "Reflectively patches the Anti-Malware Scan Interface to silence detection - strong attacker signal."),
     (re.compile(r"amsiscanbuffer", re.IGNORECASE),
-     "powershell", "AMSI bypass — AmsiScanBuffer patch", "T1562.001", "CRITICAL",
+     "powershell", "AMSI bypass - AmsiScanBuffer patch", "T1562.001", "CRITICAL",
      "Targets the AmsiScanBuffer function to bypass AV inspection of in-memory PowerShell."),
     (re.compile(r"\[reflection\.assembly\]::load\(", re.IGNORECASE),
      "powershell", "Reflective Assembly Load", "T1620", "HIGH",
-     "Loads a .NET assembly directly from memory — bypasses disk-based EDR scanning."),
+     "Loads a .NET assembly directly from memory - bypasses disk-based EDR scanning."),
 
     # ── Windows LOLBin abuse ───────────────────────────────────────────────────
     (re.compile(r"certutil\s+(?:-urlcache|-decode|-decodehex|-f|-split)", re.IGNORECASE),
      "lolbin", "certutil download / decode", "T1140", "HIGH",
-     "certutil.exe abused to download remote files or decode base64 payloads — not normal admin use."),
+     "certutil.exe abused to download remote files or decode base64 payloads - not normal admin use."),
     (re.compile(r"bitsadmin\s+/transfer", re.IGNORECASE),
      "lolbin", "bitsadmin /transfer", "T1197", "HIGH",
      "BITS service abuse to silently download payloads; persists across reboots."),
     (re.compile(r"mshta(?:\.exe)?\s+(?:https?://|vbscript:|javascript:)", re.IGNORECASE),
      "lolbin", "mshta executing remote content", "T1218.005", "CRITICAL",
-     "mshta.exe running scripts directly from URLs or inline — signature LOLBin technique."),
+     "mshta.exe running scripts directly from URLs or inline - signature LOLBin technique."),
     (re.compile(r"regsvr32\s+(?:/s\s+)?(?:/n\s+)?(?:/u\s+)?/i:\s*[\w:/\\.]+\s+scrobj\.dll", re.IGNORECASE),
      "lolbin", "regsvr32 scrobj.dll squiblydoo", "T1218.010", "CRITICAL",
-     "'Squiblydoo' technique — regsvr32 executing remote scriptlets via scrobj.dll to bypass app whitelisting."),
+     "'Squiblydoo' technique - regsvr32 executing remote scriptlets via scrobj.dll to bypass app whitelisting."),
     (re.compile(r"rundll32\s+(?!.*\\(?:system32|syswow64))[\w:/\\.]+\s*,\s*\w+", re.IGNORECASE),
      "lolbin", "rundll32 executing non-system DLL", "T1218.011", "HIGH",
-     "rundll32 invoking a DLL outside system directories — common malware loader pattern."),
+     "rundll32 invoking a DLL outside system directories - common malware loader pattern."),
     (re.compile(r"(?:wscript|cscript)\s+(?:https?://|//\S+)", re.IGNORECASE),
      "lolbin", "wscript/cscript executing remote file", "T1059.005", "HIGH",
-     "Windows Script Host executing remote VBS/JS — bypasses many EDRs that focus on PowerShell."),
+     "Windows Script Host executing remote VBS/JS - bypasses many EDRs that focus on PowerShell."),
     (re.compile(r"schtasks\s+/create", re.IGNORECASE),
-     "lolbin", "schtasks /create — task scheduler", "T1053.005", "MEDIUM",
-     "Scheduled task creation is a common persistence vector — verify the binary it launches."),
+     "lolbin", "schtasks /create - task scheduler", "T1053.005", "MEDIUM",
+     "Scheduled task creation is a common persistence vector - verify the binary it launches."),
     (re.compile(r"wmic\s+process\s+call\s+create", re.IGNORECASE),
      "lolbin", "wmic process call create", "T1047", "HIGH",
      "WMI process creation often used for fileless lateral movement and persistence."),
@@ -112,39 +112,39 @@ _PATTERNS = [
     # ── Persistence ────────────────────────────────────────────────────────────
     (re.compile(r"hkcu\\\\?software\\\\?microsoft\\\\?windows\\\\?currentversion\\\\?run", re.IGNORECASE),
      "persistence", "HKCU Run key", "T1547.001", "HIGH",
-     "Registry Run key launches the value at every logon — most common Windows persistence."),
+     "Registry Run key launches the value at every logon - most common Windows persistence."),
     (re.compile(r"hklm\\\\?software\\\\?microsoft\\\\?windows\\\\?currentversion\\\\?run", re.IGNORECASE),
      "persistence", "HKLM Run key", "T1547.001", "HIGH",
      "HKLM Run key runs at every logon for any user; requires admin to write."),
     (re.compile(r"appdata\\roaming\\microsoft\\windows\\start menu\\programs\\startup", re.IGNORECASE),
      "persistence", "Startup folder drop", "T1547.001", "MEDIUM",
-     "Files dropped here execute at user logon — classic persistence vector."),
+     "Files dropped here execute at user logon - classic persistence vector."),
     (re.compile(r"sc(?:\.exe)?\s+(?:create|config)\s+\S+\s+binpath=", re.IGNORECASE),
      "persistence", "sc.exe create/modify service", "T1543.003", "HIGH",
-     "New Windows service installation — persists across reboots and may run as SYSTEM."),
+     "New Windows service installation - persists across reboots and may run as SYSTEM."),
     (re.compile(r"__eventfilter|__filtertoconsumerbinding|activescripteventconsumer|commandlineeventconsumer", re.IGNORECASE),
      "persistence", "WMI event subscription", "T1546.003", "CRITICAL",
-     "WMI event subscription survives reboot and runs payloads on Windows events — favorite of APTs."),
+     "WMI event subscription survives reboot and runs payloads on Windows events - favorite of APTs."),
     (re.compile(r"<schedulertask[^>]*>", re.IGNORECASE),
      "persistence", "Scheduled-task XML payload", "T1053.005", "MEDIUM",
-     "Inline scheduled-task XML body — verify the action and trigger."),
+     "Inline scheduled-task XML body - verify the action and trigger."),
 
     # ── Lateral movement ───────────────────────────────────────────────────────
     (re.compile(r"net\s+use\s+\\\\\\\\\S+\s+\S+\s+/user:", re.IGNORECASE),
      "lateral", "net use with credential", "T1021.002", "HIGH",
-     "Mounting a remote SMB share with credentials — used for lateral movement."),
+     "Mounting a remote SMB share with credentials - used for lateral movement."),
     (re.compile(r"psexec(?:\.exe)?\s+(?:\\\\\\\\)?\S+", re.IGNORECASE),
      "lateral", "PsExec remote execution", "T1569.002", "HIGH",
-     "PsExec is widely abused for lateral movement — even legitimate use should be reviewed."),
+     "PsExec is widely abused for lateral movement - even legitimate use should be reviewed."),
     (re.compile(r"wmic\s+/node:\S+", re.IGNORECASE),
      "lateral", "WMIC /node remote execution", "T1047", "HIGH",
-     "WMIC against a remote node — fileless lateral movement technique."),
+     "WMIC against a remote node - fileless lateral movement technique."),
     (re.compile(r"invoke-wmimethod\s+-computername\s+\S+", re.IGNORECASE),
      "lateral", "Invoke-WmiMethod remote", "T1047", "HIGH",
-     "PowerShell WMI remote execution — favored for living-off-the-land lateral movement."),
+     "PowerShell WMI remote execution - favored for living-off-the-land lateral movement."),
     (re.compile(r"net\s+view\s+\\\\\\\\?\S*", re.IGNORECASE),
      "lateral", "net view SMB enumeration", "T1135", "MEDIUM",
-     "Enumerating SMB shares — usually a discovery step preceding lateral movement."),
+     "Enumerating SMB shares - usually a discovery step preceding lateral movement."),
 
     # ── Credential access ──────────────────────────────────────────────────────
     (re.compile(r"sekurlsa::(?:logonpasswords|wdigest|tickets|kerberos)", re.IGNORECASE),
@@ -152,30 +152,30 @@ _PATTERNS = [
      "Mimikatz command extracting cleartext credentials from LSASS."),
     (re.compile(r"lsadump::(?:sam|secrets|lsa|dcsync)", re.IGNORECASE),
      "credentials", "Mimikatz lsadump::*", "T1003.002", "CRITICAL",
-     "Mimikatz dumping SAM/LSA secrets — credential-access end state."),
+     "Mimikatz dumping SAM/LSA secrets - credential-access end state."),
     (re.compile(r"comsvcs\.dll.*minidump", re.IGNORECASE),
      "credentials", "comsvcs.dll MiniDump (LSASS)", "T1003.001", "CRITICAL",
-     "Using comsvcs.dll to dump LSASS memory — fileless credential theft."),
+     "Using comsvcs.dll to dump LSASS memory - fileless credential theft."),
     (re.compile(r"ntdsutil.*ifm", re.IGNORECASE),
-     "credentials", "ntdsutil ifm — NTDS.dit copy", "T1003.003", "CRITICAL",
-     "Creating an Install From Media set extracts the AD database — domain-wide credential theft."),
+     "credentials", "ntdsutil ifm - NTDS.dit copy", "T1003.003", "CRITICAL",
+     "Creating an Install From Media set extracts the AD database - domain-wide credential theft."),
     (re.compile(r"reg\s+save\s+(?:hklm\\)?sam\s+\S+", re.IGNORECASE),
      "credentials", "reg save SAM hive", "T1003.002", "CRITICAL",
-     "Exporting the SAM registry hive to file — offline cracking target."),
+     "Exporting the SAM registry hive to file - offline cracking target."),
     (re.compile(r"dcsync\b|getncchanges|drsuapi", re.IGNORECASE),
      "credentials", "DCSync replication request", "T1003.006", "CRITICAL",
-     "DCSync abuses domain replication to extract password hashes from a DC — requires Domain Admin or equivalent."),
+     "DCSync abuses domain replication to extract password hashes from a DC - requires Domain Admin or equivalent."),
 
     # ── C2 communication patterns ──────────────────────────────────────────────
     (re.compile(r"\b(?:dyndns|no-ip|duckdns|hopto|zapto|ddns)\.(?:org|net|com)\b", re.IGNORECASE),
      "c2", "Dynamic DNS host", "T1568.002", "HIGH",
-     "Dynamic DNS provider — frequently used for C2 because IPs can rotate while the hostname is stable."),
+     "Dynamic DNS provider - frequently used for C2 because IPs can rotate while the hostname is stable."),
     (re.compile(r"(?:[a-zA-Z0-9_-]{30,}\.){2,}[a-z]{2,10}", re.IGNORECASE),
      "c2", "Long subdomain (DNS exfil)", "T1071.004", "HIGH",
      "Unusually long subdomain labels suggest DNS-based data exfiltration or beaconing."),
     (re.compile(r"user-agent:\s*python-requests|user-agent:\s*curl|user-agent:\s*go-http-client", re.IGNORECASE),
      "c2", "Scripted User-Agent", "T1071.001", "MEDIUM",
-     "Automated tooling User-Agent — rarely seen from end-user workstations."),
+     "Automated tooling User-Agent - rarely seen from end-user workstations."),
     (re.compile(r"\bbeacon(?:ing)?\b.*interval\s*[:=]?\s*\d+", re.IGNORECASE),
      "c2", "Beacon interval reference", "T1071.001", "HIGH",
      "Beacon interval terminology hints at Cobalt Strike or similar C2 framework."),
@@ -196,7 +196,7 @@ _BASE64_RE = re.compile(r"(?<![A-Za-z0-9+/])[A-Za-z0-9+/]{16,}={0,2}(?![A-Za-z0-
 
 
 def _printable_ascii_ratio(s: str) -> float:
-    """Fraction of chars that are printable ASCII (0x20–0x7E) or common whitespace."""
+    """Fraction of chars that are printable ASCII (0x20-0x7E) or common whitespace."""
     if not s:
         return 0.0
     ok = sum(1 for c in s if 0x20 <= ord(c) <= 0x7E or c in "\t\n\r")
@@ -207,7 +207,7 @@ def _decode_b64_candidates(text: str, max_decodes: int = 5) -> List[str]:
     """Base64-decode long base64-ish runs, returning ONLY payloads that decode to
     mostly-printable-ASCII text (PowerShell -EncodedCommand is UTF-16LE; other
     bodies UTF-8). Strict decoding + a >90% printable-ASCII threshold is what
-    keeps binary/random base64 from rendering as Chinese/mojibake — anything that
+    keeps binary/random base64 from rendering as Chinese/mojibake - anything that
     isn't readable text is dropped (not shown), so the UI can say 'None'."""
     out = []
     for m in _BASE64_RE.findall(text)[:max_decodes]:

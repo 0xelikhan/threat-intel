@@ -1,5 +1,5 @@
 """
-LangGraph orchestrator — defines the multi-agent pipeline graph.
+LangGraph orchestrator - defines the multi-agent pipeline graph.
 Triage → Enrichment → Investigation → (loop if low confidence) → Response
 
 Pipeline note: every node here is a thin wrapper around an agent function
@@ -10,7 +10,7 @@ Swapping LLM_PROVIDER swaps the backend for the whole graph at once.
 
 If you need to invoke a single procedure (triage-only, sigma-only, etc.)
 without running the full pipeline, use `skills.run_skill(name, inputs)`
-— same provider abstraction, granular surface.
+ -  same provider abstraction, granular surface.
 """
 
 from typing import TypedDict, Literal
@@ -84,8 +84,8 @@ def _route_triage(state: SOCState) -> Literal["enrichment", "investigation", "dr
     if not state.get("should_proceed") and state.get("triage_score", 0) <= 0.10:
         return "dropped"
     iocs = state.get("iocs", {}) or {}
-    # CVEs — NVD / EPSS / CISA KEV. Emails — OFAC SDN + HIBP breach-by-
-    # domain. Crypto — Ransomwhe.re + OFAC SDN.
+    # CVEs - NVD / EPSS / CISA KEV. Emails - OFAC SDN + HIBP breach-by-
+    # domain. Crypto - Ransomwhe.re + OFAC SDN.
     has_enrichable = any((iocs.get(k) or []) for k in
                          ("ips", "domains", "hashes", "urls", "cves",
                           "emails", "crypto"))
@@ -106,7 +106,7 @@ async def _dropped(state: SOCState) -> SOCState:
     trace.append({
         "agent": "triage",
         "status": "dropped",
-        "summary": f"Alert scored {state.get('triage_score', 0):.2f} — below threshold. Likely noise.",
+        "summary": f"Alert scored {state.get('triage_score', 0):.2f} - below threshold. Likely noise.",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
     return {**state, "agent_trace": trace}
@@ -141,16 +141,16 @@ def make_initial_state(raw_input: str, input_type: str = "log",
     populated with a sensible default.
 
     Single source of truth used by /api/analyze (SSE), /api/analyze/sync,
-    /api/analyze/clarify, and the skill registry — previously each call
+    /api/analyze/clarify, and the skill registry - previously each call
     site rolled its own dict and they drifted apart. The SSE builder in
     main.py omitted ~18 keys that the type declares, so downstream agents
     relied on `.get(key, default)` instead of indexing. That worked, but
     the TypedDict became a documentation lie.
 
     Inputs:
-      * raw_input        — analyst-pasted log / IOC text
-      * input_type       — "log" / "ioc" / "ioc_url" / "file_summary"
-      * analyst_feedback — optional analyst verdict / context block; the
+      * raw_input        - analyst-pasted log / IOC text
+      * input_type       - "log" / "ioc" / "ioc_url" / "file_summary"
+      * analyst_feedback - optional analyst verdict / context block; the
                            investigation prompt treats this as authoritative
                            when present.
     """
@@ -211,7 +211,7 @@ def make_initial_state(raw_input: str, input_type: str = "log",
 async def run_pipeline(raw_input: str, input_type: str = "log",
                         analyst_feedback: str = "") -> dict:
     """End-to-end pipeline driver. Used by /api/analyze/sync and the
-    skill registry — the streaming /api/analyze path uses make_initial_state
+    skill registry - the streaming /api/analyze path uses make_initial_state
     too but interleaves SSE writes between stages itself.
 
     analyst_feedback: optional analyst-supplied verdict / context. When

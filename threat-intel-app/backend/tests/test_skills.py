@@ -1,5 +1,5 @@
 """
-Skill unit tests — each registered skill must pass its own test in
+Skill unit tests - each registered skill must pass its own test in
 isolation with no external API calls. The mock provider returns a fixed
 LLMResponse so LLM-backed skills can still run end-to-end here.
 
@@ -49,7 +49,7 @@ def _check_output_shape(skill, output):
 
 
 # Skills that fan out to external HTTP (TI sources) or run the full LangGraph
-# pipeline — skipped in the lightweight parametrized smoke test because they
+# pipeline - skipped in the lightweight parametrized smoke test because they
 # need either network access or a fully-wired provider with realistic JSON
 # responses. They get dedicated tests below with stronger mocks.
 _NEEDS_REAL_BACKEND = {"enrich_ioc", "investigate", "triage_alert"}
@@ -78,7 +78,7 @@ def test_skill_registry_contains_expected_skills():
 
 
 def test_map_mitre_deterministic_resolution():
-    """T1059.001 lives in MITRE ATT&CK — the deterministic resolver should
+    """T1059.001 lives in MITRE ATT&CK - the deterministic resolver should
     return at least one technique without calling any provider."""
     out = asyncio.run(get_skill("map_mitre").execute({
         "behavioral_indicators": {"techniques": ["T1059.001"]},
@@ -91,7 +91,7 @@ def test_map_mitre_deterministic_resolution():
 
 
 def test_generate_kql_strips_markdown_fences():
-    """Models often emit ```kql ... ``` blocks even when told not to —
+    """Models often emit ```kql ... ``` blocks even when told not to  - 
     the skill must strip them before returning."""
     fenced = "```kql\nDeviceProcessEvents | where ProcessName == 'powershell.exe'\n```"
     out = asyncio.run(get_skill("generate_kql").execute(
@@ -110,7 +110,7 @@ def test_correlate_signals_handles_empty_provider_response():
 
 
 def test_generate_hypothesis_strips_bullets_and_caps_at_five():
-    """The hypothesis model often emits leading "- " or "1. " — the skill
+    """The hypothesis model often emits leading "- " or "1. " - the skill
     must strip them so downstream UI can render a clean <li> list. Cap
     at five entries regardless of how many the model returns."""
     canned = "\n".join([
@@ -120,7 +120,7 @@ def test_generate_hypothesis_strips_bullets_and_caps_at_five():
         "Threat actors may be establishing persistence via scheduled tasks created by powershell on workstations",
         "Adversaries may be performing lateral movement using WMI from compromised endpoints to file servers",
         "Threat actors may be impairing defenses by stopping the Windows Defender service via net stop on critical hosts",
-        "shrt",  # too short — should be filtered out
+        "shrt",  # too short - should be filtered out
     ])
     out = asyncio.run(get_skill("generate_hypothesis").execute(
         {"analysis": {"threat_level": "HIGH"}, "iocs": {}},
@@ -229,7 +229,7 @@ def test_generate_hunt_plan_revises_when_critic_rejects():
             sys_msg = next((m["content"] for m in messages
                             if m["role"] == "system"), "")
             # The critic's system prompt begins "You are an expert
-            # threat-hunting critic" — use that as the discriminator
+            # threat-hunting critic" - use that as the discriminator
             # (the planner's prompt is just "You are an expert in
             # cybersecurity threat hunting").
             kind = "critic" if "threat-hunting critic" in sys_msg else "planner"
@@ -239,7 +239,7 @@ def test_generate_hunt_plan_revises_when_critic_rejects():
                 draft = "# Threat Hunt Plan: revised" if "Critic feedback" in str(messages) \
                         else "# Threat Hunt Plan: first draft"
                 return LLMResponse(message=draft, provider="mock", finish_reason="stop")
-            # Critic — reject on first call. (Second planner pass is the
+            # Critic - reject on first call. (Second planner pass is the
             # final pass under max_iters=2; no critic runs after it.)
             return LLMResponse(message="- Add a Recommended Time Frame section",
                                provider="mock", finish_reason="stop")
@@ -264,7 +264,7 @@ def test_extract_iocs_skill_extracts_known_indicators():
 
     The IP 185.220.101.45 is on a MISP warninglist (Tor exit node /
     common VPN range), so the skill correctly moves it from `ips` into
-    `suppressed_iocs.ips`. We assert it appears in *either* bucket — what
+    `suppressed_iocs.ips`. We assert it appears in *either* bucket - what
     matters is that the extractor saw it. The hash and email don't match
     any warninglist so they must come back in their primary buckets.
     """

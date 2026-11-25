@@ -1,11 +1,11 @@
 """
-MapMITRESkill — map findings to MITRE ATT&CK techniques.
+MapMITRESkill - map findings to MITRE ATT&CK techniques.
 
 Layered approach:
   1. Pull deterministic technique IDs out of the behavioral_indicators
      (the behavior_extractor already emits MITRE-tagged hits).
   2. Resolve human-readable names + tactic via intel.mitre_data
-     (mitreattack-python over enterprise-attack.json — loaded once,
+     (mitreattack-python over enterprise-attack.json - loaded once,
      cached at module level).
   3. If a provider is available, ask it to add any techniques the
      deterministic pass missed (it sees iocs + behavioral_indicators

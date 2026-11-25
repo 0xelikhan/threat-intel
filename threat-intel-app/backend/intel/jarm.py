@@ -1,11 +1,11 @@
 """
-JARM — server-side TLS fingerprint. Curated list of known-bad
+JARM - server-side TLS fingerprint. Curated list of known-bad
 fingerprints for C2 frameworks and commodity malware.
 
 Where JA3/JA4 fingerprint the CLIENT during a TLS handshake, JARM
 fingerprints the SERVER by sending 10 crafted ClientHellos and hashing
 the ServerHello response set. This makes JARM the right tool for
-identifying rotated C2 IPs still serving the same TLS stack — the
+identifying rotated C2 IPs still serving the same TLS stack - the
 operator can change the IP but not the underlying TLS library,
 version, cipher order, and extension ordering.
 
@@ -16,7 +16,7 @@ The public references for this list:
   - ja4db.com's JARM section
 
 The list is intentionally curated (~30 entries) rather than
-bulk-imported — every entry maps to a specific framework or family
+bulk-imported - every entry maps to a specific framework or family
 with a citation. When a Censys / Shodan lookup returns a JARM value
 for an IP we can cross-reference against this list to flag rotated
 C2 infrastructure that would otherwise slip past IP + cert lookups.
@@ -72,7 +72,7 @@ KNOWN_BAD: List[Dict[str, Any]] = [
         "jarm":       "29d29d15d29d29d21c42d43d000000f5c7d4d8f6a3e0e1f9c5d8a3b7c9c1a",
         "framework":  "Mythic agents (Apollo / Athena)",
         "alert_types": ["c2", "malware"],
-        "notes":      "Mythic C2 framework — .NET agents typical.",
+        "notes":      "Mythic C2 framework - .NET agents typical.",
     },
     # ─── Deimos C2 ─────────────────────────────────────────────────
     {

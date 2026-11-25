@@ -1,4 +1,4 @@
-"""Local ML — GradientBoosting phishing probability.
+"""Local ML - GradientBoosting phishing probability.
 
 Auto-generated from _legacy_registrations.py. Keeps the LegacyAnalyzer
 Adapter pattern (import on first call + from_legacy_dict wrap) but
@@ -13,7 +13,7 @@ from plugins import Analyzer, AnalysisResult, register
 
 class PhishingUrlClassifierAnalyzer(Analyzer):
     name = "phishing_url_classifier"
-    description = ('Local ML — GradientBoosting phishing probability.')
+    description = ('Local ML - GradientBoosting phishing probability.')
     supported_ioc_types = ['url']
     required_keys = []
     optional_keys = []

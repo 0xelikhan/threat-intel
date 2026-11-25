@@ -136,6 +136,6 @@ def test_calibration_principles_cover_log_format_gotchas():
         "IsCompliant",
     ):
         assert needle in CALIBRATION_PRINCIPLES, (
-            f"missing log-format gotcha: {needle!r} — the M365 UAL "
+            f"missing log-format gotcha: {needle!r} - the M365 UAL "
             f"'ResultStatus: Success' false-positive will reappear"
         )

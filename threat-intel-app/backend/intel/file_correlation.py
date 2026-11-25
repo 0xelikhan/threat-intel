@@ -1,5 +1,5 @@
 """
-Threat-intel correlation for file analysis — spec §4 of the all-in-one
+Threat-intel correlation for file analysis - spec §4 of the all-in-one
 scanner plan. Runs async after static analysis completes.
 
 For a file's hashes + extracted IOCs + imphash + format-specific metadata,
@@ -18,7 +18,7 @@ from typing import Dict, List, Optional
 _TIMEOUT = aiohttp.ClientTimeout(total=15)
 
 # Per-process scan store. Replaces the previous on-disk
-# backend/data/scanned_files/*.json layout — analyst-uploaded file
+# backend/data/scanned_files/*.json layout - analyst-uploaded file
 # analyses are not persisted (see platform no-persistence policy). The
 # UI's progressive-scan polling still works against this dict because
 # the scan finishes within the lifetime of the same container; long-
@@ -45,7 +45,7 @@ async def correlate(analysis: Dict, config) -> Dict:
 
     keys = {
         "VIRUSTOTAL_KEY":      config.get("VIRUSTOTAL_KEY"),
-        # abuse.ch unified Auth-Key — MalwareBazaar / ThreatFox / URLhaus all
+        # abuse.ch unified Auth-Key - MalwareBazaar / ThreatFox / URLhaus all
         # use the same one. Anonymous requests have been rate-limited /
         # soft-blocked since mid-2024 so file scans were silently hitting
         # MalwareBazaar without auth and getting throttled.
@@ -60,7 +60,7 @@ async def correlate(analysis: Dict, config) -> Dict:
 
     # Reuse the process-wide TCPConnector (DNS cache + keep-alive
     # sockets + TLS sessions) instead of building a fresh pool per
-    # file scan. File correlation hits 4-7 TI sources concurrently —
+    # file scan. File correlation hits 4-7 TI sources concurrently  - 
     # without sharing the connector, every scan paid a full TLS
     # handshake to each. connector_owner=False keeps the singleton
     # alive after this session closes.
@@ -164,10 +164,10 @@ async def _malwarebazaar(session, sha256, auth_key: str = "") -> Optional[Dict]:
             if r.status == 401:
                 # abuse.ch rejected the Auth-Key. Make the error
                 # actionable so an operator seeing the source row in
-                # the UI knows the fix is to rotate the key — without
+                # the UI knows the fix is to rotate the key - without
                 # rotating, every MalwareBazaar/ThreatFox/URLhaus call
                 # on the same key will keep failing.
-                return {"error": "auth failed (HTTP 401) — rotate ABUSECH_AUTH_KEY at https://auth.abuse.ch",
+                return {"error": "auth failed (HTTP 401) - rotate ABUSECH_AUTH_KEY at https://auth.abuse.ch",
                         "error_type": "auth_failed",
                         "fix_hint": "abuse.ch issues free Auth-Keys. The current key is expired or revoked."}
             if r.status != 200:
@@ -212,7 +212,7 @@ async def _feed_cache_for_iocs(iocs: Dict) -> Optional[Dict]:
 def append_scan_history(analysis: Dict) -> None:
     """Stash a scan record in the per-process store so progressive AI
     polling can find it later in the same container's lifetime. No
-    disk write — analyst-uploaded file content stays in memory only."""
+    disk write - analyst-uploaded file content stays in memory only."""
     hashes = analysis.get("hashes") or {}
     sha = hashes.get("sha256")
     if not sha:
@@ -247,7 +247,7 @@ async def _domain_pivots(session, domains) -> Optional[Dict]:
 
 async def _one_domain_pivot(session, domain) -> Dict:
     pivot = {}
-    # WHOIS — reuse the existing free who-dat service we already use elsewhere
+    # WHOIS - reuse the existing free who-dat service we already use elsewhere
     try:
         async with session.get(f"https://who-dat.as93.net/{domain}") as r:
             if r.status == 200:

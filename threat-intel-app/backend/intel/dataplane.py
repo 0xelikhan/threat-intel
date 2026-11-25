@@ -1,20 +1,20 @@
 """
 DataPlane.org honeypot feed loader.
 
-Source: https://dataplane.org/ — DataPlane.org's global honeypot mesh
+Source: https://dataplane.org/ - DataPlane.org's global honeypot mesh
 publishes daily-refreshed CSV feeds of IPs caught probing or brute-
 forcing specific services. Free, no-key, attribution-only redistribution.
 
 The feeds we ingest:
 
-  sshpwauth.txt    — SSH password-authentication attempts
-  sshclient.txt    — SSH client probes (port 22 connect, no banner)
-  sipinvitation.txt — SIP INVITE flood / VoIP fraud probes
-  sipquery.txt     — SIP OPTIONS / REGISTER scans
-  smtpgreet.txt    — SMTP banner-grab / open-relay probes
-  vncrfb.txt       — VNC RFB protocol probes
-  telnetlogin.txt  — Telnet login attempts (IoT-bot signature)
-  dnsrd.txt        — DNS open-recursion probes
+  sshpwauth.txt    - SSH password-authentication attempts
+  sshclient.txt    - SSH client probes (port 22 connect, no banner)
+  sipinvitation.txt - SIP INVITE flood / VoIP fraud probes
+  sipquery.txt     - SIP OPTIONS / REGISTER scans
+  smtpgreet.txt    - SMTP banner-grab / open-relay probes
+  vncrfb.txt       - VNC RFB protocol probes
+  telnetlogin.txt  - Telnet login attempts (IoT-bot signature)
+  dnsrd.txt        - DNS open-recursion probes
 
 For each, the format is
 

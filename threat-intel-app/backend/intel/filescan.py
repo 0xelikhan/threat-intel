@@ -1,13 +1,13 @@
 """
 FileScan.io hash + URL + IP + domain lookup.
 
-Source: https://www.filescan.io/ — OPSWAT MetaDefender's community
+Source: https://www.filescan.io/ - OPSWAT MetaDefender's community
 sandbox. Free API tier: 500 req/month.
 
   GET https://www.filescan.io/api/reports/search?query=<b64>
   Header: X-Api-Key: <FILESCAN_KEY>
 
-The query is a base64-encoded IOC (hash / URL / IP / domain) — the
+The query is a base64-encoded IOC (hash / URL / IP / domain) - the
 search endpoint matches across all public reports.
 
 Response:

@@ -12,10 +12,10 @@ warm, cache the rank dict in memory, refresh once per day. Cap the
 parsed set at 1M entries (~25 MB resident).
 
 The lookup is used in two places:
-  1. triage's domain branch — adjusts triage_score *downward* when the
+  1. triage's domain branch - adjusts triage_score *downward* when the
      analyst's input domain is in the top 1000. A top-100 brand that
      appears in an alert is almost certainly NOT itself the attacker.
-  2. enrichment summary — surfaces the rank so the analyst sees the
+  2. enrichment summary - surfaces the rank so the analyst sees the
      popularity context next to the verdict.
 """
 
@@ -52,7 +52,7 @@ async def _refresh(session) -> None:
         # Tranco's endpoint returns a zip; _get supports binary responses
         # via the `raw=True` kwarg when present, else fall back to bytes
         # via the SDK helper. We try the simpler path first.
-        from intel.cache import cache_for  # noqa: F401 — namespace marker
+        from intel.cache import cache_for  # noqa: F401 - namespace marker
         raw = await _get(
             session, _TRANCO_URL,
             headers={"User-Agent": "RECON-ThreatIntel/1.0",
@@ -60,7 +60,7 @@ async def _refresh(session) -> None:
             raw_bytes=True,
         )
     except TypeError:
-        # _get without raw_bytes kwarg — try a manual aiohttp pull.
+        # _get without raw_bytes kwarg - try a manual aiohttp pull.
         raw = await _fetch_bytes_directly(_TRANCO_URL)
     except Exception as e:
         _state["error"] = f"tranco fetch failed: {e}"

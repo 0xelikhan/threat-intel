@@ -1,12 +1,12 @@
 """
-Skill registry — the programmatic entry point for every AI-backed
+Skill registry - the programmatic entry point for every AI-backed
 procedure in the system.
 
 There are two equal-citizen entry points into the platform:
-  1. The LangGraph orchestrator (`agents.orchestrator.run_pipeline`) — the
+  1. The LangGraph orchestrator (`agents.orchestrator.run_pipeline`) - the
      end-to-end SOC pipeline (triage → enrichment → investigation →
      response) used by /api/analyze and the chat SSE stream.
-  2. The skill registry (this module) — granular access to any one
+  2. The skill registry (this module) - granular access to any one
      procedure in isolation. Used by tests, the Teams bot prototype,
      and any future API endpoint that needs a single step.
 

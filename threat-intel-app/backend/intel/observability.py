@@ -1,5 +1,5 @@
 """
-Observability primitives — request IDs, structured logging, error envelope.
+Observability primitives - request IDs, structured logging, error envelope.
 
 Three concerns, all additive:
 
@@ -12,7 +12,7 @@ Three concerns, all additive:
      root logger that includes the timestamp, level, component name,
      message, and (when present) the current request ID. Callers obtain
      loggers via `logging.getLogger("recon.<subsystem>")` and stop
-     worrying about format. Idempotent — re-calling is a no-op.
+     worrying about format. Idempotent - re-calling is a no-op.
 
   3. `error_envelope(detail, code=None, extras=None)` builds the
      additive error body served by main.py's global HTTPException
@@ -112,13 +112,13 @@ def configure_logging(level: Optional[str] = None) -> None:
     lvl = getattr(logging, lvl_name, logging.INFO)
 
     # Windows consoles default to cp1252, which rejects the Unicode
-    # glyphs some modules use in log messages (✓ / ✗ / ↔ / —). Reconfigure
+    # glyphs some modules use in log messages (✓ / ✗ / ↔ /  - ). Reconfigure
     # stdout to UTF-8 up-front so no log line can crash the handler with
     # UnicodeEncodeError. No-op on platforms where stdout is already UTF-8.
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
-        # Older Python or already-detached stream — fall back to
+        # Older Python or already-detached stream - fall back to
         # errors="replace" via the handler so glyphs render as '?'
         # instead of raising.
         pass
@@ -134,7 +134,7 @@ def configure_logging(level: Optional[str] = None) -> None:
     root.addHandler(handler)
     root.setLevel(lvl)
 
-    # The noisy ones — quiet them so DEBUG doesn't drown out the real
+    # The noisy ones - quiet them so DEBUG doesn't drown out the real
     # signal. Tune via LOG_LEVEL=DEBUG when actively debugging.
     for noisy in ("asyncio", "aiohttp.access", "urllib3.connectionpool",
                   "uvicorn.access", "watchfiles", "openai", "httpx"):
@@ -156,7 +156,7 @@ def error_envelope(
 
     Compatibility notes:
       * `detail` is what FastAPI emits by default and what the React
-        frontend already reads — preserved as-is so existing clients
+        frontend already reads - preserved as-is so existing clients
         don't break.
       * `error` mirrors `detail` for callers that read `err.error`
         (e.g. AgentPipeline.jsx).

@@ -7,7 +7,7 @@ there's no point burning AbuseIPDB / VT / OTX quota to be told what
 we already know. This module bakes the answer in.
 
 Distinct from warninglists:
-  - warninglists SUPPRESS at triage — the IOC never enters enrichment
+  - warninglists SUPPRESS at triage - the IOC never enters enrichment
     (correct behaviour for noisy false-positive sources like
     cloudflare.com appearing in every customer log).
   - this baseline LETS the IOC through but pre-fills a CLEAN verdict
@@ -25,7 +25,7 @@ Hit format:
     "source":   "known_good_baseline",
   }
 
-The lists are deliberately conservative — only operator-managed
+The lists are deliberately conservative - only operator-managed
 infrastructure that's stable for years. Anything ambiguous (CDN
 fronts, shared hosting) is omitted so we don't accidentally whitewash
 attacker-controlled CloudFront / Cloudflare-Pages content.
@@ -57,7 +57,7 @@ _IP_EXACT: Dict[str, Dict[str, str]] = {
     "208.67.220.220":   {"name": "OpenDNS",                  "category": "public_dns"},
     "94.140.14.14":     {"name": "AdGuard DNS",              "category": "public_dns"},
     "76.76.2.0":        {"name": "Control D DNS",            "category": "public_dns"},
-    # NTP — common in network logs as outbound destinations.
+    # NTP - common in network logs as outbound destinations.
     "129.6.15.28":      {"name": "NIST time-a.nist.gov",     "category": "ntp"},
     "129.6.15.29":      {"name": "NIST time-b.nist.gov",     "category": "ntp"},
     "132.163.97.1":     {"name": "NIST time-a-wwv.nist.gov", "category": "ntp"},
@@ -71,7 +71,7 @@ _IP_EXACT: Dict[str, Dict[str, str]] = {
     "2620:fe::fe":      {"name": "Quad9 DNS",                "category": "public_dns"},
 }
 
-# CIDR ranges that are operator-stable and benign. Kept tight — only
+# CIDR ranges that are operator-stable and benign. Kept tight - only
 # ranges that are dedicated to one verifiable service, never general
 # ASN ranges that a tenant could spin up arbitrary infrastructure in.
 _IP_CIDR_RANGES = [
@@ -161,7 +161,7 @@ _DOMAIN_EXACT: Dict[str, Dict[str, str]] = {
 }
 
 
-# Suffixes that match any subdomain too. Keep tight — these are operator
+# Suffixes that match any subdomain too. Keep tight - these are operator
 # zones we trust as a whole, not user-content domains like .blogspot.com.
 _DOMAIN_SUFFIX_TRUSTED = [
     (".windowsupdate.com",       "Windows Update edge",      "ms_update"),
@@ -193,7 +193,7 @@ _DOMAIN_SUFFIX_TRUSTED = [
 
 
 # ─── Hashes ─────────────────────────────────────────────────────────────────
-# We don't try to maintain a built-in clean-hash table — that's what
+# We don't try to maintain a built-in clean-hash table - that's what
 # CIRCL hashlookup does, and it's already wired into hash enrichment.
 # Empty dict reserved for future curation (specific in-house tools the
 # operator marks as known-good).
@@ -241,7 +241,7 @@ def lookup_domain(value: str) -> Optional[Dict[str, Any]]:
 
 
 def lookup_hash(value: str) -> Optional[Dict[str, Any]]:
-    """Hash baseline is empty today — kept for API symmetry with the
+    """Hash baseline is empty today - kept for API symmetry with the
     IP/domain paths and so external operators can populate it without
     changing call sites."""
     if not value:
@@ -274,7 +274,7 @@ def _make_hit(entry: Dict[str, str], matched_on: str) -> Dict[str, Any]:
 
 
 def stats() -> Dict[str, Any]:
-    """Counts of baseline entries — surfaced at /api/status."""
+    """Counts of baseline entries - surfaced at /api/status."""
     return {
         "ip_exact":     len(_IP_EXACT),
         "ip_cidr":      len(_IP_CIDR_RANGES),

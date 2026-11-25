@@ -25,8 +25,8 @@ Detection patterns (regex-based, deterministic, no LLM call):
     treating as sensitive).
 
 Two-pass design:
-  1. find_matches(text)        — regex scan, returns spans + types.
-  2. redact(text, threshold)   — applies replacements + confidence score.
+  1. find_matches(text)        - regex scan, returns spans + types.
+  2. redact(text, threshold)   - applies replacements + confidence score.
 The split lets callers preview detections before committing the rewrite.
 """
 
@@ -46,7 +46,7 @@ from typing import Dict, List, Tuple
 # weight). Weight feeds the confidence score.
 
 _PATTERNS: List[Tuple[str, "re.Pattern[str]", float]] = [
-    # PEM blocks (highest priority — exact framing).
+    # PEM blocks (highest priority - exact framing).
     ("PEM", re.compile(
         r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED |PRIVATE |PUBLIC )?(?:PRIVATE KEY|CERTIFICATE|RSA PRIVATE KEY)-----"
         r"[\s\S]+?"
@@ -93,7 +93,7 @@ _PATTERNS: List[Tuple[str, "re.Pattern[str]", float]] = [
     ("UNC_PATH",   re.compile(r"\\\\[A-Za-z0-9._-]{1,63}\\[A-Za-z0-9._$-]+"), 0.7),
     ("HOSTNAME",   re.compile(r"\b(?:DESKTOP|LAPTOP|WORKSTATION|SRV|SERVER|HOST|PC|WIN|DC|FS|DB|APP|WEB|MAIL|VM)-[A-Za-z0-9]{2,12}\b"), 0.7),
 
-    # High-entropy hex blobs — likely hashes or credential material.
+    # High-entropy hex blobs - likely hashes or credential material.
     ("HEX_BLOB_LONG", re.compile(r"\b[A-Fa-f0-9]{64,}\b"), 0.55),
     ("HEX_BLOB_MED",  re.compile(r"\b[A-Fa-f0-9]{40,63}\b"), 0.4),
 ]
@@ -118,7 +118,7 @@ class RedactionResult:
     reject_reason: str = ""
 
     def to_audit_dict(self) -> dict:
-        """Stripped-down record safe to log alongside the request — counts and
+        """Stripped-down record safe to log alongside the request - counts and
         confidence only, never the matched values themselves."""
         return {
             "redaction_confidence": round(self.confidence, 3),
@@ -169,7 +169,7 @@ def find_matches(text: str) -> List[RedactionMatch]:
                 type=tag, start=m.start(), end=m.end(),
                 value=value, weight=weight,
             ))
-    # Sort by start asc, length desc — longer matches at the same position win.
+    # Sort by start asc, length desc - longer matches at the same position win.
     candidates.sort(key=lambda c: (c.start, -(c.end - c.start)))
     # De-overlap: keep a match only if it doesn't sit inside an already-kept one.
     kept: List[RedactionMatch] = []
@@ -213,7 +213,7 @@ def redact(text: str, min_confidence: float | None = None) -> RedactionResult:
     #     few sensitive runs (probability we missed something rises with
     #     length without matches).
     #   * Subtract a penalty when many matches are low-weight types (IPs,
-    #     emails) without any high-weight types — likely we caught noise but
+    #     emails) without any high-weight types - likely we caught noise but
     #     not the real secrets.
     text_len = max(1, len(text))
     match_density = sum(m.end - m.start for m in matches) / text_len
@@ -225,7 +225,7 @@ def redact(text: str, min_confidence: float | None = None) -> RedactionResult:
     if matches and not high_weight and match_density < 0.02:
         confidence -= 0.15
     # When the JWT or AWS-key regex matched but its sanity check stripped
-    # everything, callers might still be at risk — but our matches list is
+    # everything, callers might still be at risk - but our matches list is
     # already filtered, so no penalty here.
     confidence = max(0.0, min(1.0, confidence))
 

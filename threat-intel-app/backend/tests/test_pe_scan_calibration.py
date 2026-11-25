@@ -11,11 +11,11 @@ discovered during the live `/api/scan/file` audit:
 
   2. Dotted-quad IP extraction must drop version-shaped values
      (6.0.0.0, 5.1.2600.0, 10.0.19041.0) and any IP with an octet
-     > 255 — they appear constantly in PE binary strings.
+     > 255 - they appear constantly in PE binary strings.
 
   3. URL extraction must drop trailing junk that PE binaries embed
      immediately after OCSP URLs (`http://ocsp.digicert.com0A` etc.)
-     — the DER ASN.1 length+tag bytes following the URL happen to
+     - the DER ASN.1 length+tag bytes following the URL happen to
      spell printable ASCII that the old `[^\\s'\"<>]` regex captured.
 """
 
@@ -54,13 +54,13 @@ def test_signed_pe_with_generic_yara_does_not_land_at_malicious():
     verdict, score = _synthesize_verdict(result)
     assert verdict in ("LOW", "SUSPICIOUS"), (
         f"signed PE with generic YARA matches should not land at "
-        f"MALICIOUS — got {verdict!r} / {score}"
+        f"MALICIOUS - got {verdict!r} / {score}"
     )
 
 
 def test_unsigned_pe_with_same_yara_still_lands_at_malicious():
     """Verify the cap only applies when Authenticode is present. The
-    same 17-match shape on an UNSIGNED binary should still escalate —
+    same 17-match shape on an UNSIGNED binary should still escalate  - 
     we don't want to make it harder to flag unsigned commodity loaders."""
     from intel.file_analyzer import _synthesize_verdict
     result = {
@@ -76,7 +76,7 @@ def test_unsigned_pe_with_same_yara_still_lands_at_malicious():
     verdict, score = _synthesize_verdict(result)
     assert verdict == "MALICIOUS", (
         f"unsigned PE with the same 17-match shape should still land "
-        f"at MALICIOUS — got {verdict!r} / {score}"
+        f"at MALICIOUS - got {verdict!r} / {score}"
     )
 
 
@@ -99,23 +99,23 @@ def test_signed_pe_with_capability_malicious_still_escalates():
     verdict, score = _synthesize_verdict(result)
     assert verdict == "MALICIOUS", (
         f"signed PE with capabilities.verdict=MALICIOUS must still "
-        f"escalate — got {verdict!r} / {score}"
+        f"escalate - got {verdict!r} / {score}"
     )
 
 
 # ─── 2. Version-shaped IPv4 filter ───────────────────────────────────────
 @pytest.mark.parametrize("ip,should_filter", [
-    # Version-shaped — PE binaries emit these constantly. Should filter.
+    # Version-shaped - PE binaries emit these constantly. Should filter.
     ("6.0.0.0",          True),    # Windows SDK
     ("5.0.0.0",          True),    # generic 5.X assembly
     ("1.0.0.0",          True),    # generic 1.0 assembly
     ("10.0.19041.0",     True),    # Windows 10 build
     ("5.1.2600.0",       True),    # Windows XP build
     ("4.0.30319.0",      True),    # .NET runtime
-    # Defender / Microsoft signature versions with octet > 255 — same shape
+    # Defender / Microsoft signature versions with octet > 255 - same shape
     # as the version strings the original Defender 1116 fix dropped.
     ("1.451.195.0",      True),    # Defender AV signature version
-    # Real IPs — must NOT filter.
+    # Real IPs - must NOT filter.
     ("1.1.1.1",          False),   # Cloudflare
     ("8.8.8.8",          False),   # Google DNS
     ("185.220.101.45",   False),   # something
@@ -153,26 +153,26 @@ def test_pe_binary_ioc_extraction_drops_version_strings():
 
 # ─── 3. URL extraction filter for DER/X.509 trailing junk ────────────────
 @pytest.mark.parametrize("url,should_pass", [
-    # Real URLs — must pass.
+    # Real URLs - must pass.
     ("https://google.com/search",                 True),
     ("http://example.com/",                       True),
     ("https://api.virustotal.com/api/v3/files/x", True),
     ("http://abuseipdb.com",                      True),
-    # IP-based URLs — common for C2 / lab / pentest setups. The Nim
+    # IP-based URLs - common for C2 / lab / pentest setups. The Nim
     # shellcode loader test in test_source_code_analysis.py uses
-    # http://192.168.174.128:4443/... and must pass — my first version
+    # http://192.168.174.128:4443/... and must pass - my first version
     # of the netloc validator rejected these because the "TLD" of an
     # IP address is a number, not alphabetic. Regression cover.
     ("http://192.168.174.128:4443/screenconnect/id?=64545", True),
     ("http://10.0.0.5/payload",                            True),
     ("https://1.1.1.1/cdn-cgi/trace",                      True),
     ("http://[2001:db8::1]:8080/x",                        True),  # IPv6 with brackets
-    # OCSP-with-DER-junk — must NOT pass.
+    # OCSP-with-DER-junk - must NOT pass.
     ("http://ocsp.digicert.com0A",                False),
     ("http://ocsp.digicert.com0C",                False),
     ("http://ocsp.digicert.com0X",                False),
     ("http://crl.thawte.com.crl0\\",              False),
-    # Bare scheme — must NOT pass.
+    # Bare scheme - must NOT pass.
     ("http://",                                   False),
     ("https://",                                  False),
 ])

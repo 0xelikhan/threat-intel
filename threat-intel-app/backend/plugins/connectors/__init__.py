@@ -1,1 +1,1 @@
-"""Connector plugins — export analysis to external platforms."""
+"""Connector plugins - export analysis to external platforms."""

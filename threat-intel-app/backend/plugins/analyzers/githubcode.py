@@ -1,4 +1,4 @@
-"""GitHub code search — surfaces target domain in public repos (leaked secrets, shadow IT).
+"""GitHub code search - surfaces target domain in public repos (leaked secrets, shadow IT).
 
 Auto-generated from _legacy_registrations.py. Keeps the LegacyAnalyzer
 Adapter pattern (import on first call + from_legacy_dict wrap) but
@@ -13,7 +13,7 @@ from plugins import Analyzer, AnalysisResult, register
 
 class GithubcodeAnalyzer(Analyzer):
     name = "githubcode"
-    description = ('GitHub code search — surfaces target domain in public repos (leaked secrets, shadow IT).')
+    description = ('GitHub code search - surfaces target domain in public repos (leaked secrets, shadow IT).')
     supported_ioc_types = ['domain']
     required_keys = ['GITHUB_TOKEN']
     optional_keys = []

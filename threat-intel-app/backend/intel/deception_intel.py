@@ -1,16 +1,16 @@
 """
-Deception / honeypot intelligence — spec §5.
+Deception / honeypot intelligence - spec §5.
 
 Free no-key sources:
 
-  DShield (SANS ISC)   → https://isc.sans.edu/api/ip/{ip}?json — attack count,
+  DShield (SANS ISC)   → https://isc.sans.edu/api/ip/{ip}?json - attack count,
                          report count, threat level, block list status.
-  StopForumSpam        → https://api.stopforumspam.org/api?json&ip={ip} — spam
+  StopForumSpam        → https://api.stopforumspam.org/api?json&ip={ip} - spam
                          and abuse history.
-  Emerging Threats     → cached download of compromised-ips.txt — checked as a
+  Emerging Threats     → cached download of compromised-ips.txt - checked as a
                          local set membership test.
   Project Honeypot     → https://www.projecthoneypot.org/api.php with HONEYPOT_KEY
-                         — HTTP:BL data when configured.
+                         - HTTP:BL data when configured.
 
 Returns one combined dict per IP. Each subsection is `{flagged, …}` so the
 confidence engine can wire any hit into a score factor.
@@ -31,7 +31,7 @@ _ET_TTL = 6 * 3600  # refresh every 6 hours
 
 
 async def _refresh_et(session: aiohttp.ClientSession) -> None:
-    """Fetch ET compromised-ips list — only every 6h."""
+    """Fetch ET compromised-ips list - only every 6h."""
     global _ET_CACHE, _ET_FETCHED
     if _ET_CACHE and (time.time() - _ET_FETCHED) < _ET_TTL:
         return
@@ -76,7 +76,7 @@ async def enrich_deception(session: aiohttp.ClientSession, ip: str, keys: Dict) 
     if isinstance(hp, dict) and "error" not in hp:
         out["project_honeypot"] = hp
 
-    # Emerging Threats — local list lookup
+    # Emerging Threats - local list lookup
     if ip in _ET_CACHE:
         out["emerging_threats"] = {
             "flagged":  True,
@@ -111,7 +111,7 @@ async def _dshield(session, ip: str) -> Dict:
                 "report_count":   count,
                 "threat_level":   threatlevel,
                 "comment":        ip_data.get("comment"),
-                "summary":        f"{attacks} attacks / {count} reports — threat level {threatlevel or 'n/a'}",
+                "summary":        f"{attacks} attacks / {count} reports - threat level {threatlevel or 'n/a'}",
                 "source":         "DShield · SANS ISC",
             }
     except Exception as e:
@@ -119,7 +119,7 @@ async def _dshield(session, ip: str) -> Dict:
 
 
 async def _stopforumspam(session, ip: str) -> Dict:
-    """StopForumSpam — spam / abuse history."""
+    """StopForumSpam - spam / abuse history."""
     try:
         async with session.get(
             "https://api.stopforumspam.org/api",
@@ -136,7 +136,7 @@ async def _stopforumspam(session, ip: str) -> Dict:
                 "frequency":    ip_info.get("frequency"),
                 "confidence":   ip_info.get("confidence"),
                 "last_seen":    ip_info.get("lastseen"),
-                "summary":      f"{appears} reports — frequency {ip_info.get('frequency') or 0}",
+                "summary":      f"{appears} reports - frequency {ip_info.get('frequency') or 0}",
                 "source":       "StopForumSpam",
             }
     except Exception as e:
@@ -144,7 +144,7 @@ async def _stopforumspam(session, ip: str) -> Dict:
 
 
 async def _project_honeypot(session, ip: str, key: str) -> Dict:
-    """Project Honeypot HTTP:BL — requires HONEYPOT_KEY (free with registration)."""
+    """Project Honeypot HTTP:BL - requires HONEYPOT_KEY (free with registration)."""
     if not key:
         return {"error": "no HONEYPOT_KEY", "source": "project_honeypot"}
     # HTTP:BL uses reversed-octet DNS lookup format:  KEY.4.3.2.1.dnsbl.httpbl.org

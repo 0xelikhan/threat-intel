@@ -1,11 +1,11 @@
 """
-Local Ollama adapter — POSTs to /api/chat on OLLAMA_BASE_URL (default
+Local Ollama adapter - POSTs to /api/chat on OLLAMA_BASE_URL (default
 http://localhost:11434). Designed for local dev / air-gapped use.
 
 Most local models don't support function calling natively, so
 supports_tools defaults False. If `tools=` is passed anyway we serialise
 them into the system prompt as a description and trust the model to
-produce JSON tool_calls in text form (best-effort, no guarantees —
+produce JSON tool_calls in text form (best-effort, no guarantees  - 
 that's why supports_tools is False).
 
 Connection errors return a clear LLMResponse.error rather than raising
@@ -74,7 +74,7 @@ class OllamaProvider(LLMProvider):
         if max_tokens:
             payload["options"]["num_predict"] = max_tokens
         if tools:
-            # Inline tool descriptions in a system note — Ollama doesn't
+            # Inline tool descriptions in a system note - Ollama doesn't
             # natively support tools so this is best-effort.
             tool_doc = "Available tools (call by returning JSON " \
                        "`{\"tool\": <name>, \"args\": {...}}`):\n" + \
@@ -98,7 +98,7 @@ class OllamaProvider(LLMProvider):
         except aiohttp.ClientConnectorError:
             return LLMResponse(
                 model=model, provider=self.name,
-                error=f"could not reach Ollama at {self._base} — is it running?",
+                error=f"could not reach Ollama at {self._base} - is it running?",
             )
         except Exception as e:
             return LLMResponse(model=model, provider=self.name, error=str(e)[:300])

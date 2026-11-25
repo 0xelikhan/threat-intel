@@ -1,14 +1,14 @@
 """
-ThreatView.io High-Confidence Cobalt Strike C2 IPs — free, no key.
+ThreatView.io High-Confidence Cobalt Strike C2 IPs - free, no key.
 
 RECON's existing C2 feeds (Feodo, ThreatFox, URLhaus, FireHOL) are
-family-agnostic — they flag an IP as bad but not "this is a Cobalt
+family-agnostic - they flag an IP as bad but not "this is a Cobalt
 Strike team server." ThreatView's Proactive C2 Hunter publishes a
 CS-specific IP list built from active-scan discovery of default
 CS listener signatures. Complements the JARM known-bad list we
 already surface in the response phase.
 
-Feed refreshes irregularly — some updates monthly, others weekly.
+Feed refreshes irregularly - some updates monthly, others weekly.
 We reload every 12h in the lifespan warm loop.
 """
 
@@ -26,7 +26,7 @@ _URL = "https://threatview.io/Downloads/High-Confidence-CobaltstrikeC2_IP_feed.t
 _TTL_SECONDS = 12 * 3600
 
 _lock = threading.RLock()  # reentrant: _ensure_loaded holds it, then
-                            # _refresh_sync re-acquires — a plain Lock
+                            # _refresh_sync re-acquires - a plain Lock
                             # deadlocks; RLock is a drop-in fix.
 _state: Dict[str, Any] = {
     "loaded_at": 0.0,
@@ -94,7 +94,7 @@ def lookup(ip: str) -> Optional[Dict[str, Any]]:
     _ensure_loaded()
     if not isinstance(ip, str) or not ip:
         return None
-    # Read the ips set + note under lock — _refresh_sync replaces both
+    # Read the ips set + note under lock - _refresh_sync replaces both
     # atomically per key but 'in' + subsequent .get() are separate ops.
     with _lock:
         if ip.strip() not in (_state.get("ips") or set()):

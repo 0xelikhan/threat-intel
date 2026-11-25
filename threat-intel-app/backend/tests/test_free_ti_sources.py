@@ -43,7 +43,7 @@ class _null_session:
 # ─── crt.sh ──────────────────────────────────────────────────────────────
 def test_crt_sh_flags_recent_cert_burst_as_suspicious():
     """When crt.sh reports 20+ new certs in 30 days OR 5+ unrelated SANs
-    the verdict is SUSPICIOUS — that's the phishing-infra prep signal
+    the verdict is SUSPICIOUS - that's the phishing-infra prep signal
     the analyst wants surfaced in orange.
 
     Uses a sliding timestamp (now-5d) so the recent-30d counter in
@@ -88,7 +88,7 @@ def test_crt_sh_degrades_gracefully_on_502():
 
 
 def test_crt_sh_retries_once_on_transient_and_succeeds():
-    """The core reason the retry exists — a 502 from the nginx front
+    """The core reason the retry exists - a 502 from the nginx front
     followed by a successful second attempt. We should return the
     parsed success payload, not the first-attempt error."""
     calls = {"n": 0}
@@ -113,7 +113,7 @@ def test_crt_sh_retries_once_on_transient_and_succeeds():
 
 def test_crt_sh_does_not_retry_non_transient_errors():
     """auth_failed / rate_limited / circuit_open aren't going to resolve
-    on a retry — the second attempt would just burn the safety window."""
+    on a retry - the second attempt would just burn the safety window."""
     calls = {"n": 0}
     async def _rate_limited(_session, _url, **_k):
         calls["n"] += 1
@@ -216,7 +216,7 @@ def test_vulnrichment_returns_empty_when_no_cisa_adp():
 
 # ─── OpenSanctions ────────────────────────────────────────────────────────
 def test_opensanctions_crypto_lookup_rejects_fuzzy_match():
-    """OpenSanctions /search fuzzy-matches — a hit that DOESN'T actually
+    """OpenSanctions /search fuzzy-matches - a hit that DOESN'T actually
     have the queried address in its cryptoWallets is noise. The
     lookup must verify the address is on the entity before returning."""
     fake_hit = {
@@ -281,7 +281,7 @@ def test_ransomware_live_matches_family_name_case_insensitive():
 
 
 def test_ransomware_live_loose_match_on_family_variants():
-    """'lockbit3' should still match the 'lockbit' feed row — the loose
+    """'lockbit3' should still match the 'lockbit' feed row - the loose
     substring branch handles the version-suffix drift."""
     ransomware_live._state.update({
         "loaded_at":  __import__("time").time(),

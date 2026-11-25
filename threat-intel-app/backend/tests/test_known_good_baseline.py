@@ -42,7 +42,7 @@ def test_random_public_ip_misses():
 
 
 def test_private_ip_returns_none():
-    # Private space isn't in the baseline — that's a different concern
+    # Private space isn't in the baseline - that's a different concern
     # (handled by triage's _is_private_ip filter).
     assert lookup_ip("192.168.1.1") is None
     assert lookup_ip("10.0.0.1")    is None
@@ -87,7 +87,7 @@ def test_unknown_domain_misses():
 
 
 def test_hash_baseline_returns_none_by_default():
-    # Empty by design — CIRCL hashlookup handles known-good hashes.
+    # Empty by design - CIRCL hashlookup handles known-good hashes.
     assert lookup_hash("d" * 64) is None
 
 

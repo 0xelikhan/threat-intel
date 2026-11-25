@@ -1,7 +1,7 @@
 """
 Robtex IP + domain passive-DNS / ASN lookup.
 
-Source: https://www.robtex.com/api/ — Robtex's free, no-key JSON API.
+Source: https://www.robtex.com/api/ - Robtex's free, no-key JSON API.
 Returns passive DNS, reverse DNS, ASN, AS-set membership.
 
 Endpoints:
@@ -12,7 +12,7 @@ The response is one JSON document per line (NDJSON for the pdns
 endpoint, single JSON for ipquery). We handle both shapes.
 
 Robtex gives us: historical/current passive DNS answers, PTR records,
-AS membership, and network ranges — all for IPs that other sources
+AS membership, and network ranges - all for IPs that other sources
 (VT, OTX, Shodan) might not have context on.
 """
 
@@ -35,7 +35,7 @@ def _summarize_pdns(entries: List[Dict[str, Any]], label: str) -> str:
 
 
 async def lookup_ip(session, ip: str) -> Dict[str, Any]:
-    """Robtex ipquery endpoint — returns passive DNS, ASN, PTR."""
+    """Robtex ipquery endpoint - returns passive DNS, ASN, PTR."""
     if not isinstance(ip, str) or not ip:
         return {"source": "robtex", "found": False,
                 "error": "missing ip"}
@@ -67,7 +67,7 @@ async def lookup_ip(session, ip: str) -> Dict[str, Any]:
     whois = r.get("whoisdesc")
     country = r.get("country")
     # Robtex returns `pas` (an array of {o: domain, t: timestamp}) for
-    # reverse passive DNS — the domains that resolved TO this IP.
+    # reverse passive DNS - the domains that resolved TO this IP.
     pdns_records = r.get("pas") or []
     pdns_count = len(pdns_records) if isinstance(pdns_records, list) else 0
 
@@ -93,7 +93,7 @@ async def lookup_ip(session, ip: str) -> Dict[str, Any]:
 
 
 async def lookup_domain(session, domain: str) -> Dict[str, Any]:
-    """Robtex forward passive-DNS lookup — returns domain's A/AAAA/MX history.
+    """Robtex forward passive-DNS lookup - returns domain's A/AAAA/MX history.
 
     Robtex's /pdns/forward/ endpoint returns NDJSON (one JSON object
     per line). The shared `_get` helper's `.json()` parser crashes on

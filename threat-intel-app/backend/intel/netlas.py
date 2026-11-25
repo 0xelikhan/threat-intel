@@ -1,7 +1,7 @@
 """
 Netlas IP whois / infrastructure lookup.
 
-Source: https://netlas.io/ — IP-level whois + internet-scan data.
+Source: https://netlas.io/ - IP-level whois + internet-scan data.
 Free tier: 50 queries/day.
 
   GET https://app.netlas.io/api/whois_ip/?q=ip:<ip>

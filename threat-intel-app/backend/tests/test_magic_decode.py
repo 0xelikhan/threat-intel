@@ -98,7 +98,7 @@ def test_magic_xor_brute_finds_single_byte_key():
 def test_magic_decode_returns_empty_shape_on_no_improvement():
     plain = "the quick brown fox jumps over the lazy dog"
     out   = magic_decode(plain)
-    # Already plaintext — no operation should improve the score.
+    # Already plaintext - no operation should improve the score.
     assert out["chain"] == []
     assert out["improved"] is False
 

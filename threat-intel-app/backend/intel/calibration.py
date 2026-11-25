@@ -1,21 +1,21 @@
 """
-Shared AI calibration — single source of truth for the "innocent until
+Shared AI calibration - single source of truth for the "innocent until
 proven guilty" principles applied across every AI call site.
 
 Background: the investigation agent's bias (calling Dell SupportAssist
 maintenance "suspicious") was the canonical failure. The same bias risks
-appearing anywhere we ask an LLM to grade an alert / file / email — so
+appearing anywhere we ask an LLM to grade an alert / file / email - so
 this module centralises the calibration so file_ai_analyst,
 file_ai_summary, email_composer, response, and investigation all reuse
 the same wording.
 
 Public surface:
-    CALIBRATION_PRINCIPLES (str)        — paste into any system prompt
-    VERDICT_LEVEL_GUIDE     (str)       — the 5-tier severity ladder
-    EVIDENCE_STANDARD       (str)       — the "what HIGH requires" rule
-    benign_only_basis(basis) -> bool    — safety-net classifier
-    downshift_if_benign_only(result)    — in-place threat_level lowering
-    build_known_good_block(state) -> str — formatted KG block for prompts
+    CALIBRATION_PRINCIPLES (str)        - paste into any system prompt
+    VERDICT_LEVEL_GUIDE     (str)       - the 5-tier severity ladder
+    EVIDENCE_STANDARD       (str)       - the "what HIGH requires" rule
+    benign_only_basis(basis) -> bool    - safety-net classifier
+    downshift_if_benign_only(result)    - in-place threat_level lowering
+    build_known_good_block(state) -> str - formatted KG block for prompts
 
 The textual blocks are designed to be concatenated into a system prompt
 verbatim. Each starts with a divider line so multiple blocks render
@@ -38,7 +38,7 @@ CALIBRATION PRINCIPLES (apply STRICTLY)
 ──────────────────────────────────────────────────────────────────────────────────
 You are a senior analyst at a tier-1 MDR. You have seen thousands of alerts.
 You know the vast majority are false positives or low-risk events. Your job is
-to ACCURATELY assess true risk — not to find threats that are not there.
+to ACCURATELY assess true risk - not to find threats that are not there.
 
 Reason like a detective who requires evidence before drawing conclusions.
 
@@ -48,14 +48,14 @@ Reason like a detective who requires evidence before drawing conclusions.
    • Files written to ProgramData subdirectories are NOT inherently suspicious.
    • Processes running from System32 are NOT inherently suspicious.
    • Source IPs from major cloud providers (AWS, Azure, GCP, Cloudflare,
-     Oracle Cloud, DigitalOcean) are NOT inherently suspicious — they host
+     Oracle Cloud, DigitalOcean) are NOT inherently suspicious - they host
      the majority of legitimate internet traffic. Never frame this as
      "often associated with malicious activity" without a source-specific
      flag from threat intel.
 
 2. KNOWN-GOOD SOFTWARE BEHAVIOUR
    Before flagging anything as suspicious, consider whether it matches known
-   vendor-tool behaviour — Dell SupportAssist, HP Support Assistant, Microsoft
+   vendor-tool behaviour - Dell SupportAssist, HP Support Assistant, Microsoft
    Defender, Windows Update, SCCM, Intune, CrowdStrike, Carbon Black,
    SentinelOne, Splunk forwarders, Veeam. If a process / path / parent / cmd
    pattern matches known vendor software, classify as LIKELY LEGITIMATE and
@@ -63,7 +63,7 @@ Reason like a detective who requires evidence before drawing conclusions.
 
 3. THE EVIDENCE STANDARD
    Only escalate severity above INFORMATIONAL when you have CONCRETE evidence
-   of malicious intent — not just the theoretical possibility of misuse.
+   of malicious intent - not just the theoretical possibility of misuse.
    HIGH or CRITICAL requires at least ONE of:
      • a hash flagged by multiple independent reputation sources
      • a command line matching known malware / attacker-tool patterns
@@ -71,14 +71,14 @@ Reason like a detective who requires evidence before drawing conclusions.
      • lateral-movement indicators
      • credential-access patterns (LSASS dump, SAM hive copy, DCSync)
      • explicit evidence of unauthorized access
-   Suspicious-LOOKING behaviour ALONE — without one of these — is
+   Suspicious-LOOKING behaviour ALONE - without one of these - is
    INFORMATIONAL or LOW.
 
 4. BE EXPLICIT ABOUT WHAT YOU DO AND DO NOT KNOW
    If the data shows no malicious indicators, say so plainly: "the hash is
    clean across every source checked," "no malicious indicators found." Do
    NOT hedge with "while indicators do not directly confirm malicious
-   activity, the context suggests potential misuse" — that is misleading when
+   activity, the context suggests potential misuse" - that is misleading when
    the evidence points toward benign activity.
 
 5. THE VERDICT MUST MATCH THE EVIDENCE
@@ -91,7 +91,7 @@ Reason like a detective who requires evidence before drawing conclusions.
    (Microsoft Storm-####, Mandiant APT##, MITRE UNC####, TA###, or a named
    group like "Midnight Blizzard", "Cozy Bear", "Sandworm", "Fancy Bear",
    "Lazarus", "Turla"), that is PROPRIETARY intel from the upstream vendor.
-   VirusTotal / AbuseIPDB / OTX returning "clean" does NOT rebut it — those
+   VirusTotal / AbuseIPDB / OTX returning "clean" does NOT rebut it - those
    sources simply do not have Microsoft's / Mandiant's private tracking
    data. A "clean IP reputation" is expected on nation-state infrastructure
    because state actors don't burn IPs on public scanners.
@@ -99,7 +99,7 @@ Reason like a detective who requires evidence before drawing conclusions.
    Rule: if the raw log contains a nation-state or tracked-actor label,
    the verdict is at MINIMUM HIGH. Clean public TI is NOT a downgrade
    reason for these events. Same rule applies when the upstream SIEM
-   marks the risk as "High" / "Critical" — the tenant-side detection
+   marks the risk as "High" / "Critical" - the tenant-side detection
    engine sees baseline data (user patterns, historical devices) that
    the public sources don't. Do not overrule the upstream detection
    with public reputation.
@@ -113,7 +113,7 @@ Reason like a detective who requires evidence before drawing conclusions.
      - "ResultStatus: Success" is metadata about the AUDIT EVENT being
        logged successfully, NOT about the underlying operation. A record
        with Operation=UserLoginFailed and ResultStatus=Success means the
-       audit pipeline captured the failed login — the login itself
+       audit pipeline captured the failed login - the login itself
        still failed.
      - The AUTHORITATIVE outcome fields are LogonError, ErrorNumber,
        ResultStatusDetail, and the Operation name itself. Read those,
@@ -154,7 +154,7 @@ Reason like a detective who requires evidence before drawing conclusions.
 
    When you see one of these fields, name it explicitly in your
    reasoning ("the ResultStatus=Success here is audit-pipeline metadata,
-   not the login outcome — the actual outcome is the LogonError field
+   not the login outcome - the actual outcome is the LogonError field
    showing UserDisabled") rather than inferring an attack.
 """.strip()
 
@@ -163,16 +163,16 @@ VERDICT_LEVEL_GUIDE = """
 ──────────────────────────────────────────────────────────────────────────────────
 SEVERITY LADDER
 ──────────────────────────────────────────────────────────────────────────────────
- • CRITICAL      — Confirmed active attack with evidence of compromise
+ • CRITICAL      - Confirmed active attack with evidence of compromise
                    (named malware executing, active C2 callout, confirmed
                     credential theft, in-progress ransomware).
- • HIGH          — Strong indicators of malicious activity with MULTIPLE
+ • HIGH          - Strong indicators of malicious activity with MULTIPLE
                    corroborating signals (named malware hash + suspicious
                    network indicator + matching MITRE technique).
- • MEDIUM        — Genuinely suspicious activity warranting investigation
+ • MEDIUM        - Genuinely suspicious activity warranting investigation
                    but with a plausible legitimate explanation.
- • LOW           — Unusual activity worth noting but likely legitimate.
- • INFORMATIONAL — Normal or expected activity with no meaningful risk
+ • LOW           - Unusual activity worth noting but likely legitimate.
+ • INFORMATIONAL - Normal or expected activity with no meaningful risk
                    indicators (most known-vendor maintenance, scheduled
                    tasks, routine updates).
 """.strip()
@@ -194,10 +194,10 @@ Do not assign HIGH or CRITICAL on speculation. Require at least ONE of:
     attacker-known IP from a credential-stuffing campaign)
   • the source log itself attributes activity to a tracked threat actor
     (Storm-####, APT##, UNC####, TA###, "Midnight Blizzard", "Cozy Bear",
-    "Sandworm", "Lazarus", "Turla", etc.) — this is proprietary vendor
+    "Sandworm", "Lazarus", "Turla", etc.) - this is proprietary vendor
     intel and IS qualifying evidence on its own
   • the upstream detection engine marked the risk "High" / "Critical"
-    or "Attempted / Successful atypical travel" — the tenant-side data
+    or "Attempted / Successful atypical travel" - the tenant-side data
     the engine sees is not visible to public TI, don't overrule it
 """.strip()
 
@@ -256,7 +256,7 @@ def downshift_if_benign_only(
             )
             result[level_key] = "LOW"
             result[basis_key] = list(basis) + [
-                f"[{label}] threat_level lowered — assessment_basis "
+                f"[{label}] threat_level lowered - assessment_basis "
                 "contained only benign indicators and no concrete "
                 "malicious evidence."
             ]
@@ -270,7 +270,7 @@ def downshift_if_benign_only(
 # ─── known-good block builder ─────────────────────────────────────────────────
 def build_known_good_block(state: Dict[str, Any]) -> str:
     """Return a formatted KNOWN_GOOD_MATCHES block ready to paste into a
-    system prompt. Returns a 'no matches' line when nothing matches —
+    system prompt. Returns a 'no matches' line when nothing matches  - 
     keeps the prompt template stable so the AI always sees a marker."""
     try:
         from intel.known_good import extract_context_from_state, match

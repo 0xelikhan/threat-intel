@@ -8,7 +8,7 @@ Technical Context, Blind Spots and Assumptions, False Positives,
 Validation, Priority, Response.
 
 We bundle the framework markdown so the response agent can structure
-its analyst summary around the same sections — gives the report a
+its analyst summary around the same sections - gives the report a
 recognised industry shape instead of an ad-hoc layout.
 
 The module is intentionally tiny: it just exposes the framework
@@ -28,7 +28,7 @@ from typing import Dict, List
 ADS_SECTIONS: List[Dict[str, str]] = [
     {
         "heading":     "Goal",
-        "description": "What this detection is supposed to find — short, "
+        "description": "What this detection is supposed to find - short, "
                        "behavioural, and outcome-focused.",
     },
     {
@@ -77,12 +77,12 @@ def ads_section_outline() -> str:
     """Return a Markdown bulleted list of the ADS sections + descriptions,
     suitable for direct injection into an LLM system prompt."""
     parts = [
-        "## Alerting & Detection Strategy (ADS) sections — structure the "
+        "## Alerting & Detection Strategy (ADS) sections - structure the "
         "analyst summary around these, in order:",
         "",
     ]
     for s in ADS_SECTIONS:
-        parts.append(f"- **{s['heading']}** — {s['description']}")
+        parts.append(f"- **{s['heading']}** - {s['description']}")
     return "\n".join(parts)
 
 

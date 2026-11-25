@@ -14,7 +14,7 @@ deploy ETW provider X" pointer and lets the KQL/SPL generator suggest
 relevant providers when crafting queries.
 
 Operator can drop a larger catalogue at vendor/etw/providers.json
-(many community-curated lists exist — see github.com/JonasAtTrendMicro/
+(many community-curated lists exist - see github.com/JonasAtTrendMicro/
 EtwProvidersCatalogue and github.com/Velocidex/etw); we ship a compact
 in-tree subset of the highest-value security providers.
 """
@@ -32,7 +32,7 @@ _log = logging.getLogger("recon.intel.etw_providers")
 _ETW_JSON = (Path(__file__).parent.parent.parent
              / "vendor" / "etw" / "providers.json")
 
-# In-tree compact catalog — covers ~40 highest-value security providers.
+# In-tree compact catalog - covers ~40 highest-value security providers.
 # Field shape: GUID → {name, category, capabilities, mitre_techniques}.
 _FALLBACK_PROVIDERS: Dict[str, Dict[str, Any]] = {
     "{54849625-5478-4994-A5BA-3E3B0328C30D}": {

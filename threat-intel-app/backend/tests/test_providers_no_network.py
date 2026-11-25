@@ -1,7 +1,7 @@
 """Provider-abstraction regression tests that don't need network or keys.
 
 The existing test_providers.py probes hit real APIs and skip when no key
-is set — so in any default-dev environment the entire provider layer goes
+is set - so in any default-dev environment the entire provider layer goes
 untested. That's how the aiohttp 3.14 compat break in /api/scan/url and
 the AnthropicProvider __init__ cache-attribute issue both escaped CI.
 
@@ -11,7 +11,7 @@ These tests pin the contracts that matter even when offline:
   2. Every provider can be constructed without errors (no AttributeError
      from missing __init__ initialisation of cache fields, no ImportError
      at construct time for optional SDKs).
-  3. .complete() never raises bare — it must return an LLMResponse with
+  3. .complete() never raises bare - it must return an LLMResponse with
      .error populated when something fails (missing key, missing SDK,
      network down).
   4. The normalised LLMResponse / LLMChunk shape holds.
@@ -67,7 +67,7 @@ def test_ollama_provider_constructs_clean():
     assert p._base.startswith("http")
 
 
-# ─── .complete() never raises bare — always returns LLMResponse ─────────
+# ─── .complete() never raises bare - always returns LLMResponse ─────────
 def test_openai_complete_returns_envelope_when_unauthorised():
     """Force an auth failure by giving the OpenAI SDK a bogus key. The
     response must come back as an LLMResponse with .error populated, not
@@ -95,7 +95,7 @@ def test_openai_complete_returns_envelope_when_unauthorised():
 
 
 def test_ollama_complete_returns_envelope_when_unreachable():
-    """Point Ollama at a port that's not listening — complete() must come
+    """Point Ollama at a port that's not listening - complete() must come
     back with .error rather than raising aiohttp.ClientConnectorError."""
     from providers.ollama_provider import OllamaProvider
     from providers.base import LLMResponse
@@ -144,7 +144,7 @@ def test_provider_configured_per_active_llm():
 
         # openai/azure check OPENAI_API_KEY
         os.environ["LLM_PROVIDER"] = "openai"
-        # Whatever the operator has in the dev config — just assert the
+        # Whatever the operator has in the dev config - just assert the
         # call returns a bool without raising.
         assert isinstance(provider_configured(config), bool)
     finally:

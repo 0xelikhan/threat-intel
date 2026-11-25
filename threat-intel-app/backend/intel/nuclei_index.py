@@ -3,7 +3,7 @@ ProjectDiscovery nuclei-templates CVE index.
 
 We don't run nuclei (Go binary, scanning behaviour, not in our scope).
 We *index* its YAML templates so the CVE enricher can tell the analyst
-"X public detection templates exist for this CVE" — far more concrete
+"X public detection templates exist for this CVE" - far more concrete
 than "CVE has CVSS 9.8" because it implies active exploitation tooling.
 
 Mirrors the same lazy-load + inverted-index pattern used by
@@ -30,7 +30,7 @@ _log = logging.getLogger("recon.intel.nuclei_index")
 _TEMPLATES_ROOT = (Path(__file__).parent.parent.parent
                    / "vendor" / "nuclei-templates")
 
-# nuclei templates are tiny — anything over 32KB is almost certainly not
+# nuclei templates are tiny - anything over 32KB is almost certainly not
 # a CVE-tagged detection template (it's probably a workflow / preset).
 _MAX_FILE_BYTES = 32_000
 
@@ -110,7 +110,7 @@ def _build_index() -> None:
                 continue
         except OSError:
             continue
-        # Quick gate — skip files that don't mention a CVE at all so we
+        # Quick gate - skip files that don't mention a CVE at all so we
         # don't YAML-parse 30k templates just to filter on classification.
         try:
             head = path.read_bytes()[:_MAX_FILE_BYTES]

@@ -1,5 +1,5 @@
 """
-AI log translator — spec §4.
+AI log translator - spec §4.
 
 Runs before IOC extraction. The AI identifies the log format, extracts every
 security-relevant field, and flags anomalies. Output feeds the rest of triage
@@ -7,7 +7,7 @@ so behavioral extraction and IOC extraction operate on structured data, not
 just raw text.
 
 Uses the same Azure-aware OpenAI client pattern as the rest of the codebase.
-Fails open — returns {detected_format: 'unknown', extracted_fields: {}, ...}
+Fails open - returns {detected_format: 'unknown', extracted_fields: {}, ...}
 if the call fails so the pipeline never blocks on translation.
 """
 
@@ -47,35 +47,35 @@ strings, system process names in non-system paths, known malicious patterns,
 suspicious user agents, hex blobs, etc.
 
 Return strict JSON with these top-level keys, IN THIS ORDER (so that if the
-generation gets truncated, the most important field — the analyst-facing
-summary — is already complete):
-  normalized_summary    — see "PLAIN-ENGLISH SUMMARY RULES" below
-  detected_format       — short string e.g. "Sysmon EventID 1", "Zscaler proxy", "CEF/Suricata"
-  confidence            — 0.0–1.0 confidence in the format detection
-  anomalies             — list of {field, value, reason} for flagged values
-  extracted_fields      — flat dict of {field_name: value}, no nesting
+generation gets truncated, the most important field - the analyst-facing
+summary - is already complete):
+  normalized_summary    - see "PLAIN-ENGLISH SUMMARY RULES" below
+  detected_format       - short string e.g. "Sysmon EventID 1", "Zscaler proxy", "CEF/Suricata"
+  confidence            - 0.0-1.0 confidence in the format detection
+  anomalies             - list of {field, value, reason} for flagged values
+  extracted_fields      - flat dict of {field_name: value}, no nesting
 
 PLAIN-ENGLISH SUMMARY RULES (the normalized_summary field):
 This is the FIRST thing an analyst reads. Treat it like a senior MDR analyst
-briefing a teammate or writing a one-paragraph ticket note — Microsoft-Copilot-
-for-Security style. It must be 3–4 short sentences and follow this exact
+briefing a teammate or writing a one-paragraph ticket note - Microsoft-Copilot-
+for-Security style. It must be 3-4 short sentences and follow this exact
 structure:
 
-  1. WHAT HAPPENED — describe the activity in plain English, naming the real
+  1. WHAT HAPPENED - describe the activity in plain English, naming the real
      actors (process, user, host, target) but converting technical fields into
      readable prose. Translate process names + command lines into intent
      ("ran reg.exe to export a registry key", not "Process Path: reg.exe").
-  2. CONTEXT — say what this kind of activity is commonly used for so the
+  2. CONTEXT - say what this kind of activity is commonly used for so the
      analyst has a baseline ("This is typical of security-hardening or
      maintenance scripts that back up the registry before changes").
-  3. VERDICT — state whether the action was permitted/blocked/anomalous and
+  3. VERDICT - state whether the action was permitted/blocked/anomalous and
      whether the surrounding signals look benign, suspicious, or malicious.
-  4. RECOMMENDATION — close with one short sentence: either "No further
+  4. RECOMMENDATION - close with one short sentence: either "No further
      action required unless this is unexpected" / "Verify with the asset
-     owner before clearing" / "Escalate — see [specific signal]".
+     owner before clearing" / "Escalate - see [specific signal]".
 
 Do NOT just restate field values. Do NOT list bullet points. Do NOT say
-"the log shows" or "this event indicates" — write it as an analyst note to
+"the log shows" or "this event indicates" - write it as an analyst note to
 another analyst. Lead with the action, not with metadata.
 
 GOOD example:
@@ -87,7 +87,7 @@ GOOD example:
    and no malicious indicators surfaced. No further action is required
    unless this change is unexpected to your team."
 
-BAD example (don't do this — just restates fields):
+BAD example (don't do this - just restates fields):
   "The log shows reg.exe ran with command line 'export ... acomservice ...'
    under user NT AUTHORITY\\SYSTEM. Process Path was c:\\windows\\system32
    \\reg.exe. The Effective Action was None."
@@ -114,7 +114,7 @@ async def translate_log(raw: str, config) -> Optional[Dict]:
 
     provider = get_provider()
     # Log-format normalization is light + latency-sensitive (gates IOC
-    # extraction) — use the fast model tier when the provider supports it.
+    # extraction) - use the fast model tier when the provider supports it.
     model = config.get_model(fast=True) if hasattr(config, "get_model") else None
 
     resp = await provider.complete(
@@ -146,7 +146,7 @@ async def translate_log(raw: str, config) -> Optional[Dict]:
     # rather than discarding the whole step (which gates IOC extraction).
     from agents.investigation import _loads_lenient
     out = _loads_lenient(resp.message)
-    # Defensive shape — ensure callers can always access expected keys.
+    # Defensive shape - ensure callers can always access expected keys.
     # normalized_summary feeds the analyst-facing Summary paragraph, so
     # strip em / en dashes per the UI prose convention.
     _norm = out.get("normalized_summary", "") or ""
@@ -166,7 +166,7 @@ async def translate_log(raw: str, config) -> Optional[Dict]:
 
 
 def fields_as_text(translation: Optional[Dict]) -> str:
-    """Turn extracted_fields into a `key=value` block — fed into IOC extraction
+    """Turn extracted_fields into a `key=value` block - fed into IOC extraction
     and behavioral analysis so they see structured data alongside the raw input."""
     if not translation:
         return ""

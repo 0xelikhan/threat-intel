@@ -55,7 +55,7 @@ def test_every_dockerfile_has_a_cmd_or_entrypoint():
         has_cmd        = re.search(r"^\s*CMD\s", text, re.MULTILINE)
         has_entrypoint = re.search(r"^\s*ENTRYPOINT\s", text, re.MULTILINE)
         assert has_cmd or has_entrypoint, (
-            f"{df.name} has no CMD or ENTRYPOINT — container would exit "
+            f"{df.name} has no CMD or ENTRYPOINT - container would exit "
             "immediately on `docker run`"
         )
 
@@ -70,11 +70,11 @@ def test_dockerfile_python_uses_service_app_target():
             continue
         # Any `service:*` reference should name `app`, not `build_app`.
         assert "service:build_app" not in text, (
-            f"{df.name} still points gunicorn at the 2-arg factory — "
+            f"{df.name} still points gunicorn at the 2-arg factory - "
             "would crash at container startup"
         )
         if "service:app" not in text:
-            # Not every Dockerfile embeds gunicorn via a top-level CMD —
+            # Not every Dockerfile embeds gunicorn via a top-level CMD  - 
             # the clamav one calls it inside a start script. Verify
             # that case separately.
             assert re.search(r"gunicorn[^\n]*service:app", text), (
@@ -98,7 +98,7 @@ def test_pypi_package_exists(pkg_name):
 
 def test_every_docker_stub_env_var_matches_dispatch_contract():
     """Every DockerStub registered in docker_stubs.py must set
-    service_env_var to a RECON_<SOMETHING>_URL — the dispatcher reads
+    service_env_var to a RECON_<SOMETHING>_URL - the dispatcher reads
     exactly that env var at request time."""
     sys.path.insert(0, str(_SIDECARS_DIR.parent.parent / "backend"))
     try:
@@ -114,20 +114,20 @@ def test_every_docker_stub_env_var_matches_dispatch_contract():
     for cls in subclasses:
         env = cls.service_env_var
         assert env.startswith("RECON_") and env.endswith("_URL"), (
-            f"{cls.__name__}.service_env_var = {env!r} — "
+            f"{cls.__name__}.service_env_var = {env!r} - "
             "doesn't match RECON_<SOMETHING>_URL convention"
         )
 
 
 def test_sidecar_dockerfile_boxjs_installs_node_and_boxjs():
-    """box-js is Node, not Python — the Dockerfile must install both."""
+    """box-js is Node, not Python - the Dockerfile must install both."""
     text = (_SIDECARS_DIR / "Dockerfile.boxjs").read_text()
     assert "FROM node" in text, "Dockerfile.boxjs doesn't start FROM a node image"
     assert "box-js" in text, "Dockerfile.boxjs doesn't install box-js"
 
 
 def test_sidecar_dockerfile_clamav_starts_daemon_before_wrapper():
-    """ClamAV wrapper needs clamd running on 3310 — the start script
+    """ClamAV wrapper needs clamd running on 3310 - the start script
     must boot clamd first and wait for it to accept connections."""
     text = (_SIDECARS_DIR / "Dockerfile.clamav").read_text()
     assert "clamav-daemon" in text, "Dockerfile.clamav doesn't install clamav-daemon"
@@ -136,7 +136,7 @@ def test_sidecar_dockerfile_clamav_starts_daemon_before_wrapper():
 
 
 def test_sidecar_dockerfile_suricata_pulls_rules():
-    """Suricata without rules alerts on nothing — Dockerfile should
+    """Suricata without rules alerts on nothing - Dockerfile should
     seed a ruleset at build time via suricata-update."""
     text = (_SIDECARS_DIR / "Dockerfile.suricata").read_text()
     assert "suricata-update" in text, (

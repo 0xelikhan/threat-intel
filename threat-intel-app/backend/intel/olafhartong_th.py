@@ -2,14 +2,14 @@
 olafhartong/ThreatHunting + BlueTeamLabs/sentinel-attack KQL corpus loader.
 
 Sources:
-  - https://github.com/olafhartong/ThreatHunting           (MIT) — KQL queries
+  - https://github.com/olafhartong/ThreatHunting           (MIT) - KQL queries
     for Microsoft Sentinel + Defender XDR, mapped to ATT&CK.
-  - https://github.com/BlueTeamLabs/sentinel-attack        (MIT) — Sentinel
+  - https://github.com/BlueTeamLabs/sentinel-attack        (MIT) - Sentinel
     rules organised by ATT&CK technique with technique-keyed folders.
 
 Both ship Sentinel/KQL rules organised by ATT&CK technique. RECON
 generates KQL on demand, but has no curated reference catalogue to
-match against — when the investigation surfaces T1059.001, we can
+match against - when the investigation surfaces T1059.001, we can
 cite "olafhartong/ThreatHunting has 4 vetted Sentinel queries for
 this technique" alongside the generated rule.
 

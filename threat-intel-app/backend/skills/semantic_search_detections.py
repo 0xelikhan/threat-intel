@@ -1,11 +1,11 @@
 """
-SemanticSearchDetectionsSkill — natural-language search over the 11
+SemanticSearchDetectionsSkill - natural-language search over the 11
 bundled detection corpora.
 
 Where match_detections is exact-match (MITRE technique ID overlap), this
 skill is a fuzzy/semantic lookup. Use case: an analyst is investigating
-a behavioural pattern they don't yet have an ATT&CK mapping for —
-"PowerShell encoded command launched from an Office macro" — and wants
+a behavioural pattern they don't yet have an ATT&CK mapping for  - 
+"PowerShell encoded command launched from an Office macro" - and wants
 to see whether anyone has shipped a detection for it. Each rule's
 title + description + technique list is embedded once; queries are
 cosine-similarity ranked.
@@ -42,7 +42,7 @@ class SemanticSearchDetectionsSkill(Skill):
         return {
             "query":     "str (natural language query)",
             "top_k":     "int (optional, default 10)",
-            "sources":   "list[str] (optional — filter to subset of corpora)",
+            "sources":   "list[str] (optional - filter to subset of corpora)",
             "min_score": "float (optional, drop matches below this score)",
         }
 

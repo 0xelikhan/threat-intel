@@ -1,5 +1,5 @@
 """
-GenerateHuntPlanSkill — synthesise a structured threat-hunting plan
+GenerateHuntPlanSkill - synthesise a structured threat-hunting plan
 (time frame, ABLE recap, data sources, hunt procedure with KQL/SPL/Sigma
 hints) for a given hypothesis + RECON analysis.
 
@@ -10,7 +10,7 @@ Prompts adapted from Cisco Talos PEAK-Assistant
 PEAK uses an autogen RoundRobinGroupChat between a planner and a critic
 that emits a termination token when the plan is good enough. We use the
 same idea via `providers/critic_loop.py` so we don't pull in autogen.
-Runs on the smart model tier (AI_MODEL) — the output is the most complex
+Runs on the smart model tier (AI_MODEL) - the output is the most complex
 of the three new skills and benefits from the better reasoning model.
 """
 
@@ -29,11 +29,11 @@ _PLANNER_PROMPT = """You are an expert in cybersecurity threat hunting. Produce 
 comprehensive hunt plan based on the provided hypothesis, RECON analysis (the
 threat verdict, IOCs, MITRE coverage, behavioural indicators), and ABLE table.
 
-Use generic SIEM-platform hints — RECON ships KQL (Microsoft Sentinel /
+Use generic SIEM-platform hints - RECON ships KQL (Microsoft Sentinel /
 Defender) and Splunk SPL examples by default. Do NOT assume a specific
 deployment of either.
 
-## Output format (Markdown — first character must be `#`, no code fences around the whole document)
+## Output format (Markdown - first character must be `#`, no code fences around the whole document)
 
 # Threat Hunt Plan: <short technique / behaviour name>
 
@@ -41,13 +41,13 @@ deployment of either.
 <restate the hypothesis verbatim>
 
 ## Recommended Time Frame
-<one short paragraph — examples: "Previous 30 days", "7 days", "Year-to-date".
+<one short paragraph - examples: "Previous 30 days", "7 days", "Year-to-date".
 If no specific window applies, write "No specific time window recommended" and
 briefly say why.>
 
 ## ABLE Recap
 <concise restatement of the ABLE table in the same | Actor | Behavior |
-Location | Evidence | format — fill in cells with one-paragraph descriptions>
+Location | Evidence | format - fill in cells with one-paragraph descriptions>
 
 ## Data Sources
 | Source | Why it matters | Key fields |
@@ -59,7 +59,7 @@ Location | Evidence | format — fill in cells with one-paragraph descriptions>
 Number each step. For each step include: what you're looking for, ONE example
 KQL or SPL query in a fenced code block, and how to interpret the result.
 
-1. **<step name>** — <what you're hunting for in this step>
+1. **<step name>** - <what you're hunting for in this step>
    ```kql
    <KQL query, scoped to the relevant table + fields>
    ```
@@ -97,7 +97,7 @@ If every criterion is met, respond with exactly:
 YYY-TERMINATE-YYY
 
 Otherwise, respond with a short bulleted list of the specific changes the
-planner should make. Do not rewrite the plan yourself — only give feedback.
+planner should make. Do not rewrite the plan yourself - only give feedback.
 """
 
 

@@ -1,4 +1,4 @@
-"""Onionoo — Tor relay / exit-node check per IP.
+"""Onionoo - Tor relay / exit-node check per IP.
 
 Auto-generated from _legacy_registrations.py. Keeps the LegacyAnalyzer
 Adapter pattern (import on first call + from_legacy_dict wrap) but
@@ -13,7 +13,7 @@ from plugins import Analyzer, AnalysisResult, register
 
 class TorExitsAnalyzer(Analyzer):
     name = "tor_exits"
-    description = ('Onionoo — Tor relay / exit-node check per IP.')
+    description = ('Onionoo - Tor relay / exit-node check per IP.')
     supported_ioc_types = ['ipv4', 'ipv6']
     required_keys = []
     optional_keys = []

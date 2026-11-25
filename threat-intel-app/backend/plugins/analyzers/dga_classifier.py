@@ -1,4 +1,4 @@
-"""Local ML — Logistic Regression DGA probability.
+"""Local ML - Logistic Regression DGA probability.
 
 Auto-generated from _legacy_registrations.py. Keeps the LegacyAnalyzer
 Adapter pattern (import on first call + from_legacy_dict wrap) but
@@ -13,7 +13,7 @@ from plugins import Analyzer, AnalysisResult, register
 
 class DgaClassifierAnalyzer(Analyzer):
     name = "dga_classifier"
-    description = ('Local ML — Logistic Regression DGA probability.')
+    description = ('Local ML - Logistic Regression DGA probability.')
     supported_ioc_types = ['domain']
     required_keys = []
     optional_keys = []

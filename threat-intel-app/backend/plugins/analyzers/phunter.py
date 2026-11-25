@@ -1,4 +1,4 @@
-"""Reference analyzer — Phunter phone-number parse / validate."""
+"""Reference analyzer - Phunter phone-number parse / validate."""
 
 from __future__ import annotations
 

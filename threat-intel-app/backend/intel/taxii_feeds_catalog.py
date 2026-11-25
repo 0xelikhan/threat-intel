@@ -1,5 +1,5 @@
 """
-Canonical TAXII feed catalog — opt-in public feeds the operator can
+Canonical TAXII feed catalog - opt-in public feeds the operator can
 enable via config or settings.
 
 Each entry is the shape `intel/feed_aggregator.py::TAXII_FEEDS` expects:
@@ -33,7 +33,7 @@ TAXII_FEED_CATALOG: Dict[str, Dict[str, Any]] = {
         "url":           "https://ais2.cisa.dhs.gov/taxii2/",
         "collection_id": None,   # operator must set after enrollment
         "auth":          None,   # API key after CISA AIS onboarding
-        "description":   ("CISA Automated Indicator Sharing — public-sector "
+        "description":   ("CISA Automated Indicator Sharing - public-sector "
                            "indicator feed. Requires free enrollment at "
                            "https://www.cisa.gov/topics/cyber-threats-and-"
                            "advisories/information-sharing/automated-"
@@ -95,7 +95,7 @@ def get_enabled_feeds(slugs: Optional[List[str]] = None) -> List[Dict[str, Any]]
         if not spec:
             _log.warning("Unknown TAXII feed slug: %s", slug)
             continue
-        # Per-feed env overrides — `RECON_TAXII_<SLUG>_COLLECTION` and
+        # Per-feed env overrides - `RECON_TAXII_<SLUG>_COLLECTION` and
         # `RECON_TAXII_<SLUG>_AUTH` ("user:pass") let the operator supply
         # post-enrollment credentials without editing code.
         ek = f"RECON_TAXII_{slug.upper()}_COLLECTION"
@@ -110,7 +110,7 @@ def get_enabled_feeds(slugs: Optional[List[str]] = None) -> List[Dict[str, Any]]
             feed["auth"] = (user, pw)
         if feed.get("requires_enrollment") and not feed.get("collection_id"):
             _log.info("TAXII feed %s requires enrollment but no "
-                       "collection_id env override supplied — skipping", slug)
+                       "collection_id env override supplied - skipping", slug)
             continue
         out.append(feed)
     return out

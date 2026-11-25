@@ -2,7 +2,7 @@
 Sublime-Security/sublime-rules corpus loader.
 
 Source: https://github.com/sublime-security/sublime-rules (MIT). The
-canonical open corpus of email detection rules — ~1,200 .yml rules
+canonical open corpus of email detection rules - ~1,200 .yml rules
 across phishing, BEC, callback phishing, malware delivery, brand
 impersonation, account takeover, ATO, and more. Each rule has shape:
 
@@ -20,7 +20,7 @@ impersonation, account takeover, ATO, and more. Each rule has shape:
 We index by tactics/techniques + attack_types so the investigation
 node can cite Sublime rules when the alert is an email phishing
 investigation. RECON has eml_analysis.py for parsing but no curated
-email-detection corpus — this fills that gap.
+email-detection corpus - this fills that gap.
 """
 
 from __future__ import annotations

@@ -2,11 +2,11 @@
 Behavioural tests for the round-4 OSS integrations sourced from
 deep-walks of awesome-yara and awesome-threat-detection:
 
-  * intel.sublime_rules        — Sublime email detection corpus
-  * intel.chronicle_rules      — Google Chronicle YARA-L corpus
-  * intel.olafhartong_th       — olafhartong/ThreatHunting + sentinel-attack
+  * intel.sublime_rules        - Sublime email detection corpus
+  * intel.chronicle_rules      - Google Chronicle YARA-L corpus
+  * intel.olafhartong_th       - olafhartong/ThreatHunting + sentinel-attack
                                   KQL/Sentinel rules
-  * intel.attack_datasets      — Splunk attack_data labelled fixtures
+  * intel.attack_datasets      - Splunk attack_data labelled fixtures
                                   (mordor surfaced but skipped on GPL-3.0)
 
 All loaders exercise their graceful-missing-corpus path. The unified
@@ -52,14 +52,14 @@ def test_attack_datasets_handles_missing_corpus():
     from intel.attack_datasets import samples_for_technique, stats
     s = stats()
     assert s["loaded"] is True
-    # Mordor is GPL-3.0 — even if present, we never ingest it
+    # Mordor is GPL-3.0 - even if present, we never ingest it
     assert "mordor_skipped" in s
     out = samples_for_technique("T1059.001")
     assert isinstance(out, list)
     assert samples_for_technique("") == []
 
 
-# ─── Unified match_detections — now spans 8 corpora ─────────────────────────
+# ─── Unified match_detections - now spans 8 corpora ─────────────────────────
 def test_match_detections_returns_eight_source_keys():
     from skills import run_skill
     out = asyncio.run(run_skill("match_detections", {

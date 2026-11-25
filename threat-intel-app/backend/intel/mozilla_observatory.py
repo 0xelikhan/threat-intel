@@ -9,12 +9,12 @@ referrer-policy, public-key-pins, etc. Returns A through F.
 
 For RECON this is a niche but useful "domain hygiene" signal. A
 domain with grade A+ is almost certainly a well-run org; grade F is
-either freshly-stood-up infrastructure or an abandoned legacy site —
+either freshly-stood-up infrastructure or an abandoned legacy site  - 
 both worth flagging in the domain enrichment summary.
 
 The endpoint accepts a GET; the result reflects the LAST scan stored
 in Mozilla's backend (often days old) rather than triggering a fresh
-scan. That suits us — we want a quick reference, not a live test.
+scan. That suits us - we want a quick reference, not a live test.
 """
 
 from __future__ import annotations

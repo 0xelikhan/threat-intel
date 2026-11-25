@@ -1,13 +1,13 @@
 """
-CIRCL CVE-Search — free NVD mirror. https://cve.circl.lu
+CIRCL CVE-Search - free NVD mirror. https://cve.circl.lu
 
 Used as a failover when nvd.nist.gov is slow / down (which happens
-routinely — NVD's own uptime is a running joke). Returns the same
+routinely - NVD's own uptime is a running joke). Returns the same
 CVE record shape from the same underlying dataset, so callers can
 drop it in without special-casing the schema.
 
 Only queried when the primary NVD call has already failed or returned
-empty data. Never called speculatively — that would double the CVE
+empty data. Never called speculatively - that would double the CVE
 enrichment latency for no gain.
 """
 
@@ -43,7 +43,7 @@ async def lookup(session, cve_id: str) -> Dict[str, Any]:
     cna = containers.get("cna") or {}
     all_containers = [cna] + list(containers.get("adp") or [])
 
-    # Description — CNA-owned in CVE 5.
+    # Description - CNA-owned in CVE 5.
     descs = cna.get("descriptions") or raw.get("descriptions") or []
     summary_text = ""
     if isinstance(descs, list):
@@ -54,7 +54,7 @@ async def lookup(session, cve_id: str) -> Dict[str, Any]:
     if not summary_text:
         summary_text = (raw.get("summary") or "")[:600]
 
-    # CVSS — walk cna + every ADP container, prefer v3.1 → v3.0 → v4.
+    # CVSS - walk cna + every ADP container, prefer v3.1 → v3.0 → v4.
     # For NVD failover the specific version matters less than "any
     # score we can render". Take the first one we find.
     cvss_v3_score: Optional[float] = None

@@ -1,5 +1,5 @@
 """
-CISA Vulnrichment — Authorized Data Publisher (ADP) enrichment layer
+CISA Vulnrichment - Authorized Data Publisher (ADP) enrichment layer
 on top of MITRE's CVE records. Free, no key.
 
 MITRE's CVE Awg API (cveawg.mitre.org) returns the canonical CVE 5
@@ -11,7 +11,7 @@ with:
   - KEV metadata (when applicable)
 
 For RECON this closes the "CVE-2024-XXXX exists but NVD says awaiting
-analysis" gap — CISA often has an SSVC decision + refined severity
+analysis" gap - CISA often has an SSVC decision + refined severity
 weeks before NVD does.
 """
 
@@ -75,7 +75,7 @@ async def lookup(session, cve_id: str) -> Dict[str, Any]:
         if refined_cvss:
             break
 
-    # SSVC — the actionable decision. `Track*` = watch, `Attend` = act,
+    # SSVC - the actionable decision. `Track*` = watch, `Attend` = act,
     # `Act` = drop everything.
     ssvc = {}
     for m in (cisa.get("metrics") or []):

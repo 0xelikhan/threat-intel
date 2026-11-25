@@ -4,11 +4,11 @@
  *
  * The bug was in the sourcesWithHits counter:
  *
- *   // BROKEN — crashes when dc is null in bare mode
+ *   // BROKEN - crashes when dc is null in bare mode
  *   const sourcesWithHits = _DETECTION_SOURCES
  *     .filter(s => (dc[s.key] || []).length).length;
  *
- *   // FIXED — matches the pattern the other two loops use
+ *   // FIXED - matches the pattern the other two loops use
  *   const sourcesWithHits = _DETECTION_SOURCES
  *     .filter(s => (((dc || {})[s.key]) || []).length).length;
  *
@@ -18,7 +18,7 @@
  * reintroduces the raw `dc[s.key]` dereference, this test fails loud.
  */
 
-describe('DetectionCitationsView — sourcesWithHits defensive pattern', () => {
+describe('DetectionCitationsView - sourcesWithHits defensive pattern', () => {
   const _DETECTION_SOURCES = [
     {key: 'sigma'}, {key: 'panther'}, {key: 'splunk'},
     {key: 'mitre_car'}, {key: 'hunter_playbook'},
@@ -44,7 +44,7 @@ describe('DetectionCitationsView — sourcesWithHits defensive pattern', () => {
     const dc = {
       sigma:   [{title: 'rule-a'}, {title: 'rule-b'}],
       panther: [{title: 'rule-c'}],
-      splunk:  [],                 // present but empty — must not count
+      splunk:  [],                 // present but empty - must not count
       // other keys absent
     };
     expect(sourcesWithHits(dc)).toBe(2);

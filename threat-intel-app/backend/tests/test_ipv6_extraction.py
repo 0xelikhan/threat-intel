@@ -70,7 +70,7 @@ def test_ipv6_private_loopback_link_local_rejected():
 
 
 def test_ipv6_well_known_resolvers_in_benign_list():
-    """Cloudflare + Google public DNS v6 are in BENIGN_IPS — should be
+    """Cloudflare + Google public DNS v6 are in BENIGN_IPS - should be
     dropped same as their v4 counterparts."""
     out = extract_iocs("DNS lookup to 2606:4700:4700::1111 and to 8.8.8.8")
     assert "2606:4700:4700::1111" not in out["ips"]

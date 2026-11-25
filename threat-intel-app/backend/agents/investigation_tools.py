@@ -4,7 +4,7 @@ Tools the investigation AI can call iteratively to gather additional context.
 Each tool wraps an existing intel module / enrichment function and returns a
 compact JSON-serialisable dict (kept small to save tokens). The AI decides
 which tools to call based on what it's seeing in the alert + the pre-enriched
-baseline data — this lets investigations adapt instead of firing a fixed
+baseline data - this lets investigations adapt instead of firing a fixed
 enrichment pattern every time.
 """
 import asyncio
@@ -83,7 +83,7 @@ TOOL_SCHEMAS = [
             "description": (
                 "Combined CVE intelligence: CISA KEV (actively exploited) + EPSS (exploit "
                 "probability percentile). Returns urgency tier and ransomware-use flag. Use "
-                "when the alert mentions a CVE ID — you almost always want to call this."
+                "when the alert mentions a CVE ID - you almost always want to call this."
             ),
             "parameters": {
                 "type": "object",
@@ -172,7 +172,7 @@ TOOL_SCHEMAS = [
             "name": "check_lolbas",
             "description": (
                 "Check whether a Windows binary is in the LOLBAS catalog (legitimate "
-                "binaries adversaries abuse — certutil.exe, mshta.exe, regsvr32.exe, etc.). "
+                "binaries adversaries abuse - certutil.exe, mshta.exe, regsvr32.exe, etc.). "
                 "Returns categories and example abuse cases. Use when the alert mentions "
                 "an executable and you want to know if it's commonly abused."
             ),
@@ -265,7 +265,7 @@ def _summarize_for_trace(name: str, result: dict) -> str:
     if name == "find_threat_actors_by_ttps":
         actors = result.get("actors", [])
         top = ", ".join(f"{a['name']} ({a['score']}%)" for a in actors[:3])
-        return f"{len(actors)} actor matches" + (f" — top: {top}" if top else "")
+        return f"{len(actors)} actor matches" + (f" - top: {top}" if top else "")
     if name == "threat_actor_profile":
         if result.get("found") is False:
             return f"not found: {result.get('query')}"
@@ -315,7 +315,7 @@ async def execute_tool(name: str, args: dict, config) -> dict:
 
 
 # Each enrich_* below internally cherry-picks the keys it needs, so we
-# pass the FULL configured key set instead of a hand-curated subset —
+# pass the FULL configured key set instead of a hand-curated subset  - 
 # this avoids the AI's tool calls getting a degraded enrichment vs. the
 # main /api/analyze pipeline (abuse.ch endpoints in particular need
 # ABUSECH_AUTH_KEY to dodge anonymous rate limits).
@@ -325,7 +325,7 @@ def _all_keys(config) -> dict:
         "OTX_KEY", "URLSCAN_KEY", "PULSEDIVE_KEY",
         "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY",
         # Censys: PAT-first, legacy v2 ID/Secret pair as the configured
-        # fallback. Both are registered in config.py — the previously-used
+        # fallback. Both are registered in config.py - the previously-used
         # CENSYS_API_ID / CENSYS_API_SECRET / CENSYS_PERSONAL_ACCESS_TOKEN
         # names were not registered anywhere, so the AI tool's Censys
         # lookups silently never authenticated.
@@ -337,7 +337,7 @@ def _all_keys(config) -> dict:
     )}
 
 
-# Per-tool aiohttp helper — reuses the process-wide TCPConnector instead of
+# Per-tool aiohttp helper - reuses the process-wide TCPConnector instead of
 # spinning up a fresh pool (and a fresh DNS cache, fresh TLS handshakes)
 # every time the LLM calls a tool. connector_owner=False means closing the
 # session doesn't close the shared connector, so it survives across many
@@ -390,13 +390,13 @@ def _t_check_cve(args, config):
     kev = kev_lookup(cve)
     epss = epss_get(cve)
     pct = (epss or {}).get("epss_percent", 0)
-    urgency = ("CRITICAL — actively exploited in ransomware"
+    urgency = ("CRITICAL - actively exploited in ransomware"
                if kev and kev.get("ransomware_use")
-               else "CRITICAL — confirmed exploited"      if kev and pct >= 70
-               else "HIGH — in CISA KEV catalog"          if kev
-               else "HIGH — high exploit probability"     if pct >= 70
-               else "MEDIUM — moderate exploit probability" if pct >= 10
-               else "LOW — no active exploitation observed")
+               else "CRITICAL - confirmed exploited"      if kev and pct >= 70
+               else "HIGH - in CISA KEV catalog"          if kev
+               else "HIGH - high exploit probability"     if pct >= 70
+               else "MEDIUM - moderate exploit probability" if pct >= 10
+               else "LOW - no active exploitation observed")
     return {"cve": cve, "in_kev": bool(kev), "kev": kev, "epss": epss, "urgency": urgency}
 
 

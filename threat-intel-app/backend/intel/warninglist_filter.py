@@ -33,7 +33,7 @@ _benign_sha256:   Set[str] = set()
 _benign_urls:     Set[str] = set()
 _list_sources:    dict = {}     # value -> source list name (for "removed because…" reasons)
 _loaded = False
-# Cached count snapshot produced once at load — see load_warninglists().
+# Cached count snapshot produced once at load - see load_warninglists().
 _STATS_CACHE: "Optional[dict]" = None
 
 # Search vendor/ first (cloned via setup_vendor.sh), fall back to legacy local copy
@@ -50,7 +50,7 @@ def _pick_dir() -> Optional[Path]:
     return None
 
 
-# Pickle cache — parsing 123 warninglist JSON files + constructing
+# Pickle cache - parsing 123 warninglist JSON files + constructing
 # ~61k ipaddress.ip_network objects costs ~3.5 s per process cold-start.
 # The parsed structure includes ip_network objects and per-octet CIDR
 # buckets, which don't round-trip through JSON but pickle cleanly.
@@ -138,7 +138,7 @@ def _write_cache() -> None:
 def load_warninglists() -> dict:
     """Idempotent loader. Returns a dict of counts per type.
 
-    Short-circuits without recomputing _stats() when already loaded —
+    Short-circuits without recomputing _stats() when already loaded  - 
     the per-check entry points (is_benign_ip/domain/hash/url) all call
     this for the side-effect of "data is loaded" and discard the
     return value. _stats() walks _list_sources to build a set
@@ -153,12 +153,12 @@ def load_warninglists() -> dict:
 
     base = _pick_dir()
     if not base:
-        _log.warning("vendor/misp-warninglists not found — false positive "
+        _log.warning("vendor/misp-warninglists not found - false positive "
                      "filtering disabled. Run scripts/setup_vendor.sh.")
         _loaded = True
         return _stats()
 
-    # Try the pickle cache first — saves ~3.5 s of JSON parse + ip_network
+    # Try the pickle cache first - saves ~3.5 s of JSON parse + ip_network
     # construction on process cold-start.
     _t0 = time.perf_counter()
     if _load_from_cache(base):
@@ -220,7 +220,7 @@ def _ingest(list_type: str, name: str, values):
             continue
 
         if list_type == "ip":
-            # Some IP lists smuggle CIDRs anyway — detect both.
+            # Some IP lists smuggle CIDRs anyway - detect both.
             if "/" in v:
                 _add_cidr(v, name)
             else:
@@ -254,7 +254,7 @@ def _ingest(list_type: str, name: str, values):
 # ship ~100k CIDR entries (anycast / cloud / ISP ranges); without the
 # index every lookup walked all of them and the loop's `addr in net`
 # bit-math dominated triage even when the answer was no-match. IPv6
-# stays on the full list — it's a much smaller subset and the prefix
+# stays on the full list - it's a much smaller subset and the prefix
 # space is too large for a single-byte bucket.
 _benign_cidrs_by_octet: "dict[int, list]" = {}
 _benign_cidrs_v6:       List[ipaddress._BaseNetwork] = []
@@ -352,14 +352,14 @@ def is_benign_url(url: str) -> Tuple[bool, str]:
 def filter_iocs(iocs: dict) -> Tuple[dict, dict]:
     """
     Split an IOC dict into (filtered, removed) where:
-      filtered: only IOCs that are NOT known-benign — these go on to enrichment
+      filtered: only IOCs that are NOT known-benign - these go on to enrichment
       removed:  {type: [{"ioc": v, "reason": "list name"}, …]} for analyst visibility
     """
     load_warninglists()
 
     # Filterable buckets are built explicitly below. Non-filterable
     # buckets (emails / cves / crypto / files / paths) pass through
-    # unchanged — there's no MISP warninglist for these types, and
+    # unchanged - there's no MISP warninglist for these types, and
     # dropping them here was silently losing CVE + crypto IOCs before
     # the enrichment fan-out.
     filtered = {
@@ -403,7 +403,7 @@ def filter_iocs(iocs: dict) -> Tuple[dict, dict]:
     return filtered, removed
 
 
-# ─── CIRCL hashlookup (async) — known-good file lookup before enrichment ─────
+# ─── CIRCL hashlookup (async) - known-good file lookup before enrichment ─────
 async def check_hashlookup(session, hash_value: str) -> dict:
     """
     Query https://hashlookup.circl.lu/lookup/{sha256|sha1|md5}/{hash} to flag

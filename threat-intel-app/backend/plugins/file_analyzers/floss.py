@@ -1,4 +1,4 @@
-"""FLOSS — FLARE Obfuscated String Solver.
+"""FLOSS - FLARE Obfuscated String Solver.
 
 Extracts and deobfuscates strings embedded in malware. Covers:
   - static strings (ASCII + Unicode)
@@ -17,7 +17,7 @@ from plugins import AnalysisResult, FileAnalyzer, register
 
 class FlossAnalyzer(FileAnalyzer):
     name = "floss"
-    description = ("FLARE FLOSS — extract + decode strings from PE/ELF "
+    description = ("FLARE FLOSS - extract + decode strings from PE/ELF "
                    "binaries, including stack-stored, stack-decoded, "
                    "and tight-loop-decoded strings.")
     supported_file_types = ["pe", "elf", "shellcode"]

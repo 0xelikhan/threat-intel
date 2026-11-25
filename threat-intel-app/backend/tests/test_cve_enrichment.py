@@ -22,7 +22,7 @@ def test_extract_cves_case_insensitive_dedup():
 
 
 def test_extract_cves_rejects_invalid_year():
-    text = "Old CVE-1995-001 and future CVE-2099-99999 — both nonsense"
+    text = "Old CVE-1995-001 and future CVE-2099-99999 - both nonsense"
     out = extract_cves(text)
     assert out == []
 
@@ -35,7 +35,7 @@ def test_extract_cves_handles_empty():
 
 def test_extract_cves_seven_digit_number():
     """CVE numbering supports 4-7 digits after the year."""
-    out = extract_cves("CVE-2024-1234567 — a huge CVE number")
+    out = extract_cves("CVE-2024-1234567 - a huge CVE number")
     assert out == ["CVE-2024-1234567"]
 
 
@@ -114,7 +114,7 @@ def test_urlhaus_any_hit_flagged():
 
 # ─── CVE GTI scoring ─────────────────────────────────────────────────────────
 def test_cve_score_kev_match_is_malicious():
-    """KEV match alone is the highest-confidence signal — MALICIOUS verdict."""
+    """KEV match alone is the highest-confidence signal - MALICIOUS verdict."""
     out = score_cve({"cisa_kev": {"in_kev": True, "date_added": "2024-05-01",
                                   "ransomware_use": True}}, label="CVE-2024-1234")
     assert out.verdict == "MALICIOUS"

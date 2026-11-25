@@ -1,6 +1,6 @@
 """
 Spamhaus DBL (Domain Block List).
-Free DNS-based domain reputation — no API key.
+Free DNS-based domain reputation - no API key.
 
 Query pattern: <domain>.dbl.spamhaus.org → A record
 Return codes (from the A record's last octet):

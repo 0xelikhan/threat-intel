@@ -1,5 +1,5 @@
 """
-Email composer — generates customer-facing alert emails from analysis output.
+Email composer - generates customer-facing alert emails from analysis output.
 
 All MDR-team identity is parameterized via configurable placeholders
 (`{{TeamName}}` / `{{FromAddress}}`); the signature block is fully
@@ -30,7 +30,7 @@ from typing import Dict, List, Optional, Tuple
 
 
 # ─── alert type catalog ───────────────────────────────────────────────────────
-# (id_value, display_label, category) — id used as URL/JSON key, label as UI text.
+# (id_value, display_label, category) - id used as URL/JSON key, label as UI text.
 ALERT_TYPES: List[Tuple[str, str, str]] = [
     ("user_at_risk",                "User at Risk",                          "cloud"),
     ("impossible_travel",           "Impossible Travel",                     "cloud"),
@@ -75,7 +75,7 @@ RESPONSE_ACTIONS = [
 # ─── log parser (ported from Services/LogParserService.cs) ────────────────────
 def parse_log(log_text: str) -> Dict:
     """Parse a pasted security log into a flat dict of every field the
-    composer might reference. Mirrors the C# LogParserService.Parse() —
+    composer might reference. Mirrors the C# LogParserService.Parse()  - 
     every field, every alias cascade, every regex fallback."""
     if not log_text or not log_text.strip():
         return {"_error": "Log text is empty.", "raw_fields": {}}
@@ -109,7 +109,7 @@ def parse_log(log_text: str) -> Dict:
             sep = line.find(":")
             key = line[:sep].strip()
             val = line[sep + 1:].strip()
-            # Section header (key only, value empty) — skip
+            # Section header (key only, value empty) - skip
             if key and not val:
                 pass
             # Name → Value pair, look ahead one line
@@ -157,7 +157,7 @@ def parse_log(log_text: str) -> Dict:
                                    "identity", "accountName", "UserName"),
     }
 
-    # Privileged role — modifiedProperties newValue, with targetResources fallback
+    # Privileged role - modifiedProperties newValue, with targetResources fallback
     out["privileged_role_object_id"] = (_extract_modified_property_new_value(lines, "Role.ObjectID")
                                         or _extract_role_target_resource_id(lines))
     out["privileged_role_display_name"] = (_extract_modified_property_new_value(lines, "Role.DisplayName")
@@ -198,7 +198,7 @@ def parse_log(log_text: str) -> Dict:
     out["location_state"]   = _extract_section_value(lines, "location", "state")
     out["location_country"] = (_extract_section_value(lines, "location", "countryOrRegion")
                                or _extract_section_value(lines, "location", "country"))
-    # Single-line "Location: City, State, Country" — many SIEM/EDR exports emit
+    # Single-line "Location: City, State, Country" - many SIEM/EDR exports emit
     # location on one line instead of a structured block, which the section
     # parser above can't read. Split it into city/state/country as a fallback.
     if not out["location_city"] and not out["location_country"]:
@@ -212,7 +212,7 @@ def parse_log(log_text: str) -> Dict:
             elif len(parts) == 1:
                 out["location_country"] = parts[0]
 
-    # IP address — alias cascade then 3 increasingly desperate regex fallbacks
+    # IP address - alias cascade then 3 increasingly desperate regex fallbacks
     ip = get("ClientIP", "clientIp", "clientIP", "ipAddress", "IPAddress", "ip",
              "IP Address", "SourceIPAddress", "sourceIpAddress", "sourceIPAddress",
              "remoteIpAddress", "remoteIP", "address", "ipaddr", "Source IP Address")
@@ -411,7 +411,7 @@ def parse_log(log_text: str) -> Dict:
             or _extract_section_value(lines, "SecondLogin", "IP")
         )
 
-    # Per-login ASN + ASN name — used by the AI summary to flag VPN /
+    # Per-login ASN + ASN name - used by the AI summary to flag VPN /
     # bulletproof / anonymising provider names (PacketHub, Cogent abuse
     # ranges, etc.) without requiring an enrichment-source call.
     out["first_login_asn"]      = _extract_section_value(lines, "FirstLogin", "ASN")
@@ -420,7 +420,7 @@ def parse_log(log_text: str) -> Dict:
     out["second_login_asn_name"] = _extract_section_value(lines, "SecondLogin", "ASNName")
 
     # AssetNamePair often holds "Unknown,RealHost" or "RealHost,Unknown"
-    # — pick the non-Unknown side over the literal "Unknown" the section
+    # - pick the non-Unknown side over the literal "Unknown" the section
     # parser would otherwise return. Same trick for the IPv6/IPv4 pair.
     pair = raw_fields.get("AssetNamePair") or raw_fields.get("assetNamePair") or ""
     if pair and "," in pair:
@@ -437,7 +437,7 @@ def parse_log(log_text: str) -> Dict:
                 out["asset_name"] = v
                 break
 
-    # Impossible-travel signal — both logins present, different cities or
+    # Impossible-travel signal - both logins present, different cities or
     # countries, both within a short window. Computed cheaply here so the
     # AI prompt doesn't have to derive it.
     out["impossible_travel"] = bool(
@@ -466,7 +466,7 @@ def parse_log(log_text: str) -> Dict:
         kw in _second_asn for kw in _VPN_ASN_KEYWORDS
     ) if _second_asn else False
 
-    # ep_date / timestamp aliases — the template-field timeline toggle
+    # ep_date / timestamp aliases - the template-field timeline toggle
     # reads these, so populate them from whichever login timestamp the
     # parser captured first.
     if not out.get("ep_date"):
@@ -479,7 +479,7 @@ def parse_log(log_text: str) -> Dict:
     if not out.get("ip_address") and out.get("first_login_ip"):
         out["ip_address"] = out["first_login_ip"]
     if not out.get("ip_address") and out.get("second_login_ip"):
-        # Promote the second-login IP when the first wasn't extracted —
+        # Promote the second-login IP when the first wasn't extracted  - 
         # otherwise the Source IP row stays empty even though we have a
         # perfectly good IP from the second leg of an impossible-travel
         # event.
@@ -509,7 +509,7 @@ def parse_log(log_text: str) -> Dict:
         action = suggest_response_action(suggested)
         if action:
             out["suggested_response_action"] = action
-    # Category breakdown of every present field — the frontend renders one
+    # Category breakdown of every present field - the frontend renders one
     # toggle per category and sends enabled_categories back on compose to
     # control which categories make it into the email body.
     try:
@@ -520,7 +520,7 @@ def parse_log(log_text: str) -> Dict:
 
 
 # ─── alert-type heuristic ─────────────────────────────────────────────────────
-# Keyword → alert_type id. First match wins. Ordering matters — narrower
+# Keyword → alert_type id. First match wins. Ordering matters - narrower
 # patterns ("defender exclusion") must precede broader ones ("defender").
 _ALERT_TYPE_KEYWORDS: List[Tuple[str, str]] = [
     # Cloud / identity
@@ -550,7 +550,7 @@ _ALERT_TYPE_KEYWORDS: List[Tuple[str, str]] = [
     ("risky sign in",                    "user_at_risk"),
     ("risk detection",                   "user_at_risk"),
 
-    # Endpoint — defender / sentinel
+    # Endpoint - defender / sentinel
     ("defender exclusion",               "defender_exclusion_created"),
     ("add-mppreference",                 "defender_exclusion_created"),
     ("defender disabled",                "disable_protection"),
@@ -562,7 +562,7 @@ _ALERT_TYPE_KEYWORDS: List[Tuple[str, str]] = [
     ("sentinelone",                      "sentinel_one_detection"),
     ("sentinel one",                     "sentinel_one_detection"),
 
-    # Endpoint — behavioral
+    # Endpoint - behavioral
     ("powershell",                       "powershell_policy_bypass"),
     ("executionpolicy bypass",           "powershell_policy_bypass"),
     ("-encodedcommand",                  "powershell_policy_bypass"),
@@ -615,8 +615,8 @@ def suggest_alert_type(log_text: str, parsed: Optional[Dict] = None) -> Optional
         if parsed.get("risk_event_type", "").lower() in ("anonymizedipaddress", "tor"):
             return "anonymized_ip"
         # A risk level on an authenticated IP is a user-at-risk sign-in. (Was
-        # gated on parsed["location"], a key the parser never emits — it stores
-        # location_city/state/country — so this fallback never fired.)
+        # gated on parsed["location"], a key the parser never emits - it stores
+        # location_city/state/country - so this fallback never fired.)
         if parsed.get("risk_level") and parsed.get("ip_address"):
             return "user_at_risk"
         if parsed.get("threat_name") or parsed.get("ep_admin_alert_title"):
@@ -640,7 +640,7 @@ _DEFAULT_RESPONSE_BY_ALERT = {
     "creation_of_admin_account":   "escalating",
     "privileged_role":             "escalating",
     "forwarding_rule":             "lock_account_and_revoke_session",
-    # Endpoint — contain
+    # Endpoint - contain
     "ransomware":                  "isolating",
     "public_rdp_connection":       "isolating",
     "vulnerable_driver":           "isolating",
@@ -648,7 +648,7 @@ _DEFAULT_RESPONSE_BY_ALERT = {
     "uninstall_script_execution":  "isolating",
     "disable_security_agent":      "isolating",
     "sentinel_one_detection":      "isolating",
-    # Endpoint — escalate (needs review, not auto-containment)
+    # Endpoint - escalate (needs review, not auto-containment)
     "defender_detection":          "escalating",
     "defender_exclusion_created":  "escalating",
     "disable_protection":          "escalating",
@@ -662,7 +662,7 @@ _DEFAULT_RESPONSE_BY_ALERT = {
 
 def suggest_response_action(alert_type: Optional[str]) -> Optional[str]:
     """Map an alert-type id to the response-action id a SOC analyst would
-    usually pick. Returns ``None`` when there's no strong default — caller
+    usually pick. Returns ``None`` when there's no strong default - caller
     should leave the dropdown empty rather than guess."""
     if not alert_type:
         return None
@@ -728,13 +728,13 @@ def _walk_modified_properties(lines, target_display, key="newValue"):
           oldValue    : ""
           newValue    : "Privileged Role Administrator"
 
-      concatenated (Entra ID PIM export — every field on one line):
+      concatenated (Entra ID PIM export - every field on one line):
           modifiedProperties :displayName : Role.DisplayNameoldValue : ""newValue : "Privileged Role Administrator"
     """
     target_l = (target_display or "").lower()
     key_l = (key or "").lower()
 
-    # Pass 1 — multi-line.
+    # Pass 1 - multi-line.
     in_block = False
     cur_display = cur_val = ""
     for raw in lines:
@@ -760,7 +760,7 @@ def _walk_modified_properties(lines, target_display, key="newValue"):
     if in_block and cur_display.lower() == target_l and cur_val:
         return _trim_wrapped_quotes(cur_val)
 
-    # Pass 2 — concatenated.
+    # Pass 2 - concatenated.
     for raw in lines:
         for m in _MP_INLINE_RE.finditer(raw):
             if (m.group("display") or "").strip().lower() == target_l:
@@ -795,7 +795,7 @@ def _walk_target_resources(lines, want_type, want_field):
     concatenated single-line shape that Entra ID PIM exports default to."""
     target_t = (want_type or "").lower()
 
-    # Pass 1 — multi-line (original walker).
+    # Pass 1 - multi-line (original walker).
     in_block = False
     cur_type = cur_val = ""
     for raw in lines:
@@ -822,7 +822,7 @@ def _walk_target_resources(lines, want_type, want_field):
     if in_block and cur_type.lower() == target_t and cur_val and cur_val != "-":
         return _trim_wrapped_quotes(cur_val)
 
-    # Pass 2 — concatenated.
+    # Pass 2 - concatenated.
     field_l = (want_field or "").lower()
     field_map = {k.lower(): k for k in
                  ("id", "displayName", "type", "userPrincipalName", "groupType")}
@@ -871,18 +871,18 @@ def _extract_additional_detail_value(lines, target_key):
           value : 89.104.236.4
 
       concatenated (Entra ID PIM export / 'select-object -expandproperty'
-      output / browser-copy-from-table — all the bits land on one
+      output / browser-copy-from-table - all the bits land on one
       physical line with no separator):
           additionalDetails :key : ipaddrvalue : 89.104.236.4
 
     The concatenated form was previously missed entirely because the
     block-detector looked for a line that equalled 'additionaldetails :'
-    verbatim — concatenated PIM logs (the most common Entra alert paste)
+    verbatim - concatenated PIM logs (the most common Entra alert paste)
     have every field on the same line and slipped right past.
     """
     target_l = (target_key or "").lower()
 
-    # Pass 1 — multi-line shape (original behaviour, kept for back-compat
+    # Pass 1 - multi-line shape (original behaviour, kept for back-compat
     # with logs that already came in nicely formatted).
     in_block = False
     cur_key = ""
@@ -904,7 +904,7 @@ def _extract_additional_detail_value(lines, target_key):
         elif k.lower() == "value" and cur_key.lower() == target_l:
             return v
 
-    # Pass 2 — concatenated shape. Walk every line and pull out each
+    # Pass 2 - concatenated shape. Walk every line and pull out each
     # (key, value) pair inline. First exact-key match wins.
     for raw in lines:
         for m in _AD_INLINE_RE.finditer(raw):
@@ -1127,7 +1127,7 @@ _TEMPLATES_DIR = Path(__file__).resolve().parent / "email_templates"
 
 # Per-analyst drafts + rolling send history are kept IN MEMORY ONLY.
 # Email subjects / bodies / recipients contain analyst-derived data and
-# must never land on disk — see the no-persistence policy. State is lost
+# must never land on disk - see the no-persistence policy. State is lost
 # on container restart by design.
 _HISTORY_CAP  = 200
 _DRAFTS_CAP   = 200
@@ -1141,13 +1141,13 @@ def _slugify(s: str) -> str:
 
 def save_draft(payload: Dict) -> Dict:
     """Stash a composed email + its compose options in memory. Returns the
-    saved record. Lost on restart — never persisted."""
+    saved record. Lost on restart - never persisted."""
     now = datetime.now(timezone.utc)
     alert = _slugify(payload.get("alert_type") or "generic")
     draft_id = f"{now.strftime('%Y%m%dT%H%M%S')}_{alert}"
 
     # Bound each free-form field so a 50 MB body (allowed by the audit
-    # middleware) doesn't sit in _drafts_mem at full size — 200 drafts ×
+    # middleware) doesn't sit in _drafts_mem at full size - 200 drafts ×
     # 50 MB is 10 GB of RSS. Caps match the same envelope the
     # /api/email/send EmailSendRequest enforces, with a little extra room
     # for the parsed metadata blob the composer attaches to the record.
@@ -1169,7 +1169,7 @@ def save_draft(payload: Dict) -> Dict:
         "options":     payload.get("options") or {},
     }
     _drafts_mem[draft_id] = record
-    # Cheap FIFO eviction — newest insertion order preserved.
+    # Cheap FIFO eviction - newest insertion order preserved.
     if len(_drafts_mem) > _DRAFTS_CAP:
         for k in list(_drafts_mem.keys())[:-_DRAFTS_CAP]:
             _drafts_mem.pop(k, None)
@@ -1240,7 +1240,7 @@ def _defang_if_iplike(v):
     return _defang_ip(s) if ("." in s or ":" in s) else s
 
 
-# Body-level IOC defanger — sanitizes a generated email body so raw IOCs
+# Body-level IOC defanger - sanitizes a generated email body so raw IOCs
 # (IPs the analyst pulled from a SIEM, attacker C2 domains, etc.) can't be
 # clicked by the recipient. Three rules govern what we touch:
 #   * Raw IPs                  -> always defanged (almost always IOCs in this
@@ -1314,7 +1314,7 @@ def _is_safe_host(host: str) -> bool:
 def _defang_url(url: str) -> str:
     """Defang an http(s):// URL UNLESS its hostname is a safe-listed vendor.
     Leaves the full URL intact for Microsoft KB, MITRE ATT&CK, VirusTotal,
-    etc. — clicking those is desirable, not dangerous."""
+    etc. - clicking those is desirable, not dangerous."""
     # Extract hostname (between :// and the next /, ?, or end).
     m = re.match(r"^(https?)://([^/?#\s]+)(.*)$", url, re.IGNORECASE)
     if not m:
@@ -1330,24 +1330,24 @@ def _defang_url(url: str) -> str:
 # customer-facing email. The system prompt forbids them, but models still slip
 # them in, so we strip on the way out as a belt-and-braces guard. Replacement
 # rules picked for grammatical safety across the most common patterns:
-#   "...quickly — and as always..."        -> "...quickly, and as always..."   (clause join)
-#   "first IP 1.2.3.4 — clean reputation"  -> "first IP 1.2.3.4: clean ..."     (label + detail)
-#   "8–14 lines"                           -> "8 to 14 lines"                   (numeric range)
-#   "anti–virus"                           -> "anti-virus"                       (compound word)
-_EM_OR_EN = "[—–]"
+#   "...quickly - and as always..."        -> "...quickly, and as always..."   (clause join)
+#   "first IP 1.2.3.4 - clean reputation"  -> "first IP 1.2.3.4: clean ..."     (label + detail)
+#   "8-14 lines"                           -> "8 to 14 lines"                   (numeric range)
+#   "anti-virus"                           -> "anti-virus"                       (compound word)
+_EM_OR_EN = "[ - -]"
 def _strip_em_dashes(text: str) -> str:
     if not text:
         return text
     out = text
-    # Numeric range with en/em dash (no surrounding spaces): "8–14" -> "8 to 14".
+    # Numeric range with en/em dash (no surrounding spaces): "8-14" -> "8 to 14".
     out = re.sub(rf"(\d)\s*{_EM_OR_EN}\s*(\d)", r"\1 to \2", out)
-    # Space-padded dash separating clauses: " — " or " – " -> ", ".
+    # Space-padded dash separating clauses: " - " or " - " -> ", ".
     out = re.sub(rf"\s+{_EM_OR_EN}\s+", ", ", out)
     # Dash used inline with one-sided spacing (rarer): drop to comma + space.
     out = re.sub(rf"\s+{_EM_OR_EN}", ",", out)
     out = re.sub(rf"{_EM_OR_EN}\s+", ", ", out)
     # Bare dash inside a word (compound) -> regular hyphen.
-    out = out.replace("—", "-").replace("–", "-")
+    out = out.replace(" - ", "-").replace("-", "-")
     return out
 
 
@@ -1449,12 +1449,12 @@ def _build_replacement_map(parsed, options, signature_html, ip1, ip2):
     )
     ip1 = ip1 or {}
     ip2 = ip2 or {}
-    # Domain-joined explainer — only present when the parsed log has an
+    # Domain-joined explainer - only present when the parsed log has an
     # asset_name (e.g. a hybrid-AAD-joined endpoint surfaced in the alert).
     # Renders as a standalone paragraph that explains why this class of
     # alert is usually a false positive on managed devices, so the analyst
     # doesn't have to type the same context every time. Empty string when
-    # asset_name is missing — the post-render blank-line collapse in
+    # asset_name is missing - the post-render blank-line collapse in
     # compose()/compose_ai() flattens the stray "{{DomainJoinedNote}}\n\n"
     # gap so absent-asset emails don't show an empty paragraph.
     domain_joined_note = ""
@@ -1595,8 +1595,8 @@ def _render_subject(alert_type_id, options, parsed):
     org = options.get("organization") or "Organization"
     asset = options.get("asset_name") or parsed.get("asset_name") or ""
     if asset:
-        return f"[MDR Alert] {label} — {org} — {asset}"
-    return f"[MDR Alert] {label} — {org}"
+        return f"[MDR Alert] {label} - {org} - {asset}"
+    return f"[MDR Alert] {label} - {org}"
 
 
 def _render_html(template_text, replacements, signature_html, include_runbook):
@@ -1675,7 +1675,7 @@ def _build_signature_html(config) -> str:
     """Build the signature block from RECON settings.
 
     If EMAIL_SIGNATURE is set: honor it verbatim (HTML or plain).
-    Otherwise: render a minimal block with just the configured name/address —
+    Otherwise: render a minimal block with just the configured name/address  - 
     no hardcoded role title, no fallback name. If nothing is configured at
     all, return an empty string so the email ends cleanly."""
     name = (config.get("EMAIL_FROM_NAME") or "").strip()
@@ -1726,7 +1726,7 @@ def list_templates() -> List[Dict]:
 def load_template(alert_id: str) -> str:
     # save_template ran the alert_id through _safe_name() before writing
     # the file (alphanumeric + underscore only) AND checked it against
-    # the fixed ALERT_TYPES set. load_template did neither — an attacker
+    # the fixed ALERT_TYPES set. load_template did neither - an attacker
     # who could reach /api/email/templates/<alert_type> could supply
     # something like "../intel/redactor" and the f"{alert_id}.txt"
     # interpolation would resolve to a path outside the templates dir.
@@ -1754,12 +1754,12 @@ def save_template(alert_id: str, body: str) -> bool:
 # ─── compose (public) ─────────────────────────────────────────────────────────
 def compose(alert_type: str, parsed: Dict, options: Dict, config,
             ip1: Optional[Dict] = None, ip2: Optional[Dict] = None) -> Dict:
-    """Render the email — returns {subject, text, html}."""
+    """Render the email - returns {subject, text, html}."""
     template = load_template(alert_type)
     options = {**options, "alert_type": alert_type}
     signature_html = _build_signature_html(config)
     # _signature_plain rebuilds a multi-line block from config on each
-    # call — pre-compute once and reuse, since both the {{Signature}}
+    # call - pre-compute once and reuse, since both the {{Signature}}
     # placeholder substitution and _inject_closing_text need the same
     # value. Same shape as the signature_html one-shot just above.
     signature_text = _signature_plain(config)
@@ -1779,7 +1779,7 @@ def compose(alert_type: str, parsed: Dict, options: Dict, config,
     html = _strip_closing_block_html(html)
     text = _inject_closing_text(text, signature_text)
     html = _inject_closing_html(html, signature_html)
-    # Last-pass dash strip — catches anything injected after the AI body
+    # Last-pass dash strip - catches anything injected after the AI body
     # was first sanitized (closing statement, signature line, future templates).
     text = _strip_em_dashes(text)
     html = _strip_em_dashes(html)
@@ -1816,7 +1816,7 @@ def _strip_closing_block(text: str) -> str:
 
 
 def _strip_closing_block_html(html: str) -> str:
-    """Same idea for HTML — the renderer wraps each line in <div>...</div>,
+    """Same idea for HTML - the renderer wraps each line in <div>...</div>,
     so we drop any div whose text starts with 'If you have ... questions'."""
     return re.sub(
         r'<div[^>]*>\s*If you have (?:any )?questions[^<]*?(?:reach out|contact)[^<]*</div>',
@@ -1885,7 +1885,7 @@ def _category_for(alert_id: str) -> str:
 
 
 def _category_siblings(alert_id: str, k: int = 4) -> list:
-    """Up to k other alert ids in the same category — used so the inspiration
+    """Up to k other alert ids in the same category - used so the inspiration
     set leans toward the analyst's actual alert class. Skip the alert itself."""
     cat = _category_for(alert_id)
     if not cat:
@@ -1899,7 +1899,7 @@ def _ai_example_block(priority_alert_type: str = "",
     """Render in-repo templates as inspiration. When `priority_alert_type` is
     set, lead with that template + same-category siblings so the AI's style
     leans toward the analyst's actual alert. All examples are framed as
-    inspiration — the prompt explicitly tells the AI not to copy verbatim.
+    inspiration - the prompt explicitly tells the AI not to copy verbatim.
 
     Always loads via `load_template` so analyst-edited templates flow through
     too (not just the hardcoded _DEFAULT_TEMPLATES). That's the whole point:
@@ -1964,7 +1964,7 @@ def _ai_context_substitutions(parsed: dict, options: dict) -> dict:
     asset = (options or {}).get("asset_name") or (parsed or {}).get("asset_name") or ""
     # Many SIEMs (Microsoft Entra ID exports, for example) populate the
     # AssetName field with the literal string "Unknown" / "-" / "N/A" when
-    # the asset is NOT domain-joined. Treat those as absent — otherwise the
+    # the asset is NOT domain-joined. Treat those as absent - otherwise the
     # domain-joined explainer paragraph injects on every impossible-travel
     # alert regardless of whether either login was on a managed device.
     asset_norm = asset.strip().lower() if isinstance(asset, str) else ""
@@ -1992,12 +1992,12 @@ _AI_SYSTEM = """You are a senior security analyst writing the body of a
 customer-facing notification about a security alert. Write the way an
 experienced practitioner would explain the situation to a peer at the
 customer site: direct, technical, informative, SCANNABLE. The example
-templates below are INSPIRATION ONLY for tone — do NOT copy them.
+templates below are INSPIRATION ONLY for tone - do NOT copy them.
 
 THE BODY HAS EXACTLY TWO SECTIONS:
 
 ──────────────────────────────────────────────────────────────────────────
-SECTION 1 — DETAILS (structured facts block, NOT prose narration)
+SECTION 1 - DETAILS (structured facts block, NOT prose narration)
 ──────────────────────────────────────────────────────────────────────────
 Render the parsed facts as a clean block of labelled lines, one fact per
 line, in this format:
@@ -2005,13 +2005,13 @@ line, in this format:
     Label: value
 
 No bullets, no dashes, no markdown, no asterisks. Just labelled lines.
-Only include labels that actually have data in the log — skip empty
+Only include labels that actually have data in the log - skip empty
 fields entirely. Pick from this set (in this rough order of relevance,
 ignore the ones that don't apply):
 
     User
-    Source IP                 (one or two — for impossible-travel etc.)
-    Source location           (city, country — when geolocation is known)
+    Source IP                 (one or two - for impossible-travel etc.)
+    Source location           (city, country - when geolocation is known)
     Time                      (UTC timestamp)
     Asset / Host
     Process
@@ -2027,13 +2027,13 @@ ignore the ones that don't apply):
 
 Follow the facts block with EXACTLY ONE short sentence (no more than 25
 words) that names what this alert IS in plain language. Not a paragraph.
-One sentence. Example: "Sign-in failure for a disabled account — most
+One sentence. Example: "Sign-in failure for a disabled account - most
 likely a stale automation still calling the deactivated identity."
 
 Then one blank line and Section 2.
 
 ──────────────────────────────────────────────────────────────────────────
-SECTION 2 — INVESTIGATE AND REMEDIATE (tight prose, one paragraph)
+SECTION 2 - INVESTIGATE AND REMEDIATE (tight prose, one paragraph)
 ──────────────────────────────────────────────────────────────────────────
 ONE paragraph (3-5 sentences) covering the investigation steps,
 containment, remediation, and detection guidance that actually apply to
@@ -2061,7 +2061,7 @@ LENGTH:
 * Genuine incident: facts block + summary sentence + up to 2 tight
   paragraphs. Total 22-32 lines.
 
-CALIBRATION — do NOT over-state the threat:
+CALIBRATION - do NOT over-state the threat:
 * If the evidence shows a clean hash, a known vendor maintenance pattern,
   expected service-account activity, a disabled-account login failure, or
   any other recognised legitimate / benign condition, say so explicitly in
@@ -2123,12 +2123,12 @@ HARD FORMAT RULES:
 * NO bullets, NO numbered lists, NO dash-prefixed items. Paragraphs only.
 * NO em dashes, NO en dashes. Hyphens only inside compound words
   (anti-virus, two-factor). Never as a sentence-level separator.
-* Plain text only — no markdown, no asterisks for emphasis, no underscores.
+* Plain text only - no markdown, no asterisks for emphasis, no underscores.
 * NO signature block. NO "Best regards" / name / title. The system appends
   the signature automatically.
 * NO greeting. Do NOT start with "Hi", "Hello", "Hi team", "Greetings",
   "Dear team", "Good morning", or any other salutation. The first line of
-  the body is the first line of the DETAILS section — go straight in.
+  the body is the first line of the DETAILS section - go straight in.
 
 REDUNDANT OPENERS TO AVOID:
 * "I am writing to inform you that"
@@ -2143,7 +2143,7 @@ REDUNDANT OPENERS TO AVOID:
 * "We'll continue monitoring your environment"
 Strip these openers; replace with the direct statement they were padding.
 
-EXAMPLE — the format you should produce:
+EXAMPLE - the format you should produce:
 
   User: hou-paton-storage1@patoncontrols.com
   Source IP: 108.249.198.145
@@ -2153,7 +2153,7 @@ EXAMPLE — the format you should produce:
   Auth: OAuth2:Token
   Device: non-compliant, unmanaged
 
-  Sign-in failure against a disabled account — most likely a stale
+  Sign-in failure against a disabled account - most likely a stale
   automation still calling the deactivated identity.
 
   Confirm in Entra ID whether hou-paton-storage1@patoncontrols.com is
@@ -2163,7 +2163,7 @@ EXAMPLE — the format you should produce:
   account needs to come back, rotate the credential, enforce MFA, and check
   conditional-access before re-enabling.
 
-That's the whole body. Not "robotic narration of each field" — clean labelled
+That's the whole body. Not "robotic narration of each field" - clean labelled
 facts on top, one sentence of context, one paragraph of action.
 """
 
@@ -2204,7 +2204,7 @@ def _strip_list_markers(body: str) -> str:
 # top), then opener strips, then in-body team-reference rewrites, then closing
 # strips, then whitespace cleanup.
 _FILLER_SUBS = [
-    # ── Grammar/logic fix — imperative + "and no <X> is/are present"
+    # ── Grammar/logic fix - imperative + "and no <X> is/are present"
     # The AI keeps producing "review the affected file and no further
     # malicious activity is present" which conjoins an instruction with
     # a passive statement using "and" (logically wrong, reads as
@@ -2221,7 +2221,7 @@ _FILLER_SUBS = [
      lambda m: (f"{m.group(1)} {m.group(2)} to confirm no "
                 f"{(m.group(3) or '').strip()} {m.group(4).strip()} "
                 f"{m.group(5)} present").replace("  ", " ").strip()),
-    # Same pattern but with "is recommended to <verb>" preface — the
+    # Same pattern but with "is recommended to <verb>" preface - the
     # AI alternates between bare-imperative and "it is recommended"
     # phrasings.
     (re.compile(
@@ -2235,7 +2235,7 @@ _FILLER_SUBS = [
                 f"{(m.group(4) or '').strip()} {m.group(5).strip()} "
                 f"{m.group(6)} present").replace("  ", " ").strip()),
 
-    # ── Greetings — strip ANY salutation at the very top of the body ─────
+    # ── Greetings - strip ANY salutation at the very top of the body ─────
     # Matches: "Hi team,", "Hello,", "Hi,", "Greetings,", "Dear team,",
     # "Good morning,", "Hi <Name>,", with optional trailing newlines.
     (re.compile(
@@ -2255,9 +2255,9 @@ _FILLER_SUBS = [
     (re.compile(r"\bIn response to (?:this|the)\s+(?:alert|notification),?\s*", re.IGNORECASE), ""),
     (re.compile(r"\bIn light of (?:this|the)\s+\w+,?\s*", re.IGNORECASE), ""),
 
-    # ── Team self-references — rewrite to passive voice without the actor ─
+    # ── Team self-references - rewrite to passive voice without the actor ─
     # The AI keeps producing "our MDR team has cleared the notification" /
-    # "our team confirmed the alert" — the user wants no group self-reference.
+    # "our team confirmed the alert" - the user wants no group self-reference.
     # Rewrite to passive: "the notification was cleared" / "the alert was
     # confirmed". The {verb}ed pattern catches common past-tense verbs the
     # model uses (cleared, confirmed, identified, reviewed, determined,
@@ -2279,7 +2279,7 @@ _FILLER_SUBS = [
         r"(?:the\s+|this\s+|that\s+)(\w+)",
         re.IGNORECASE),
      lambda m: f"the {m.group(2).lower()} was {m.group(1).lower()}"),
-    # Step 2: plain team-strip fallback — catches "our team is monitoring",
+    # Step 2: plain team-strip fallback - catches "our team is monitoring",
     # "the team reviewed", and any remaining mid-sentence references the
     # verb-rewrite missed.
     (re.compile(
@@ -2289,7 +2289,7 @@ _FILLER_SUBS = [
     (re.compile(r"\b(?:our|the)\s+(?:MDR|SOC)\s+analysts?\s+", re.IGNORECASE), ""),
     (re.compile(r"\bour\s+analysts?\s+", re.IGNORECASE), ""),
 
-    # ── Closing-courtesy lines — kill the WHOLE sentence containing the
+    # ── Closing-courtesy lines - kill the WHOLE sentence containing the
     # offending phrase. Uses a lookbehind for the leading sentence boundary
     # so re.sub can find adjacent closing sentences on a second pass; if
     # the boundary were consumed, only the first of two back-to-back
@@ -2320,7 +2320,7 @@ _FILLER_SUBS = [
         r"[^.\n]*\.?\s*",
         re.IGNORECASE), ""),
 
-    # ── Robotic phrases — surgical word-level rewrites that don't kill
+    # ── Robotic phrases - surgical word-level rewrites that don't kill
     # whole sentences, just strip the chatgpt-isms. Order matters: the
     # longer patterns come first so "may be necessary" matches before
     # "be necessary" would fire.
@@ -2334,7 +2334,7 @@ _FILLER_SUBS = [
     (re.compile(r"\bas\s+always,?\s*", re.IGNORECASE), ""),
     (re.compile(r"\bright\s+away\b", re.IGNORECASE), ""),
     (re.compile(r"\bto\s+act\s+quickly\b", re.IGNORECASE), ""),
-    # "the X identified for this request was Y" -> "X: Y" — drops the
+    # "the X identified for this request was Y" -> "X: Y" - drops the
     # robotic restatement; the structured-facts block above carries the
     # actual data. But only fire mid-sentence so we don't break the
     # labelled lines themselves.
@@ -2378,7 +2378,7 @@ def _strip_filler_phrases(body: str) -> str:
     out = _ORPHAN_SENTENCE_RE.sub("", out)
 
     # Re-capitalise the first letter of every sentence (the verb-rewrite
-    # produces "the notification was cleared" — that should be "The
+    # produces "the notification was cleared" - that should be "The
     # notification was cleared" when it sits at the start of a sentence).
     def _cap(match):
         return match.group(1) + match.group(2).upper()
@@ -2394,12 +2394,12 @@ def _strip_filler_phrases(body: str) -> str:
 # ─── Deterministic facts-block renderer ──────────────────────────────────────
 #
 # The LLM is unreliable at producing the clean "Label: value" structured
-# block we want at the top of every alert email — even with strong prompt
+# block we want at the top of every alert email - even with strong prompt
 # rules and post-processor scrubs, it keeps falling back to "A failed
 # login attempt was recorded for ..." style robotic narration.
 #
 # Solution: take the formatting concern away from the LLM entirely. We
-# already extracted every field in /api/email/parse — render them directly
+# already extracted every field in /api/email/parse - render them directly
 # as labelled lines server-side. The LLM is then asked for ONLY two small
 # things it cannot screw up: a one-sentence plain-language summary and a
 # one-paragraph action block. The body is assembled by concatenation, not
@@ -2413,14 +2413,14 @@ def _strip_filler_phrases(body: str) -> str:
 # the facts block (and, transitively, what the AI summary references).
 #
 # Categories:
-#   Identity   — user / account / asset / host
-#   Network    — IPs, ASN, location, user-agent
-#   Process    — process name / path / cmdline / id
-#   File       — file path, hash, artifact
-#   Detection  — alert name, rule name, malware family, risk type/level
-#   Time       — timestamps
-#   Action     — what was done about the event (response action, forwarding)
-#   Other      — privileged role / TAP / risk reasons / catch-all
+#   Identity   - user / account / asset / host
+#   Network    - IPs, ASN, location, user-agent
+#   Process    - process name / path / cmdline / id
+#   File       - file path, hash, artifact
+#   Detection  - alert name, rule name, malware family, risk type/level
+#   Time       - timestamps
+#   Action     - what was done about the event (response action, forwarding)
+#   Other      - privileged role / TAP / risk reasons / catch-all
 ALL_CATEGORIES = (
     "Identity", "Network", "Process", "File", "Detection",
     "Time", "Action", "Other",
@@ -2477,7 +2477,7 @@ _FACT_FIELDS = (
 
 # Keyword → category for the catch-all "Other parsed fields" classifier.
 # Used when we see a raw_field key the hardcoded _FACT_FIELDS doesn't
-# cover — keeps the categorisation working on arbitrary log formats.
+# cover - keeps the categorisation working on arbitrary log formats.
 _CATEGORY_KEYWORDS = (
     ("Network",    ("ip", "addr", "host", "url", "domain", "asn",
                     "country", "city", "region", "latitude", "longitude",
@@ -2522,7 +2522,7 @@ def categorize_parsed(parsed: dict) -> dict:
     out: dict = {c: [] for c in ALL_CATEGORIES}
     covered_keys: set = set()
 
-    # Pass 1 — hardcoded fact fields with formatters + canonical labels.
+    # Pass 1 - hardcoded fact fields with formatters + canonical labels.
     for entry in _FACT_FIELDS:
         label, keys = entry[0], entry[1]
         fmt = entry[2] if len(entry) > 2 else None
@@ -2542,7 +2542,7 @@ def categorize_parsed(parsed: dict) -> dict:
             })
             break
 
-    # Pass 2 — every other raw_fields key that the hardcoded list didn't
+    # Pass 2 - every other raw_fields key that the hardcoded list didn't
     # already cover. Lets arbitrary log shapes still surface their fields.
     raw_fields = parsed.get("raw_fields") or {}
     for raw_key, raw_val in raw_fields.items():
@@ -2585,11 +2585,11 @@ def _is_real_value(v) -> bool:
 # Map a template field-id (the UI's toggle name) to the list of parsed-dict
 # keys it controls. When `options["enabled_fields"]` is a non-empty list,
 # `_filter_parsed_for_template()` keeps ONLY keys mentioned by enabled
-# field-ids — disabled fields are completely excluded from the rendered
+# field-ids - disabled fields are completely excluded from the rendered
 # email body and from the AI prompt, not just visually hidden.
 TEMPLATE_FIELD_TO_KEYS = {
     "alert_summary":       [],   # rendered by the AI summary sentence, not a parsed key
-    # Do NOT fall back to ep_domain — it's the Windows AD domain prefix
+    # Do NOT fall back to ep_domain - it's the Windows AD domain prefix
     # from "DOMAIN\username", not a hostname. Using it as a host source
     # made the email body claim "affected host: SEC" when SEC was really
     # just the AD domain shared across every user record.
@@ -2624,7 +2624,7 @@ TEMPLATE_FIELD_TO_KEYS = {
 }
 
 # Field-ids the analyst sees in the UI. Order matters for the rendered
-# email body — kept aligned with the natural triage flow.
+# email body - kept aligned with the natural triage flow.
 TEMPLATE_FIELD_ORDER = (
     "alert_summary", "severity", "malware_name", "affected_host",
     "username", "source_ip", "destination_ip",
@@ -2665,17 +2665,17 @@ def _render_facts_block(parsed: dict, options: dict) -> str:
     Returns a multi-line string ready to slot at the top of the email body.
     Returns "" when the parser produced nothing usable.
 
-    The LLM never produces this content — it's deterministic, so we never
+    The LLM never produces this content - it's deterministic, so we never
     have to worry about robotic narration or hallucinated fields."""
     p = parsed or {}
     o = options or {}
-    # Custom-template filtering — when options carries an enabled_fields
+    # Custom-template filtering - when options carries an enabled_fields
     # list, drop every parsed key that isn't mapped to an enabled field-id
     # so disabled fields are excluded from the rendered email entirely.
     enabled_fields = (options or {}).get("enabled_fields")
     if enabled_fields:
         p = _filter_parsed_for_template(p, enabled_fields)
-    # Category-toggle filtering — when options carries enabled_categories,
+    # Category-toggle filtering - when options carries enabled_categories,
     # render ONLY the fact rows + raw_fields entries whose category is on.
     # Lets the analyst dynamically include/exclude whole groups (Identity,
     # Network, Process, etc.) without editing the per-field list. When
@@ -2743,7 +2743,7 @@ def _render_facts_block(parsed: dict, options: dict) -> str:
         seen_values.add(value_str)
         lines.append(f"{label}: {value_str}")
 
-    # Catch-all — any raw_fields key the hardcoded _FACT_FIELDS list didn't
+    # Catch-all - any raw_fields key the hardcoded _FACT_FIELDS list didn't
     # cover but whose category survived the enabled-categories filter still
     # gets a row. Keeps the email accurate for arbitrary log shapes without
     # requiring every new log format to be hardcoded.
@@ -2767,7 +2767,7 @@ def _render_facts_block(parsed: dict, options: dict) -> str:
         seen_values.add(value_str)
         lines.append(f"{raw_key}: {value_str}")
 
-    # Response action — what was already done about the alert, if anything
+    # Response action - what was already done about the alert, if anything
     response_action = (o or {}).get("response_action") or ""
     if response_action:
         for rid, rlabel in RESPONSE_ACTIONS:
@@ -2789,7 +2789,7 @@ def _render_facts_block(parsed: dict, options: dict) -> str:
 # AND feeds the same data to the AI so the analysis paragraph can
 # reference specific findings.
 #
-# Caps the fan-out to keep latency bounded — emails are interactive,
+# Caps the fan-out to keep latency bounded - emails are interactive,
 # analysts don't want a 30-second compose. Max 4 IPs / 3 domains / 2
 # hashes / 2 URLs gets us 90% of useful context for <8s overhead.
 
@@ -2860,7 +2860,7 @@ def _extract_iocs_from_log(log_text: str, parsed: Dict) -> Dict[str, List[str]]:
         from agents.triage import strip_defender_version_strings as _strip_ver
         cleaned = _strip_ver(cleaned)
     except Exception:
-        # Fallback — strip `\X.Y.Z.W\` / `/X.Y.Z.W/` path versions and
+        # Fallback - strip `\X.Y.Z.W\` / `/X.Y.Z.W/` path versions and
         # `AV: 1.451.195.0` Defender version K-V lines.
         cleaned = re.sub(r"(?<=[\\/])\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?=[\\/])", " ", cleaned)
         cleaned = re.sub(r"\b(?:AV|AS|NIS|AM)\s*:\s*\d{1,5}(?:\.\d{1,5}){2,3}\b", " ", cleaned)
@@ -2868,7 +2868,7 @@ def _extract_iocs_from_log(log_text: str, parsed: Dict) -> Dict[str, List[str]]:
     # Browser version numbers inside User-Agent strings look exactly like
     # IPv4 addresses (Chrome/148.0.0.0, Edg/149.0.0.0, Firefox/120.0.0.0).
     # iocextract / our IP regex were extracting them and enriching the
-    # Chrome version number as if it were the user's source IP — emails
+    # Chrome version number as if it were the user's source IP - emails
     # then carried bogus 'Vodafone Turkey' / 'Compañía Dominicana de
     # Teléfonos' lines for a user-agent string. Strip the
     # 'Token/X.Y.Z.W' pattern (any product token followed by 4-octet
@@ -2893,7 +2893,7 @@ def _extract_iocs_from_log(log_text: str, parsed: Dict) -> Dict[str, List[str]]:
     # shaped exactly like a SHA-256 (e.g. 'id : 29644c05947ac6...').
     # They were being extracted as file hashes, pushed to VirusTotal,
     # and the empty-result was then narrated by the AI as 'the file
-    # hash has no malicious reputation' — misleading because it's not
+    # hash has no malicious reputation' - misleading because it's not
     # a file hash, just an alert ID. Strip any line where the key
     # ends with 'Id' / 'ID' / 'id' and the value is a long hex blob.
     cleaned = re.sub(
@@ -2903,7 +2903,7 @@ def _extract_iocs_from_log(log_text: str, parsed: Dict) -> Dict[str, List[str]]:
 
     # Documentation / KB links inside an alert message (go.microsoft.com,
     # learn.microsoft.com, docs.microsoft.com, ...) are not customer
-    # IOCs — they're just where Microsoft hosts the help page for the
+    # IOCs - they're just where Microsoft hosts the help page for the
     # detection. They were getting enriched as if they were attacker
     # infrastructure. Strip any documentation-shaped URL pattern.
     cleaned = re.sub(
@@ -2911,12 +2911,12 @@ def _extract_iocs_from_log(log_text: str, parsed: Dict) -> Dict[str, List[str]]:
         " ", cleaned, flags=re.IGNORECASE,
     )
 
-    # IPs — log body
+    # IPs - log body
     for m in _IOC_IP_RE.finditer(cleaned):
         _add("ips", m.group(0))
         if len(iocs["ips"]) >= _EMAIL_ENR_MAX_IPS:
             break
-    # IPs — parsed (covers source_ip, dest_ip, first_login_ip, etc.)
+    # IPs - parsed (covers source_ip, dest_ip, first_login_ip, etc.)
     for k, v in (parsed or {}).items():
         if isinstance(v, str) and _IOC_IP_RE.fullmatch(v.strip() or ""):
             _add("ips", v.strip())
@@ -2935,7 +2935,7 @@ def _extract_iocs_from_log(log_text: str, parsed: Dict) -> Dict[str, List[str]]:
         if len(iocs["urls"]) >= _EMAIL_ENR_MAX_URLS:
             break
 
-    # Hashes — md5, sha1, sha256 from log + parsed
+    # Hashes - md5, sha1, sha256 from log + parsed
     _HASH_RE = re.compile(r"\b[a-fA-F0-9]{32,64}\b")
     for m in _HASH_RE.finditer(cleaned):
         h = m.group(0).lower()
@@ -2970,9 +2970,9 @@ def _strip_asn_prefix(org: str) -> Tuple[str, str]:
 
 def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
     """Client-readable summary paragraph for an IP. Pulls from every
-    API source we have — AbuseIPDB, VirusTotal, IPInfo, Maltiverse,
+    API source we have - AbuseIPDB, VirusTotal, IPInfo, Maltiverse,
     Pulsedive, Censys, Criminal IP, ProxyCheck, Feodo Tracker, BGP
-    ranking, ASN reputation, Tor — and renders as natural-language
+    ranking, ASN reputation, Tor - and renders as natural-language
     sentences so the customer can read it without decoding CLI-style
     fragments."""
     if not data or not isinstance(data, dict):
@@ -2989,7 +2989,7 @@ def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
     criminal_ip = data.get("criminal_ip") or {}
     feodo = data.get("feodo_tracker") or {}
     bgp = (data.get("osint") or {}).get("bgp_ranking") or {}
-    # enrich_ip returns tor as {'isExitNode': bool} — not a bare bool.
+    # enrich_ip returns tor as {'isExitNode': bool} - not a bare bool.
     # The naive bool(data.get('tor')) check treated every non-empty dict
     # as Truthy and labelled every IP as a Tor exit. Use the inner flag.
     _tor_blob = data.get("tor") or {}
@@ -3088,7 +3088,7 @@ def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
                 piece += f" (associated threats: {', '.join(threats[:3])})"
             reputation_bits.append(piece + ".")
 
-    # Criminal IP — paid TI service with inbound/outbound threat scores
+    # Criminal IP - paid TI service with inbound/outbound threat scores
     # + VPN/proxy/scanner/Tor classification flags.
     if criminal_ip and not criminal_ip.get("error"):
         inb = criminal_ip.get("inbound_score")
@@ -3110,7 +3110,7 @@ def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
                 piece += f" with {', '.join(flags)} flags"
             reputation_bits.append(piece + ".")
 
-    # ProxyCheck — VPN / proxy / Tor classification. When the IP is
+    # ProxyCheck - VPN / proxy / Tor classification. When the IP is
     # flagged as a proxy or VPN, that's high-signal context for any
     # alert (user logging in from a VPN, C2 traffic via a proxy, etc.).
     if proxycheck and not proxycheck.get("error"):
@@ -3125,7 +3125,7 @@ def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
                 piece += f", risk score {risk}/100"
             reputation_bits.append(piece + ".")
 
-    # Feodo Tracker — abuse.ch botnet C2 tracker. Hits are high-signal.
+    # Feodo Tracker - abuse.ch botnet C2 tracker. Hits are high-signal.
     if feodo:
         family = feodo.get("malware") or feodo.get("family") or "a known botnet"
         first_seen = feodo.get("first_seen") or ""
@@ -3134,14 +3134,14 @@ def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
             piece += f" (first observed {first_seen[:10]})"
         reputation_bits.append(piece + ".")
 
-    # BGP Ranking (CIRCL) — ASN-level reputation. HIGHER rank + LOWER
+    # BGP Ranking (CIRCL) - ASN-level reputation. HIGHER rank + LOWER
     # position = worse reputation (more abuse indicators). Position=1
     # is the single worst ASN. Only emit the sentence when the derived
-    # verdict is SUSPICIOUS or MALICIOUS — a CLEAN ASN is baseline
+    # verdict is SUSPICIOUS or MALICIOUS - a CLEAN ASN is baseline
     # signal and adds noise to the client-facing email.
     #
     # Historical bug: comment said "Lower rank = worse" (inverted) and
-    # the gate was `rank < 5` — every CIRCL rank is < 5, so every IP
+    # the gate was `rank < 5` - every CIRCL rank is < 5, so every IP
     # got labelled "poor reputation" including Google DNS. The
     # analyst-visible summary now uses the module's own verdict field
     # so there's no way to invert it.
@@ -3157,11 +3157,11 @@ def _fmt_ip_enrichment(ip: str, data: Dict) -> str:
                      f"({asn_desc or 'unknown'}) with a {tier_word} "
                      f"reputation")
             if isinstance(position, int) and isinstance(total, int):
-                piece += (f" — position {position:,}/{total:,} in the CIRCL "
+                piece += (f" - position {position:,}/{total:,} in the CIRCL "
                           f"badness index (cleaner than only {pct}% of ASNs)")
             reputation_bits.append(piece + ".")
 
-    # Censys — observed open services + TLS cert when present.
+    # Censys - observed open services + TLS cert when present.
     if censys and not censys.get("error"):
         services = censys.get("services") or []
         if services:
@@ -3228,7 +3228,7 @@ def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
 
     sentences: List[str] = []
 
-    # WHOIS — age + registrar + registrant
+    # WHOIS - age + registrar + registrant
     if whois and not whois.get("error"):
         age = whois.get("age_days")
         registrar = (whois.get("registrar") or "").strip()
@@ -3270,7 +3270,7 @@ def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
         sentences.append(
             f"Domain age is {nrd.get('age_days')} days, "
             "a strong newly-registered-domain (NRD) phishing indicator.")
-    # DGA heuristic — suppress for known-legitimate auto-generated tenant
+    # DGA heuristic - suppress for known-legitimate auto-generated tenant
     # subdomains. Microsoft 365 tenants are auto-named 'netorgft#######'
     # or '<random>.onmicrosoft.com'; the DGA scorer correctly flags the
     # random label, but in this context it's a legitimate tenant name,
@@ -3306,7 +3306,7 @@ def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
                 sentences.append(
                     f"VirusTotal shows the domain clean across {total} engines.")
 
-    # Spamhaus DBL — independent authoritative listing
+    # Spamhaus DBL - independent authoritative listing
     if spam.get("hit"):
         v = spam.get("verdict") or "listed"
         sentences.append(
@@ -3366,14 +3366,14 @@ def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
     if wayback:
         if wayback.get("has_snapshots") is False and not _is_known_generated:
             sentences.append(
-                "The Wayback Machine has no archived snapshots — unusual for "
+                "The Wayback Machine has no archived snapshots - unusual for "
                 "an established business domain.")
         elif wayback.get("closest_snapshot"):
             sentences.append(
                 f"The Wayback Machine archive snapshot dates back to "
                 f"{str(wayback.get('closest_snapshot'))[:10]}.")
 
-    # Typosquat — high-signal phishing indicator. Backend's _typosquat_check
+    # Typosquat - high-signal phishing indicator. Backend's _typosquat_check
     # writes {brand, distance} when the domain is an edit-distance match
     # against a well-known brand. These were absent from the email entirely
     # despite being one of the strongest single signals for a phishing case.
@@ -3383,7 +3383,7 @@ def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
         piece = f"The domain is a typosquat of {ts['brand']}"
         if dist is not None:
             piece += f" (edit distance {dist})"
-        sentences.append(piece + " — a near-certain brand-impersonation phishing signal.")
+        sentences.append(piece + " - a near-certain brand-impersonation phishing signal.")
 
     # Local offline blocklists (firehol / ipsum / phishing-db). A hit on
     # one of these curated public lists is high-signal corroboration.
@@ -3392,13 +3392,13 @@ def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
         src = lf.get("source") or "a public threat-intel blocklist"
         sentences.append(f"The domain appears on {src}, an offline blocklist of known-bad infrastructure.")
 
-    # Google Safe Browsing — browsers actively warn users on visit.
+    # Google Safe Browsing - browsers actively warn users on visit.
     gsb = (data.get("osint") or {}).get("google_safebrowsing") or {}
     if gsb and (gsb.get("match_count") or 0) > 0:
         threats = gsb.get("threat_types") or []
         kind = ", ".join(threats[:3]).lower() if threats else "unsafe content"
         sentences.append(
-            f"Google Safe Browsing flags the domain for {kind} — browsers display a warning page on visit.")
+            f"Google Safe Browsing flags the domain for {kind} - browsers display a warning page on visit.")
 
     if not sentences:
         return ""
@@ -3408,9 +3408,9 @@ def _fmt_domain_enrichment(domain: str, data: Dict) -> str:
 def _fmt_hash_enrichment(h: str, data: Dict) -> str:
     """Client-readable summary for a file hash. Pulls VirusTotal,
     MalwareBazaar, ThreatFox, URLhaus payload, CIRCL hashlookup, Team
-    Cymru MHR, and MISP feeds — every hash source the backend writes.
+    Cymru MHR, and MISP feeds - every hash source the backend writes.
     Earlier code read vt.family / vt.popular_name / vt.first_submission_date
-    (none of which the parser sets — the right keys are malware_family /
+    (none of which the parser sets - the right keys are malware_family /
     first_submission) and ignored every source beyond VT/MB, so hash
     emails about confirmed malware never
     mentioned URLhaus or ThreatFox even when the indicator was active
@@ -3430,7 +3430,7 @@ def _fmt_hash_enrichment(h: str, data: Dict) -> str:
 
     sentences: List[str] = []
 
-    # VirusTotal — engine ratio + family + dates. Parser writes
+    # VirusTotal - engine ratio + family + dates. Parser writes
     # malware_family (suggested_threat_label) and first_submission.
     if vt and not vt.get("error"):
         mal = vt.get("malicious", 0) or 0
@@ -3457,7 +3457,7 @@ def _fmt_hash_enrichment(h: str, data: Dict) -> str:
             except (TypeError, ValueError):
                 pass
 
-    # MalwareBazaar — confirmation + tags. _p_mb returns malware_family
+    # MalwareBazaar - confirmation + tags. _p_mb returns malware_family
     # but doesn't set a `found` flag; presence with non-error is the hit.
     if mb and not mb.get("error") and (mb.get("malware_family") or mb.get("malwareName")):
         family = mb.get("malware_family") or mb.get("malwareName")
@@ -3469,13 +3469,13 @@ def _fmt_hash_enrichment(h: str, data: Dict) -> str:
             piece += f" (tagged {', '.join(tags[:3])})"
         sentences.append(piece + ".")
 
-    # ThreatFox — active malware C2 / payload tracking
+    # ThreatFox - active malware C2 / payload tracking
     if tf and not tf.get("error"):
         fam = tf.get("malware") or tf.get("malware_family")
         if fam:
             sentences.append(f"ThreatFox tracks this hash as active {fam} payload.")
 
-    # URLhaus payload — distributed via known malware URLs
+    # URLhaus payload - distributed via known malware URLs
     if up and not up.get("error") and up.get("verdict") == "MALICIOUS":
         sig = up.get("signature") or "malware"
         n_urls = up.get("url_count")
@@ -3484,7 +3484,7 @@ def _fmt_hash_enrichment(h: str, data: Dict) -> str:
             piece += f", distributed across {n_urls} URL{'s' if n_urls != 1 else ''}"
         sentences.append(piece + ".")
 
-    # CIRCL hashlookup — known-good (NSRL) or explicitly known-malicious
+    # CIRCL hashlookup - known-good (NSRL) or explicitly known-malicious
     if circl and not circl.get("error"):
         if circl.get("verdict") == "CLEAN":
             prod = circl.get("ProductName") or circl.get("FileName") or "a known-good file"
@@ -3492,12 +3492,12 @@ def _fmt_hash_enrichment(h: str, data: Dict) -> str:
         elif circl.get("known_malicious"):
             sentences.append("CIRCL hashlookup explicitly flags the file as known-malicious.")
 
-    # Team Cymru MHR — DNS-based malware reputation
+    # Team Cymru MHR - DNS-based malware reputation
     if cymru and not cymru.get("error") and cymru.get("detection_pct") is not None:
         sentences.append(
             f"Team Cymru MHR shows {cymru['detection_pct']}% AV-engine consensus on this hash.")
 
-    # MISP feeds — community-curated event hits
+    # MISP feeds - community-curated event hits
     if misp and misp.get("matched_feeds"):
         feeds = ", ".join(misp["matched_feeds"][:3])
         sentences.append(f"The hash is published in MISP community feeds ({feeds}).")
@@ -3518,7 +3518,7 @@ def _fmt_url_enrichment(url: str, data: Dict) -> str:
     """Client-readable summary for a URL. Pulls from VirusTotal, URLhaus
     (the canonical malware-distribution list), the trained phishing-URL
     classifier (round-14), ThreatFox, OTX, and URLScan's archived-
-    screenshot lookup — the actual sources URL enrichment writes."""
+    screenshot lookup - the actual sources URL enrichment writes."""
     if not data or not isinstance(data, dict):
         return ""
 
@@ -3603,7 +3603,7 @@ def _fmt_url_enrichment(url: str, data: Dict) -> str:
 # available so sparse logs don't get a half-empty block.
 
 
-# Well-known Azure / Entra ID role GUIDs — keep in sync with the AI prompt's
+# Well-known Azure / Entra ID role GUIDs - keep in sync with the AI prompt's
 # role list. Used to render 'Role: Global Administrator' instead of a raw GUID.
 _AZURE_ROLE_GUIDS = {
     "62e90394-69f5-4237-9190-012177145e10": "Global Administrator",
@@ -3624,7 +3624,7 @@ def _g(parsed: dict, *keys: str) -> str:
     """First non-empty value across the candidate key list. Match is
     case-insensitive AND treats underscores / spaces as equivalent so
     'process_path' matches 'Process Path', 'destination_ip' matches
-    'Destination IP', etc. — saves us listing every alias variant."""
+    'Destination IP', etc. - saves us listing every alias variant."""
     if not parsed:
         return ""
     def _norm(s: str) -> str:
@@ -3647,13 +3647,13 @@ def _g(parsed: dict, *keys: str) -> str:
 
 
 def _classify_alert(parsed: dict, log_text: str) -> str:
-    """Pick the bullet template that fits the input. Order matters — most
+    """Pick the bullet template that fits the input. Order matters - most
     specific patterns first."""
     raw_lower = (log_text or "").lower()
     rf = (parsed.get("raw_fields") or {}) if isinstance(parsed, dict) else {}
     rf_lower = {k.lower(): str(v).lower() for k, v in rf.items() if isinstance(v, str)}
 
-    # Exchange / mailbox operations — BEC indicators
+    # Exchange / mailbox operations - BEC indicators
     if rf_lower.get("workload") == "exchange":
         return "exchange"
     if any(op in raw_lower for op in
@@ -3715,7 +3715,7 @@ def _abbreviate_value(v: str, max_len: int = 110) -> str:
 def _render_detection_summary(parsed: dict, log_text: str,
                               enrichment_raw: Optional[Dict] = None) -> str:
     """Build the bullet block. Returns empty string when fewer than 4
-    bullets can be filled — half-empty summaries look worse than none."""
+    bullets can be filled - half-empty summaries look worse than none."""
     parsed = parsed or {}
     rf = (parsed.get("raw_fields") or {}) if isinstance(parsed, dict) else {}
     bullets: List[tuple] = []
@@ -3794,7 +3794,7 @@ def _render_detection_summary(parsed: dict, log_text: str,
         client_bits = []
         if req_type: client_bits.append(req_type)
         if ua:
-            # Trim the user-agent — full UA strings are massive
+            # Trim the user-agent - full UA strings are massive
             client_bits.append(_abbreviate_value(ua, 80))
         if client_bits:
             bullets.append(("Client", " / ".join(client_bits)))
@@ -3815,10 +3815,10 @@ def _render_detection_summary(parsed: dict, log_text: str,
         ) if x])
         if account: bullets.append(("Account", account))
         if first_ip:
-            label = f"{_ip_with_loc(first_ip)}" + (f" — {first_loc}" if first_loc and first_loc not in _ip_with_loc(first_ip) else "")
+            label = f"{_ip_with_loc(first_ip)}" + (f" - {first_loc}" if first_loc and first_loc not in _ip_with_loc(first_ip) else "")
             bullets.append(("First login", label))
         if second_ip:
-            label = f"{_ip_with_loc(second_ip)}" + (f" — {second_loc}" if second_loc and second_loc not in _ip_with_loc(second_ip) else "")
+            label = f"{_ip_with_loc(second_ip)}" + (f" - {second_loc}" if second_loc and second_loc not in _ip_with_loc(second_ip) else "")
             bullets.append(("Second login", label))
         bullets.append(("Pattern", "Impossible travel between two geographies in a short window"))
         if response_action:
@@ -3913,7 +3913,7 @@ def _render_detection_summary(parsed: dict, log_text: str,
         return ""
 
     lines = ["Detection summary"]
-    for k, v in dedup[:7]:   # cap at 7 — past that it's facts-block territory
+    for k, v in dedup[:7]:   # cap at 7 - past that it's facts-block territory
         lines.append(f"- {k}: {v}")
     return "\n".join(lines)
 
@@ -3923,7 +3923,7 @@ async def _gather_email_enrichment(log_text: str, parsed: Dict,
     """Run enrichment for IOCs found in the email log. Returns a dict
     with 'lines' (rendered facts-block subsection) and 'raw' (the raw
     per-IOC enrichment dicts, for the AI prompt). Returns empty dict on
-    any error — the email compose flow must never break because of
+    any error - the email compose flow must never break because of
     enrichment failures."""
     try:
         iocs = _extract_iocs_from_log(log_text, parsed)
@@ -3940,7 +3940,7 @@ async def _gather_email_enrichment(log_text: str, parsed: Dict,
             "PULSEDIVE_KEY", "MALTIVERSE_KEY",
             "IPINFO_TOKEN", "WHOISXML_KEY", "GOOGLE_API_KEY",
             "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY",
-            # Canonical Censys names — PAT first, legacy v2 pair as fallback.
+            # Canonical Censys names - PAT first, legacy v2 pair as fallback.
             "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET",
             "CRIMINAL_IP_KEY", "PROXYCHECK_KEY",
             "OPENCTI_URL", "OPENCTI_TOKEN",
@@ -3955,7 +3955,7 @@ async def _gather_email_enrichment(log_text: str, parsed: Dict,
             enrich_url as _enr_url,
         )
 
-        # 20s outer cap on the whole fan-out — emails are interactive
+        # 20s outer cap on the whole fan-out - emails are interactive
         # so we'd rather ship a partial enrichment than block the
         # analyst for 60+ seconds.
         outer_timeout = 20
@@ -4030,11 +4030,11 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     """Generate a customer-facing email body.
 
     Body structure (assembled server-side, NOT by the LLM):
-      1. Deterministic facts block (Label: value lines) — rendered from
+      1. Deterministic facts block (Label: value lines) - rendered from
          parsed fields directly. The LLM never touches this.
-      2. AI summary — ONE plain-language sentence naming what the alert is.
-      3. AI guidance — ONE tight paragraph of investigate + remediate.
-      4. Signature — appended by the existing render pipeline.
+      2. AI summary - ONE plain-language sentence naming what the alert is.
+      3. AI guidance - ONE tight paragraph of investigate + remediate.
+      4. Signature - appended by the existing render pipeline.
 
     The LLM scope is limited to producing JSON {summary, guidance} which
     is small enough that prompt-following stays reliable. This replaces
@@ -4052,14 +4052,14 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     if not provider_configured(config):
         return {"error": "LLM provider not configured"}
 
-    # Short customer-facing email — light, latency-sensitive → fast model tier.
+    # Short customer-facing email - light, latency-sensitive → fast model tier.
     # NOTE: `config` here is a plain dict (passed from the endpoint), not the
     # ConfigManager, so resolve the fast model via dict access, not get_model().
     model    = config.get("FAST_AI_MODEL") or config.get("AI_MODEL") or "gpt-4o-mini"
     parsed   = parsed or {}
     options  = options or {}
 
-    # Custom-template filtering — when the analyst picked a template that
+    # Custom-template filtering - when the analyst picked a template that
     # disables certain fields (e.g. "Defender Alerts" with username +
     # process_path off), drop those parsed keys BEFORE the AI sees them so
     # the model can't hallucinate content for fields the template excludes.
@@ -4120,7 +4120,7 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     # facts block as a 'Threat intelligence' subsection AND pass the
     # compact rendering into the AI prompt so the analysis paragraph can
     # weave specific findings in (ISP, ASN, country, risk score, etc.).
-    # Bounded by an outer 20s timeout — failures degrade gracefully to
+    # Bounded by an outer 20s timeout - failures degrade gracefully to
     # "no enrichment available" so the email always renders.
     enr_bundle = await _gather_email_enrichment(log_text, parsed, config)
     enr_lines = (enr_bundle or {}).get("lines", "")
@@ -4130,7 +4130,7 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
                        + enr_lines) if facts_block else \
                       ("Threat intelligence:\n" + enr_lines)
 
-    # Detection summary — 4-7 bullet block tailored per alert type, sits
+    # Detection summary - 4-7 bullet block tailored per alert type, sits
     # between the verbose facts block and the AI prose. Built AFTER
     # enrichment so source-IP bullets can carry ASN + location inline.
     # Returns "" when fewer than 4 meaningful bullets are available, in
@@ -4139,12 +4139,12 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     summary_block = _render_detection_summary(parsed, log_text, enr_raw)
 
     # ── Tiny LLM scope: ONLY a summary sentence + a guidance paragraph ──
-    # The prompt asks for strict JSON {summary, guidance} — both fields are
+    # The prompt asks for strict JSON {summary, guidance} - both fields are
     # small, so prompt-following stays reliable. The model never has the
     # chance to robotic-narrate the facts (because we render them itself).
     sys_msg = (
-        "OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes (—), "
-        "en-dashes (–), or curly quotes. Use hyphens (-), commas, or restructure. "
+        "OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes ( - ), "
+        "en-dashes (-), or curly quotes. Use hyphens (-), commas, or restructure. "
         "Customers immediately spot AI text by the em-dash and lose trust in the "
         "analysis.\n\n"
         "You are a senior SOC analyst writing the body of a customer alert "
@@ -4152,7 +4152,7 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "'analysis'. No other keys. No markdown fences.\n\n"
         "The analysis paragraph is the ENTIRE email body the customer reads "
         "below the facts block. The signature is appended afterwards.\n\n"
-        "FACTS ONLY — NO ASSUMPTIONS. The analyst rejects emails that "
+        "FACTS ONLY - NO ASSUMPTIONS. The analyst rejects emails that "
         "speculate. STRICT rules:\n"
         "  1. State only what the log + enrichment data literally show. "
         "Walk through the events in chronological order using the actual "
@@ -4172,7 +4172,7 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "no 'please reach out', no soft hedging.\n"
         "  5. 4-6 sentences total. Each sentence must reference a specific "
         "value from the facts block or raw log. No filler.\n\n"
-        "WRITING STYLE — read carefully:\n"
+        "WRITING STYLE - read carefully:\n"
         "* Connect the sentences. Use transitions (then, after, when, "
         "because, while) so the reader experiences ONE flowing paragraph, "
         "not a list of disjoint fact-statements joined by periods.\n"
@@ -4202,16 +4202,16 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "42 abuse reports', 'VirusTotal shows 8/86 engines flagging the "
         "domain', 'WHOIS records show the domain was registered 4 days "
         "ago via Namecheap').\n"
-        "* De-conflict when sources disagree — if AbuseIPDB scores the IP "
+        "* De-conflict when sources disagree - if AbuseIPDB scores the IP "
         "high but VT shows it clean, mention BOTH so the recipient sees "
         "the full picture.\n"
         "* Never reference a TI source that isn't in the enrichment "
         "block. If no enrichment is present, do not pretend there is.\n\n"
         "CALIBRATION:\n"
         "* Known-good vendor patterns (Dell SupportAssist, Microsoft "
-        "Defender, SCCM, CrowdStrike, etc.) — say so plainly and state "
+        "Defender, SCCM, CrowdStrike, etc.) - say so plainly and state "
         "the verification needed before clearing.\n"
-        "* Confirmed-malicious — multiple corroborating signals such as\n"
+        "* Confirmed-malicious - multiple corroborating signals such as\n"
         "    - a hash matching a known malware family (VirusTotal multi-\n"
         "      engine flag, MalwareBazaar verdict)\n"
         "    - an IP that Maltiverse / AbuseIPDB classify as malicious,\n"
@@ -4225,7 +4225,7 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "  with a soft 'please confirm whether this was authorized'. State\n"
         "  the verdict plainly ('this is a confirmed compromise', 'this\n"
         "  matches a ransomware deployment pattern') and close with a\n"
-        "  CONCRETE containment action the customer should take now —\n"
+        "  CONCRETE containment action the customer should take now  - \n"
         "  isolate the host, kill the process, block the destination IP,\n"
         "  reset the user's credentials, quarantine the file. The closing\n"
         "  is action-oriented, not permission-seeking.\n"
@@ -4235,18 +4235,18 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "* SUSPICIOUS authentication patterns to call out by name when "
         "present in the parsed fields:\n"
         "  - UserAgent 'BAV2ROPC' (Basic Auth / Resource Owner Password "
-        "    Credentials flow) — strongly associated with password spray "
+        "    Credentials flow) - strongly associated with password spray "
         "    and credential-stuffing attacks against M365 / Azure AD.\n"
         "  - RequestType 'OAuth2:Token' from BAV2ROPC or unknown clients "
-        "    — same ROPC abuse pattern, often paired with legacy auth.\n"
+        "    - same ROPC abuse pattern, often paired with legacy auth.\n"
         "  - LogonError / ErrorNumber 50053, 50057, 50126 on accounts "
-        "    that are disabled / locked / wrong-password — single events "
+        "    that are disabled / locked / wrong-password - single events "
         "    are routine, but if multiple users are seeing this pattern "
         "    from one IP, flag it as potential password spray.\n"
         "  - User-Agent strings that name an automation framework "
         "    (curl, python-requests, postman, ROPC, MSAL.NET) on "
-        "    interactive-user accounts — surface for verification.\n\n"
-        "* DUAL-USE administrative tools — do NOT lead with 'malicious' "
+        "    interactive-user accounts - surface for verification.\n\n"
+        "* DUAL-USE administrative tools - do NOT lead with 'malicious' "
         "  even when VirusTotal flags the file. The following are widely-"
         "  used IT admin / penetration-testing tools that legitimate "
         "  administrators run daily; AV engines flag them because they "
@@ -4256,12 +4256,12 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "    - Nmap, Zenmap, masscan\n"
         "    - Angry IP Scanner\n"
         "    - PsExec, PsLoggedOn, the wider Sysinternals suite\n"
-        "    - PuTTY family — putty.exe, plink.exe, pscp.exe, psftp.exe\n"
+        "    - PuTTY family - putty.exe, plink.exe, pscp.exe, psftp.exe\n"
         "      (legit SSH / SCP / SFTP clients, also used to tunnel /\n"
         "      exfil)\n"
         "    - OpenSSH client (ssh.exe, scp.exe, sftp.exe)\n"
         "    - PowerShell Empire / Cobalt Strike artefacts (these ARE\n"
-        "      offensive frameworks — treat as malicious unless the\n"
+        "      offensive frameworks - treat as malicious unless the\n"
         "      customer's red team has scheduled an engagement)\n"
         "    - ProcDump, ProcessHacker (legit + LSASS dump abuse)\n"
         "    - RemCom, paexec, BloodHound, SharpHound\n"
@@ -4279,14 +4279,14 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "  Calibrate based on context:\n"
         "    - Executed from C:\\Tools\\, C:\\Program Files\\..., or by\n"
         "      a known admin account during business hours: probably\n"
-        "      legitimate — confirm with IT.\n"
+        "      legitimate - confirm with IT.\n"
         "    - Executed from Desktop, Downloads, AppData\\Local\\Temp,\n"
         "      by an unprivileged user, after-hours, or following a\n"
-        "      suspicious sign-in: treat as serious — that's the\n"
+        "      suspicious sign-in: treat as serious - that's the\n"
         "      reconnaissance phase of a real intrusion.\n"
         "  Never write 'this file is malicious' for these tools without\n"
         "  the secondary context above.\n\n"
-        "* SASE / cloud egress proxies — many enterprises route ALL "
+        "* SASE / cloud egress proxies - many enterprises route ALL "
         "  employee traffic through a cloud security proxy. When an "
         "  'Impossible Travel' alert pairs a normal user IP with an IP "
         "  belonging to one of these services, the second IP is almost "
@@ -4307,7 +4307,7 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "     the proxy rather than a real geographic anomaly. Confirm\n"
         "     whether <provider> is your egress provider before\n"
         "     treating this as a compromise.'\n"
-        "  Do NOT suppress the alert — surface the context so the\n"
+        "  Do NOT suppress the alert - surface the context so the\n"
         "  customer can dismiss with confidence.\n\n"
         "* ROUTINE system operations that look alarming in raw logs:\n"
         "    - svchost.exe (eventlog service, args -k localservice\n"
@@ -4330,7 +4330,7 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "  Lead with the routine-operation callout when these patterns\n"
         "  appear so the customer understands the context.\n\n"
         "* DO NOT NARRATE the following technical IDs in customer-\n"
-        "  facing prose — they don't help the recipient decide:\n"
+        "  facing prose - they don't help the recipient decide:\n"
         "    - File sizes in bytes (unless unusual for the file type:\n"
         "      a 50KB .exe might be a loader, a 500MB \"document\"\n"
         "      might be a memory dump). Routine file sizes add noise.\n"
@@ -4342,7 +4342,7 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "  These are fine in the facts block at the top of the email\n"
         "  for reference, but should not be re-narrated in the analysis\n"
         "  paragraph unless one of them is the actual decision point.\n\n"
-        "* WELL-KNOWN Azure / Entra ID role GUIDs — when a role-change\n"
+        "* WELL-KNOWN Azure / Entra ID role GUIDs - when a role-change\n"
         "  operation references one of these GUIDs, resolve the name\n"
         "  inline so the customer doesn't have to look it up:\n"
         "    62e90394-69f5-4237-9190-012177145e10 → Global Administrator\n"
@@ -4354,29 +4354,29 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         "    966707d0-3269-4727-9be2-8c3a10f19b9d → Password Administrator\n"
         "    8329153b-31d0-4727-b945-745eb3bc5f31 → Exchange Administrator\n"
         "  Assignments to Global / Privileged Role / Privileged Auth / \n"
-        "  Security Administrator are TIER-0 changes — flag explicitly\n"
+        "  Security Administrator are TIER-0 changes - flag explicitly\n"
         "  ('This grants tenant-wide control') and require change-ticket\n"
         "  confirmation regardless of stated reason.\n\n"
-        "* SUSPICIOUS mailbox / Exchange operations — these are TOP "
+        "* SUSPICIOUS mailbox / Exchange operations - these are TOP "
         "  Business Email Compromise (BEC) indicators. When the parsed "
         "  log includes one of these Workload=Exchange operations, name "
         "  the pattern in the analysis and treat the action as suspect "
         "  until the customer confirms:\n"
         "  - Set-Mailbox + ForwardingAddress / ForwardingSmtpAddress / "
-        "    DeliverToMailboxAndForward — external auto-forward rule is "
+        "    DeliverToMailboxAndForward - external auto-forward rule is "
         "    the #1 BEC indicator. Adversaries set this to exfiltrate "
         "    invoices / contract emails after credential theft. Always "
         "    flag and ask whether the forward target is intended.\n"
         "  - New-InboxRule / Set-InboxRule with deleteMessage / "
-        "    moveToFolder=Deleted Items / forwardTo external — same "
+        "    moveToFolder=Deleted Items / forwardTo external - same "
         "    BEC stealth pattern; the rule auto-deletes incoming "
         "    threads so the victim doesn't see the adversary's "
         "    interception.\n"
         "  - Add-MailboxPermission / Add-MailboxFolderPermission with "
-        "    FullAccess / SendAs to an external account — mailbox "
+        "    FullAccess / SendAs to an external account - mailbox "
         "    delegation grant; flag as account-takeover indicator.\n"
         "  - Disable-Mailbox / Remove-Mailbox immediately after a "
-        "    suspicious sign-in — destruction-of-evidence pattern.\n"
+        "    suspicious sign-in - destruction-of-evidence pattern.\n"
         "  When any of these patterns appears, do NOT close with a soft "
         "  'confirm whether this was authorized'. Lead with the BEC "
         "  callout ('Auto-forward rules to an external address are the "
@@ -4404,14 +4404,14 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     if enabled_fields:
         enabled_str = ", ".join(sorted(str(f) for f in enabled_fields))
         template_hint = (
-            "\n\n## TEMPLATE: only these fields are enabled for this email — "
+            "\n\n## TEMPLATE: only these fields are enabled for this email - "
             f"{enabled_str}.\n"
             "Do NOT generate content for fields outside this list. If a "
             "disabled field would normally be mentioned (e.g. process path), "
             "omit it entirely rather than describing it."
         )
 
-    # Impossible-travel / VPN-anonymiser hint — derived deterministically
+    # Impossible-travel / VPN-anonymiser hint - derived deterministically
     # in parse_log() so the AI summary calls it out instead of saying
     # "common behaviour for legitimate users" when two logins clearly came
     # from geographically incompatible locations within hours.
@@ -4437,12 +4437,12 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         asn_tag   = f" (ASN: {second_asn})" if second_asn else ""
         vpn_line  = (
             "The second-login ASN matches a known VPN / anonymising "
-            "provider — name it explicitly in the summary as a "
+            "provider - name it explicitly in the summary as a "
             "credibility hit.\n"
         ) if is_vpn else ""
 
         impossible_travel_hint = (
-            "\n\n## IMPOSSIBLE-TRAVEL SIGNAL (server-derived — facts only)\n"
+            "\n\n## IMPOSSIBLE-TRAVEL SIGNAL (server-derived - facts only)\n"
             f"First login: {first_loc}{first_at} from {first_ip}.\n"
             f"Second login: {second_loc}{second_at} from {second_ip}{asn_tag}.\n"
             f"{vpn_line}"
@@ -4456,11 +4456,11 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
         )
 
     user_msg = (
-        f"## Alert facts (already rendered as the email's top block — DO NOT "
+        f"## Alert facts (already rendered as the email's top block - DO NOT "
         "re-narrate the field list back; refer to specific values from it)\n"
         f"{facts_block or '(no structured fields)'}\n\n"
         + (f"## Detection summary (already rendered above the analysis as a "
-           "scannable bullet list — DO NOT repeat these bullets verbatim. "
+           "scannable bullet list - DO NOT repeat these bullets verbatim. "
            "Your paragraph should EXPLAIN what these bullets mean for the "
            "customer and CLOSE with the recommended next step.)\n"
            f"{summary_block}\n\n" if summary_block else "")
@@ -4516,7 +4516,7 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     if analysis:
         body_parts.append(analysis)
     body = "\n\n".join(body_parts) if body_parts else (
-        # Defensive fallback — if both the facts and the LLM produced nothing
+        # Defensive fallback - if both the facts and the LLM produced nothing
         # the email is empty, which is worse than a curt fallback.
         "The alert details could not be parsed automatically. Review the raw "
         "log directly to determine impact and next steps."
@@ -4544,11 +4544,11 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
     subject = _render_subject_ai(log_text, parsed)
     # Drop any "If you have questions, reach out..." line the AI body OR the
     # template inheritance produced. The compose_ai flow no longer injects
-    # the canned _CLOSING_STATEMENT — the analyst's signature handles the
+    # the canned _CLOSING_STATEMENT - the analyst's signature handles the
     # closing on its own (per repeated user feedback).
     text = _strip_closing_block(text)
     html = _strip_closing_block_html(html)
-    # Last-pass dash strip — catches anything injected after the AI body
+    # Last-pass dash strip - catches anything injected after the AI body
     # was first sanitized (signature line, future templates).
     text = _strip_em_dashes(text)
     html = _strip_em_dashes(html)
@@ -4561,13 +4561,13 @@ async def compose_ai(log_text: str, parsed: Optional[Dict], options: Dict,
 
 
 def _render_subject_ai(log_text: str, parsed: Dict) -> str:
-    """Heuristic subject for AI-generated emails — re-uses the alert-type
+    """Heuristic subject for AI-generated emails - re-uses the alert-type
     suggester to pick a label, falls back to a generic security-alert line."""
     suggested = suggest_alert_type(log_text, parsed)
     label = ALERT_LABEL_BY_ID.get(suggested) if suggested else None
     # Org hint: prefer an explicit org name, else derive from the user's email
     # domain (identifies the customer). Never emit the literal "Organization"
-    # placeholder — drop the suffix entirely when we can't determine an org.
+    # placeholder - drop the suffix entirely when we can't determine an org.
     org = parsed.get("organization_name")
     if not org:
         upn = (parsed.get("user_principal_name") or parsed.get("target_user_principal_name") or "")
@@ -4577,7 +4577,7 @@ def _render_subject_ai(log_text: str, parsed: Dict) -> str:
                                    "yahoo.com", "icloud.com", "live.com", "aol.com"):
                 org = dom
     base = f"[MDR Alert] {label or 'Security Alert'}"
-    return f"{base} — {org}" if org else base
+    return f"{base} - {org}" if org else base
 
 
 # ─── SMTP send ────────────────────────────────────────────────────────────────

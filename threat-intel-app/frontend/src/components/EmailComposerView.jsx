@@ -1,5 +1,5 @@
 /**
- * RECON Email Composer — AI-only flow in the OpenCTI aesthetic.
+ * RECON Email Composer - AI-only flow in the OpenCTI aesthetic.
  *
  *   1. Paste the raw alert log
  *   2. Pick a response action (optional)
@@ -7,7 +7,7 @@
  *
  * All static templates live on the backend at backend/intel/email_templates/
  * and feed the AI as few-shot style examples. The frontend never picks a
- * template — Compose always calls /api/email/compose-ai, which parses the
+ * template - Compose always calls /api/email/compose-ai, which parses the
  * log, generates a tailored body via OpenAI/Azure, and renders it through
  * the same signature pipeline as static composes.
  */
@@ -29,7 +29,7 @@ const monoSx = { fontFamily: '"JetBrains Mono", monospace' };
 // compose pipeline builds HTML from f-string templates that interpolate
 // AI output (LLM text) + IOC strings + customer-supplied names. None of
 // those produce script tags in the happy path, but the preview pane
-// renders the HTML via dangerouslySetInnerHTML — so a prompt that
+// renders the HTML via dangerouslySetInnerHTML - so a prompt that
 // coaxes the model to emit a <script>, an onerror= handler, or a
 // data:javascript: URL would execute in the analyst's session. Strip
 // every executable surface (script, event handlers, dangerous URI
@@ -61,7 +61,7 @@ const RESPONSE_OPTIONS = [
 // ─── Custom email templates (spec §8) ───────────────────────────────────────
 // Templates control which email body fields are included when the AI builds
 // the message. Disabled fields are completely excluded from the rendered
-// body AND from the AI prompt — the model never sees them, so it can't
+// body AND from the AI prompt - the model never sees them, so it can't
 // hallucinate content for fields the analyst chose to suppress.
 //
 // Built-in templates ("All Details", "Minimal") cannot be deleted; the
@@ -102,7 +102,7 @@ const BUILT_IN_TEMPLATES = [
   {
     id: '__all_details',
     name: 'All Details',
-    description: 'Every email field included — full triage hand-off.',
+    description: 'Every email field included - full triage hand-off.',
     enabled_fields: ALL_FIELD_IDS,
     builtIn: true,
   },
@@ -166,10 +166,10 @@ function CopyBtn({ text, label = 'Copy', size = 'small' }) {
 }
 
 
-// SectionHeader removed — replaced by PanelCard's built-in collapsible
+// SectionHeader removed - replaced by PanelCard's built-in collapsible
 // header. Kept as a comment marker so the diff history reads cleanly.
 
-// AI remediation section labels — module scope so callers can pass it to
+// AI remediation section labels - module scope so callers can pass it to
 // useCallback / useEffect deps arrays without a stale-reference warning.
 const REM_SECTIONS = [
   { key: 'executive_summary',    label: 'Executive summary' },
@@ -181,7 +181,7 @@ const REM_SECTIONS = [
 ];
 
 
-/* PanelCard — chevron-toggled collapsible wrapper. Mirrors the file
+/* PanelCard - chevron-toggled collapsible wrapper. Mirrors the file
    analyzer's SectionCard pattern: header click toggles open/closed,
    chevron rotates 90° when expanded, optional right-aligned summary
    indicator next to the title. State is local per card.            */
@@ -242,23 +242,23 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
   const [composing, setComposing]           = useState(false);
   const [composeError, setComposeError]     = useState(null);
   const [previewMode, setPreviewMode]       = useState('rendered');
-  // Auto-classification — populated as the analyst pastes. The detected
+  // Auto-classification - populated as the analyst pastes. The detected
   // alert type drives template selection in /api/email/compose-ai; the
   // Response Action dropdown is intentionally manual (analyst picks what
   // actually happened, not what the AI guesses).
   const [detected, setDetected]             = useState(null);   // {alert_type, alert_label}
   const parseTimer                          = useRef(null);
-  // Parsed fields stash — populated by the debounced auto-classify. Kept in
+  // Parsed fields stash - populated by the debounced auto-classify. Kept in
   // state so compose can send the structured fields alongside the raw log,
   // and so the AI Remediation panel can render the structured guidance the
   // analyst sees the email being built from.
   const [parsedFields, setParsedFields] = useState(initialParsed || {});
 
-  // AI Remediation panel — DISPLAY-ONLY view of the structured guidance the
+  // AI Remediation panel - DISPLAY-ONLY view of the structured guidance the
   // compose_ai prompt weaves into the email body. The panel lets analysts
   // verify where the recommendations are coming from without parsing the
   // rendered email. The email itself still gets the remediation woven in
-  // automatically by the backend prompt — the panel doesn't change the body.
+  // automatically by the backend prompt - the panel doesn't change the body.
   const [remediation, setRemediation] = useState(null);
   const [remLoading, setRemLoading]   = useState(false);
   const [remError, setRemError]       = useState(null);
@@ -285,7 +285,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
   const [templateMode, setTemplateMode] = useState('idle'); // 'idle' | 'create' | 'edit'
   const [draftName, setDraftName] = useState('');
   const [draftDescription, setDraftDescription] = useState('');
-  // Dynamic category toggles — replaces the old fixed 17-field grid.
+  // Dynamic category toggles - replaces the old fixed 17-field grid.
   // Categories present in the parsed log become checkboxes; the analyst
   // turns whole groups on/off. Defaults to "everything on" so a fresh
   // paste produces the full email, and the analyst trims down from there.
@@ -297,7 +297,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
     } catch {}
     return [...CATEGORY_ORDER];
   });
-  // Categories start COLLAPSED by default — analyst expands the ones
+  // Categories start COLLAPSED by default - analyst expands the ones
   // they want to inspect. Mirrors the file-analyzer card pattern.
   const [expandedCategories, setExpandedCategories] = useState([]);
   const toggleExpanded = useCallback((cat) => {
@@ -444,7 +444,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
           options: {
             response_action:     responseAction,
             enabled_fields:      enabledFields,
-            // Category toggles — only categories present in the parsed
+            // Category toggles - only categories present in the parsed
             // log AND turned on by the analyst land in the email body.
             enabled_categories:  enabledCategories,
           },
@@ -453,7 +453,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.detail || d.error || `HTTP ${r.status}`);
       // The AI guidance is woven into the body by compose_ai's prompt
-      // (see backend/intel/email_composer.py::_AI_SYSTEM — four-part
+      // (see backend/intel/email_composer.py::_AI_SYSTEM - four-part
       // structure: details, action taken, recommended next steps,
       // closing). Nothing to append here.
       setComposed(d);
@@ -467,7 +467,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
   // Debounced auto-classify: as the analyst pastes, hit /api/email/parse to
   // learn the alert type. The compose-ai backend uses this to pick the right
   // template for the client communication. We do NOT auto-pick the response
-  // action dropdown — that's the analyst's deliberate choice based on what
+  // action dropdown - that's the analyst's deliberate choice based on what
   // they actually did, not what the AI guesses.
   useEffect(() => {
     if (parseTimer.current) clearTimeout(parseTimer.current);
@@ -491,7 +491,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
           alert_type: at,
           alert_label: (p._alert_label || at).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
         });
-      } catch { /* parse failure is silent — analyst can still compose */ }
+      } catch { /* parse failure is silent - analyst can still compose */ }
     }, 400);
     return () => { if (parseTimer.current) clearTimeout(parseTimer.current); };
   }, [rawLog]);
@@ -665,7 +665,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
           )}
         </Stack>
 
-        {/* Dynamic category toggles — one per category the parser actually
+        {/* Dynamic category toggles - one per category the parser actually
             extracted from THIS log. Hidden until the log is parsed. Each
             toggle expands to show the labels + values it controls so the
             analyst sees what's about to land in the email. */}
@@ -677,7 +677,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
             return (
               <Typography sx={{ fontSize: 11, color: 'text.tertiary',
                 fontStyle: 'italic', mt: 0.5 }}>
-                Paste the alert log first — category toggles will appear here
+                Paste the alert log first - category toggles will appear here
                 based on what the log actually contains.
               </Typography>
             );
@@ -819,7 +819,7 @@ export default function EmailComposerView({ initialLog = '', initialParsed = nul
           Display-only view of the structured guidance the AI uses to weave
           the email body. Generated on demand so the analyst can see WHERE
           the email's recommendations came from. The email itself ALREADY
-          contains this guidance as flowing prose — this panel doesn't
+          contains this guidance as flowing prose - this panel doesn't
           change the body; it only surfaces the structured source.        */}
       <PanelCard
         title="AI Remediation"

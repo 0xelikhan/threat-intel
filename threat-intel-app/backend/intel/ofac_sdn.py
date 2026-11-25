@@ -14,7 +14,7 @@ including:
 
 For RECON, the high-value subset is the crypto-wallet + email IDs.
 When triage extracts a wallet address or email, this index resolves it
-to the sanctioned entity name + sanctions program — a strong signal
+to the sanctioned entity name + sanctions program - a strong signal
 for ransomware-payment investigations and BEC attribution.
 
 We accept either:
@@ -39,7 +39,7 @@ _log = logging.getLogger("recon.intel.ofac")
 _OFAC_DIR = (Path(__file__).parent.parent.parent
              / "vendor" / "ofac")
 
-# OFAC schema namespace — Treasury publishes SDN XML under this NS.
+# OFAC schema namespace - Treasury publishes SDN XML under this NS.
 _NS = {"sdn": "http://tempuri.org/sdnList.xsd"}
 
 # Recognised IDType strings that map to RECON IOC types.
@@ -184,7 +184,7 @@ def _build_index() -> None:
     parsed = _parse_xml()
     if not parsed.get("loaded"):
         _state["error"]  = parsed.get("error")
-        _state["loaded"] = True   # one-shot — operator can't fix at runtime
+        _state["loaded"] = True   # one-shot - operator can't fix at runtime
         return
     _state.update(parsed)
     _state["error"] = None

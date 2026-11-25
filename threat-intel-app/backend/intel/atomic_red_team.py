@@ -1,5 +1,5 @@
 """
-Atomic Red Team — for each MITRE technique, a library of small, reproducible
+Atomic Red Team - for each MITRE technique, a library of small, reproducible
 attack tests with example commands. Used to enrich AI investigation prompts
 with REAL attack examples per technique, not just abstract descriptions.
 """
@@ -62,7 +62,7 @@ def get_examples_summary(technique_ids: list[str], max_chars: int = 1500) -> str
             line = f"  • {t['name']}"
             if t["command"]:
                 cmd = t["command"].split("\n")[0][:140]
-                line += f" — `{cmd}`"
+                line += f" - `{cmd}`"
             chunks.append(line)
         if len("\n".join(chunks)) > max_chars:
             break

@@ -18,7 +18,7 @@ COMMON_BRANDS = [
 ]
 
 # First-party brand-owned domains whose SLD label contains a brand
-# substring — these must NOT be flagged as typosquats. Every M365
+# substring - these must NOT be flagged as typosquats. Every M365
 # tenant lives at `<tenant>.onmicrosoft.com`, every OAuth flow round-
 # trips `login.microsoftonline.com`, GCP objects live at
 # `storage.googleapis.com`, etc. Bug that surfaced this list: forwarding-
@@ -64,7 +64,7 @@ def _is_legit_brand_domain(domain: str) -> bool:
         return False
     if d in LEGIT_BRAND_DOMAINS:
         return True
-    # Match any subdomain of a legit brand domain — e.g.
+    # Match any subdomain of a legit brand domain - e.g.
     # `contoso.onmicrosoft.com` matches `onmicrosoft.com`.
     for legit in LEGIT_BRAND_DOMAINS:
         if d.endswith("." + legit):
@@ -133,10 +133,10 @@ _BRAND_SIMILARITY_THRESHOLD = 0.85
 
 
 def looks_like_brand(domain: str) -> dict | None:
-    """Heuristic brand-impersonation check — fast, no DNS lookups."""
+    """Heuristic brand-impersonation check - fast, no DNS lookups."""
     # First-party brand domains (onmicrosoft.com, microsoftonline.com,
     # googleusercontent.com, etc.) short-circuit before the substring
-    # matcher — otherwise "microsoft" would flag inside "onmicrosoft"
+    # matcher - otherwise "microsoft" would flag inside "onmicrosoft"
     # and every M365 tenant would show as a typosquat.
     if _is_legit_brand_domain(domain):
         return None

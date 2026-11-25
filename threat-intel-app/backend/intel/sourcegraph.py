@@ -1,11 +1,11 @@
-"""Sourcegraph code search — queries sourcegraph.com's public index
+"""Sourcegraph code search - queries sourcegraph.com's public index
 for a domain string. Covers public GitHub + GitLab + many self-hosted
 mirrors Sourcegraph has crawled.
 
   GET https://sourcegraph.com/.api/search/stream?q={query}&v=V3
 
 Response is server-sent events; we parse the first chunk for hit
-counts. Token optional — SOURCEGRAPH_TOKEN raises the free quota
+counts. Token optional - SOURCEGRAPH_TOKEN raises the free quota
 beyond ~30 search/day.
 """
 

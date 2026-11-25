@@ -1,4 +1,4 @@
-"""crt.name — alternative Certificate Transparency log search.
+"""crt.name - alternative Certificate Transparency log search.
 
 Faster than crt.sh for subdomain enumeration (indexed differently),
 and often up when crt.sh's postgres backend is 502ing. Free, no key.
@@ -32,7 +32,7 @@ async def lookup(session, domain: str) -> Dict[str, Any]:
         return {"source": "crtname", "error": r.get("error"),
                 "error_type": r.get("error_type", "unreachable")}
     # crt.name returns either a list of hostname strings or a dict with
-    # a "hostnames" key — depends on API version. Normalise both.
+    # a "hostnames" key - depends on API version. Normalise both.
     hosts: list = []
     if isinstance(r, list):
         hosts = [h for h in r if isinstance(h, str)]

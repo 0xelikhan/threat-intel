@@ -1,5 +1,5 @@
 """
-Constants — single source of truth for the string literals that appear
+Constants - single source of truth for the string literals that appear
 in multiple places.
 
 The existing call sites still inline these strings (changing every one
@@ -8,20 +8,20 @@ gives new code and tests a stable import surface so we don't keep
 re-spelling the same strings.
 
 Categories:
-  * THREAT_LEVELS  — output of the investigation agent's `threat_level`.
-  * VERDICTS       — output of every enrichment-source verdict.
-  * SEVERITY       — Sigma rule `level` values.
-  * MITRE_TACTICS  — the 14 ATT&CK Enterprise tactic names, in kill-chain
+  * THREAT_LEVELS  - output of the investigation agent's `threat_level`.
+  * VERDICTS       - output of every enrichment-source verdict.
+  * SEVERITY       - Sigma rule `level` values.
+  * MITRE_TACTICS  - the 14 ATT&CK Enterprise tactic names, in kill-chain
                     order. The frontend's tactic colours map directly to
                     these strings, so adding/renaming requires syncing
                     DetectionTab.jsx::TACTIC_COLORS too.
-  * ENRICHMENT_SOURCES — every TI source key that may appear under
+  * ENRICHMENT_SOURCES - every TI source key that may appear under
                     `enrichments[<ioc_type>][<ioc>]`. Used by the
                     confidence engine + UI source listings.
-  * IOC_TYPES      — the four enrichable IOC type keys.
-  * CACHE_NAMESPACES — the static-dataset cache namespaces registered at
+  * IOC_TYPES      - the four enrichable IOC type keys.
+  * CACHE_NAMESPACES - the static-dataset cache namespaces registered at
                     startup (see intel/cache.py).
-  * ERROR_CODES    — machine-readable slugs for error_envelope responses.
+  * ERROR_CODES    - machine-readable slugs for error_envelope responses.
 """
 
 from __future__ import annotations

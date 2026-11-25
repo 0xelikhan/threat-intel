@@ -13,7 +13,7 @@
  *   opencti-platform/opencti-front/src/private/components/nav/LeftBar.jsx
  *
  * To use: wrap the app in <ThemeProvider theme={theme}> and add <CssBaseline/>.
- * Inline-styled legacy components keep working — only MUI components inherit.
+ * Inline-styled legacy components keep working - only MUI components inherit.
  */
 
 import { createTheme } from '@mui/material/styles';
@@ -27,12 +27,12 @@ const hexToRGB = (hex, opacity = 1) => {
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 };
 
-// ─── Palette tokens — Nucleon Cyber aesthetic (cybercure.ai) ─────────────────
+// ─── Palette tokens - Nucleon Cyber aesthetic (cybercure.ai) ─────────────────
 // Shifts OpenCTI's dark theme toward Nucleon's navy-cyan + matrix-green scheme.
 // MUI component overrides below are unchanged; only the token values moved.
 export const THEME_DARK_DEFAULT_BACKGROUND = '#060b1c';  // deep navy, page bg
 export const THEME_DARK_DEFAULT_PRIMARY    = '#00b4d8';  // mid-cyan accent
-export const THEME_DARK_DEFAULT_SECONDARY  = '#00ff41';  // matrix green — status/live
+export const THEME_DARK_DEFAULT_SECONDARY  = '#00ff41';  // matrix green - status/live
 export const THEME_DARK_DEFAULT_ACCENT     = '#0a1628';  // card inset / grid overlay
 export const THEME_DARK_DEFAULT_PAPER      = '#0a1120';  // card background
 export const THEME_DARK_DEFAULT_TEXT       = '#e6edf3';  // body text
@@ -48,7 +48,7 @@ const primary    = THEME_DARK_DEFAULT_PRIMARY;
 const secondary  = THEME_DARK_DEFAULT_SECONDARY;
 const text_color = THEME_DARK_DEFAULT_TEXT;
 
-// ─── MUI theme — every override below ported from OpenCTI ───────────────────
+// ─── MUI theme - every override below ported from OpenCTI ───────────────────
 const theme = createTheme({
   borderRadius: 4,
   palette: {
@@ -116,7 +116,7 @@ const theme = createTheme({
     },
   },
 
-  // Typography — Inter for UI, JetBrains Mono for data (overridden via class)
+  // Typography - Inter for UI, JetBrains Mono for data (overridden via class)
   typography: {
     fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "IBM Plex Sans", sans-serif',
     body1:    { fontSize: '0.9rem', color: text_color, letterSpacing: '0.005em' },
@@ -175,7 +175,7 @@ const theme = createTheme({
       },
     },
 
-    // ─── Chip — adapted from Tag.tsx (lowercase, soft alpha bg) ──────────
+    // ─── Chip - adapted from Tag.tsx (lowercase, soft alpha bg) ──────────
     MuiChip: {
       styleOverrides: {
         root: {
@@ -375,7 +375,7 @@ const theme = createTheme({
       },
     },
 
-    // ─── Tables — compact, 1px border lines, no whitespace ───────────────
+    // ─── Tables - compact, 1px border lines, no whitespace ───────────────
     MuiTable: {
       styleOverrides: {
         root: { borderCollapse: 'separate' },
@@ -439,7 +439,7 @@ const theme = createTheme({
       },
     },
 
-    // ─── Typography — lowercase global ──────────────────────────────────
+    // ─── Typography - lowercase global ──────────────────────────────────
     MuiTypography: {
       styleOverrides: {
         root: { color: text_color, textTransform: 'none' },
@@ -459,7 +459,7 @@ const theme = createTheme({
       },
     },
 
-    // ─── CssBaseline — global body / scrollbar / code blocks ────────────
+    // ─── CssBaseline - global body / scrollbar / code blocks ────────────
     MuiCssBaseline: {
       styleOverrides: {
         html: {

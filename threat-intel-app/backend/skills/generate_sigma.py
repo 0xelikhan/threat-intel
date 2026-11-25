@@ -1,5 +1,5 @@
 """
-GenerateSigmaSkill — produce a Sigma detection rule for the analysis.
+GenerateSigmaSkill - produce a Sigma detection rule for the analysis.
 
 Reuses agents.response.validate_sigma_rule for sigma-cli validation. The
 generation prompt is local to keep the skill self-contained.
@@ -24,7 +24,7 @@ in YAML 1.2 syntax that fires on the threat described below. The rule must:
 * include `falsepositives`, `level`, and `tags` (use MITRE technique IDs
   in tags when available, e.g. `attack.t1059.001`)
 
-Output the YAML only — no surrounding markdown fences, no commentary.
+Output the YAML only - no surrounding markdown fences, no commentary.
 """
 
 

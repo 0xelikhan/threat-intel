@@ -1,5 +1,5 @@
 """
-Threat actor intelligence — spec §7.
+Threat actor intelligence - spec §7.
 
 Uses MitreAttackData (mitreattack-python) loading
 backend/intel/mitre/enterprise-attack.json, exposes:

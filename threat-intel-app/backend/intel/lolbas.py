@@ -1,5 +1,5 @@
 """
-LOLBAS — Living Off The Land Binaries, Scripts and Libraries.
+LOLBAS - Living Off The Land Binaries, Scripts and Libraries.
 Catalog of legitimate Windows binaries adversaries abuse.
 """
 import re

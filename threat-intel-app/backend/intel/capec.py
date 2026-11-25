@@ -6,7 +6,7 @@ content; the data files themselves are public-domain US-government work).
 ~600 attack patterns with hierarchy, ATT&CK cross-mapping, prerequisites,
 mitigations, and consequences.
 
-CAPEC complements ATT&CK by being more abstract — "SQL Injection" lives
+CAPEC complements ATT&CK by being more abstract - "SQL Injection" lives
 at CAPEC-66, with parents (CAPEC-7 Blind SQL Injection, CAPEC-470
 Expanding Control over the OS, etc.) and ATT&CK mappings. The investi-
 gation result extends each ATT&CK technique with CAPEC parents so the
@@ -36,7 +36,7 @@ _CAPEC_XML  = (Path(__file__).parent.parent.parent
 _CAPEC_JSON = (Path(__file__).parent.parent.parent
                / "vendor" / "capec" / "index.json")
 
-# Built-in compact subset — high-traffic CAPECs with their ATT&CK cross-
+# Built-in compact subset - high-traffic CAPECs with their ATT&CK cross-
 # references. Used when no vendored data is present. Extracted from the
 # MITRE-published mappings.
 _FALLBACK: Dict[str, Dict[str, Any]] = {

@@ -1,4 +1,4 @@
-"""MISP connector — push an analysed artifact + its enrichment into
+"""MISP connector - push an analysed artifact + its enrichment into
 a MISP event.
 
 Wraps intel/misp_push.py in the formal Connector interface. The old

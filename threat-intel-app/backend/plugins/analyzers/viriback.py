@@ -1,4 +1,4 @@
-"""ViriBack Tracker — malware C2 panel index.
+"""ViriBack Tracker - malware C2 panel index.
 
 Auto-generated from _legacy_registrations.py. Keeps the LegacyAnalyzer
 Adapter pattern (import on first call + from_legacy_dict wrap) but
@@ -13,7 +13,7 @@ from plugins import Analyzer, AnalysisResult, register
 
 class ViribackAnalyzer(Analyzer):
     name = "viriback"
-    description = ('ViriBack Tracker — malware C2 panel index.')
+    description = ('ViriBack Tracker - malware C2 panel index.')
     supported_ioc_types = ['ipv4', 'ipv6', 'url']
     required_keys = []
     optional_keys = []

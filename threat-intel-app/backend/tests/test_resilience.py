@@ -64,7 +64,7 @@ def test_host_of_extracts_hostname():
 # ─── error envelope ───────────────────────────────────────────────────────────
 def test_envelope_preserves_existing_fields():
     """`detail` (FastAPI default) and `error` (frontend fallback) must both
-    survive — the additive contract."""
+    survive - the additive contract."""
     env = error_envelope("bad request", code="bad_request", status=400)
     assert env["detail"] == "bad request"
     assert env["error"]  == "bad request"

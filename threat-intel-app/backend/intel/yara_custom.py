@@ -1,5 +1,5 @@
 """
-Custom-rule management for the file scanner — spec §5.
+Custom-rule management for the file scanner - spec §5.
 
 Loads user rules from backend/intel/yara_rules/, exposes save/delete/validate
 helpers, and watches for changes with watchdog so new rules show up in
@@ -183,7 +183,7 @@ def scan_with_custom(data: bytes, timeout: int = 8) -> List[Dict]:
 
 
 def scan_combined(data: bytes, timeout: int = 8) -> List[Dict]:
-    """Vendor rules (intel.yara_scanner) + custom rules — single combined list
+    """Vendor rules (intel.yara_scanner) + custom rules - single combined list
     with source tagged on each entry."""
     out = []
     try:
@@ -193,7 +193,7 @@ def scan_combined(data: bytes, timeout: int = 8) -> List[Dict]:
             out.append(m)
     except Exception as _e:
         # A single malformed user rule (or a yara-python compile failure)
-        # used to silently disable the entire vendor ruleset — every
+        # used to silently disable the entire vendor ruleset - every
         # /api/scan/file looked clean of YARA matches with no diagnostic.
         # Log so the missing-vendor-scan case is visible to operators.
         _log.warning("vendor YARA scan failed; falling back to custom-only: %s", _e)
@@ -204,7 +204,7 @@ def scan_combined(data: bytes, timeout: int = 8) -> List[Dict]:
 # ─── hot-reload via watchdog ──────────────────────────────────────────────────
 def start_hot_reload():
     """Watch _CUSTOM_DIR for changes and invalidate the compiled cache. Safe
-    to call multiple times — second call is a no-op."""
+    to call multiple times - second call is a no-op."""
     if _STATE.get("observer"):
         return
     try:
@@ -221,7 +221,7 @@ def start_hot_reload():
                 return
             with _LOCK:
                 _STATE["compiled"] = None
-            _log.info("custom rule change: %s — reloading on next scan", event.src_path)
+            _log.info("custom rule change: %s - reloading on next scan", event.src_path)
 
     obs = Observer()
     obs.schedule(_H(), str(_CUSTOM_DIR), recursive=False)

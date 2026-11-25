@@ -2,7 +2,7 @@
 OpenSSF Scorecards API client.
 
 Source: https://api.securityscorecards.dev (Apache-2.0). Per-repo
-supply-chain security posture scoring — Branch-Protection, Code-Review,
+supply-chain security posture scoring - Branch-Protection, Code-Review,
 Dependency-Update-Tool, SAST, Token-Permissions, Vulnerabilities, etc.
 
 When a GHSA finding fingers a package, the upstream repo's Scorecard

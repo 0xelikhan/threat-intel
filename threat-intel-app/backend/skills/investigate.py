@@ -1,5 +1,5 @@
 """
-InvestigateSkill — wraps the full agents.investigation.run_investigation.
+InvestigateSkill - wraps the full agents.investigation.run_investigation.
 
 This is the heaviest skill. Run_investigation already routes through the
 provider abstraction (after the call-site migration in 464828d), so this
@@ -37,7 +37,7 @@ class InvestigateSkill(Skill):
             "iocs":        "dict",
             "enrichments": "dict",
             # Optional: cross_refs, behavioral_indicators, confidence_scores,
-            # analyst_answers — passed straight through if present.
+            # analyst_answers - passed straight through if present.
         }
 
     @property
@@ -52,12 +52,12 @@ class InvestigateSkill(Skill):
             "clarifying_questions":  "list",
             "confidence":            "float",
             "probing_questions":     "list",
-            # Two-tier output per PRINCIPLE 7 — confirmed facts vs analyst
+            # Two-tier output per PRINCIPLE 7 - confirmed facts vs analyst
             # assessment, separated so callers know which is evidence and
             # which is inference.
             "confirmed_facts":       "list",
             "analysis_assessment":   "list",
-            # Server-computed enrichment baseline — {returned_count, total_count,
+            # Server-computed enrichment baseline - {returned_count, total_count,
             # flagged_count, flagged_iocs, flagged_per_ioc, line}.
             "enrichment_summary":    "dict",
             "raw":                   "dict",
@@ -120,7 +120,7 @@ class InvestigateSkill(Skill):
     @staticmethod
     def _empty(error: str = "") -> Dict[str, Any]:
         # Must mirror every key declared in output_schema. Was missing
-        # confirmed_facts / analysis_assessment / enrichment_summary —
+        # confirmed_facts / analysis_assessment / enrichment_summary  - 
         # callers that destructure those (e.g. the response agent)
         # crashed with KeyError when the investigation module failed to
         # import or returned this empty shape on outer-exception fallback.

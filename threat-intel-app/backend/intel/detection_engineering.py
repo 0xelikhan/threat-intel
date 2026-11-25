@@ -1,5 +1,5 @@
 """
-Detection-engineering helpers — spec §6.
+Detection-engineering helpers - spec §6.
 
   - validate_sigma(yaml_text)  -> (ok, errors)
   - convert_sigma_to_spl(yt)   -> str  (Splunk)
@@ -120,7 +120,7 @@ def _search_existing_sigma_cached(targets: tuple) -> List[dict]:
     if not targets:
         return []
     # Pre-lowercase the "attack.<tid>" needles once instead of recomputing
-    # text.lower() per technique per file — for 6 techniques across ~3500
+    # text.lower() per technique per file - for 6 techniques across ~3500
     # Sigma files that's the difference between 6 and 21,000 .lower()
     # calls on a cold cache miss.
     needles = tuple(f"attack.{t.lower()}" for t in targets)
@@ -133,7 +133,7 @@ def _search_existing_sigma_cached(targets: tuple) -> List[dict]:
         except Exception:
             continue
         text_lower = text.lower()
-        # Tags appear as "attack.t1059.001" — cheap substring scan first to skip parsing
+        # Tags appear as "attack.t1059.001" - cheap substring scan first to skip parsing
         if not any(n in text_lower for n in needles):
             continue
         title = _scrape_yaml_field(text, "title")
@@ -152,7 +152,7 @@ def _search_existing_sigma_cached(targets: tuple) -> List[dict]:
 
 
 def search_existing_elastic(techniques) -> List[dict]:
-    """Walk vendor/elastic-rules/rules — TOML files with [[rule.threat]] sections.
+    """Walk vendor/elastic-rules/rules - TOML files with [[rule.threat]] sections.
     Best-effort substring match on technique IDs."""
     targets = _technique_set(techniques)
     if not targets or not _ELASTIC_DIR.exists():

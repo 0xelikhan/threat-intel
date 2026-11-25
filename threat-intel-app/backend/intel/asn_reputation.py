@@ -1,5 +1,5 @@
 """
-ASN reputation — flag IPs hosted by ASNs/organizations known for bulletproof
+ASN reputation - flag IPs hosted by ASNs/organizations known for bulletproof
 hosting, anonymizers, or recurring abuse. Uses ISP/org text from the
 existing AbuseIPDB + IPInfo enrichment we already collect; no extra API calls.
 """
@@ -10,23 +10,23 @@ import re
 # Categorized so the AI can reason about them.
 BAD_ASN_PATTERNS = {
     "bulletproof": [
-        ("frantech",          "AS53667 FranTech Solutions — long-running BPH"),
-        ("inferno solutions", "Inferno Solutions — known bulletproof"),
-        ("baxet group",       "Baxet — bulletproof reseller"),
-        ("blazingfast",       "AS62240 BlazingFast — high abuse"),
-        ("alexhost",          "AlexHost — bulletproof"),
-        ("dataideas",         "DataIdeas — bulletproof"),
-        ("flokinet",          "FlokiNET — privacy host, frequent abuse"),
-        ("njalla",            "Njalla — privacy registrar"),
+        ("frantech",          "AS53667 FranTech Solutions - long-running BPH"),
+        ("inferno solutions", "Inferno Solutions - known bulletproof"),
+        ("baxet group",       "Baxet - bulletproof reseller"),
+        ("blazingfast",       "AS62240 BlazingFast - high abuse"),
+        ("alexhost",          "AlexHost - bulletproof"),
+        ("dataideas",         "DataIdeas - bulletproof"),
+        ("flokinet",          "FlokiNET - privacy host, frequent abuse"),
+        ("njalla",            "Njalla - privacy registrar"),
         ("buyvm",             "BuyVM (Frantech subsidiary)"),
-        ("uadomen",           "Ualinkos / UADoMen — Eastern Europe BPH"),
-        ("petersburg",        "Petersburg Internet Network — BPH"),
-        ("pinet",             "Pinet — BPH"),
-        ("velia",             "Velia.net — recurring abuse"),
-        ("ddos-guard",        "DDoS-Guard — Russian DDoS protection"),
-        ("nicenic",           "NiceNIC — Chinese hoster, frequent abuse"),
-        ("shinjiru",          "Shinjiru Technology — BPH"),
-        ("offshore racks",    "Offshore Racks — BPH"),
+        ("uadomen",           "Ualinkos / UADoMen - Eastern Europe BPH"),
+        ("petersburg",        "Petersburg Internet Network - BPH"),
+        ("pinet",             "Pinet - BPH"),
+        ("velia",             "Velia.net - recurring abuse"),
+        ("ddos-guard",        "DDoS-Guard - Russian DDoS protection"),
+        ("nicenic",           "NiceNIC - Chinese hoster, frequent abuse"),
+        ("shinjiru",          "Shinjiru Technology - BPH"),
+        ("offshore racks",    "Offshore Racks - BPH"),
     ],
     "vpn_proxy": [
         ("nordvpn",   "NordVPN exit"),
@@ -37,20 +37,20 @@ BAD_ASN_PATTERNS = {
         ("protonvpn", "ProtonVPN"),
         ("ipvanish",  "IPVanish"),
         ("torguard",  "TorGuard VPN"),
-        ("m247",      "M247 — heavy VPN reseller"),
-        ("packethub", "PacketHub — VPN reseller"),
-        ("hostwinds", "Hostwinds — frequent VPN traffic"),
-        ("datacamp",  "Datacamp — VPN reseller"),
+        ("m247",      "M247 - heavy VPN reseller"),
+        ("packethub", "PacketHub - VPN reseller"),
+        ("hostwinds", "Hostwinds - frequent VPN traffic"),
+        ("datacamp",  "Datacamp - VPN reseller"),
     ],
     "hosting_abuse": [
-        ("vultr",        "Vultr Holdings — large surface, regular abuse"),
-        ("digitalocean", "DigitalOcean — frequent C2"),
-        ("linode",       "Linode (Akamai) — frequent abuse"),
-        ("hetzner",      "Hetzner — frequent C2"),
-        ("ovh",          "OVH — frequent C2"),
-        ("contabo",      "Contabo — frequent abuse"),
-        ("scaleway",     "Scaleway — frequent abuse"),
-        ("colocrossing", "ColoCrossing — heavy proxy reseller"),
+        ("vultr",        "Vultr Holdings - large surface, regular abuse"),
+        ("digitalocean", "DigitalOcean - frequent C2"),
+        ("linode",       "Linode (Akamai) - frequent abuse"),
+        ("hetzner",      "Hetzner - frequent C2"),
+        ("ovh",          "OVH - frequent C2"),
+        ("contabo",      "Contabo - frequent abuse"),
+        ("scaleway",     "Scaleway - frequent abuse"),
+        ("colocrossing", "ColoCrossing - heavy proxy reseller"),
     ],
     "anonymizer": [
         ("tor exit",  "Tor network exit"),
@@ -89,7 +89,7 @@ def check(isp: str = "", org: str = "", usage_type: str = "") -> dict | None:
 
     # Usage-type signal (AbuseIPDB tags these)
     if "hosting" in (usage_type or "").lower() and "bulletproof" not in seen_cats:
-        # neutral — many legit services use hosting providers
+        # neutral - many legit services use hosting providers
         pass
     if "vpn" in (usage_type or "").lower() or "proxy" in (usage_type or "").lower():
         if "vpn_proxy" not in seen_cats and "anonymizer" not in seen_cats:

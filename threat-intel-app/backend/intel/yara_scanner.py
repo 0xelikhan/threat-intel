@@ -1,5 +1,5 @@
 """
-YARA file scanner — uses the 8,000+ rules across vendor/ to identify
+YARA file scanner - uses the 8,000+ rules across vendor/ to identify
 malware families, packers, exploit shellcode, and APT tooling.
 
 Lazy-loads compiled rulesets on first call; precompiles to a single
@@ -10,7 +10,7 @@ from functools import lru_cache
 
 VENDOR = Path(__file__).parent.parent.parent / "vendor"
 
-# Rule sources, in priority order — early hits get cited first. Each
+# Rule sources, in priority order - early hits get cited first. Each
 # source ships at least Apache-2.0 / MIT / BSD-2-Clause / DRUL-1.0
 # (DRL-style permissive). Operator fetches via scripts/fetch_yara_corpora.sh.
 RULE_SOURCES = [
@@ -56,10 +56,10 @@ def _ruleset():
     except ImportError:
         return None
 
-    # Folders to skip — utility rules (IOC-pattern extractors) and deprecated rules
+    # Folders to skip - utility rules (IOC-pattern extractors) and deprecated rules
     # that match too broadly and produce false positives on virtually every file.
     skip_path_parts = {
-        "utils",           # yara-rules/utils — IP/domain/URL extractors
+        "utils",           # yara-rules/utils - IP/domain/URL extractors
         "deprecated",      # old / unmaintained rules
         "obsolete",
         "tests",

@@ -1,8 +1,8 @@
-"""Stress probe — for each working source, fire N concurrent requests
+"""Stress probe - for each working source, fire N concurrent requests
 against benign well-known indicators and report success rate, latency
 percentiles, and rate-limit / circuit-breaker events.
 
-This is NOT a pytest run — it's a runnable script that hits real
+This is NOT a pytest run - it's a runnable script that hits real
 external services. Run on demand to confirm your keys + the upstream
 endpoints stay healthy under realistic analyst-batch load (~10 IOCs
 per investigation × a few investigations in parallel).
@@ -21,7 +21,7 @@ Benign test indicators (same set as test_all_apis.py):
     IP     1.1.1.1
     Domain google.com
     Hash   275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f
-                                          (EICAR — every TI source has it)
+                                          (EICAR - every TI source has it)
 
 Output: one table per source with OK / FAIL / rate-limited counts and
 p50 / p95 / max latency in ms.
@@ -142,7 +142,7 @@ class Bucket:
             return 0.0, 0.0, 0.0
         s = sorted(self.latencies_ms)
         p50 = statistics.median(s)
-        # Manual p95 — statistics.quantiles is awkward for small N.
+        # Manual p95 - statistics.quantiles is awkward for small N.
         p95 = s[int(max(0, min(len(s) - 1, round(0.95 * (len(s) - 1)))))]
         return p50, p95, max(s)
 
@@ -294,7 +294,7 @@ async def _build_sources(session: aiohttp.ClientSession) -> List[Tuple[str, str,
 
 # ─── Runner ───────────────────────────────────────────────────────────────
 async def main() -> int:
-    print(f"Stress probe — {REQUESTS} requests, {CONCURRENCY} in flight, "
+    print(f"Stress probe - {REQUESTS} requests, {CONCURRENCY} in flight, "
           f"{TIMEOUT_S}s per-request cap")
     t0 = time.time()
     connector = aiohttp.TCPConnector(limit=80, limit_per_host=20,
@@ -303,7 +303,7 @@ async def main() -> int:
         sources = await _build_sources(session)
         print(f"Configured sources: {len(sources)}")
         if not sources:
-            print("No keys configured — nothing to probe.")
+            print("No keys configured - nothing to probe.")
             return 1
 
         results: List[Tuple[str, Bucket]] = []

@@ -1,5 +1,5 @@
 """
-AI-generated YARA rule per analyzed file — spec §5.
+AI-generated YARA rule per analyzed file - spec §5.
 
 Picks the most unique/stable indicators from a file_analyzer result and asks
 the AI to produce a tight YARA rule. Validates by compiling with yara-python
@@ -88,7 +88,7 @@ def _pick_unique_strings(result: Dict, limit: int = 12) -> List[str]:
             continue
         if s.lower() in common_lib_names:
             continue
-        # Want some character diversity — not just A-Z
+        # Want some character diversity - not just A-Z
         if not any(c in s for c in (":", "\\", "{", "/", "@", ".", "_", "-")):
             continue
         picked.append(s)
@@ -110,7 +110,7 @@ def _pick_mutexes(result: Dict, limit: int = 5) -> List[str]:
 
 
 async def generate_yara_for_file(result: Dict, ai_call) -> Dict:
-    """ai_call: async (prompt: str) -> str — same shape as main._ai_gen."""
+    """ai_call: async (prompt: str) -> str - same shape as main._ai_gen."""
     from datetime import datetime, timezone
     sha256 = (result.get("hashes") or {}).get("sha256") or ""
     pe     = (result.get("format_specific") or {}).get("pe") or {}
@@ -152,11 +152,11 @@ async def generate_yara_for_file(result: Dict, ai_call) -> Dict:
         mutexes="\n".join(f"  - {m}" for m in mut) or "  (none extracted)",
     )
 
-    # Validation loop — up to 3 attempts
+    # Validation loop - up to 3 attempts
     prompt = base
     last_text = ""
     last_errors: List[str] = []
-    # 2 attempts max — previous 3-attempt loop pushed scans over a minute
+    # 2 attempts max - previous 3-attempt loop pushed scans over a minute
     # when the small model produced bad YARA syntax. The validation+retry is
     # still here to catch the common case; pathologically broken rules just
     # ship as 'valid: false' and the analyst sees the error inline.
@@ -208,7 +208,7 @@ def _validate_and_test(text: str, file_bytes) -> Tuple[bool, List[str]]:
     except yara.Error as e:
         return False, [f"compile: {e}"]
     if not file_bytes:
-        # No bytes to verify against — accept on compile success
+        # No bytes to verify against - accept on compile success
         return True, []
     try:
         matches = compiled.match(data=file_bytes, timeout=5)

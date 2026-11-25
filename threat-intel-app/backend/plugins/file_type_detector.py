@@ -1,4 +1,4 @@
-"""File-type detection — maps raw bytes + filename to the file_type
+"""File-type detection - maps raw bytes + filename to the file_type
 string that FileAnalyzer plugins advertise in supported_file_types.
 
 Deliberately magic-byte-based (not content-type / extension) because
@@ -6,7 +6,7 @@ analysts upload samples with scrubbed extensions. The returned type
 is one of: pe | elf | macho | pdf | office | rtf | apk | eml |
 pcap | js | html | shellcode | zip | unknown.
 
-Multiple returns are possible — e.g. APK is also a ZIP, DOCX is also
+Multiple returns are possible - e.g. APK is also a ZIP, DOCX is also
 a ZIP (OpenXML). The caller gets a prioritised list; file_analyzers
 whose supported_file_types intersect with ANY entry are invoked.
 """
@@ -38,7 +38,7 @@ def detect_types(data: bytes, filename: str = "") -> List[str]:
     elif head.startswith(b"{\\rtf"):
         types.append("rtf")
     elif head.startswith(b"PK\x03\x04"):
-        # ZIP container. Could be APK, DOCX, XLSX, JAR, etc. — use
+        # ZIP container. Could be APK, DOCX, XLSX, JAR, etc. - use
         # name/content heuristics to disambiguate.
         if lower_name.endswith(".apk") or b"AndroidManifest.xml" in head or b"classes.dex" in data[:65536]:
             types.append("apk")
@@ -93,7 +93,7 @@ def detect_types(data: bytes, filename: str = "") -> List[str]:
         elif lower_name.endswith((".ipa",)):
             types.append("ipa")
 
-    # Shellcode heuristic — small blob (< 4KB) with no identified
+    # Shellcode heuristic - small blob (< 4KB) with no identified
     # format. Only fires when nothing else matched; emulators can
     # still try to run it.
     if not types and 0 < len(data) < 4096:

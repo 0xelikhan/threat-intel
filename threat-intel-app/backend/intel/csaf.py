@@ -85,7 +85,7 @@ def _ingest_doc(doc: Dict[str, Any], path: Path,
         cve = (v.get("cve") or "").upper().strip()
         if not cve.startswith("CVE-"):
             continue
-        # CVSS extraction — CSAF can ship multiple scoring versions per
+        # CVSS extraction - CSAF can ship multiple scoring versions per
         # vuln; pull the first cvss_v3.baseScore we see.
         cvss_score: Optional[float] = None
         for scoring in (v.get("scores") or []):

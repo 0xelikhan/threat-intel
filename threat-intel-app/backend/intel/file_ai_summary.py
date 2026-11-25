@@ -2,12 +2,12 @@
 AI plain-English summary for a file analysis result.
 
 Different from file_capability_map.plain_english_summary (which only describes
-malicious capability). This describes what the file IS — works equally well
+malicious capability). This describes what the file IS - works equally well
 for "this is just a png of a sunset" as for "this is a stage-2 Cobalt Strike
 beacon dropper". The analyst reads it before drilling into details.
 
 Uses the same Azure-aware OpenAI client pattern as the rest of the codebase.
-Fails open — returns None on missing key / model error so the caller falls
+Fails open - returns None on missing key / model error so the caller falls
 back to no summary rather than blocking the response.
 """
 
@@ -18,7 +18,7 @@ from typing import Optional, Dict
 
 
 def _compress_for_prompt(analysis: Dict) -> Dict:
-    """Pull just the high-signal fields — keeps prompt small and fast."""
+    """Pull just the high-signal fields - keeps prompt small and fast."""
     fs = analysis.get("format_specific") or {}
     pe = fs.get("pe") or {}
     office = fs.get("office") or {}
@@ -89,7 +89,7 @@ def _compress_for_prompt(analysis: Dict) -> Dict:
     }
 
 
-SYSTEM_PROMPT = """OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes (—), en-dashes (–), or curly quotes. Use hyphens (-), commas, or restructure the sentence.
+SYSTEM_PROMPT = """OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes ( - ), en-dashes (-), or curly quotes. Use hyphens (-), commas, or restructure the sentence.
 
 You are a senior malware analyst writing for a colleague.
 Given a file analysis result, write a SHORT plain-English summary (2-3 sentences,
@@ -100,7 +100,7 @@ its purpose / behavior. If benign, say so plainly. If malicious, name the
 family or capability directly. If just a picture / document / archive with
 nothing notable, say that.
 
-CALIBRATION — do not overstate:
+CALIBRATION - do not overstate:
 * If the hash is clean across every TI source, no YARA rules matched, and
   no suspicious patterns were extracted, say "no malicious indicators" and
   treat the file as legitimate unless the type itself is suspect.
@@ -120,12 +120,12 @@ Examples of the register:
     JSON responses, and writes them to a local CSV. Reads credentials from
     environment variables. No malicious indicators."
   * "Windows PE executable, packed (entropy 7.8), signed by an unknown CA.
-    Imports VirtualAllocEx, WriteProcessMemory, CreateRemoteThread — a
+    Imports VirtualAllocEx, WriteProcessMemory, CreateRemoteThread - a
     textbook process injector. VirusTotal flags it as MALICIOUS (45/72)
     with the family 'CobaltStrike'."
 
 Output ONLY the summary text. No markdown, no lists, no headers, no quotes
-around it. No em dashes or en dashes — use commas or restructure.
+around it. No em dashes or en dashes - use commas or restructure.
 """
 
 
@@ -135,7 +135,7 @@ async def summarize_file(analysis: Dict, config) -> Optional[str]:
     if not provider_configured(config):
         return None
     provider = get_provider()
-    # Short 2-3 sentence summary — light, latency-sensitive → fast model tier.
+    # Short 2-3 sentence summary - light, latency-sensitive → fast model tier.
     model = config.get_model(fast=True) if hasattr(config, "get_model") else None
     resp = await provider.complete(
         messages=[

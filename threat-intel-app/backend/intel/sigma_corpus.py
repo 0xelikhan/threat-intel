@@ -3,17 +3,17 @@ SigmaHQ rule corpus loader + inverted index.
 
 The repo ships 2,600+ Sigma rules at `backend/intel/sigma/` (cloud, network,
 windows, etc., mirroring SigmaHQ/sigma's repository layout). The rules are
-DRL 1.1 licensed — fine to *consume* (we match against them), but any UI
+DRL 1.1 licensed - fine to *consume* (we match against them), but any UI
 that surfaces full rule bodies must attribute SigmaHQ.
 
 This module loads every .yml rule lazily on first call and builds two
 inverted indexes:
 
-  by_technique  — { "T1059.001": [rule_meta, ...], ... }
-  by_logsource  — { ("process_creation","windows"): [rule_meta, ...], ... }
+  by_technique  - { "T1059.001": [rule_meta, ...], ... }
+  by_logsource  - { ("process_creation","windows"): [rule_meta, ...], ... }
 
 Each rule_meta is a small dict (title, id, description, tags, level,
-logsource, file_path) — no full rule body — so 2,600 rules fit in ~3MB
+logsource, file_path) - no full rule body - so 2,600 rules fit in ~3MB
 of RAM. The inverted-index pattern mirrors intel/mitre_data.py and
 intel/misp_galaxies.py so callers (investigation.py + the new
 match_sigma_rules skill) get the same lookup ergonomics.
@@ -42,13 +42,13 @@ _CORPUS_ROOT = Path(__file__).parent / "sigma"
 _CACHE_JSON  = _CORPUS_ROOT.parent / "sigma_corpus.cache.json"
 _ATTACK_TAG_RE = re.compile(r"attack\.(t\d{4}(?:\.\d{3})?)", re.IGNORECASE)
 
-# Single load lock — first caller into the module triggers the parse;
+# Single load lock - first caller into the module triggers the parse;
 # subsequent threads block until the index is ready. Matches the lazy-
 # load pattern used by intel/yara_scanner.py::_ruleset.
 _lock  = threading.Lock()
 _state: Dict[str, Any] = {
     "loaded":       False,
-    "rules":        [],     # list[dict] — all rule metadata
+    "rules":        [],     # list[dict] - all rule metadata
     "by_technique": {},     # dict[str, list[dict]]
     "by_logsource": {},     # dict[(str,str), list[dict]]
     "error":        None,
@@ -117,7 +117,7 @@ def _write_cache() -> None:
 
 def _safe_yaml_load(text: str) -> Optional[Dict[str, Any]]:
     """SigmaHQ rules occasionally have multi-doc YAML (one base rule + per-
-    target overrides). For the inverted index we just need the first doc —
+    target overrides). For the inverted index we just need the first doc  - 
     that's where every meta field we care about lives."""
     try:
         import yaml  # ships as transitive dep of mitreattack-python / sigma-cli
@@ -173,7 +173,7 @@ def _build_index() -> None:
     for path in _CORPUS_ROOT.rglob("*.yml"):
         if not path.is_file():
             continue
-        # Cap individual file size (real SigmaHQ rules are tiny — anything
+        # Cap individual file size (real SigmaHQ rules are tiny - anything
         # huge is almost certainly a non-rule YAML we accidentally walked).
         try:
             if path.stat().st_size > 64_000:

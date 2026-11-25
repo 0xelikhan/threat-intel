@@ -4,12 +4,12 @@ Case-level rollup score with letter grade and recency multipliers.
 Adapted from cti-expert (MIT) analysis/weight-engine.md +
 analysis/exposure-model.md. The existing `gti_score.py` is per-IOC and
 verdict×severity-driven, which is correct for triage. This module is
-DIFFERENT — it produces ONE score for the whole investigation that
+DIFFERENT - it produces ONE score for the whole investigation that
 incorporates:
 
-  * Recency multipliers — observations within 30 days count more,
+  * Recency multipliers - observations within 30 days count more,
     observations older than 730 days count less.
-  * Active-compromise amplifier — when investigation_result flags an
+  * Active-compromise amplifier - when investigation_result flags an
     ongoing intrusion (KEV CVE actively exploited, named ransomware
     family, lateral movement signals), bump 1.35x.
   * Letter-grade subscale on top of the 0-100 number. Analysts read
@@ -18,7 +18,7 @@ incorporates:
     D=escalate, F=critical).
 
 The output rides alongside per-IOC `gti_scores` on `response_summary`
-without replacing it — analysts can still drill in to per-IOC scores
+without replacing it - analysts can still drill in to per-IOC scores
 when needed.
 
 Shape:
@@ -43,7 +43,7 @@ from typing import Any, Dict, List, Optional
 _log = logging.getLogger("recon.intel.case_score")
 
 
-# Driver weights — the BASE contributions before any multiplier. These
+# Driver weights - the BASE contributions before any multiplier. These
 # track gut-feel triage importance: a confirmed KEV CVE is the biggest
 # single signal; a single VT detection is a smaller signal; a benign
 # warninglist hit subtracts. Tuned to land "typical malicious alert"
@@ -55,14 +55,14 @@ _DRIVERS: List[Dict[str, Any]] = [
     {"key": "ransomware",    "weight": 25, "label": "Ransomware behaviour observed"},
     {"key": "actor_match",   "weight": 18, "label": "Threat-actor attribution"},
     {"key": "vt_strong",     "weight": 15, "label": "≥5 VT engines flagged an IOC"},
-    {"key": "vt_partial",    "weight": 8,  "label": "1–4 VT engines flagged an IOC"},
+    {"key": "vt_partial",    "weight": 8,  "label": "1-4 VT engines flagged an IOC"},
     {"key": "abuseipdb_high","weight": 10, "label": "AbuseIPDB ≥75 confidence"},
     {"key": "credential_access", "weight": 12, "label": "Credential access tactic present"},
     {"key": "lateral_movement",  "weight": 12, "label": "Lateral movement signal"},
     {"key": "c2_beacon",     "weight": 14, "label": "C2 beacon / known-bad infra hit"},
     {"key": "domain_dga",    "weight": 8,  "label": "Trained DGA classifier verdict"},
     {"key": "phish_url",     "weight": 8,  "label": "Trained phishing-URL verdict"},
-    # Negative driver — warninglist match means a chunk of IOCs were
+    # Negative driver - warninglist match means a chunk of IOCs were
     # benign public infra (Cloudflare, MS, Google) and the case is
     # smaller than it looks.
     {"key": "warninglist",   "weight": -10, "label": "MISP warninglist hits"},
@@ -118,13 +118,13 @@ def _detect_drivers(state: Dict[str, Any]) -> Dict[str, bool]:
             ai_max = max(ai_max, int(score or 0))
     out["abuseipdb_high"] = ai_max >= 75
 
-    # Behavioural categories — read directly off the indicator dict.
+    # Behavioural categories - read directly off the indicator dict.
     cats = (bi.get("categories") or {}) if isinstance(bi, dict) else {}
     out["credential_access"] = bool(cats.get("credential_access"))
     out["lateral_movement"]  = bool(cats.get("lateral_movement"))
     out["c2_beacon"] = bool(cats.get("c2") or cats.get("command_and_control"))
 
-    # Round-14 classifiers — pick up the strongest signal across domains.
+    # Round-14 classifiers - pick up the strongest signal across domains.
     dga_any = False
     phish_any = False
     for per_source in ((enrichments.get("domains") or {}).values() if isinstance(enrichments.get("domains"), dict) else []):
@@ -199,7 +199,7 @@ def compute(
     """Roll up the case score for a final pipeline state.
 
     `observation_ts` is the timestamp the alert was generated (NOT
-    when RECON analyzed it). Defaults to "now" when not supplied — that
+    when RECON analyzed it). Defaults to "now" when not supplied - that
     means newly-analyzed alerts get the recency boost, which is the
     right behaviour for live SOC traffic. Historical re-analysis passes
     should pass the original alert timestamp so old findings decay."""
@@ -216,7 +216,7 @@ def compute(
     rec_mult = _recency_multiplier(observation_ts)
     multipliers["recency"] = round(rec_mult, 3)
 
-    # Active-compromise amplifier (cti-expert's 1.35x) — only fires
+    # Active-compromise amplifier (cti-expert's 1.35x) - only fires
     # when at least one of the high-signal drivers AND one of the
     # active-exploitation flags is present.
     high_signal = (
@@ -243,7 +243,7 @@ def compute(
     tier = _tier(score)
 
     if score == 0:
-        summary = "No significant signals — case score 0 / A1."
+        summary = "No significant signals - case score 0 / A1."
     else:
         top = sorted(contributing, key=lambda c: -c["weight"])[:3]
         top_str = ", ".join(c["label"] for c in top)

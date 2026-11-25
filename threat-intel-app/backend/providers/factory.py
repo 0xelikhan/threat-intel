@@ -3,7 +3,7 @@ Single entry point for selecting which LLM provider to use at runtime.
 
 Reads LLM_PROVIDER env (default 'openai') and returns the matching
 instance. Instances are constructed on first call and cached so subsequent
-get_provider() calls are O(1) — the SDK clients inside the providers
+get_provider() calls are O(1) - the SDK clients inside the providers
 manage their own connection pooling.
 """
 
@@ -22,7 +22,7 @@ _cache: Dict[str, LLMProvider] = {}
 
 def get_provider(name: str | None = None) -> LLMProvider:
     """Return the configured (or explicitly-named) provider instance.
-    `name` overrides LLM_PROVIDER when set — useful for skills that want
+    `name` overrides LLM_PROVIDER when set - useful for skills that want
     to force a specific provider (e.g. a vision skill that requires
     OpenAI even when the default is Ollama)."""
     selected = (name or os.environ.get("LLM_PROVIDER") or "openai").strip().lower()
@@ -34,7 +34,7 @@ def get_provider(name: str | None = None) -> LLMProvider:
         provider = OllamaProvider()
     else:
         raise ValueError(
-            f"unknown LLM_PROVIDER={selected!r} — supported: openai, azure, ollama"
+            f"unknown LLM_PROVIDER={selected!r} - supported: openai, azure, ollama"
         )
     _cache[selected] = provider
     return provider

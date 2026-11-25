@@ -1,7 +1,7 @@
 """
 Vulners CVE / exploit database lookup.
 
-Source: https://vulners.com/api/v3/ — large aggregated vuln + exploit
+Source: https://vulners.com/api/v3/ - large aggregated vuln + exploit
 database. Free API key tier covers moderate per-day quota; register
 at https://vulners.com/.
 
@@ -130,7 +130,7 @@ async def lookup(session, cve_id: str, api_key: str = "") -> Dict[str, Any]:
         "verdict":        verdict,
         "summary":        (f"Vulners: {cve_id}"
                            + (f" CVSS {cvss_score}" if cvss_score else "")
-                           + (" — EXPLOITED IN THE WILD"
+                           + (" - EXPLOITED IN THE WILD"
                               if wild_exploited else "")
                            + (f" ({exploit_count} public exploit"
                               f"{'s' if exploit_count != 1 else ''})"

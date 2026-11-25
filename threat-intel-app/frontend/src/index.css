@@ -1,11 +1,16 @@
-/* ─── Nucleon-Cyber-inspired dark SOC aesthetic ───────────────────────────
+/* Nucleon-Cyber-inspired dark SOC aesthetic
  * Palette:
- *   background gradient: #060b1c → #0a1628 → #0d1b2a
- *   primary cyan: #0093ee → #00b4d8 → #00e5ff → #00f2fe
+ *   background gradient: #060b1c -> #0a1628 -> #0d1b2a
+ *   primary cyan: #0093ee -> #00b4d8 -> #00e5ff -> #00f2fe
  *   matrix green: #00ff41  (live status)
  *   alert red:    #ef4444
- *   text slate:   #e6edf3 (primary) → #94a3b8 (muted)
- * Signature elements: CRT scanline overlay, cyan micro-grid, cyan ::selection
+ *   text slate:   #e6edf3 (primary) -> #94a3b8 (muted)
+ *
+ * Previously layered a CRT scanline + cyan micro-grid on top of the
+ * base gradient. Both were visual clutter at normal zoom and made
+ * fine type (10-11px monospace on IOC rows) harder to read. Dropped
+ * in favour of the single gradient; the cyan accent carries the
+ * brand without the extra texture.
  */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -22,15 +27,7 @@ body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'IBM Plex Sans', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background:
-    /* CRT scanline (horizontal 1px lines, very low alpha) */
-    linear-gradient(0deg, rgba(0,0,0,0.04) 0 1px, transparent 1px 3px),
-    /* Cyan micro-grid (vertical) */
-    linear-gradient(90deg, rgba(87,212,219,0.012) 1px, transparent 1px) 0 0 / 24px 24px,
-    /* Cyan micro-grid (horizontal) */
-    linear-gradient(0deg, rgba(87,212,219,0.012) 1px, transparent 1px) 0 0 / 24px 24px,
-    /* Core page gradient */
-    linear-gradient(#060b1c 0%, #0a1628 40%, #0d1b2a 100%) fixed;
+  background: linear-gradient(#060b1c 0%, #0a1628 40%, #0d1b2a 100%) fixed;
 }
 
 /* Monospace in the right places */
@@ -46,7 +43,7 @@ code, pre, kbd, samp,
 a { color: #00e5ff; text-decoration: none; }
 a:hover { color: #00f2fe; text-decoration: underline; }
 
-/* Selection highlight — brand cyan */
+/* Selection highlight - brand cyan */
 ::selection { background: rgba(0, 229, 255, 0.28); color: #ffffff; }
 
 /* Scrollbars (WebKit) */
@@ -68,7 +65,7 @@ a:hover { color: #00f2fe; text-decoration: underline; }
 .nc-text-warning   { color: #e1b823; }
 .nc-text-danger    { color: #ef4444; }
 
-/* Live-pulse dot — "online" indicator in matrix green */
+/* Live-pulse dot - "online" indicator in matrix green */
 .nc-live-dot {
   display: inline-block;
   width: 8px; height: 8px;
@@ -82,7 +79,7 @@ a:hover { color: #00f2fe; text-decoration: underline; }
   50%      { opacity: 0.55; transform: scale(0.9); }
 }
 
-/* Card hover glow — subtle cyan rim for interactive cards */
+/* Card hover glow - subtle cyan rim for interactive cards */
 .nc-interactive {
   transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
 }

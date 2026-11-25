@@ -1,4 +1,4 @@
-"""TheHive connector — push the artifact + its verdict as a Case."""
+"""TheHive connector - push the artifact + its verdict as a Case."""
 
 from __future__ import annotations
 

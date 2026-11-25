@@ -1,7 +1,7 @@
 """
 Config Manager
 Reads and writes API keys to a local config.json file.
-Keys never leave the user's machine — no telemetry, no cloud sync.
+Keys never leave the user's machine - no telemetry, no cloud sync.
 """
 
 import json
@@ -80,7 +80,7 @@ API_KEY_DEFINITIONS = {
     },
     "VIRUSTOTAL_KEY": {
         "label": "VirusTotal API Key",
-        "description": "IP, domain, URL, hash reputation. Free: 500 req/day. Optional — enrichment degrades when missing but the platform still runs.",
+        "description": "IP, domain, URL, hash reputation. Free: 500 req/day. Optional - enrichment degrades when missing but the platform still runs.",
         "required": False,
         "url": "https://virustotal.com",
         "placeholder": "64-character hex key",
@@ -88,7 +88,7 @@ API_KEY_DEFINITIONS = {
     },
     "ABUSEIPDB_KEY": {
         "label": "AbuseIPDB API Key",
-        "description": "IP abuse confidence scores. Free: 1,000 checks/day. Optional — IPs still enrich via other sources when missing.",
+        "description": "IP abuse confidence scores. Free: 1,000 checks/day. Optional - IPs still enrich via other sources when missing.",
         "required": False,
         "url": "https://abuseipdb.com",
         "placeholder": "AbuseIPDB API key",
@@ -107,7 +107,7 @@ API_KEY_DEFINITIONS = {
     },
     "IPINFO_TOKEN": {
         "label": "ipinfo.io Token",
-        "description": "IP geolocation, ASN. Optional — the Geolocation card shows a 'configure IPINFO_TOKEN' hint when missing; everything else still runs. Free: 50,000/month.",
+        "description": "IP geolocation, ASN. Optional - the Geolocation card shows a 'configure IPINFO_TOKEN' hint when missing; everything else still runs. Free: 50,000/month.",
         "required": False,
         "url": "https://ipinfo.io",
         "placeholder": "ipinfo token",
@@ -148,7 +148,7 @@ API_KEY_DEFINITIONS = {
     },
     "ABUSECH_AUTH_KEY": {
         "label": "abuse.ch API Key",
-        "description": "abuse.ch API key — free at auth.abuse.ch, unlocks MalwareBazaar, "
+        "description": "abuse.ch API key - free at auth.abuse.ch, unlocks MalwareBazaar, "
                        "ThreatFox, and URLhaus. Required since mid-2024; anonymous calls "
                        "are heavily rate-limited. Backwards-compat alias: ABUSE_CH_AUTH_KEY "
                        "(underscore variant) is also read by intel/file_correlation.py.",
@@ -183,7 +183,7 @@ API_KEY_DEFINITIONS = {
     },
     "STALKPHISH_KEY": {
         "label": "Stalkphish API Key",
-        "description": "Phishing-kit tracker — identifies which kit schema (16shop, evilginx, zeus, etc.) is deployed on a URL/IP. Token-based auth.",
+        "description": "Phishing-kit tracker - identifies which kit schema (16shop, evilginx, zeus, etc.) is deployed on a URL/IP. Token-based auth.",
         "required": False,
         "url": "https://www.stalkphish.io/",
         "placeholder": "Stalkphish API token",
@@ -255,7 +255,7 @@ API_KEY_DEFINITIONS = {
     },
     "VALIDIN_KEY": {
         "label": "Validin API Key",
-        "description": "Historical passive DNS pivots — IP ↔ domain over time. Strong for infrastructure clustering.",
+        "description": "Historical passive DNS pivots - IP ↔ domain over time. Strong for infrastructure clustering.",
         "required": False,
         "url": "https://app.validin.com/",
         "placeholder": "Validin API key",
@@ -263,7 +263,7 @@ API_KEY_DEFINITIONS = {
     },
     "EMAILREP_KEY": {
         "label": "EmailRep API Key",
-        "description": "Email reputation — malicious-activity flags, credential leaks, disposable domains, social profile presence. Key is optional (raises daily quota).",
+        "description": "Email reputation - malicious-activity flags, credential leaks, disposable domains, social profile presence. Key is optional (raises daily quota).",
         "required": False,
         "url": "https://emailrep.io/key",
         "placeholder": "optional EmailRep key",
@@ -279,7 +279,7 @@ API_KEY_DEFINITIONS = {
     },
     "HUNTER_IO_KEY": {
         "label": "Hunter.io API Key",
-        "description": "Domain email enumeration — known addresses, roles, naming pattern. Free tier: 25 req/month.",
+        "description": "Domain email enumeration - known addresses, roles, naming pattern. Free tier: 25 req/month.",
         "required": False,
         "url": "https://hunter.io/api_keys",
         "placeholder": "Hunter.io API key",
@@ -383,7 +383,7 @@ API_KEY_DEFINITIONS = {
     },
     "CENSYS_API_KEY": {
         "label": "Censys API Key (Personal Access Token)",
-        "description": "Censys v3 Personal Access Token — single token sent "
+        "description": "Censys v3 Personal Access Token - single token sent "
                        "as a Bearer header. Replaces the legacy API ID + "
                        "Secret pair (the legacy pair is still accepted as a "
                        "fallback for older deployments). Free tier: 250 "
@@ -483,7 +483,7 @@ API_KEY_DEFINITIONS = {
     },
     "EMAIL_SMTP_HOST": {
         "label": "Email · SMTP Host",
-        "description": "Optional — if set, enables Send via SMTP from the composer.",
+        "description": "Optional - if set, enables Send via SMTP from the composer.",
         "required": False,
         "url": "",
         "placeholder": "smtp.office365.com",
@@ -566,7 +566,7 @@ API_KEY_DEFINITIONS = {
     },
     "THEHIVE_ORG": {
         "label": "TheHive · Organisation",
-        "description": "TheHive 5 organisation name (the multi-tenant scope). Optional — defaults to your API key's primary org.",
+        "description": "TheHive 5 organisation name (the multi-tenant scope). Optional - defaults to your API key's primary org.",
         "required": False,
         "url": "",
         "placeholder": "default-org",
@@ -591,7 +591,7 @@ API_KEY_DEFINITIONS = {
     },
     "RECON_TAXII_CISA_AIS_COLLECTION": {
         "label": "TAXII · CISA AIS Collection Override",
-        "description": "Operator-specific TAXII collection ID for the CISA Automated Indicator Sharing feed. Only used when RECON_TAXII_FEEDS includes cisa_ais. Set this after enrolling with CISA — they issue the collection ID per organisation.",
+        "description": "Operator-specific TAXII collection ID for the CISA Automated Indicator Sharing feed. Only used when RECON_TAXII_FEEDS includes cisa_ais. Set this after enrolling with CISA - they issue the collection ID per organisation.",
         "required": False,
         "url": "https://www.cisa.gov/topics/cyber-threats-and-advisories/information-sharing/automated-indicator-sharing-ais",
         "default": "",
@@ -610,7 +610,7 @@ API_KEY_DEFINITIONS = {
     },
     "RECON_ENABLE_MOZILLA_OBSERVATORY": {
         "label": "Enrichers · Mozilla Observatory (slow)",
-        "description": "1 to enable per-domain Mozilla Observatory web-security grade lookups. Off by default — the v2 API can take 3+ seconds per domain.",
+        "description": "1 to enable per-domain Mozilla Observatory web-security grade lookups. Off by default - the v2 API can take 3+ seconds per domain.",
         "required": False,
         "default": "0",
         "placeholder": "0",
@@ -618,7 +618,7 @@ API_KEY_DEFINITIONS = {
     },
     "RECON_ENABLE_CAPA": {
         "label": "Enrichers · FLARE capa file capabilities (slow)",
-        "description": "1 to invoke Mandiant FLARE capa as a subprocess on every PE/.NET/ELF upload. Off by default — capa spends 5-30 seconds per real binary; the rules-based capability mapper already produces a MITRE-technique list without it.",
+        "description": "1 to invoke Mandiant FLARE capa as a subprocess on every PE/.NET/ELF upload. Off by default - capa spends 5-30 seconds per real binary; the rules-based capability mapper already produces a MITRE-technique list without it.",
         "required": False,
         "default": "0",
         "placeholder": "0",
@@ -743,7 +743,7 @@ class ConfigManager:
                     self._config = json.load(f)
                 self._mtime = CONFIG_FILE.stat().st_mtime
             except Exception:
-                # Preserve whatever was already loaded — wiping to {}
+                # Preserve whatever was already loaded - wiping to {}
                 # used to drop every file-stored API key when a
                 # concurrent _save() happened mid-read (json.load() on
                 # partial content raises). Next get() retries the
@@ -760,7 +760,7 @@ class ConfigManager:
         """Re-read config.json when the file's mtime advances. Lets the
         operator edit data/config.json with the backend running and have
         new keys (MalwareBazaar Auth-Key, etc.) picked up immediately
-        without a restart. Cheap — one stat() call per get()."""
+        without a restart. Cheap - one stat() call per get()."""
         if not CONFIG_FILE.exists():
             return
         try:
@@ -771,7 +771,7 @@ class ConfigManager:
             self._load()
 
     def _save(self):
-        """Atomic save — write to a sibling temp file then os.replace so
+        """Atomic save - write to a sibling temp file then os.replace so
         a concurrent reader can never observe a partially-written JSON.
         Without this, _maybe_reload() racing _save() would catch a
         truncated read, JSON-decode would raise, and the in-memory
@@ -806,7 +806,7 @@ class ConfigManager:
             # Clean up the temp file if the replace never happened (disk
             # full mid-write, encoding error, fsync failure, …). The old
             # path left orphan .config.<rand>.tmp files in data/ on every
-            # failed save — a slow disk leak that took weeks to notice.
+            # failed save - a slow disk leak that took weeks to notice.
             if not replaced:
                 try:
                     _os.unlink(tmp_path)
@@ -889,7 +889,7 @@ class ConfigManager:
         return status
 
     def get_settings_response(self) -> dict:
-        """For the settings page — returns masked key values only.
+        """For the settings page - returns masked key values only.
 
         Security: never ships rawValue. Earlier code emitted the raw
         plaintext key in a rawValue field "for the settings page"; the

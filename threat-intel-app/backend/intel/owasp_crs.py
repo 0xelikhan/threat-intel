@@ -6,14 +6,14 @@ canonical open WAF rule set covering SQLi, XSS, RCE, LFI, RFI, PHP
 injection, Java injection, deserialisation, scanner detection, session
 fixation, etc.
 
-CRS rules use ModSec's `SecRule` syntax — a single line per rule, e.g.:
+CRS rules use ModSec's `SecRule` syntax - a single line per rule, e.g.:
 
   SecRule REQUEST_COOKIES "@rx (?i:..." \
     "id:932100,phase:2,block,msg:'Remote Command Execution: Unix Command Injection',\
      tag:'attack-rce',tag:'paranoia-level/1',tag:'capec/1000/152/248/88'"
 
 We parse the `id:`, `msg:`, `tag:` action fields with a small regex
-extractor — no actual ModSec engine needed. The inverted index keys
+extractor - no actual ModSec engine needed. The inverted index keys
 by CRS rule-id and attack-class tag so investigation can cite "OWASP
 CRS rule 932100 covers Unix command injection".
 """
@@ -93,7 +93,7 @@ def _build_index() -> None:
             text = path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        # ModSec SecRule lines often span continuation backslashes — we
+        # ModSec SecRule lines often span continuation backslashes - we
         # parse by splitting on the SecRule keyword and collecting until
         # the next blank line.
         chunks = re.split(r"(?<=^|\n)SecRule\s", text)[1:]
@@ -144,7 +144,7 @@ def match_by_attack_class(attack_class: str,
 
 
 def match_by_keywords(text: str, max_results: int = 8) -> List[Dict[str, Any]]:
-    """Best-effort keyword routing — if the analyst's input mentions
+    """Best-effort keyword routing - if the analyst's input mentions
     'sql injection' / 'xss' / 'rce' / 'lfi', return matching CRS rules.
     Cheap text-matching; not an exhaustive classifier."""
     _ensure_loaded()

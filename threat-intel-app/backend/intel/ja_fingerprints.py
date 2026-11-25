@@ -39,7 +39,7 @@ C2_FINGERPRINTS = [
         "alert_types": ["c2", "malware"],
         "ja3":  "8528d3c80e2e44a30c6ea2ed6e5fcc8d",
         "ja4":  "t13d2014h2_a09f3c656075_e1d6f57c5e16",
-        "notes": "Sliver implant mTLS handshake — distinct from browser traffic.",
+        "notes": "Sliver implant mTLS handshake - distinct from browser traffic.",
     },
     # ─── Metasploit Meterpreter HTTPS ─────────────────────────────────
     {
@@ -47,7 +47,7 @@ C2_FINGERPRINTS = [
         "alert_types": ["c2", "malware"],
         "ja3":  "c12f54a3f91dc7bafd92cb59fe009a35",
         "ja4":  "t13d301400_b85a5c95d12d_eeeeae84566f",
-        "notes": "Meterpreter reverse_https stager — common in red-team and commodity intrusions.",
+        "notes": "Meterpreter reverse_https stager - common in red-team and commodity intrusions.",
     },
     # ─── Empire / Starkiller ──────────────────────────────────────────
     {
@@ -69,7 +69,7 @@ C2_FINGERPRINTS = [
         "framework": "Mythic Apollo",
         "alert_types": ["c2", "malware"],
         "ja3":  "65983b1f8c93e6b8e98ed0b04a87bf41",
-        "notes": "Mythic framework's .NET agent — used by FIN12, others.",
+        "notes": "Mythic framework's .NET agent - used by FIN12, others.",
     },
     # ─── Trickbot / IcedID / Pikabot loaders ──────────────────────────
     {
@@ -83,7 +83,7 @@ C2_FINGERPRINTS = [
         "framework": "Tor client",
         "alert_types": ["c2", "exfiltration"],
         "ja3":  "e7d705a3286e19ea42f587b344ee6865",
-        "notes": "Tor 0.4.x — useful to flag policy-violating traffic from corporate endpoints.",
+        "notes": "Tor 0.4.x - useful to flag policy-violating traffic from corporate endpoints.",
     },
     # ─── PupyRAT ──────────────────────────────────────────────────────
     {
@@ -126,7 +126,7 @@ def as_sigma_yaml_snippet(fingerprints: list[dict]) -> str:
     ja3_list = [f"        - '{e['ja3']}'" for e in fingerprints if e.get("ja3")]
     ja4_list = [f"        - '{e['ja4']}'" for e in fingerprints if e.get("ja4")]
     lines = [
-        "# Optional network detection — append to your Sigma rule if your TLS sensor logs JA3/JA4.",
+        "# Optional network detection - append to your Sigma rule if your TLS sensor logs JA3/JA4.",
         "detection:",
         "    selection_ja3:",
         "        ja3:",
@@ -145,7 +145,7 @@ def as_kql_snippet(fingerprints: list[dict]) -> str:
     ja3s = [e["ja3"] for e in fingerprints if e.get("ja3")]
     ja4s = [e["ja4"] for e in fingerprints if e.get("ja4")]
     lines = [
-        "// Optional network detection — requires Zeek / Suricata / EDR TLS metadata.",
+        "// Optional network detection - requires Zeek / Suricata / EDR TLS metadata.",
         "let MaliciousJA3 = dynamic([" + ", ".join(f'"{j}"' for j in ja3s) + "]);",
     ]
     if ja4s:

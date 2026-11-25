@@ -1,15 +1,15 @@
 """
-Unified threat-intel feed aggregator — spec §8.
+Unified threat-intel feed aggregator - spec §8.
 
 Polls (1) public TAXII 2.1 servers and (2) a self-hosted FreshRSS instance via
 the GReader API and keeps everything in an IN-MEMORY cache keyed by IOC
 value.
 
 Cadence (started by main.py at startup):
-  TAXII feeds      — every 6 hours
-  FreshRSS articles — every 30 minutes
+  TAXII feeds      - every 6 hours
+  FreshRSS articles - every 30 minutes
 
-The cache is NOT persisted to disk — analyst-derived correlations are
+The cache is NOT persisted to disk - analyst-derived correlations are
 out of scope for the no-persistence policy. On restart the cache is
 empty and refills on the next poll cycle.
 """
@@ -35,12 +35,12 @@ logger = logging.getLogger(__name__)
 #   MITRE ATT&CK    cti-taxii.mitre.org → connect timeout (MITRE migrated
 #                   to attack-taxii.mitre.org in 2024 and decommissioned
 #                   the legacy host)
-#   URLhaus         HTTP 401 — the v1 TAXII endpoint now requires an
+#   URLhaus         HTTP 401 - the v1 TAXII endpoint now requires an
 #                   abuse.ch Auth-Key HEADER, which the taxii2client
 #                   library has no clean injection point for
-#   ThreatFox       HTTP 200 returning text/html instead of TAXII JSON —
+#   ThreatFox       HTTP 200 returning text/html instead of TAXII JSON  - 
 #                   the v2 TAXII endpoint moved or was retired
-#   Feodo Tracker   HTTP 404 — endpoint moved or was retired
+#   Feodo Tracker   HTTP 404 - endpoint moved or was retired
 #
 # Leaving the URLs in this list ran the poll loop every 6 hours, four
 # warn-logs per cycle, and a permanently empty /api/feeds cache. Empty
@@ -68,7 +68,7 @@ except Exception:
 
 
 # ─── In-memory cache (never persisted) ────────────────────────────────
-# IOC dict has to be bounded — URLhaus alone publishes ~30k indicators,
+# IOC dict has to be bounded - URLhaus alone publishes ~30k indicators,
 # ThreatFox similar, and we re-poll every 6 hours. Without a cap the
 # dict (plus _by_source / _by_type indexes that mirror its keys) grows
 # until the backend OOMs. 50k is the rough cap each one of the live
@@ -92,7 +92,7 @@ def _ioc_put(value: str, entry: Dict) -> None:
     iocs[value] = entry
     while len(iocs) > _FEED_CACHE_CAP:
         old_key, old_entry = iocs.popitem(last=False)
-        # Keep the indexes consistent — leaving stale set entries would
+        # Keep the indexes consistent - leaving stale set entries would
         # have list_iocs(source=...) return ghost values.
         src = (old_entry or {}).get("source") or "unknown"
         typ = (old_entry or {}).get("type")   or "unknown"
@@ -115,13 +115,13 @@ def _index_put(entry: Dict) -> None:
 
 
 def _load_cache():
-    # Kept as a no-op for the existing call sites — there is no disk
+    # Kept as a no-op for the existing call sites - there is no disk
     # cache to lazy-load any more; everything lives in _cache_state.
     return
 
 
 def _save_cache():
-    # Persistence is intentionally disabled — see module docstring.
+    # Persistence is intentionally disabled - see module docstring.
     # Trim articles to the last 100 here since the writer used to do it
     # and the rest of the code assumes the bound.
     _cache_state["articles"] = _cache_state["articles"][-100:]
@@ -129,7 +129,7 @@ def _save_cache():
 
 # ─── Public lookup APIs ────────────────────────────────────────────────────────
 def check_ioc(value: str) -> Optional[Dict]:
-    """Fast O(1) lookup — returns the cached entry if this IOC was seen in any feed."""
+    """Fast O(1) lookup - returns the cached entry if this IOC was seen in any feed."""
     _load_cache()
     return _cache_state["iocs"].get(value)
 
@@ -157,7 +157,7 @@ def list_iocs(source: Optional[str] = None, type_: Optional[str] = None,
               since_hours: Optional[int] = None, limit: int = 500) -> List[Dict]:
     _load_cache()
     iocs = _cache_state["iocs"]
-    # Skip the full scan when a source / type filter is active — the
+    # Skip the full scan when a source / type filter is active - the
     # source/type index narrows the candidate set to just the matching
     # IOC values, which we then dereference back into entries.
     if source and type_:
@@ -391,7 +391,7 @@ async def run_polling_loop(get_config):
 
     Wrapped in an outer try/except so any unexpected failure in get_config or
     timestamp arithmetic does NOT terminate the daemon. The track_task
-    machinery removes the task from _BG_TASKS on completion — and an
+    machinery removes the task from _BG_TASKS on completion - and an
     untrapped exception that kills this loop would silently stop TAXII /
     FreshRSS ingestion for the rest of the container's lifetime with no
     visible signal. Log and sleep through it instead.
@@ -428,7 +428,7 @@ async def run_polling_loop(get_config):
                     except Exception as e:
                         logger.warning("FreshRSS poll error: %s", e)
         except asyncio.CancelledError:
-            # Lifespan shutdown — propagate so the task actually exits.
+            # Lifespan shutdown - propagate so the task actually exits.
             raise
         except Exception as e:
             logger.warning("feed scheduler tick failed; will retry next cycle: %s", e)

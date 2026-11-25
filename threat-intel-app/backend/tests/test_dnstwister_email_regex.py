@@ -1,9 +1,9 @@
 """Regression tests for round-18 fixes:
 
-  1. Email extraction — iocextract was gluing preceding tokens onto the
+  1. Email extraction - iocextract was gluing preceding tokens onto the
      local-part ('from ceo@x.com' -> 'fromceo@x.com'). Added a
      word-boundary check against the source text before accepting.
-  2. DNSTwister — new intel/dnstwister.py using the free /api/fuzz/
+  2. DNSTwister - new intel/dnstwister.py using the free /api/fuzz/
      endpoint + local DNS resolution to identify registered typos.
 """
 
@@ -37,7 +37,7 @@ def test_extract_iocs_rejects_iocextract_prefix_glue():
 
 
 def test_extract_iocs_keeps_defanged_and_at_variants():
-    """iocextract earns its keep by catching defanged forms — the
+    """iocextract earns its keep by catching defanged forms - the
     word-boundary filter must not accidentally drop those. `@` after a
     space, `[at]`, `(at)` are the common defang variants."""
     text = ("Contact user1[at]example.com or user2 (at) example.org "

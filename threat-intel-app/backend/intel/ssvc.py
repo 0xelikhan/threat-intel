@@ -1,14 +1,14 @@
 """
-SSVC — Stakeholder-Specific Vulnerability Categorization.
+SSVC - Stakeholder-Specific Vulnerability Categorization.
 
 Source: https://github.com/CERTCC/SSVC (Apache-2.0). CISA + CERT/CC
 joint publication that turns CVSS-style severity into one of four
 operational categories:
 
-  - Act       — apply mitigations immediately; consider emergency response
-  - Attend    — quickly schedule remediation; out-of-cycle ok
-  - Track*    — track during normal cycles; treat as Attend if state changes
-  - Track     — track during normal cycles
+  - Act       - apply mitigations immediately; consider emergency response
+  - Attend    - quickly schedule remediation; out-of-cycle ok
+  - Track*    - track during normal cycles; treat as Attend if state changes
+  - Track     - track during normal cycles
 
 The Coordinator decision tree consumes four discrete signals:
 
@@ -31,7 +31,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 
-# Decision-tree mapping — the canonical SSVC Coordinator outcomes per
+# Decision-tree mapping - the canonical SSVC Coordinator outcomes per
 # (exploitation, automatable, technical_impact, mission_impact). Mission
 # impact 'mev' tier is not derived automatically.
 _TREE: Dict[tuple, str] = {
@@ -78,7 +78,7 @@ def derive_signals(cve_data: Dict[str, Any],
                    mission_impact: str = "crippled") -> Dict[str, str]:
     """Map RECON's existing CVE enrichment into SSVC's four signals.
     Defaults: mission_impact='crippled' (the safer default for a generic
-    SOC — operators can override per-asset)."""
+    SOC - operators can override per-asset)."""
     # Exploitation
     kev = cve_data.get("cisa_kev") or {}
     pocs = (cve_data.get("public_pocs") or {}).get("poc_count") or 0

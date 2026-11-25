@@ -14,7 +14,7 @@ This module exposes a thin wrapper:
 
 When stix-shifter isn't installed, we fall back to a built-in
 hand-written translator covering the most common STIX 2.1 comparison
-operators for Splunk SPL + KQL — enough to give the analyst a starting
+operators for Splunk SPL + KQL - enough to give the analyst a starting
 query without forcing the full ~150MB stix-shifter dependency.
 
 The function consumed by /api/export/stix-shifter accepts either a
@@ -174,7 +174,7 @@ def _to_elastic(matches: List[Dict[str, str]]) -> str:
 
 
 def _to_crowdstrike(matches: List[Dict[str, str]]) -> str:
-    """Falcon FQL — a SQL-like dialect."""
+    """Falcon FQL - a SQL-like dialect."""
     if not matches:
         return ""
     terms: List[str] = []
@@ -200,7 +200,7 @@ _DIALECT_HANDLERS = {
 
 def _extract_matches(pattern: str) -> List[Dict[str, str]]:
     """Parse a single STIX pattern into a list of (type, path, op, value)
-    matches. Discards the logical structure (AND/OR) — the dialect
+    matches. Discards the logical structure (AND/OR) - the dialect
     handlers all default to OR-joining."""
     out: List[Dict[str, str]] = []
     for m in _OBJECT_PATH_RE.finditer(pattern or ""):

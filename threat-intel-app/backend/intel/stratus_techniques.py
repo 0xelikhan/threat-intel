@@ -9,7 +9,7 @@ Each is defined in Go at
 with a `stratus.Registry().RegisterAttackTechnique(...)` call carrying
 `ID`, `FriendlyName`, `Description`, `Platform`, `MitreAttackTactics`,
 `MitreAttackTechniques`. This module extracts the metadata WITHOUT
-running Go — we regex over the source files.
+running Go - we regex over the source files.
 
 Companion to DataDog grimoire (which I integrated in round 3). Grimoire
 gives the labelled CloudTrail samples; Stratus gives the canonical

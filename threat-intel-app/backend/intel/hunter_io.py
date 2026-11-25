@@ -1,7 +1,7 @@
 """
 Hunter.io domain email enumeration.
 
-Source: https://hunter.io/ — enumerates known email addresses + roles
+Source: https://hunter.io/ - enumerates known email addresses + roles
 + patterns for a given domain. Useful for BEC / phishing-reconnaissance
 pivots. Free tier: 25 req/month, 50 email results per query.
 

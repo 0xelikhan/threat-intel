@@ -1,5 +1,5 @@
 r"""
-ForensicArtifacts/artifacts loader — the de-facto YAML registry of
+ForensicArtifacts/artifacts loader - the de-facto YAML registry of
 DFIR artefact definitions consumed by Plaso, Velociraptor, GRR.
 
 Source: https://github.com/ForensicArtifacts/artifacts (Apache-2.0).
@@ -19,7 +19,7 @@ Each artefact YAML has shape:
 We index two views:
 
   by_label  → {label, [artefact]}    (label is the closest analogue to a
-                                       MITRE tactic — "Persistence",
+                                       MITRE tactic - "Persistence",
                                        "Authentication", "ExternalMedia")
   by_keyword → {keyword, [artefact]} (keywords extracted from doc+name so
                                        investigation can pivot from
@@ -62,8 +62,8 @@ def _safe_yaml_all(text: str) -> List[Dict[str, Any]]:
 
 
 def _extract_targets(sources: Any) -> List[Dict[str, Any]]:
-    """Pull the artefact's collection targets — registry keys, file paths,
-    EventLog channels, WMI queries — into a small uniform list."""
+    """Pull the artefact's collection targets - registry keys, file paths,
+    EventLog channels, WMI queries - into a small uniform list."""
     out: List[Dict[str, Any]] = []
     if not isinstance(sources, list):
         return out
@@ -164,7 +164,7 @@ def _ensure_loaded() -> None:
 def evidence_for_techniques(technique_names: Iterable[str],
                             host_os: Optional[str] = None,
                             max_results: int = 12) -> List[Dict[str, Any]]:
-    """Given a set of technique LABELS (free-text — e.g.
+    """Given a set of technique LABELS (free-text - e.g.
     'Persistence', 'Authentication'), return matching artefact
     collection targets, filtered to `host_os` when provided."""
     _ensure_loaded()

@@ -1,4 +1,4 @@
-"""Default card visualizer — covers every analyser without a custom
+"""Default card visualizer - covers every analyser without a custom
 render override. Returns a flat {verdict, summary, details_url}
 component hint the frontend can render as a generic enrichment card.
 """
@@ -12,10 +12,10 @@ from plugins import AnalysisResult, Visualizer, register
 
 class DefaultCardVisualizer(Visualizer):
     name = "default_card"
-    description = ("Fallback render hint — any analyser's result can be "
+    description = ("Fallback render hint - any analyser's result can be "
                    "shown as a verdict-coloured card with summary + "
                    "details link.")
-    # Empty list means "all sources" — the frontend checks this one last.
+    # Empty list means "all sources" - the frontend checks this one last.
     supported_sources = []
 
     def to_component_hint(self, result: AnalysisResult) -> Dict[str, Any]:

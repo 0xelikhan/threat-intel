@@ -1,5 +1,5 @@
 """
-Threat Intelligence Platform — FastAPI Backend
+Threat Intelligence Platform - FastAPI Backend
 Single process: serves React frontend as static files + all API endpoints.
 """
 
@@ -48,7 +48,7 @@ async def _lifespan(app):
     # No-persistence policy: any analyst-derived state from a previous
     # container's lifetime must not survive a restart. Wipe known
     # legacy paths under backend/data/ on startup. config.json (operator
-    # API keys) is preserved — that's platform config, not analyst data.
+    # API keys) is preserved - that's platform config, not analyst data.
     try:
         from pathlib import Path
         import shutil
@@ -142,7 +142,7 @@ async def _lifespan(app):
             ("ViriBack Tracker",    "intel.viriback",       "_refresh_sync",   None),
             # Wiz cloud-threat slug index (actors + tools + techniques + incidents).
             ("Wiz cloud threats",   "intel.wiz_cloud_threats", "_refresh_sync", None),
-            # DFIQ — curated forensic questions catalog (Google).
+            # DFIQ - curated forensic questions catalog (Google).
             ("DFIQ questions",      "intel.dfiq",           "_refresh_sync",   None),
             # MISP hashes.csv feeds (CIRCL / DigitalSide / Botvrij).
             # Fetching three multi-MB CSVs costs ~20-30 s on cold start;
@@ -154,11 +154,11 @@ async def _lifespan(app):
             ("MISP feeds",          "intel.misp_feeds",     "_refresh_sync",   None),
             ("Warning lists",  "intel.warninglist_filter",  "load_warninglists", None),
             ("YARA rules",     "intel.yara_scanner",        "_ruleset",        None),
-            # Round-14 ML — sklearn LogisticRegression / GradientBoosting.
+            # Round-14 ML - sklearn LogisticRegression / GradientBoosting.
             # ~50 ms / ~100 ms train cost shifted off the first request.
             ("DGA classifier",  "intel.dga_classifier",          "_build_model", None),
             ("Phishing URL ML", "intel.phishing_url_classifier", "_build_model", None),
-            # Detection corpora — sigma + 10 others. Each is multi-second
+            # Detection corpora - sigma + 10 others. Each is multi-second
             # YAML walk on first call, ~12 s total when serialised. Run
             # in parallel here so the analyst never waits for them mid-
             # investigation. semantic_search.stats() depends on all 11
@@ -174,7 +174,7 @@ async def _lifespan(app):
             ("falco rules",     "intel.falco_rules",         "stats",           None),
             ("Stratus Red Team","intel.stratus_techniques",  "stats",           None),
             ("IDS rules",       "intel.ids_rules",           "stats",           None),
-            # Defensive-context corpora — investigation.py loads each
+            # Defensive-context corpora - investigation.py loads each
             # lazily inside the investigation node, so the first
             # analyst's investigation was paying their YAML/JSON walk
             # cost (50-500 ms each). Pre-warm in parallel here.
@@ -186,7 +186,7 @@ async def _lifespan(app):
             ("Forensic artifacts","intel.forensic_artifacts", "stats",          None),
             ("Emulation plans",   "intel.emulation_plans",    "stats",          None),
             # Modules that used to lazy-load on the first alert that hit them
-            # (2026-07 telemetry — measured ~15 s of in-line warming during
+            # (2026-07 telemetry - measured ~15 s of in-line warming during
             # the first heavy_multi analyze after boot). Adding them to
             # pre-warm means the first analyst hits a truly warm backend.
             ("OFAC SDN",          "intel.ofac_sdn",           "_build_index",   None),
@@ -198,7 +198,7 @@ async def _lifespan(app):
             ("KEV live catalog",  "intel.cve_enrichment",     "_kev_prewarm_sync", None),
         ]
         await asyncio.gather(*[_warm_one(*m) for m in light + heavy])
-        # Semantic search index — depends on all 11 corpora being warm.
+        # Semantic search index - depends on all 11 corpora being warm.
         await _warm_one("Semantic search", "intel.semantic_search", "stats", None)
         # Register static-dataset namespaces in the TTL cache so they
         # appear in /api/status. A long-TTL marker entry keeps the
@@ -213,7 +213,7 @@ async def _lifespan(app):
 
     track_task(asyncio.create_task(_warm_all()))
 
-    # LLM keepalive — a tiny periodic ping so the httpx connection pool
+    # LLM keepalive - a tiny periodic ping so the httpx connection pool
     # to Azure OpenAI stays warm across idle periods. First-request TLS
     # handshake + connection setup can cost 0.5-1.5s; this eliminates
     # that on cold-start analyzes. Runs every 60s with a 1-token
@@ -248,7 +248,7 @@ async def _lifespan(app):
     except Exception as e:
         _log.warning("feed aggregator NOT started: %s", e)
 
-    # Feodo Tracker refresh every 6h — keeps the in-memory C2 list hot
+    # Feodo Tracker refresh every 6h - keeps the in-memory C2 list hot
     # without ever blocking an enrichment fan-out on the upstream fetch.
     async def _feodo_periodic():
         from intel.feeds_loader import refresh_feodo_now
@@ -260,7 +260,7 @@ async def _lifespan(app):
                 _log.debug("feodo periodic refresh failed: %s", e)
     track_task(asyncio.create_task(_feodo_periodic()))
 
-    # Phishing.Database (mitchellkrogza) — hourly active phishing-domain
+    # Phishing.Database (mitchellkrogza) - hourly active phishing-domain
     # feed. Warmed on startup, then refreshed every hour. Domain triage
     # consults the in-memory set synchronously, so the feed needs to be
     # populated *before* the first analyze fires; if it isn't (network
@@ -277,7 +277,7 @@ async def _lifespan(app):
             await asyncio.sleep(3600)
     track_task(asyncio.create_task(_phishing_db_periodic()))
 
-    # Tranco top-1M ranked domains — once-a-day refresh. Domain triage
+    # Tranco top-1M ranked domains - once-a-day refresh. Domain triage
     # uses is_top_n() to avoid flagging Microsoft/Google/etc. when they
     # appear in an alert.
     async def _tranco_periodic():
@@ -292,7 +292,7 @@ async def _lifespan(app):
             await asyncio.sleep(24 * 3600)
     track_task(asyncio.create_task(_tranco_periodic()))
 
-    # Cloud provider IP ranges — AWS/Azure/GCP/Cloudflare/Fastly/GitHub.
+    # Cloud provider IP ranges - AWS/Azure/GCP/Cloudflare/Fastly/GitHub.
     # Daily refresh; in-memory CIDR list serves all IP enrichments.
     async def _cloud_ip_periodic():
         import aiohttp
@@ -306,7 +306,7 @@ async def _lifespan(app):
             await asyncio.sleep(24 * 3600)
     track_task(asyncio.create_task(_cloud_ip_periodic()))
 
-    # Vendor advisory RSS — Apple / Adobe / Oracle. Daily.
+    # Vendor advisory RSS - Apple / Adobe / Oracle. Daily.
     async def _vendor_advisories_periodic():
         import aiohttp
         from intel.vendor_advisories import ensure_loaded as _va_ensure
@@ -319,7 +319,7 @@ async def _lifespan(app):
             await asyncio.sleep(24 * 3600)
     track_task(asyncio.create_task(_vendor_advisories_periodic()))
 
-    # DataPlane.org honeypot feeds — 12h refresh.
+    # DataPlane.org honeypot feeds - 12h refresh.
     async def _dataplane_periodic():
         import aiohttp
         from intel.dataplane import ensure_loaded as _dp_ensure
@@ -332,7 +332,7 @@ async def _lifespan(app):
             await asyncio.sleep(12 * 3600)
     track_task(asyncio.create_task(_dataplane_periodic()))
 
-    # Spamhaus DROP/EDROP — daily refresh.
+    # Spamhaus DROP/EDROP - daily refresh.
     async def _spamhaus_periodic():
         import aiohttp
         from intel.spamhaus_drop import ensure_loaded as _sh_ensure
@@ -356,7 +356,7 @@ async def _lifespan(app):
     except Exception as e:
         _log.warning("self-diagnosis NOT started: %s", e)
 
-    # Ingestor plugins — opt-in background pollers that stream external
+    # Ingestor plugins - opt-in background pollers that stream external
     # feeds (TAXII, etc.) into the analysis queue. Disabled by default
     # because the TAXII feeds are configured per-env + a chatty feed
     # can exhaust background workers. Opt in with RECON_INGEST_ENABLED=1.
@@ -398,7 +398,7 @@ async def _lifespan(app):
     # Cancel every long-lived background task we spawned at startup
     # (warm-up, feed polling, Feodo refresh, health probe, diagnostics).
     # Without explicit cancellation uvicorn waits for them on shutdown
-    # — the periodic loops have `while True: await asyncio.sleep(6h)`
+    # - the periodic loops have `while True: await asyncio.sleep(6h)`
     # so the await never returns and uvicorn's grace period eventually
     # SIGKILLs the worker. Doing it ourselves gives a clean exit.
     try:
@@ -484,7 +484,7 @@ def _clean_exc(e: BaseException, *, prefix: str = "") -> str:
     if (not msg
             or msg.startswith("0, message=")
             or "message='', url=URL(" in msg):
-        # SDK noise — surface the class name in a human shape.
+        # SDK noise - surface the class name in a human shape.
         cls = type(e).__name__
         human = (cls.replace("Error", " error")
                     .replace("Exception", " exception")
@@ -513,7 +513,7 @@ app.add_middleware(CORSMiddleware, allow_origins=_cors_origins,
 # would actually grow the response.
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
-# Per-request UUID — outermost so every log line in every handler
+# Per-request UUID - outermost so every log line in every handler
 # carries the same rid. Echoed back as X-Request-ID for client tooling.
 app.add_middleware(RequestIDMiddleware)
 
@@ -541,7 +541,7 @@ async def _empty_body():
     return
 
 
-# Global error envelope — additive. The existing `detail` key (which the
+# Global error envelope - additive. The existing `detail` key (which the
 # React frontend reads via `err.detail || err.error`) is preserved; new
 # fields (`error_code`, `details`, `request_id`, `ts`) are stacked on.
 @app.exception_handler(StarletteHTTPException)
@@ -570,7 +570,7 @@ async def _validation_exc_handler(_request, exc: RequestValidationError):
 # this, an uncaught exception (e.g. POSTing to a JSON endpoint with no
 # Content-Type header, which trips FastAPI's body parser BEFORE it
 # becomes a RequestValidationError) falls through to Starlette's
-# default `Internal Server Error` plain-text 500 — which breaks the
+# default `Internal Server Error` plain-text 500 - which breaks the
 # `err.detail || err.error` shape every other API error response uses.
 @app.exception_handler(Exception)
 async def _catchall_exc_handler(request, exc: Exception):
@@ -594,10 +594,10 @@ async def _catchall_exc_handler(request, exc: Exception):
     return _JSONResponse(body, status_code=500,
                         headers={"X-Request-ID": rid})
 
-# Auth gate — everything under /api/* requires a session EXCEPT:
-#   * /api/health        — needed by the Docker HEALTHCHECK and the deploy probe
-#   * /api/auth/*        — login / logout / me; you can't log in if login is gated
-#   * /api/docs, /api/openapi.json — FastAPI's own doc routes
+# Auth gate - everything under /api/* requires a session EXCEPT:
+#   * /api/health        - needed by the Docker HEALTHCHECK and the deploy probe
+#   * /api/auth/*        - login / logout / me; you can't log in if login is gated
+#   * /api/docs, /api/openapi.json - FastAPI's own doc routes
 # Static frontend assets (everything not under /api) are served unauthenticated
 # so the LoginPage can render. The LoginPage POSTs to /api/auth/login and the
 # rest of the app waits behind that wall.
@@ -619,7 +619,7 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
         if not path.startswith("/api/") or path.startswith(_PUBLIC_PREFIXES):
             return await call_next(request)
         # CORS preflight OPTIONS requests carry no credentials by design
-        # — browsers send them to discover whether the cross-origin POST
+        # - browsers send them to discover whether the cross-origin POST
         # is permitted. Gating them on auth means CORSMiddleware never
         # gets to ship the Access-Control-Allow-* headers and the
         # browser refuses the actual request without ever trying. Let
@@ -629,7 +629,7 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         if current_user(request.session):
             return await call_next(request)
-        # Middleware can't raise HTTPException through the global handler —
+        # Middleware can't raise HTTPException through the global handler  - 
         # the exception fires before the handler chain. Build the envelope
         # inline so 401s carry the same shape (error_code/request_id/ts)
         # as every other API error response.
@@ -653,12 +653,12 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
                             headers={"X-Request-ID": rid})
 
 
-# Order matters — last add_middleware is OUTERMOST (runs first per request).
+# Order matters - last add_middleware is OUTERMOST (runs first per request).
 # Goal: SessionMiddleware sits OUTSIDE AuthGate so session is populated by
 # the time the gate inspects it.
 app.add_middleware(AuthGateMiddleware)
 
-# Spec §9 platform hardening — security headers + body size cap + audit log
+# Spec §9 platform hardening - security headers + body size cap + audit log
 from intel.security import SecurityHeadersMiddleware, AuditMiddleware
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(AuditMiddleware)
@@ -683,7 +683,7 @@ if (_SESSION_SECRET == "dev-only-not-for-production"
 # Cookie Secure flag gated on RECON_HTTPS so local plain-HTTP dev can
 # actually receive the session cookie. https_only=True ships the Secure
 # attribute, which strict HTTP clients (PowerShell Invoke-RestMethod /
-# .NET HttpClient) reject over plain HTTP — so any non-browser smoke
+# .NET HttpClient) reject over plain HTTP - so any non-browser smoke
 # test or CLI helper hitting localhost:8000 couldn't establish a session.
 # Production behind Azure Container Apps (TLS-terminated) sets RECON_HTTPS=1.
 _HTTPS_ONLY = (os.environ.get("RECON_HTTPS") or "").lower() in {"1", "true", "yes"}
@@ -702,7 +702,7 @@ app.add_middleware(
 # context manager).
 
 # BoundedDict lives in bg_utils.py so tests can hit it without paying
-# the full FastAPI import cost — see test_bounded_dict.py.
+# the full FastAPI import cost - see test_bounded_dict.py.
 from bg_utils import BoundedDict as _BoundedDict
 
 _results: dict = _BoundedDict(cap=500)
@@ -715,7 +715,7 @@ FRONTEND_BUILD = Path(__file__).parent.parent / "frontend" / "build"
 
 # ─── SCHEMAS ──────────────────────────────────────────────────────────────────────
 class AnalyzeRequest(BaseModel):
-    # 1 MB pasteable log per request — keeps the LLM prompt bounded
+    # 1 MB pasteable log per request - keeps the LLM prompt bounded
     # while still accepting full event-grid / Defender exports. The
     # 50 MB outer cap is for the file-scan endpoints; pasted text is
     # tighter.
@@ -727,7 +727,7 @@ class AnalyzeRequest(BaseModel):
     # at the top of the user message and instructs the AI to treat the
     # analyst's findings as authoritative when they conflict with its own
     # inference. Used by the post-analysis feedback re-run flow.
-    # Capped at 4 KB — the investigation prompt truncates to 2000 chars
+    # Capped at 4 KB - the investigation prompt truncates to 2000 chars
     # internally; the schema cap stops an analyst from re-paste-attacking
     # the body cap with megabyte-long "feedback" that the prompt would
     # have thrown away anyway.
@@ -790,7 +790,7 @@ class StixShifterRequest(BaseModel):
 class HuntPlanRequest(BaseModel):
     """Body for /api/hunt/plan. Re-uses the verdict + IOCs + MITRE coverage
     produced by /api/analyze to derive 3-5 hypotheses, an ABLE table, and a
-    structured hunt plan. `hypothesis` is optional — when blank the first
+    structured hunt plan. `hypothesis` is optional - when blank the first
     auto-generated hypothesis is used to drive ABLE + plan."""
     iocs:       Optional[dict] = None
     analysis:   Optional[dict] = None
@@ -799,7 +799,7 @@ class HuntPlanRequest(BaseModel):
 
 # ─── Self-contained route groups extracted to backend/routers/ ───────────
 # Mounted here so the URL paths + middleware behaviour are unchanged.
-# Proof-of-concept split — the rest of main.py is too cross-coupled to
+# Proof-of-concept split - the rest of main.py is too cross-coupled to
 # move without a deeper refactor, but new routes go in routers/.
 from routers import calibration as _calibration_router
 app.include_router(_calibration_router.router)
@@ -810,7 +810,7 @@ app.include_router(_calibration_router.router)
 # timestamp / source_count) into this bounded deque. The /api/recent-iocs endpoint
 # returns a snapshot; the frontend polls every ~3s to drive the ticker.
 #
-# Deliberately in-memory — no persistence, so analysts don't become responsible
+# Deliberately in-memory - no persistence, so analysts don't become responsible
 # for IOC history logs. On restart the ticker starts empty and refills within
 # a minute of real traffic.
 from collections import deque as _deque
@@ -835,7 +835,7 @@ def _record_recent_ioc(ioc_type: str, value: str, verdict: str,
 
 
 # Make the recorder reachable from agents.enrichment without a circular
-# import — it stashes itself as a module attribute everything can read.
+# import - it stashes itself as a module attribute everything can read.
 try:
     import agents.enrichment as _enr_mod
     _enr_mod.record_recent_ioc = _record_recent_ioc
@@ -1041,14 +1041,14 @@ async def test_key():
 async def health(request: Request):
     """Public liveness + (when authenticated) full status snapshot.
 
-    Unauthenticated callers — the Docker HEALTHCHECK, the Azure
-    Container Apps deploy probe — get a minimal {status, version,
+    Unauthenticated callers - the Docker HEALTHCHECK, the Azure
+    Container Apps deploy probe - get a minimal {status, version,
     timestamp} envelope. That's all a probe needs.
 
     Authenticated callers (the frontend dashboard reading via cookie)
     get the full breakdown: which API keys are wired up, the cache +
     circuit-breaker + diagnosis rollups. The full payload used to leak
-    to unauth callers — an information disclosure surface (which TI
+    to unauth callers - an information disclosure surface (which TI
     sources are wired) for free reconnaissance.
     """
     is_authed = bool(current_user(request.session))
@@ -1075,9 +1075,9 @@ async def health(request: Request):
         breaker_block = _get_breaker().stats()
     except Exception as e:
         breaker_block = {"error": _clean_exc(e, prefix="breaker stats")}
-    # Live diagnosis snapshot — updated by the 15-min background loop
+    # Live diagnosis snapshot - updated by the 15-min background loop
     # so /api/health reflects current source / AI provider state, not
-    # the boot-time snapshot. Additive — old fields preserved.
+    # the boot-time snapshot. Additive - old fields preserved.
     try:
         from intel.diagnose import get_current_health
         diagnosis_block = get_current_health()
@@ -1098,7 +1098,7 @@ async def health(request: Request):
     }
 
 
-# ─── /api/diagnose — on-demand self-diagnosis report ────────────────────────
+# ─── /api/diagnose - on-demand self-diagnosis report ────────────────────────
 @app.get("/api/diagnose")
 async def diagnose():
     """Run every health check on demand and return the full report. Each
@@ -1122,21 +1122,21 @@ class LoginRequest(BaseModel):
 # Per-IP login throttle. Sliding 60-second window of failure timestamps;
 # after 5 failures the IP gets a 429 with Retry-After until the oldest
 # failure expires. Without this, the bcrypt-rounds=12 cost (~250ms per
-# verify) is the only thing slowing a brute-force attempt — and an
+# verify) is the only thing slowing a brute-force attempt - and an
 # attacker who concurrent-POSTs can still saturate worker capacity.
 _LOGIN_FAILURES: dict = _BoundedDict(cap=2000)
 _LOGIN_WINDOW_S    = 60
 _LOGIN_MAX_FAILURES = 5
 
 # Per-username throttle complements the per-IP one. Per-IP alone gets
-# defeated by an attacker rotating across IPs (cloud / Tor / botnet) —
+# defeated by an attacker rotating across IPs (cloud / Tor / botnet)  - 
 # each fresh IP starts with a clean 5-attempt budget against the same
 # username. The per-username window is wider (15 min) and higher (20
 # attempts) than the per-IP one: legitimate users almost never hit it,
 # but the cumulative-across-the-internet attempt count does. Eviction
 # at 200 distinct usernames means an attacker who rotates BOTH IPs AND
 # usernames can still degrade tracking, but at that point they're just
-# guessing usernames blind — which doesn't help them against the one
+# guessing usernames blind - which doesn't help them against the one
 # username that's actually configured.
 _LOGIN_USER_FAILURES: dict = _BoundedDict(cap=200)
 _LOGIN_USER_WINDOW_S     = 15 * 60
@@ -1147,7 +1147,7 @@ def _login_client_ip(request: Request) -> str:
     # Honour X-Forwarded-For only when the operator opts in via
     # RECON_TRUST_PROXY=1, matching the audit middleware's
     # _audit_client_ip behaviour. Without the gate, the throttle would
-    # trust an arbitrary inbound XFF — meaning on a dev box / any
+    # trust an arbitrary inbound XFF - meaning on a dev box / any
     # deployment NOT behind a TLS proxy that strips XFF, an attacker
     # could rotate the "IP" the throttle keys off by spoofing the
     # header. The per-username throttle (15 min / 20 attempts) covers
@@ -1176,8 +1176,8 @@ async def auth_login(req: LoginRequest, request: Request):
     _window = [t for t in _window if (_now - t) < _LOGIN_WINDOW_S]
     # Per-username throttle. Same shape but wider window so it captures
     # IP-rotating brute-force across hours, not just within 60 s. Keyed
-    # by the username the caller is TARGETING — not the configured
-    # one — so an attacker probing different usernames doesn't share a
+    # by the username the caller is TARGETING - not the configured
+    # one - so an attacker probing different usernames doesn't share a
     # bucket with the real user.
     _user_key = (req.username or "").strip().lower()[:64]
     _user_window = _LOGIN_USER_FAILURES.get(_user_key) or []
@@ -1194,7 +1194,7 @@ async def auth_login(req: LoginRequest, request: Request):
         except Exception:
             pass
         raise HTTPException(
-            429, "too many failed login attempts — wait and retry",
+            429, "too many failed login attempts - wait and retry",
             headers={"Retry-After": str(_retry_after)},
         )
     if len(_user_window) >= _LOGIN_USER_MAX_FAILURES:
@@ -1207,7 +1207,7 @@ async def auth_login(req: LoginRequest, request: Request):
         except Exception:
             pass
         raise HTTPException(
-            429, "too many failed login attempts for this user — wait and retry",
+            429, "too many failed login attempts for this user - wait and retry",
             headers={"Retry-After": str(_retry_after)},
         )
     if not verify_credentials(req.username, req.password):
@@ -1228,7 +1228,7 @@ async def auth_login(req: LoginRequest, request: Request):
     _LOGIN_FAILURES[_ip] = []
     _LOGIN_USER_FAILURES[_user_key] = []
     request.session["auth_user"] = req.username.strip()
-    # Log successful logins too — a security audit trail with only
+    # Log successful logins too - a security audit trail with only
     # failures is incomplete. An attacker who steals a credential and
     # successfully logs in is the most interesting event to have on
     # tape, not the failed brute-force attempts.
@@ -1270,7 +1270,7 @@ async def auth_me(request: Request):
 
 def _intel_status() -> dict:
     """Snapshot of how much offline intelligence is loaded. Each module's
-    stats() is called independently — a single broken stats() must not
+    stats() is called independently - a single broken stats() must not
     blank the whole status report. Failures log at debug level so a
     permanently-broken module surfaces in the build/dev logs."""
     out = {}
@@ -1298,9 +1298,9 @@ def _intel_status() -> dict:
     return out
 
 
-# ─── ANALYZE (streaming pipeline — pushes partial results between stages) ────────
+# ─── ANALYZE (streaming pipeline - pushes partial results between stages) ────────
 def _strip(state: dict, run_id: str, label: str = "") -> dict:
-    """Build the analyst-facing snapshot from current state — safe to send mid-pipeline."""
+    """Build the analyst-facing snapshot from current state - safe to send mid-pipeline."""
     out = {k: v for k, v in state.items() if k != "stix_bundle"}
     out["runId"] = run_id
     if label:
@@ -1322,7 +1322,7 @@ def _sse_event(kind: str, payload: dict, run_id: str, label: str = "") -> str:
 
 async def _drain_events(task: "asyncio.Task", q: "asyncio.Queue", run_id: str, label: str = ""):
     """Yield SSE frames for events a running agent `task` pushes onto `q` as
-    (kind, payload) tuples, until the task finishes — then flush whatever's left
+    (kind, payload) tuples, until the task finishes - then flush whatever's left
     queued. The agent runs concurrently with this drain, so its tool calls /
     partial enrichments reach the browser the moment they happen instead of all
     at once when the stage returns. The caller awaits the task afterwards to get
@@ -1334,7 +1334,7 @@ async def _drain_events(task: "asyncio.Task", q: "asyncio.Queue", run_id: str, l
             kind, payload = getter.result()
             yield _sse_event(kind, payload, run_id, label)
             continue
-        # Agent finished — stop waiting for more events and flush the backlog.
+        # Agent finished - stop waiting for more events and flush the backlog.
         getter.cancel()
         while not q.empty():
             kind, payload = q.get_nowait()
@@ -1345,7 +1345,7 @@ async def _drain_events(task: "asyncio.Task", q: "asyncio.Queue", run_id: str, l
 async def _stream(raw_input: str, input_type: str, label: str = "",
                    analyst_feedback: str = ""):
     """Walk the pipeline one agent at a time, emitting partial_result events after
-    each stage so the UI populates progressively — extracted IOCs land immediately,
+    each stage so the UI populates progressively - extracted IOCs land immediately,
     enrichment data lands when ready, AI assessment lands when investigation finishes,
     detection rules land when response finishes."""
     if not config.is_configured():
@@ -1364,7 +1364,7 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
     # Background tasks (enrichment, investigation) we asyncio.create_task and
     # await later in the generator. If the client disconnects mid-stream
     # (browser tab closed, network blip), Python cancels the generator but
-    # asyncio's event loop still holds strong refs to these tasks — they'd
+    # asyncio's event loop still holds strong refs to these tasks - they'd
     # run to completion in the background, burning LLM cost on a dead
     # client. Track them here and cancel in the finally block.
     _bg_tasks: list[asyncio.Task] = []
@@ -1372,8 +1372,8 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
     try:
         # Centralised initial-state builder lives in orchestrator.py so the
         # streaming and sync paths can't drift apart. Includes every key
-        # the SOCState TypedDict declares — including the ones populated
-        # by later stages — so downstream `state[key]` reads see a typed
+        # the SOCState TypedDict declares - including the ones populated
+        # by later stages - so downstream `state[key]` reads see a typed
         # default instead of falling back to `.get(key, default)`.
         from agents.orchestrator import make_initial_state
         state = make_initial_state(raw_input, input_type, analyst_feedback)
@@ -1387,7 +1387,7 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
         trace = state.get("agent_trace", [])
         if trace:
             yield f"data: {json.dumps({'event': 'agent_update', 'runId': run_id, 'trace': trace[-1]})}\n\n"
-        # Push extracted IOCs + cross_refs + email_analysis immediately —
+        # Push extracted IOCs + cross_refs + email_analysis immediately  - 
         # the sidebar IOC list and the EmailAnalysis card render instantly.
         yield f"data: {json.dumps({'event': 'partial_result', 'runId': run_id, 'result': _strip(state, run_id, label)})}\n\n"
 
@@ -1447,7 +1447,7 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
             yield f"data: {json.dumps({'event': 'partial_result', 'runId': run_id, 'result': _strip(state, run_id, label)})}\n\n"
 
             # Provisional verdict (P3): a deterministic, enrichment-based read the
-            # analyst sees NOW — ~2 min before the AI investigation finishes. Clearly
+            # analyst sees NOW - ~2 min before the AI investigation finishes. Clearly
             # flagged `provisional` so the UI labels it preliminary; the AI verdict
             # (early_rs below) overwrites it the moment investigation completes.
             _counts = (state.get("enrichment_summary", {}).get("verdict_counts") or {})
@@ -1499,7 +1499,7 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
                         continue
                     merged_rs[k] = v
                 merged_rs["timestamp"] = _ts()
-                # Keep the provisional flag off — once the AI has said
+                # Keep the provisional flag off - once the AI has said
                 # anything, we're no longer a pure enrichment guess.
                 merged_rs.pop("provisional", None)
                 await _q.put(("partial", {"response_summary": merged_rs}))
@@ -1516,7 +1516,7 @@ async def _stream(raw_input: str, input_type: str, label: str = "",
         if trace:
             yield f"data: {json.dumps({'event': 'agent_update', 'runId': run_id, 'trace': trace[-1]})}\n\n"
         # Surface an in-flight response_summary now so the AI Assessment card lands
-        # before the response stage runs — give the analyst the verdict ASAP.
+        # before the response stage runs - give the analyst the verdict ASAP.
         inv = state.get("investigation_result") or {}
         early_rs = {
             "threat_level":            inv.get("threat_level"),
@@ -1604,7 +1604,7 @@ async def analyze_sync(req: AnalyzeRequest):
     run_id = str(uuid.uuid4())
     # run_pipeline now drives the full triage → enrichment → investigation
     # → response graph, and run_response computes gti_scores onto state.
-    # No post-hoc mutation here — the agent contract owns its output keys.
+    # No post-hoc mutation here - the agent contract owns its output keys.
     state = await run_pipeline(req.logText, req.inputType,
                                 analyst_feedback=req.analystFeedback or "")
     _results[run_id] = state
@@ -1620,12 +1620,12 @@ class ClarifyRequest(BaseModel):
 @app.post("/api/analyze/clarify/{run_id}")
 async def analyze_clarify(run_id: str, req: ClarifyRequest):
     """Spec §5 Phase 2: re-run investigation with analyst answers to clarifying
-    questions. Re-uses the original triage/enrichment state — only the AI
+    questions. Re-uses the original triage/enrichment state - only the AI
     investigation step runs again, with analyst_answers appended to the prompt.
 
     Consumed by: documented in /api/docs as part of the public REST surface.
     The frontend wires the analyst-feedback re-run through /api/analyze itself
-    (with `analystFeedback` in the body) instead of through this endpoint —
+    (with `analystFeedback` in the body) instead of through this endpoint  - 
     they're equivalent paths to the same outcome, kept distinct so external
     tooling can re-run just the investigation step without re-paying the
     enrichment fan-out.
@@ -1634,7 +1634,7 @@ async def analyze_clarify(run_id: str, req: ClarifyRequest):
         raise HTTPException(404, f"unknown run_id {run_id}")
     if not req.answers:
         raise HTTPException(400, "answers required")
-    # Same 16KB cap as /api/scan/clarify — prevents an analyst from
+    # Same 16KB cap as /api/scan/clarify - prevents an analyst from
     # pasting the whole log into a clarifying answer and blowing out the
     # prompt budget on the re-run.
     _answers_size = sum(len(str(q)) + len(str(a)) for q, a in req.answers.items())
@@ -1695,7 +1695,7 @@ async def attribution_hashes(family: str, limit: int = 10):
         return cached["payload"]
 
     # abuse.ch added required authentication on the MalwareBazaar API in
-    # late 2023 — every endpoint now needs an Auth-Key header. The key is
+    # late 2023 - every endpoint now needs an Auth-Key header. The key is
     # free at https://auth.abuse.ch but it must be provisioned by the
     # operator. Look it up under multiple config aliases so existing
     # deployments don't have to rename their stored key.
@@ -1791,7 +1791,7 @@ async def gti_score_standalone(req: GTIScoreRequest):
     """Compute GTI-style threat scores from enrichment data without running
     the full pipeline.
 
-    Consumed by: external tooling — SIEM playbooks / scripts that have
+    Consumed by: external tooling - SIEM playbooks / scripts that have
     already gathered enrichment data and want a deterministic scoring
     layer on top. The frontend reads `gti_scores` directly off the
     /api/analyze result instead (run_response now writes them onto
@@ -2020,7 +2020,7 @@ async def detection(req: DetectionRequest):
         attack_tags = " ".join(f"attack.{t.split(' ')[0].lower()}" for t in techniques if t.startswith("T"))
         prompt = (
             f"Generate a complete, valid Sigma detection rule. Output ONLY the YAML "
-            f"document — no markdown fences, no commentary.\n\n"
+            f"document - no markdown fences, no commentary.\n\n"
             f"Required fields and their values:\n"
             f"  title: a descriptive 4-8 word name\n"
             f"  id: {str(_u.uuid4())}\n"
@@ -2077,7 +2077,7 @@ async def detection(req: DetectionRequest):
         return {"result": await _ai_gen(prompt)}
 
     if req.action == "query":
-        # Query DSL — pure pattern language: no tables, no schema joins,
+        # Query DSL - pure pattern language: no tables, no schema joins,
         # just (Attribute Operator Value) statements composed with AND /
         # OR / parens. The model needs the full grammar in the prompt
         # because it isn't standard SQL / KQL / Lucene.
@@ -2201,12 +2201,12 @@ async def detection(req: DetectionRequest):
         hashes = (req.iocs or {}).get("hashes", [])[:3]
         prompt = (
             f"Generate a YARA rule for detecting samples of the malware family '{family}'. "
-            f"Output ONLY the YARA rule — no markdown fences, no commentary.\n\n"
+            f"Output ONLY the YARA rule - no markdown fences, no commentary.\n\n"
             f"Requirements:\n"
             f"  rule meta: description, author = 'RECON Platform', date = '{datetime.now(timezone.utc).strftime('%Y-%m-%d')}', "
             f"    hash = first hash from the IOC list ({hashes[0] if hashes else 'unknown'}), "
             f"    mitre = first technique ID\n"
-            f"  strings: pattern strings drawn from behavioral indicators — mutex names, registry keys, "
+            f"  strings: pattern strings drawn from behavioral indicators - mutex names, registry keys, "
             f"    file paths, network strings, encoded command patterns from any sandbox report context. "
             f"    Mix ASCII and wide. Use $s1, $s2, $s3, … naming.\n"
             f"  condition: filesize appropriate to the malware type (typically < 5MB) AND at least 2 of the strings.\n\n"
@@ -2235,7 +2235,7 @@ async def detection(req: DetectionRequest):
             "elastic": search_existing_elastic(techniques),
         }
 
-    # Additional detection-rule formats — analysts wanted the Detection
+    # Additional detection-rule formats - analysts wanted the Detection
     # card to cover EVERY platform, not just Sigma + KQL + YARA. Each
     # action below produces one platform's rule as plain text.
     if req.action in ("splunk_spl", "elastic_eql", "suricata",
@@ -2354,7 +2354,7 @@ async def detection_search_stats():
     return stats()
 
 
-# ─── UNIFIED FEED INTEL (spec §8 — TAXII + FreshRSS) ────────────────────────────
+# ─── UNIFIED FEED INTEL (spec §8 - TAXII + FreshRSS) ────────────────────────────
 @app.get("/api/feeds")
 async def feeds_list(source: Optional[str] = None, type: Optional[str] = None,
                      since_hours: Optional[int] = None, limit: int = 500):
@@ -2368,14 +2368,14 @@ async def feeds_list(source: Optional[str] = None, type: Optional[str] = None,
 
 @app.get("/api/feeds/stats")
 async def feeds_stats():
-    """Cache stats — IOC counts per feed + last poll times."""
+    """Cache stats - IOC counts per feed + last poll times."""
     from intel.feed_aggregator import stats
     return stats()
 
 
 @app.post("/api/feeds/refresh")
 async def feeds_refresh(source: str = "all"):
-    """Manual refresh — useful for the frontend 'Refresh' button."""
+    """Manual refresh - useful for the frontend 'Refresh' button."""
     from intel.feed_aggregator import poll_taxii, poll_freshrss
     out = {}
     if source in ("all", "taxii"):
@@ -2499,7 +2499,7 @@ async def export_cacao(run_id: str):
 async def export_maltego(run_id: str):
     """Emit the investigation as a Maltego-compatible GraphML graph.
     Analyst teams that live in Maltego CE / XL can import this for link
-    analysis — every IOC becomes a node, every relationship (resolves
+    analysis - every IOC becomes a node, every relationship (resolves
     to / on_domain / attributed_to / seen_with) becomes an edge.
     Caps per-IOC-type at 50 nodes so the canvas stays readable; analysts
     can pull more via native Maltego transforms on the seed nodes."""
@@ -2541,7 +2541,7 @@ async def push_to_misp(req: MispPushRequest):
         req.analysis or 1,
     )
     # Audit-log every outbound push regardless of outcome. This is data
-    # leaving RECON's boundary — exactly what the audit middleware was
+    # leaving RECON's boundary - exactly what the audit middleware was
     # built for.
     from intel.security import audit_log
     audit_log(
@@ -2666,7 +2666,7 @@ async def chat_history(run_id: str):
 def _build_chat_system_msg(state: dict) -> str:
     rs = state.get("response_summary") or {}
     raw = (state.get("raw_input") or "")[:1800]
-    return f"""OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes (—), en-dashes (–), or curly quotes. Use hyphens (-), commas, or restructure the sentence. Analysts immediately spot AI text by the em-dash and discount it.
+    return f"""OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes ( - ), en-dashes (-), or curly quotes. Use hyphens (-), commas, or restructure the sentence. Analysts immediately spot AI text by the em-dash and discount it.
 
 You are RECON, an MDR analyst's assistant currently helping with a SPECIFIC
 investigation. You already produced an initial analysis below; the analyst is now
@@ -2676,12 +2676,12 @@ Your job:
   • Answer concisely and conversationally (short paragraphs, not walls of JSON)
   • If the analyst gives you new context that resolves an ambiguity, update your
     verdict explicitly: "Based on what you told me, this is most likely a false
-    positive because…" or "That changes my read — this is malicious because…"
+    positive because…" or "That changes my read - this is malicious because…"
   • If you need more info to give a confident answer, ASK A SPECIFIC FOLLOW-UP
     QUESTION rather than guess
-  • You have tools available (lookup_ip, lookup_domain, check_cve, etc.) — use them
+  • You have tools available (lookup_ip, lookup_domain, check_cve, etc.) - use them
     when the analyst asks about something you don't already know
-  • Bias toward the false-positive interpretation when it's plausible — most alerts
+  • Bias toward the false-positive interpretation when it's plausible - most alerts
     in MDR work are FPs (vulnerability scanners, approved RMM, patching tools,
     auto-updates, scheduled maintenance, etc.)
 
@@ -2710,13 +2710,13 @@ async def _chat_stream(run_id: str, user_msg: str):
     # _results is a BoundedDict capped at 500. The chat_send handler
     # checks `run_id in _results` before constructing this generator,
     # but the generator runs at first iteration of the StreamingResponse
-    # — by which time enough new analyses could have landed to evict
+    # - by which time enough new analyses could have landed to evict
     # this run. Use .get() and bail with an SSE error event instead of
     # KeyErroring out of the generator (which would surface as a 500
     # without the consistent SSE shape the frontend expects).
     state = _results.get(run_id)
     if state is None:
-        yield f"data: {json.dumps({'event': 'error', 'error': 'analysis result expired — re-run the analyze'})}\n\n"
+        yield f"data: {json.dumps({'event': 'error', 'error': 'analysis result expired - re-run the analyze'})}\n\n"
         yield "data: [DONE]\n\n"
         return
     sys_msg = _build_chat_system_msg(state)
@@ -2727,7 +2727,7 @@ async def _chat_stream(run_id: str, user_msg: str):
     history.append({"role": "user", "content": user_msg, "timestamp": now})
     _chats[run_id] = history
 
-    # Send the full conversation by default — analysts run long
+    # Send the full conversation by default - analysts run long
     # investigations and the chat should never "forget" earlier turns.
     # The only thing we cap is the TOTAL CONTENT SIZE sent to the
     # model: once the cumulative body crosses a soft budget, we drop
@@ -2743,7 +2743,7 @@ async def _chat_stream(run_id: str, user_msg: str):
                                       # outputs + a 1200-token reply.
     _PROTECTED_RECENT_TURNS = 10
     _PER_MESSAGE_BYTE_CAP = 6_000     # a pasted log inside chat can be
-                                      # 50KB on its own — clamp so one
+                                      # 50KB on its own - clamp so one
                                       # message doesn't eat the budget.
 
     candidates = [m for m in history if m.get("role") in ("user", "assistant")]
@@ -2767,7 +2767,7 @@ async def _chat_stream(run_id: str, user_msg: str):
             keep_reversed.append((role, body))
             total += cost
         else:
-            # Stop walking back — older turns are dropped.
+            # Stop walking back - older turns are dropped.
             break
     kept = list(reversed(keep_reversed))
 
@@ -2804,7 +2804,7 @@ async def _chat_stream(run_id: str, user_msg: str):
     _assistant_persisted = False
 
     try:
-        # Tool-calling loop — non-streamed for tool decisions, streamed for the final answer
+        # Tool-calling loop - non-streamed for tool decisions, streamed for the final answer
         iteration = 0
         for iteration in range(_MAX_ITERATIONS):
             # Drop tools after the iteration cap so the next call MUST
@@ -2831,7 +2831,7 @@ async def _chat_stream(run_id: str, user_msg: str):
                 try:
                     history.append({
                         "role": "assistant",
-                        "content": "[chat error — the AI failed to respond. Try again.]",
+                        "content": "[chat error - the AI failed to respond. Try again.]",
                         "tool_calls": tool_calls_made,
                         "error": resp.error,
                         "timestamp": _ts(),
@@ -2865,7 +2865,7 @@ async def _chat_stream(run_id: str, user_msg: str):
                     })
                 continue
 
-            # Final answer turn — capture what the model produced.
+            # Final answer turn - capture what the model produced.
             final_content = (resp.message or "").strip()
             break
 
@@ -2878,12 +2878,12 @@ async def _chat_stream(run_id: str, user_msg: str):
                 tool_names = ", ".join(sorted({t['tool'] for t in tool_calls_made}))
                 final_content = (
                     f"I ran {tool_names} but didn't produce a written reply. "
-                    f"The tool output is above — try asking me to summarise it, "
+                    f"The tool output is above - try asking me to summarise it, "
                     f"or rephrase the question."
                 )
             else:
                 final_content = (
-                    "I didn't manage to compose a reply this turn — likely a "
+                    "I didn't manage to compose a reply this turn - likely a "
                     "model timeout or context-budget hiccup. Try sending the "
                     "message again."
                 )
@@ -2891,7 +2891,7 @@ async def _chat_stream(run_id: str, user_msg: str):
         # Persist the assistant turn BEFORE streaming. The 12ms-per-word
         # SSE drip below can be interrupted by client disconnect
         # (GeneratorExit propagates through the next yield), and we don't
-        # want an orphaned user turn — same failure mode the except
+        # want an orphaned user turn - same failure mode the except
         # handler below fixes for the tool-loop error path, applied here
         # to the cancellation path.
         history.append({"role": "assistant", "content": final_content,
@@ -2918,7 +2918,7 @@ async def _chat_stream(run_id: str, user_msg: str):
         try:
             history.append({
                 "role": "assistant",
-                "content": "[chat error — the AI failed to respond. Try again.]",
+                "content": "[chat error - the AI failed to respond. Try again.]",
                 "tool_calls": tool_calls_made,
                 "error": _err,
                 "timestamp": _ts(),
@@ -2936,14 +2936,14 @@ async def _chat_stream(run_id: str, user_msg: str):
         # or the token drip). In that case the user turn at line 1845 sits
         # orphaned and a later refresh shows their question hanging with
         # no AI reply. Append a dropped-connection marker so the
-        # conversation history stays internally consistent — the model
+        # conversation history stays internally consistent - the model
         # never sees two consecutive user turns and the analyst sees the
         # "connection dropped" framing rather than a void.
         if not _assistant_persisted:
             try:
                 history.append({
                     "role":      "assistant",
-                    "content":   "[chat cancelled — the connection dropped before a reply could be generated.]",
+                    "content":   "[chat cancelled - the connection dropped before a reply could be generated.]",
                     "tool_calls": tool_calls_made,
                     "cancelled": True,
                     "timestamp": _ts(),
@@ -2960,7 +2960,7 @@ async def chat_send(run_id: str, req: dict):
 
     The AI gets: the original alert, the full analysis, the conversation history,
     and the same tool-calling toolbox the investigation agent had. Replies are
-    conversational — focused on helping the analyst decide FP vs malicious.
+    conversational - focused on helping the analyst decide FP vs malicious.
     Tokens stream as they generate so the analyst reads while the AI writes.
     """
     if run_id not in _results:
@@ -3066,7 +3066,7 @@ async def scan_file(file: UploadFile = File(...)):
     spelling kept stable for curl scripts / SIEM playbooks documented
     against /api/docs. The frontend's File Scanner uses /api/scan/file
     (slash) instead, which carries the richer source-code-mode / capability
-    / AI-analyst output. Keep both — removing the hyphen form would break
+    / AI-analyst output. Keep both - removing the hyphen form would break
     every external script that hit this surface before the slash form
     existed.
     """
@@ -3141,7 +3141,7 @@ async def scan_file_v2(file: UploadFile = File(...)):
     from intel.file_analyzer import analyze_file
     # Static analysis is CPU-bound (hashing, entropy, regex string extraction,
     # YARA). Run it in a worker thread so a large upload doesn't block the event
-    # loop — keeps concurrent requests and SSE streams responsive during a scan.
+    # loop - keeps concurrent requests and SSE streams responsive during a scan.
     analysis = await asyncio.to_thread(analyze_file, data, file.filename or "uploaded")
 
     # Stash the bytes on the result temporarily so yara_ai_gen can verify the
@@ -3155,7 +3155,7 @@ async def scan_file_v2(file: UploadFile = File(...)):
     except Exception:
         pass
 
-    # TI correlation (async) — file_correlation handles VT/MB via the
+    # TI correlation (async) - file_correlation handles VT/MB via the
     # hash; enrich_hash adds OTX file, ThreatFox, URLhaus payload,
     # CIRCL hashlookup, Team Cymru MHR, Maltiverse, OpenCTI, VT graph
     # relationships, and MalwareBazaar similar samples. Run both
@@ -3217,13 +3217,13 @@ async def scan_file_v2(file: UploadFile = File(...)):
         # progressively fill its cards as the AI background tasks land.
         # Append_scan_history is what makes the result visible to that
         # poll. A persistent failure here would leave the analyst staring
-        # at a spinner that never resolves — surface it instead of pass.
+        # at a spinner that never resolves - surface it instead of pass.
         _log.warning("file_correlation.append_scan_history failed for "
                      "%s: %s",
                      ((analysis.get("hashes") or {}).get("sha256") or "?")[:12],
                      _e)
 
-    # Kick off AI workflows in the background — caller doesn't wait for them
+    # Kick off AI workflows in the background - caller doesn't wait for them
     if sha256:
         track_task(asyncio.create_task(_finish_ai_in_background(sha256, data)))
 
@@ -3232,7 +3232,7 @@ async def scan_file_v2(file: UploadFile = File(...)):
 
 async def _finish_ai_in_background(sha256: str, file_bytes: bytes):
     """Runs the four AI workstreams concurrently and persists each the moment it
-    finishes — so the frontend poller (GET /api/scan/by-hash) surfaces cards
+    finishes - so the frontend poller (GET /api/scan/by-hash) surfaces cards
     progressively: the fast triage verdict appears first, then the summary/YARA,
     then the deep analyst report (itself ~2x faster now that it's split into two
     parallel field-groups). Each stream fails open independently."""
@@ -3245,7 +3245,7 @@ async def _finish_ai_in_background(sha256: str, file_bytes: bytes):
     scan = load_scan(sha256)
     if not scan:
         return
-    # yara_ai_gen needs the bytes for match verification — re-attach briefly.
+    # yara_ai_gen needs the bytes for match verification - re-attach briefly.
     # Kept on the in-memory dict only; stripped from every persisted snapshot.
     scan["_file_bytes"] = file_bytes
     scan.setdefault("ai_analyst", {})
@@ -3258,7 +3258,7 @@ async def _finish_ai_in_background(sha256: str, file_bytes: bytes):
     def _val(r):
         return {"error": str(r)[:200]} if isinstance(r, Exception) else r
 
-    # Progressive deep-result persistence — each of the three deep sub-calls
+    # Progressive deep-result persistence - each of the three deep sub-calls
     # (narrative / verdict / structured) lands at a different time. Without
     # this hook, the deep result only persists once when ALL three complete,
     # so technical_summary / execution_narrative / key_findings all wait on
@@ -3275,7 +3275,7 @@ async def _finish_ai_in_background(sha256: str, file_bytes: bytes):
             _persist()
         except Exception as _persist_e:
             # The main fan-out's final _persist() at the end of the loop
-            # will still try — so a one-off transient failure here doesn't
+            # will still try - so a one-off transient failure here doesn't
             # block the final snapshot from landing. A persistent failure
             # would mean the frontend polls forever waiting for partial
             # snapshots that never appear; surface it so operators see
@@ -3284,7 +3284,7 @@ async def _finish_ai_in_background(sha256: str, file_bytes: bytes):
                          sha256, _persist_e)
 
     # Wrap the four-stream fan-out in try/finally so ai_pending gets
-    # cleared no matter what — an unhandled exception before this point
+    # cleared no matter what - an unhandled exception before this point
     # used to leave the scan stuck pending forever, and the frontend
     # polled GET /api/scan/by-hash indefinitely waiting for cards that
     # would never land.
@@ -3314,7 +3314,7 @@ async def _finish_ai_in_background(sha256: str, file_bytes: bytes):
                     scan["ai_analyst"]["deep"] = val
                     if extra and isinstance(val, dict) and "error" not in val:
                         scan["ai_analyst"]["institutional_knowledge_applied"] = True
-                _persist()   # progressive — each poll picks up whatever has landed
+                _persist()   # progressive - each poll picks up whatever has landed
     except Exception as _ai_bg_e:
         _log.exception("AI background fan-out raised for %s", sha256)
         scan.setdefault("ai_analyst", {})["error"] = _clean_exc(
@@ -3330,7 +3330,7 @@ async def _finish_ai_in_background(sha256: str, file_bytes: bytes):
 
 @app.get("/api/scan/by-hash/{sha256}")
 async def scan_get(sha256: str):
-    """Polling endpoint — returns the current state of a scan, including
+    """Polling endpoint - returns the current state of a scan, including
     any AI fields that have completed since the initial POST returned.
     Path is /by-hash/ to avoid shadowing /api/scan/history|stats|rules|etc."""
     from intel.file_correlation import load_scan
@@ -3346,7 +3346,7 @@ class ScanHashRequest(BaseModel):
 
 @app.post("/api/scan/hash")
 async def scan_hash(req: ScanHashRequest):
-    """Hash lookup — always a fresh TI query.
+    """Hash lookup - always a fresh TI query.
 
     Full per-investigation isolation: we do NOT return a prior scan from history,
     so a lookup never serves data saved from an earlier investigation."""
@@ -3359,7 +3359,7 @@ async def scan_hash(req: ScanHashRequest):
         raise HTTPException(400, "hash must be hex characters only")
     out = {"hash": h, "sources": {}}
 
-    # 2. No prior scan — query TI sources by hash and shape the result like a
+    # 2. No prior scan - query TI sources by hash and shape the result like a
     #    scan (hashes + threat_intel + verdict) so the frontend renders it via the
     #    existing FileIdentity / ThreatIntelSection / VerdictBanner components
     #    instead of a blank report.
@@ -3377,7 +3377,7 @@ async def scan_hash(req: ScanHashRequest):
             from intel.file_correlation import _vt_file, _malwarebazaar
             # Pass the abuse.ch unified auth key so MalwareBazaar doesn't
             # hit anonymously and get rate-limited. Same fix the broader
-            # file_correlation.correlate() path got — this direct
+            # file_correlation.correlate() path got - this direct
             # /api/scan/hash call site was a separate, parallel use.
             _abusech = (config.get("ABUSECH_AUTH_KEY")
                         or config.get("MALWAREBAZAAR_API_KEY") or "")
@@ -3420,14 +3420,14 @@ async def scan_url_endpoint(req: ScanUrlRequest):
     """Scan a URL: try to download (30s timeout, 50MB cap) for static
     file analysis, but soft-fail to URL-reputation-only when the remote
     site blocks the fetch. Many security URLs (abuseipdb / virustotal /
-    urlscan) return 403 to non-browser clients — we still want to run
+    urlscan) return 403 to non-browser clients - we still want to run
     URL enrichment + URLScan submission on those, not error out."""
     url = (req.url or "").strip()
     if not url:
         raise HTTPException(400, "url required")
     if not url.startswith(("http://", "https://")):
         raise HTTPException(400, "url must be http(s)")
-    # SSRF guard — analyst-supplied URL must not target internal
+    # SSRF guard - analyst-supplied URL must not target internal
     # infrastructure. Resolves the hostname and rejects anything that
     # lands on RFC1918 / loopback / link-local / metadata service ranges.
     # Redirects are then resolved manually below so a 302 to localhost
@@ -3440,21 +3440,21 @@ async def scan_url_endpoint(req: ScanUrlRequest):
     # classify as private/reserved/link-local but that an SSRF guard must
     # still refuse:
     #
-    #   100.64.0.0/10    — RFC 6598 carrier-grade NAT. Catches Alibaba
+    #   100.64.0.0/10    - RFC 6598 carrier-grade NAT. Catches Alibaba
     #                       Cloud's metadata endpoint at 100.100.100.200
     #                       (verified during the SSRF audit: ip_address
     #                       reports is_private=False for this range on
     #                       Python 3.11).
-    #   198.18.0.0/15    — RFC 2544 benchmark-test space; should never
+    #   198.18.0.0/15    - RFC 2544 benchmark-test space; should never
     #                       resolve a real public host.
-    #   192.0.0.0/24     — RFC 5736 IANA IPv4 special purpose.
-    #   192.0.2.0/24     — TEST-NET-1 documentation.
-    #   198.51.100.0/24  — TEST-NET-2 documentation.
-    #   203.0.113.0/24   — TEST-NET-3 documentation.
-    #   fd00:ec2::/64    — AWS IPv6 metadata (the documented EC2-IMDS-v6
+    #   192.0.0.0/24     - RFC 5736 IANA IPv4 special purpose.
+    #   192.0.2.0/24     - TEST-NET-1 documentation.
+    #   198.51.100.0/24  - TEST-NET-2 documentation.
+    #   203.0.113.0/24   - TEST-NET-3 documentation.
+    #   fd00:ec2::/64    - AWS IPv6 metadata (the documented EC2-IMDS-v6
     #                       prefix; not flagged by is_private on its own).
-    #   2001:db8::/32    — IPv6 documentation prefix.
-    #   100::/64         — IPv6 discard prefix.
+    #   2001:db8::/32    - IPv6 documentation prefix.
+    #   100::/64         - IPv6 discard prefix.
     _EXTRA_INTERNAL_NETS = tuple(ipaddress.ip_network(c) for c in (
         "100.64.0.0/10",
         "198.18.0.0/15",
@@ -3486,7 +3486,7 @@ async def scan_url_endpoint(req: ScanUrlRequest):
     def _resolve_public(host: str) -> list[str]:
         """Resolve `host` and return ONLY public IPs. Empty list means the
         host is unresolvable or every A/AAAA pointed somewhere internal.
-        The caller treats empty as "block the request" — there is no
+        The caller treats empty as "block the request" - there is no
         "best-effort partial" path."""
         if not host:
             return []
@@ -3514,7 +3514,7 @@ async def scan_url_endpoint(req: ScanUrlRequest):
     # `aiohttp.abc.AbstractResolver`. Under the older path every
     # /api/scan/url POST blew up with AttributeError BEFORE the SSRF guard
     # even ran (the class definition raised at endpoint-eval time), so the
-    # endpoint had been returning blanket 500s — masking both the guard and
+    # endpoint had been returning blanket 500s - masking both the guard and
     # any downstream behaviour. Import explicitly so a future re-export
     # change can't break us silently.
     from aiohttp.abc import AbstractResolver as _AiohttpAbstractResolver
@@ -3560,7 +3560,7 @@ async def scan_url_endpoint(req: ScanUrlRequest):
     # We send a full Chrome header set first; on 403/406/429 we retry
     # once with Firefox in case the first signature was fingerprinted.
     # Real anti-bot stacks (Cloudflare turnstile, PerimeterX, DataDome)
-    # we cannot beat without a headless browser — we soft-fail and
+    # we cannot beat without a headless browser - we soft-fail and
     # surface URLScan's screenshot as the visual evidence instead.
     _CHROME_HEADERS = {
         "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -3651,7 +3651,7 @@ async def scan_url_endpoint(req: ScanUrlRequest):
         if last_status in _SOFT_BLOCK_STATUSES:
             download_warning = (
                 f"Remote site is gated behind bot protection (HTTP {last_status}). "
-                f"This is normal for sites using Cloudflare, Akamai, or similar — "
+                f"This is normal for sites using Cloudflare, Akamai, or similar - "
                 f"see URLScan's screenshot below for the rendered page."
             )
         elif last_status and last_status != 200:
@@ -3726,7 +3726,7 @@ async def scan_url_endpoint(req: ScanUrlRequest):
             "CENSYS_ID", "CENSYS_SECRET", "CRIMINAL_IP_KEY",
         )}
         # Run hash correlation (file_correlation) + per-IOC enrichment in
-        # parallel — every source the platform supports gets a fair shot.
+        # parallel - every source the platform supports gets a fair shot.
         from agents.enrichment import _get_connector
         async with aiohttp.ClientSession(
             connector=_get_connector(),
@@ -3766,7 +3766,7 @@ async def scan_url_endpoint(req: ScanUrlRequest):
         # progressively fill its cards as the AI background tasks land.
         # Append_scan_history is what makes the result visible to that
         # poll. A persistent failure here would leave the analyst staring
-        # at a spinner that never resolves — surface it instead of pass.
+        # at a spinner that never resolves - surface it instead of pass.
         _log.warning("file_correlation.append_scan_history failed for "
                      "%s: %s",
                      ((analysis.get("hashes") or {}).get("sha256") or "?")[:12],
@@ -3819,7 +3819,7 @@ class CustomRuleSave(BaseModel):
     # save_rule() runs _safe_name() over the slug so the path is bounded,
     # but cap inputs at the schema layer to keep DoS surface tight.
     # 200 KB is enough for the most complex YARA rule a real hunter
-    # writes by hand — anything bigger is generated noise.
+    # writes by hand - anything bigger is generated noise.
     name: str = Field(..., max_length=128)
     rule: str = Field(..., max_length=200_000)
 
@@ -3906,7 +3906,7 @@ async def scan_hunt(req: YaraHuntRequest):
         sha = entry.get("sha256")
         if not sha:
             continue
-        # We don't keep original file bytes — hunt only against stored strings.
+        # We don't keep original file bytes - hunt only against stored strings.
         # This is a deliberate trade-off (binary bytes can be massive).
         from intel.file_correlation import load_scan
         scan = load_scan(sha)
@@ -3949,10 +3949,10 @@ async def scan_clarify(req: ScanClarifyRequest):
 
     scan = load_scan(req.scan_id)
     if not scan:
-        raise HTTPException(404, "no prior scan for that sha256 — run /api/scan/file first")
+        raise HTTPException(404, "no prior scan for that sha256 - run /api/scan/file first")
     if not req.answers:
         raise HTTPException(400, "answers required")
-    # Cap the answers payload — 16KB is way more than any real clarifying
+    # Cap the answers payload - 16KB is way more than any real clarifying
     # exchange and stops a paste-the-whole-log mistake from blowing up
     # the prompt budget.
     _answers_size = sum(len(str(q)) + len(str(a)) for q, a in req.answers.items())
@@ -4019,7 +4019,7 @@ async def scan_feedback_list(scan_id: Optional[str] = None):
 
 
 _URLSCAN_VISIBILITIES = {"public", "unlisted", "private"}
-# URLScan UUIDs are RFC 4122 — accept either the canonical 8-4-4-4-12
+# URLScan UUIDs are RFC 4122 - accept either the canonical 8-4-4-4-12
 # hex form or a 32-char dashless form. Anything else is bogus and we
 # refuse to ask URLScan about it (avoids spamming upstream with garbage).
 import re as _re_validate
@@ -4123,7 +4123,7 @@ async def status_check():
     free_results = await asyncio.gather(*[probe(name, url, ok_codes=(200, 404)) for name, url in free_probes])
     for (name, _), r in zip(free_probes, free_results):
         out["sources"][name] = r
-    # Per-host network timing histogram — surfaces which TI hosts run
+    # Per-host network timing histogram - surfaces which TI hosts run
     # slow or error-prone under the operator's actual workload. Builds
     # up across every analyze; reset via /api/status/timings/reset.
     try:
@@ -4263,7 +4263,7 @@ async def report_full(run_id: str):
     """Spec §10: full structured report for export tooling.
 
     Consumed by: external tooling and the planned ReportView export. The
-    in-app analyst report renders directly from the /api/analyze result —
+    in-app analyst report renders directly from the /api/analyze result  - 
     this endpoint exists so scripts / case-management integrations can
     re-fetch a normalised report shape by run_id.
     """
@@ -4284,7 +4284,7 @@ async def report_markdown(run_id: str):
     r = _build_report(run_id, _results[run_id])
     lines = []
     m = r["metadata"]
-    lines.append(f"# Threat intelligence report — {m['label'] or 'Untitled'}")
+    lines.append(f"# Threat intelligence report - {m['label'] or 'Untitled'}")
     lines.append(f"**Run ID:** `{m['run_id']}`  ")
     lines.append(f"**Generated:** {m['generated_at']}  ")
     lines.append(f"**Analyst:** {m['analyst'] or '_unassigned_'}  ")
@@ -4306,7 +4306,7 @@ async def report_markdown(run_id: str):
     lines.append("")
     lines.append("## MITRE ATT&CK coverage")
     for t in r["mitre_coverage"]:
-        lines.append(f"- [{t['id']}]({t['url']}) — {t['name']}")
+        lines.append(f"- [{t['id']}]({t['url']}) - {t['name']}")
     lines.append("")
     for prio, items in r["recommended_actions"].items():
         if not items:
@@ -4330,7 +4330,7 @@ async def report_markdown(run_id: str):
 
 
 # ─── HISTORY ──────────────────────────────────────────────────────────────────────
-# /api/history listing was removed — investigations are not accumulated
+# /api/history listing was removed - investigations are not accumulated
 # into a cross-session history (no-persistence policy), so the listing
 # always returned []. Per-run fetch by id still works against the
 # in-memory _results store.
@@ -4358,7 +4358,7 @@ class EmailParseRequest(BaseModel):
 
 
 class EmailComposeRequest(BaseModel):
-    # alert_type maps to a fixed set of ALERT_TYPES — short slug.
+    # alert_type maps to a fixed set of ALERT_TYPES - short slug.
     alert_type: str = Field(..., max_length=64)
     parsed: dict
     options: Optional[dict] = None
@@ -4370,7 +4370,7 @@ class EmailSendRequest(BaseModel):
     # CRLF in any header value would propagate into the MIME headers
     # email_composer.send_smtp() builds. While SMTP RCPT TO won't honour
     # a Bcc: smuggled through the To field, the rendered headers reach
-    # the recipient's MUA — which DOES display whatever extra header
+    # the recipient's MUA - which DOES display whatever extra header
     # rows the analyst's input invented. Pattern blocks \r and \n in
     # every address-shape field plus subject; body fields can carry
     # newlines because they're MIME bodies, not headers. Caps match
@@ -4419,7 +4419,7 @@ async def email_template_save(req: EmailTemplateSave):
     return {"saved": True, "alert_type": req.alert_type}
 
 
-_EMAIL_LOG_MAX = 200_000   # 200 KB log_text cap — well above any real
+_EMAIL_LOG_MAX = 200_000   # 200 KB log_text cap - well above any real
                             # alert payload, below the AuditMiddleware
                             # body cap, prevents OOM on accidental paste.
 
@@ -4441,7 +4441,7 @@ async def email_parse(req: EmailParseRequest):
 
 @app.post("/api/email/compose")
 async def email_compose(req: EmailComposeRequest):
-    """Render the email — returns subject + plain text + HTML."""
+    """Render the email - returns subject + plain text + HTML."""
     from intel.email_composer import compose
     if not req.alert_type:
         raise HTTPException(400, "alert_type required")
@@ -4486,7 +4486,7 @@ async def email_compose_ai(req: EmailComposeAIRequest):
     # _gather_email_enrichment fans out to (VirusTotal, AbuseIPDB,
     # MalwareBazaar, etc.). Previously the dict only
     # carried the 7 AI / sender-identity keys and the enrichment helper
-    # silently got None for everything else — that's why VT / Spamhaus
+    # silently got None for everything else - that's why VT / Spamhaus
     # / WHOIS lines never appeared in the prose even
     # though the keys were configured in data/config.json.
     cfg = {
@@ -4498,7 +4498,7 @@ async def email_compose_ai(req: EmailComposeAIRequest):
         "EMAIL_FROM_NAME":    config.get("EMAIL_FROM_NAME"),
         "EMAIL_FROM_ADDRESS": config.get("EMAIL_FROM_ADDRESS"),
         "EMAIL_SIGNATURE":    config.get("EMAIL_SIGNATURE"),
-        # Enrichment APIs — full set so compose_ai's enrichment fan-out
+        # Enrichment APIs - full set so compose_ai's enrichment fan-out
         # matches the /api/analyze pipeline (ABUSECH_AUTH_KEY in
         # particular avoids anonymous rate-limits on MalwareBazaar /
         # ThreatFox / URLhaus).
@@ -4513,7 +4513,7 @@ async def email_compose_ai(req: EmailComposeAIRequest):
         "GOOGLE_API_KEY":     config.get("GOOGLE_API_KEY"),
         "MALWAREBAZAAR_API_KEY": config.get("MALWAREBAZAAR_API_KEY"),
         "ABUSECH_AUTH_KEY":   config.get("ABUSECH_AUTH_KEY"),
-        # Canonical Censys names — PAT first, legacy v2 pair as fallback.
+        # Canonical Censys names - PAT first, legacy v2 pair as fallback.
         "CENSYS_API_KEY":     config.get("CENSYS_API_KEY"),
         "CENSYS_ID":          config.get("CENSYS_ID"),
         "CENSYS_SECRET":      config.get("CENSYS_SECRET"),
@@ -4536,7 +4536,7 @@ async def email_compose_ai(req: EmailComposeAIRequest):
 # ─── AI remediation (Section 7) ─────────────────────────────────────────────
 class EmailRemediateRequest(BaseModel):
     """Body for /api/email/remediate. Accepts whatever subset of parsed
-    alert fields the email composer has populated — every field is
+    alert fields the email composer has populated - every field is
     optional because alert types vary widely. Field caps mirror the
     other /api/email/* request models so a 50 MB body can't be sent
     in as a "log" and round-trip into the LLM prompt unbounded."""
@@ -4548,7 +4548,7 @@ class EmailRemediateRequest(BaseModel):
     severity:          str = Field(default="",                max_length=32)
 
 
-_REMEDIATION_SYSTEM_PROMPT = """OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes (—), en-dashes (–), or curly quotes. Use hyphens (-), commas, or restructure the sentence. This applies to every word the customer or analyst will read.
+_REMEDIATION_SYSTEM_PROMPT = """OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes ( - ), en-dashes (-), or curly quotes. Use hyphens (-), commas, or restructure the sentence. This applies to every word the customer or analyst will read.
 
 You are a senior incident responder and threat-intelligence
 analyst at a Managed Detection and Response provider with 10 years of experience.
@@ -4559,7 +4559,7 @@ job is to generate clear, SPECIFIC, ACTIONABLE remediation and investigation
 guidance that will be included directly in the email.
 
 Write as if you are advising the recipient on exactly what to do right now. Be
-specific to the actual threat details provided — do NOT give generic advice. If
+specific to the actual threat details provided - do NOT give generic advice. If
 you can identify the malware family or threat actor from the details, reference
 their known behaviors and typical next steps.
 
@@ -4660,7 +4660,7 @@ async def email_remediate(req: EmailRemediateRequest):
     try:
         out = _json.loads(resp.message or "{}")
     except Exception:
-        # Retry once with an explicit format-fix instruction — matches the
+        # Retry once with an explicit format-fix instruction - matches the
         # graceful-degradation rule in S4.
         try:
             resp2 = await provider.complete(
@@ -4671,7 +4671,7 @@ async def email_remediate(req: EmailRemediateRequest):
                     {"role": "assistant", "content": resp.message or ""},
                     {"role": "user", "content":
                         "Your previous response was not valid JSON. Re-emit it as "
-                        "strict JSON only — no markdown, no commentary, no fences."},
+                        "strict JSON only - no markdown, no commentary, no fences."},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.0,
@@ -4721,7 +4721,7 @@ async def email_send(req: EmailSendRequest):
             "error": out.get("error") if not out.get("sent") else None,
         })
     except Exception as _hist_e:
-        # The send already happened — losing the history entry isn't
+        # The send already happened - losing the history entry isn't
         # catastrophic but it does mean an analyst hitting /api/email/history
         # wouldn't see this send. Worth surfacing so a persistently
         # broken append_history (corrupted in-memory store, bug in the
@@ -4752,7 +4752,7 @@ async def email_draft_get(draft_id: str):
 @app.post("/api/email/drafts")
 async def email_draft_save(req: dict):
     """Stash a composed email in the in-memory drafts store. Lost on
-    restart by design — per the platform's no-persistence policy. The
+    restart by design - per the platform's no-persistence policy. The
     old docstring claimed it persisted to backend/data/email_drafts/
     but save_draft has only ever touched _drafts_mem."""
     from intel.email_composer import save_draft
@@ -4782,7 +4782,7 @@ async def email_send_test(req: dict):
     to = (req or {}).get("to") or ""
     if not to:
         raise HTTPException(400, "to address required")
-    # Same CRLF defense as EmailSendRequest — the `to` value flows into a
+    # Same CRLF defense as EmailSendRequest - the `to` value flows into a
     # MIME To: header via email_composer.send_smtp, and Python's email
     # module doesn't filter \r\n in header values. Reject early so an
     # attacker can't smuggle Bcc: / Reply-To: rows into the test path.
@@ -4797,7 +4797,7 @@ async def email_send_test(req: dict):
         "EMAIL_FROM_NAME":     config.get("EMAIL_FROM_NAME"),
     }
     return send_smtp(
-        "RECON Email Composer — SMTP test",
+        "RECON Email Composer - SMTP test",
         "<p>If you're reading this, your RECON email tool SMTP is configured correctly.</p>",
         "If you're reading this, your RECON email tool SMTP is configured correctly.",
         to, "", smtp_cfg,
@@ -4811,7 +4811,7 @@ async def ingest_misp(file: UploadFile = File(...)):
     content = await file.read()
     if not content:
         raise HTTPException(400, "empty file")
-    # UploadFile.filename is Optional[str] — without the guard,
+    # UploadFile.filename is Optional[str] - without the guard,
     # file.filename.endswith(...) raises AttributeError for a body
     # uploaded without a Content-Disposition filename.
     fname = (file.filename or "").lower()
@@ -4841,7 +4841,7 @@ async def ingest_misp(file: UploadFile = File(...)):
 async def taxii_poll(req: TaxiiPollRequest, background_tasks: BackgroundTasks):
     poll_id = str(uuid.uuid4())
     async def _poll():
-        # Catch every exception — BackgroundTasks runs this AFTER the
+        # Catch every exception - BackgroundTasks runs this AFTER the
         # response is already sent, so an uncaught raise has no caller
         # to surface to. Without the store-error path the GET poller
         # saw {"status": "pending"} forever on a backend that had
@@ -4871,7 +4871,7 @@ async def taxii_feeds():
 
 
 # ─── FRONTEND ─────────────────────────────────────────────────────────────────────
-# index.html MUST be served with no-cache headers — it references
+# index.html MUST be served with no-cache headers - it references
 # fingerprinted chunk filenames (e.g. /static/js/633.{hash}.chunk.js) and a
 # stale cached index pointing at chunk hashes the new deployment no longer
 # has produces a "Loading chunk N failed" crash for every analyst with an
@@ -4886,7 +4886,7 @@ _INDEX_NOCACHE_HEADERS = {
 if FRONTEND_BUILD.exists():
     # CRA emits content-hashed filenames under /static/ (main.<hash>.js,
     # <chunk>.<hash>.chunk.js, main.<hash>.css). Hashed assets are
-    # immutable by construction — a new build mints a new hash — so we
+    # immutable by construction - a new build mints a new hash - so we
     # can safely tell browsers to cache them for a year. Default
     # StaticFiles ships no Cache-Control, which means every page load
     # does a conditional revalidation (etag round-trip) on a 670 KB JS
@@ -4905,7 +4905,7 @@ if FRONTEND_BUILD.exists():
     async def serve_spa(full_path: str):
         if full_path.startswith("api/"):
             raise HTTPException(404)
-        # /favicon.ico convention path — browsers always request this even
+        # /favicon.ico convention path - browsers always request this even
         # when index.html declares a different <link rel="icon">. Without
         # a real file the SPA fallback served HTML, which made every
         # browser console log a "Resource interpreted as Image" warning
@@ -4927,7 +4927,7 @@ if FRONTEND_BUILD.exists():
                 if asset.name == "index.html":
                     return FileResponse(str(asset), headers=_INDEX_NOCACHE_HEADERS)
                 return FileResponse(str(asset))
-        # Otherwise fall back to SPA index — never cached.
+        # Otherwise fall back to SPA index - never cached.
         idx = FRONTEND_BUILD / "index.html"
         if idx.exists():
             return FileResponse(str(idx), headers=_INDEX_NOCACHE_HEADERS)

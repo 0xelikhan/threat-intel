@@ -11,7 +11,7 @@ STIX_FILE            = Path(__file__).parent / "mitre" / "enterprise-attack.json
 STIX_FILE_ICS        = Path(__file__).parent / "mitre" / "ics-attack.json"
 STIX_FILE_MOBILE     = Path(__file__).parent / "mitre" / "mobile-attack.json"
 # ATT&CK for Cloud + Containers ship inside the Enterprise STIX bundle
-# as separate `x-mitre-matrix` objects — we don't load them as separate
+# as separate `x-mitre-matrix` objects - we don't load them as separate
 # files; the keyword routers below decide when to filter Enterprise
 # results to the cloud/containers slice.
 
@@ -68,7 +68,7 @@ def get_all_techniques_ics() -> list[dict]:
     return sorted(results, key=lambda x: x["id"])
 
 
-# Keyword router — when an analyst alert mentions any of these tokens,
+# Keyword router - when an analyst alert mentions any of these tokens,
 # the investigation agent will consult the ICS matrix in addition to
 # Enterprise. Tokens chosen to be high-specificity (no generic IT terms).
 _ICS_KEYWORDS = (
@@ -215,7 +215,7 @@ def get_all_techniques() -> list[dict]:
 @lru_cache(maxsize=1)
 def _search_index() -> dict:
     """One-shot lowercase substring index keyed off (id, name, tactic).
-    Returns {token_or_field_lower: [tech, ...]} — actually here we keep
+    Returns {token_or_field_lower: [tech, ...]} - actually here we keep
     a flat list of (haystack, tech) pairs because substring matching
     can't use a hash directly. Built once per process; subsequent
     search_techniques() calls do a single linear scan over the cached
@@ -241,7 +241,7 @@ def search_techniques(query: str) -> list[dict]:
     return out
 
 
-# Kill-chain ordering — used to bucket an actor's TTPs as "look for before
+# Kill-chain ordering - used to bucket an actor's TTPs as "look for before
 # this alert" vs "look for after this alert" relative to the techniques that
 # actually matched the log. Lower index = earlier in the attack lifecycle.
 _KILL_CHAIN_ORDER = (
@@ -414,7 +414,7 @@ def get_actor_ttps_by_phase(mitre_group_id: str,
         elif pos > pivot:
             after.append(t)
         else:
-            # Same tactic as the matched pivot — surface as "after" since
+            # Same tactic as the matched pivot - surface as "after" since
             # it's a sibling technique within the same phase the alert
             # represents.
             after.append(t)
@@ -437,7 +437,7 @@ def get_groups_by_techniques(technique_ids: list[str]) -> list[dict]:
     """Score = precision-style: `matched / N_alert_techniques * 100`.
 
     Reads as "of the techniques observed in THIS alert, what fraction line
-    up with this actor's documented profile?" — independent of how huge
+    up with this actor's documented profile?" - independent of how huge
     the actor's full TTP catalogue is. The old `matched / max(...)` formula
     lowballed every score because mature APT profiles list 30-100+
     techniques, making 75%+ effectively unreachable for normal alerts.

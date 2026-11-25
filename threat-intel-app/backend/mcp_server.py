@@ -1,5 +1,5 @@
 """
-RECON Threat Intelligence — MCP Server (stdio)
+RECON Threat Intelligence - MCP Server (stdio)
 ================================================
 
 Exposes RECON's analysis pipeline and intel modules as Model Context Protocol
@@ -93,7 +93,7 @@ def _mcp_keys(cfg) -> dict:
         "VIRUSTOTAL_KEY", "ABUSEIPDB_KEY", "IPINFO_TOKEN",
         "OTX_KEY", "URLSCAN_KEY", "PULSEDIVE_KEY",
         "ABUSECH_AUTH_KEY", "MALWAREBAZAAR_API_KEY",
-        # Canonical Censys names — PAT first, legacy v2 pair as fallback.
+        # Canonical Censys names - PAT first, legacy v2 pair as fallback.
         # Both are registered in config.py.
         "CENSYS_API_KEY", "CENSYS_ID", "CENSYS_SECRET",
         "CRIMINAL_IP_KEY", "PROXYCHECK_KEY",
@@ -170,13 +170,13 @@ def check_cve(cve_id: str) -> dict:
     kev = kev_lookup(cve_id)
     epss = epss_get(cve_id)
     pct = (epss or {}).get("epss_percent", 0)
-    urgency = ("CRITICAL — actively exploited in ransomware"
+    urgency = ("CRITICAL - actively exploited in ransomware"
                if kev and kev.get("ransomware_use")
-               else "CRITICAL — confirmed exploited" if kev and pct >= 70
-               else "HIGH — in CISA KEV catalog"      if kev
-               else "HIGH — high exploit probability" if pct >= 70
-               else "MEDIUM — moderate exploit probability" if pct >= 10
-               else "LOW — no active exploitation observed")
+               else "CRITICAL - confirmed exploited" if kev and pct >= 70
+               else "HIGH - in CISA KEV catalog"      if kev
+               else "HIGH - high exploit probability" if pct >= 70
+               else "MEDIUM - moderate exploit probability" if pct >= 10
+               else "LOW - no active exploitation observed")
     return {"cve": cve_id.upper().strip(),
             "in_kev": bool(kev),
             "kev":    kev,
@@ -279,7 +279,7 @@ def recon_intel_inventory() -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Resources — let MCP clients browse RECON's reference data
+# Resources - let MCP clients browse RECON's reference data
 # ═══════════════════════════════════════════════════════════════════════════════
 @mcp.resource("recon://about")
 def about() -> str:

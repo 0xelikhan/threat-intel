@@ -5,7 +5,7 @@ DNS servers (e.g. 8.8.8.8 shows a 44-entry blacklist and tags like
 public DNS).
 
 The AI investigation prompt reads that blob and writes prose like
-"Maltiverse associates this IP with AsyncRAT" — even when Maltiverse's
+"Maltiverse associates this IP with AsyncRAT" - even when Maltiverse's
 own definitive `classification` field says whitelist.
 
 Fix: only surface blacklist + tag when classification is
@@ -59,7 +59,7 @@ def test_maltiverse_drops_noise_for_whitelist_ip():
 
 
 def test_maltiverse_drops_noise_for_neutral_ip():
-    """No classification data at all — still zeroed."""
+    """No classification data at all - still zeroed."""
     from intel import maltiverse
     fake = {
         "blacklist": [{"description": "old-report", "source": "X"}],
@@ -75,7 +75,7 @@ def test_maltiverse_drops_noise_for_neutral_ip():
 
 def test_maltiverse_preserves_noise_for_suspicious_ip():
     """The real-spammer case (149.40.62.132 shape): classification is
-    suspicious and there are two current blacklist entries — the AI
+    suspicious and there are two current blacklist entries - the AI
     NEEDS to see those to attribute the alert correctly."""
     from intel import maltiverse
     fake = {

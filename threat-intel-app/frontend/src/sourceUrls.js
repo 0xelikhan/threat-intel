@@ -1,6 +1,6 @@
 // Map a (source label, IOC value, IOC type) to the source's public web UI
 // pre-filled with that indicator. Returning null means there's no useful
-// pivot — the source label renders as plain text instead of a link.
+// pivot - the source label renders as plain text instead of a link.
 //
 // IOC types come straight from the backend pipeline: 'ip' | 'domain' |
 // 'url' | 'hash' | 'email' | 'cve'. Anything unrecognised falls through
@@ -21,7 +21,7 @@ function vtUrlId(u) {
 
 // One row per source label that the backend may surface. Each entry maps
 // the type-tag to a builder. If the source has no public per-IOC page
-// for a given type, omit it — the link won't render.
+// for a given type, omit it - the link won't render.
 const BUILDERS = {
   'VirusTotal': {
     ip:     v => `https://www.virustotal.com/gui/ip-address/${enc(v)}`,
@@ -77,7 +77,7 @@ const BUILDERS = {
   'URLhaus payload': { hash: v => `https://bazaar.abuse.ch/sample/${enc(v)}/` },
   'URLScan.io':      { url: v => `https://urlscan.io/search/#${enc(v)}` },
   // Spamhaus's check.spamhaus.org/results/?query=... isn't actually a
-  // public URL pattern — it 404s/403s consistently. The reliable
+  // public URL pattern - it 404s/403s consistently. The reliable
   // entry-point is the IP-and-domain reputation centre where the
   // domain goes into a form. Less direct but at least the page loads.
   'Spamhaus DBL':    { domain: v => `https://check.spamhaus.org/results?domain=${enc(v)}` },
@@ -100,7 +100,7 @@ const BUILDERS = {
   },
   'NVD':             { cve:  v => `https://nvd.nist.gov/vuln/detail/${enc(v)}` },
   // FIRST.org renders the user-facing EPSS page at /epss (no /data/queries
-  // path — that 404s). The api.first.org JSON endpoint returns the score
+  // path - that 404s). The api.first.org JSON endpoint returns the score
   // and percentile for a specific CVE and renders inline in the browser,
   // which is the closest pivot to "show me EPSS for this CVE".
   'EPSS':            { cve:  v => `https://api.first.org/data/v1/epss?cve=${enc(v)}` },
@@ -113,7 +113,7 @@ const BUILDERS = {
   'CISA KEV':        { cve:  v => `https://www.cve.org/CVERecord?id=${enc(v)}` },
   'Wayback':         { domain: v => `https://web.archive.org/web/*/${enc(v)}` },
 
-  // ─── Phase 1 additions — 28 new TI sources ────────────────────────────
+  // ─── Phase 1 additions - 28 new TI sources ────────────────────────────
   'YARAify': { hash: v => `https://yaraify.abuse.ch/sample/${enc(v)}/` },
   'Robtex': {
     ip:     v => `https://www.robtex.com/ip-lookup/${enc(v)}`,
@@ -200,7 +200,7 @@ const BUILDERS = {
 };
 
 
-// Public — returns a URL or null. Source name is the human label the
+// Public - returns a URL or null. Source name is the human label the
 // backend emits (matches BUILDERS keys verbatim).
 export function sourceUrl(sourceName, ioc, iocType) {
   if (!sourceName || !ioc || !iocType) return null;

@@ -1,7 +1,7 @@
 """
 SecurityTrails domain + IP attack-surface lookup.
 
-Source: https://securitytrails.com/corp/api — current DNS, historical
+Source: https://securitytrails.com/corp/api - current DNS, historical
 WHOIS, subdomain enumeration. Free tier: 50 req/month.
 
   Header: apikey: <SECURITYTRAILS_KEY>

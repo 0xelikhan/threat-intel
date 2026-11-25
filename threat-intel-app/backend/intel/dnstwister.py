@@ -1,5 +1,5 @@
 """
-DNSTwister — free API at dnstwister.report, no key.
+DNSTwister - free API at dnstwister.report, no key.
 
 The local `intel/typosquat.py` heuristic already flags a domain as
 suspicious when it Levenshtein-distance-1 away from a known brand. What
@@ -14,7 +14,7 @@ We use DNSTwister for the fuzz-list generation ONLY:
                             Omission, Repetition, Replacement, Subdomain,
                             Transposition, …)
 
-DNSTwister's own /api/ip/ endpoint is broken — returns `ip:false,
+DNSTwister's own /api/ip/ endpoint is broken - returns `ip:false,
 error:true` for every domain including known-registered ones. So we
 resolve permutations locally via socket.gethostbyname wrapped in
 asyncio.to_thread. Bounded parallelism keeps enrich_domain fast.
@@ -128,7 +128,7 @@ async def enrich(session, domain: str,
                              f"{domain}, none currently registered."),
         }
 
-    # Actionable finding — someone has registered at least one lookalike.
+    # Actionable finding - someone has registered at least one lookalike.
     fuzzers = sorted({r.get("fuzzer") for r in resolving if r.get("fuzzer")})
     sample  = [f"{r['domain']} → {r['ip']}" for r in resolving[:5]]
     return {

@@ -1,7 +1,7 @@
 """
 URLdna URL analysis / scan lookup.
 
-Source: https://urldna.io/ — URLdna performs sandboxed URL analysis
+Source: https://urldna.io/ - URLdna performs sandboxed URL analysis
 and returns reputation + screenshots. We only hit the SEARCH endpoint
 for existing public scans, not NEW_SCAN (which takes 5-10s).
 

@@ -1,4 +1,4 @@
-"""TTLCache unit tests — covers TTL expiry, hit/miss accounting, clear(),
+"""TTLCache unit tests - covers TTL expiry, hit/miss accounting, clear(),
 and namespaced rollup. Uses time.monotonic patches rather than real
 sleeps so the suite stays fast."""
 
@@ -35,7 +35,7 @@ def test_ttl_expiry_evicts_lazily_and_returns_miss():
     with patch("intel.cache.time.monotonic", side_effect=[100.0, 100.0, 200.0, 200.0]):
         c.set("k", "v")          # consumes 100.0
         assert c.get("k") == "v" # consumes 100.0 (within TTL)
-        # Next get is at t=200 — well past the 10s TTL → miss + eviction
+        # Next get is at t=200 - well past the 10s TTL → miss + eviction
         assert c.get("k") is None
     s = c.stats()
     assert s["evictions"] == 1

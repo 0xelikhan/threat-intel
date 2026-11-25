@@ -2,7 +2,7 @@
 analysis whose log contained an email or CVE IOC.
 
 Bug: run_enrichment's per-IOC verdict aggregation used a hardcoded
-verdicts = {"ips": {}, "domains": {}, "hashes": {}, "urls": {}} —
+verdicts = {"ips": {}, "domains": {}, "hashes": {}, "urls": {}}  - 
 when the loop iterated the new "emails" or "cves" bucket added by
 later commits, verdicts[cat][ioc] = ... raised KeyError on the
 missing bucket name.

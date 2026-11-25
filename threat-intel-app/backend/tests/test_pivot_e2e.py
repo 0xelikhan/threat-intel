@@ -3,8 +3,8 @@
 The existing test_pivot_second_pass.py mocks enrich_hash wholesale.
 This file goes a layer deeper: it patches the aiohttp session's
 .get / .post methods only, letting the real enrich_hash orchestrator
-run its full fan-out — URL construction, header assembly, response
-parsing, cache lookup, verdict aggregation — and only intercepts
+run its full fan-out - URL construction, header assembly, response
+parsing, cache lookup, verdict aggregation - and only intercepts
 the final HTTP call. That proves:
 
   1. The pivot plugin fires on a real sandbox-shaped enrich_hash
@@ -56,7 +56,7 @@ def _make_session_mock():
     so the first-pass fan-out completes without errors."""
 
     def _route(url: str, kwargs: dict):
-        # Hybrid Analysis file-overview — this is what the pivot
+        # Hybrid Analysis file-overview - this is what the pivot
         # plugin looks at. Return a payload with files_dropped.
         if "hybrid-analysis.com/api/v2/overview/" in url and _ORIGINAL_SHA256 in url:
             return _FakeAioResp(200, {
@@ -97,8 +97,8 @@ def test_pivot_second_pass_dispatches_through_real_enricher_table():
     Strategy: patch enrich_hash with a tracker that returns a sandbox-
     shaped first-pass response for the original IOC, then an empty
     response for the two dropped hashes. If the second-pass dispatch
-    is wired correctly, enrich_hash gets called 3 times — once for
-    the original, twice for the pivot drops — and all three hashes
+    is wired correctly, enrich_hash gets called 3 times - once for
+    the original, twice for the pivot drops - and all three hashes
     land in the enrichments['hashes'] bucket.
 
     This is a stricter test than test_pivot_second_pass_adds_dropped_
@@ -172,7 +172,7 @@ def test_pivot_second_pass_dispatches_through_real_enricher_table():
 
 
 def test_pivot_pass_bounded_at_20_iocs():
-    """A chatty sandbox result shouldn't fan out unbounded — cap at 20."""
+    """A chatty sandbox result shouldn't fan out unbounded - cap at 20."""
     from agents.enrichment import run_enrichment
 
     _MANY_HASHES = [chr(ord('d') + i) * 64 for i in range(50)]

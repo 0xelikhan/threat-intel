@@ -1,5 +1,5 @@
 /**
- * Skeleton — RECON-styled loading placeholders.
+ * Skeleton - RECON-styled loading placeholders.
  *
  * Replaces every centered loading spinner on the platform with a layout-
  * matching skeleton that pulses gently in the RECON cyan accent. Analysts
@@ -15,7 +15,7 @@
  *   <SkeletonChart variant />        chart shape (dial | bars | sparkline)
  *
  * Animation: the shimmer is a single global @keyframes rule injected once
- * via a styled tag (MUI's GlobalStyles equivalent — using a one-time
+ * via a styled tag (MUI's GlobalStyles equivalent - using a one-time
  * useEffect so we don't reach for @emotion/react). The animation runs on
  * background-position so the GPU compositor handles it.
  */
@@ -155,7 +155,7 @@ export function SkeletonAnalyze() {
   useEffect(() => { _ensureKeyframes(); }, []);
   return (
     <Box>
-      {/* "Analyzing" banner — explicit signal that the pipeline is
+      {/* "Analyzing" banner - explicit signal that the pipeline is
           running. Sits at the top of the placeholder layout so analysts
           can tell at a glance that the empty cards below are deferred
           rendering, not an empty result. */}
@@ -369,9 +369,9 @@ export function SkeletonHistoryRows({ count = 5 }) {
 // ─── chart skeleton ──────────────────────────────────────────────────────────
 /**
  * Layout-matching skeleton for charts. `variant`:
- *   'dial'      — circular dial + tier-distribution bars
- *   'bars'      — horizontal bar chart
- *   'sparkline' — single-line sparkline
+ *   'dial'      - circular dial + tier-distribution bars
+ *   'bars'      - horizontal bar chart
+ *   'sparkline' - single-line sparkline
  */
 export function SkeletonChart({ variant = 'dial', height = 180 }) {
   useEffect(() => { _ensureKeyframes(); }, []);

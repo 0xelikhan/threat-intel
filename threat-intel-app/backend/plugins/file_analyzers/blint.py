@@ -1,4 +1,4 @@
-"""Blint — binary SBOM + capability analysis.
+"""Blint - binary SBOM + capability analysis.
 
 Blint is a Linux Foundation project that extracts a software bill of
 materials and security-relevant metadata (symbols, exposed functions,
@@ -15,7 +15,7 @@ from plugins import AnalysisResult, FileAnalyzer, register
 
 class BlintAnalyzer(FileAnalyzer):
     name = "blint"
-    description = ("Blint — binary SBOM + security-flag analysis for "
+    description = ("Blint - binary SBOM + security-flag analysis for "
                    "PE / ELF / Mach-O. Flags missing NX / ASLR / CFG, "
                    "known-vulnerable symbol imports.")
     supported_file_types = ["pe", "elf", "macho"]

@@ -1,7 +1,7 @@
 """
 SANS Internet Storm Center (DShield) API client.
 
-Source: https://isc.sans.edu/api/ — SANS ISC's volunteer-firewall sensor
+Source: https://isc.sans.edu/api/ - SANS ISC's volunteer-firewall sensor
 network. Free, no-key, JSON. Per-IP endpoint:
 
   GET https://isc.sans.edu/api/ip/<ip>?json

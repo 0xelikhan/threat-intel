@@ -1,4 +1,4 @@
-"""Pivot — sandbox analysis → dropped hashes → queue each for enrichment.
+"""Pivot - sandbox analysis → dropped hashes → queue each for enrichment.
 
 Watches for Hybrid Analysis / Triage / Joe Sandbox results. If any
 contains dropped-file hashes in its raw payload, surfaces them as new

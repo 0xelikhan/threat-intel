@@ -1,10 +1,10 @@
 """
-Have I Been Pwned — Pwned Passwords k-anonymity API.
+Have I Been Pwned - Pwned Passwords k-anonymity API.
 
 Source: https://api.pwnedpasswords.com (free, no key, abuse-rate-limited).
 Privacy-preserving: caller sends only the first 5 chars of a SHA-1 hash;
 the server returns every hash starting with that prefix and the breach
-count. The caller does the final-byte match locally — the password never
+count. The caller does the final-byte match locally - the password never
 leaves their machine.
 
 RECON's hash IOC extractor surfaces SHA-1 hashes. When the analyst

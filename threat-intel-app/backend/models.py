@@ -1,5 +1,5 @@
 """
-Public Pydantic request/response models — single import surface.
+Public Pydantic request/response models - single import surface.
 
 Historical note: these classes are defined in `main.py` where the
 endpoints live. Physically relocating them would force every endpoint

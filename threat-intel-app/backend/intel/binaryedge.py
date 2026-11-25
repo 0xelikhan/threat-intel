@@ -1,7 +1,7 @@
 """
 BinaryEdge host + subdomain enumeration.
 
-Source: https://www.binaryedge.io/ — commercial internet-scan dataset
+Source: https://www.binaryedge.io/ - commercial internet-scan dataset
 (ports, services, SSL certs, torrents, DNS). Free trial tier.
 
   Header: X-Key: <BINARYEDGE_KEY>

@@ -1,5 +1,5 @@
 """
-StopForumSpam — free, no key. Community-maintained spam-source
+StopForumSpam - free, no key. Community-maintained spam-source
 database with both IP and email reputation.
 
 Two lookups:
@@ -7,7 +7,7 @@ Two lookups:
   - Email: /api?email=X&json  → {appears, frequency}
 
 `confidence` is 0-100 (SFS's own probability estimate). Any `appears=1`
-is a real report signal — SFS is conservative and won't flag benign
+is a real report signal - SFS is conservative and won't flag benign
 IPs. The IP endpoint also returns `torexit=1` for Tor exit nodes,
 which we already track via intel.deception; treat as an independent
 confirmation.

@@ -1,5 +1,5 @@
 /**
- * URLScan.io live submission block — analyst clicks Submit, we POST to
+ * URLScan.io live submission block - analyst clicks Submit, we POST to
  * /api/urlscan/submit, then poll /api/urlscan/result/<uuid> every 10s
  * until ready or 3 min elapsed. Renders verdict + screenshot + page
  * metadata + WHOIS registration date + Wayback last-snapshot date.
@@ -81,7 +81,7 @@ export default function URLScanLive({ result, bare, urls: urlsProp }) {
   const monoSx = { fontFamily: '"JetBrains Mono", monospace' };
   const busy = submission?.state === 'submitting' || submission?.state === 'polling';
 
-  // WHOIS / Wayback for the current target — populated by both /api/scan/url
+  // WHOIS / Wayback for the current target - populated by both /api/scan/url
   // and the analyze enrichment fan-out. Lets the done-state grid show
   // registration date + last-snapshot alongside the URLScan report.
   let _whoisInfo = null;

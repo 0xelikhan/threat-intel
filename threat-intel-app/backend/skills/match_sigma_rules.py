@@ -1,10 +1,10 @@
 """
-MatchSigmaRulesSkill — cross-reference an analysis against the bundled
+MatchSigmaRulesSkill - cross-reference an analysis against the bundled
 SigmaHQ rule corpus and surface rules whose MITRE coverage overlaps the
 techniques the investigation produced.
 
 This is purely a metadata lookup over the inverted index built by
-intel/sigma_corpus.py — no LLM, no IO, ~100µs per query after the
+intel/sigma_corpus.py - no LLM, no IO, ~100µs per query after the
 corpus is loaded. The matcher is cheap enough to call on every
 investigation run; we just need to be explicit about citation
 (SigmaHQ rules are DRL 1.1, attribution required when surfaced).
@@ -60,7 +60,7 @@ class MatchSigmaRulesSkill(Skill):
 
         matches = match_by_techniques(techniques, max_results=max_results)
 
-        # Strip path + author from the analyst-facing payload — they're
+        # Strip path + author from the analyst-facing payload - they're
         # build artifacts. Keep the source attribution simple ("SigmaHQ").
         public: List[Dict[str, Any]] = []
         for m in matches:

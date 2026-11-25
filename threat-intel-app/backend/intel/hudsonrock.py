@@ -1,8 +1,8 @@
 """
-Hudson Rock Cavalier API — infostealer-compromised credentials
+Hudson Rock Cavalier API - infostealer-compromised credentials
 lookup.
 
-Source: https://www.hudsonrock.com/ — Hudson Rock operates the
+Source: https://www.hudsonrock.com/ - Hudson Rock operates the
 Cavalier platform tracking compromised credentials from infostealer
 infections. Returns per-employee / per-user / per-domain stealer
 exposure, including which URLs, IPs, and software are compromised.

@@ -1,5 +1,5 @@
 """
-Geopolitical risk context — spec §7.
+Geopolitical risk context - spec §7.
 
 Runs post-enrichment. Groups all IPs by country, computes per-country risk
 based on known state-sponsored APT activity, attributes infrastructure to
@@ -28,7 +28,7 @@ COUNTRY_APT_INDEX: Dict[str, List[str]] = {
     "USA":         [],  # No public attribution standard for offensive ops
 }
 
-# Country-level base risk score (0–25) — feeds the confidence engine.
+# Country-level base risk score (0-25) - feeds the confidence engine.
 COUNTRY_RISK: Dict[str, int] = {
     "Russia": 25, "China": 25, "North Korea": 25, "Iran": 25,
     "Pakistan": 15, "Vietnam": 15, "Belarus": 15, "Syria": 15,
@@ -56,9 +56,9 @@ def _country_name(code_or_name: Optional[str]) -> Optional[str]:
 def compute_geopolitical_context(enrichments: Dict, threat_actor: Optional[Dict] = None,
                                   actor_country_hints: Optional[Dict] = None) -> Dict:
     """
-    enrichments       — the per-IOC dict produced by the enrichment agent
-    threat_actor      — optional {name: …, confidence: …} from investigation
-    actor_country_hints — optional override {actor_name: country_str}; if not
+    enrichments       - the per-IOC dict produced by the enrichment agent
+    threat_actor      - optional {name: …, confidence: …} from investigation
+    actor_country_hints - optional override {actor_name: country_str}; if not
                           supplied we derive from COUNTRY_APT_INDEX
     """
     actor_country_hints = actor_country_hints or {}
@@ -138,7 +138,7 @@ def compute_geopolitical_context(enrichments: Dict, threat_actor: Optional[Dict]
 
 
 def _country_for_actor(actor_name: str) -> Optional[str]:
-    """Reverse-lookup the curated APT index — returns the country an actor is
+    """Reverse-lookup the curated APT index - returns the country an actor is
     publicly attributed to, or None if unknown."""
     if not actor_name:
         return None

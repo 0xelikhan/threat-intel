@@ -135,8 +135,8 @@ def test_validate_drops_analysis_that_paraphrases_summary():
         ],
     }
     out = validate_investigation_result(r)
-    # First analysis sentence overlaps the summary heavily — should be
-    # dropped. Second is distinct — should be kept.
+    # First analysis sentence overlaps the summary heavily - should be
+    # dropped. Second is distinct - should be kept.
     assert len(out["analysis_assessment"]) == 1
     assert "AbuseIPDB" in out["analysis_assessment"][0]
 

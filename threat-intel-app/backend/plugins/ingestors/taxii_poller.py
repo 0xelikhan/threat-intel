@@ -1,4 +1,4 @@
-"""TAXII ingestor — poll configured TAXII 2.1 feeds for new STIX IOCs.
+"""TAXII ingestor - poll configured TAXII 2.1 feeds for new STIX IOCs.
 
 Thin wrapper around intel/taxii_poller.py. Yields {type, value} dicts
 on each poll cycle; the orchestrator decides whether to run them

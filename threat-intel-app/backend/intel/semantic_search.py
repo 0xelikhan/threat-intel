@@ -13,7 +13,7 @@ Implementation notes:
 
   * Two-tier embedder. If sentence-transformers + a local MiniLM model
     are present, we use that (better quality). Otherwise we fall back
-    to sklearn TfidfVectorizer with char-ngrams — strictly lexical
+    to sklearn TfidfVectorizer with char-ngrams - strictly lexical
     semantic-LITE but useful when the operator hasn't downloaded the
     model. The query interface is identical.
 
@@ -46,7 +46,7 @@ _log = logging.getLogger("recon.intel.semantic_search")
 # Which corpus modules feed the index. Each entry is
 # (source_label, module_path, list-attr-on-state).
 # The corpus modules already expose a `_state["rules"]` (or equivalent)
-# after their _ensure_loaded() runs — we re-use that to avoid re-parsing.
+# after their _ensure_loaded() runs - we re-use that to avoid re-parsing.
 _CORPUS_SOURCES: List[Tuple[str, str]] = [
     ("sigma",           "intel.sigma_corpus"),
     ("panther",         "intel.panther_rules"),
@@ -65,8 +65,8 @@ _CORPUS_SOURCES: List[Tuple[str, str]] = [
 _lock = threading.Lock()
 _state: Dict[str, Any] = {
     "loaded":       False,
-    "items":        [],     # list[dict] — rule metadata
-    "texts":        [],     # list[str]  — embedding inputs
+    "items":        [],     # list[dict] - rule metadata
+    "texts":        [],     # list[str]  - embedding inputs
     "embeddings":   None,   # numpy.ndarray [N x dim]
     "backend":      None,   # "sentence_transformers" | "tfidf" | None
     "model":        None,   # the embedder/vectorizer instance
@@ -94,7 +94,7 @@ def _collect_rules() -> List[Dict[str, Any]]:
             source_counts[source_label] = 0
             continue
         # Trigger lazy load via the corpus's match_by_techniques (or
-        # stats()) — either populates the _state dict.
+        # stats()) - either populates the _state dict.
         try:
             if hasattr(mod, "stats"):
                 mod.stats()
@@ -159,31 +159,31 @@ def _try_sentence_transformers(texts: List[str]) -> Optional[Tuple[Any, Any, str
         from sentence_transformers import SentenceTransformer  # type: ignore
         import numpy as np  # noqa: F401
     except Exception as e:
-        _log.info("sentence_transformers not installed (%s) — TF-IDF fallback", e)
+        _log.info("sentence_transformers not installed (%s) - TF-IDF fallback", e)
         return None
 
     import os
-    # Default model — small, fast, ~80MB. Operator can override via env.
+    # Default model - small, fast, ~80MB. Operator can override via env.
     model_name = os.environ.get("RECON_EMBED_MODEL", "all-MiniLM-L6-v2")
     try:
         model = SentenceTransformer(model_name)
     except Exception as e:
         # Common case: no network / no cached model. Fall back gracefully.
-        _log.info("SentenceTransformer load failed for %s (%s) — TF-IDF fallback",
+        _log.info("SentenceTransformer load failed for %s (%s) - TF-IDF fallback",
                    model_name, e)
         return None
     try:
         emb = model.encode(texts, normalize_embeddings=True,
                             batch_size=64, show_progress_bar=False)
     except Exception as e:
-        _log.warning("embedding failed: %s — TF-IDF fallback", e)
+        _log.warning("embedding failed: %s - TF-IDF fallback", e)
         return None
     return model, emb, "sentence_transformers"
 
 
 def _try_tfidf(texts: List[str]) -> Optional[Tuple[Any, Any, str]]:
     """Fallback embedder: sklearn TfidfVectorizer (char + word n-grams).
-    Lexical but useful — and dependency-free given sklearn is already
+    Lexical but useful - and dependency-free given sklearn is already
     in the round-14 baseline for the DGA/phish classifiers."""
     try:
         from sklearn.feature_extraction.text import TfidfVectorizer

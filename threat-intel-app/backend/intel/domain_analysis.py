@@ -73,7 +73,7 @@ def nrd_check(whois_created: str | None) -> dict | None:
 
 
 # ─── DGA ──────────────────────────────────────────────────────────────────────
-# Common English bigrams — domains with random characters score low.
+# Common English bigrams - domains with random characters score low.
 _COMMON_BIGRAMS = {
     "th","he","in","er","an","re","on","at","en","nd","ti","es","or","te","of",
     "ed","is","it","al","ar","st","to","nt","ng","se","ha","as","ou","io","le",
@@ -93,7 +93,7 @@ def _entropy(s: str) -> float:
 
 
 def dga_score(domain: str) -> dict:
-    """Score 0..1 — higher = more likely algorithmically generated."""
+    """Score 0..1 - higher = more likely algorithmically generated."""
     if not domain:
         return {"score": 0.0, "flagged": False, "signals": []}
     label = domain.lower().split(".")[0]
@@ -105,7 +105,7 @@ def dga_score(domain: str) -> dict:
     vowels     = sum(1 for c in label if c in "aeiou")
     digits     = sum(1 for c in label if c.isdigit())
 
-    # Bigram dictionary score — what fraction of bigrams are common English?
+    # Bigram dictionary score - what fraction of bigrams are common English?
     bigrams = [label[i:i+2] for i in range(len(label)-1)]
     common  = sum(1 for b in bigrams if b in _COMMON_BIGRAMS) / max(len(bigrams), 1)
 

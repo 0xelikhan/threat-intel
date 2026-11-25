@@ -1,7 +1,7 @@
 /**
  * Adapted from OpenCTI (AGPL-3.0) github.com/OpenCTI-Platform/opencti
  *
- * RECON File Scanner — single-page scrollable analyst report (spec §3).
+ * RECON File Scanner - single-page scrollable analyst report (spec §3).
  *
  * Layout: sticky header at top (filename + classification + verdict +
  * action buttons) → 15 stacked sections flowing down → sticky right-side
@@ -51,7 +51,7 @@ const ANALYSIS_STEPS = [
 
 // File analyzer sections in display order. Hunting Leads, Recommended
 // Actions, Notes & Refinement, Format-Specific and standalone YARA were
-// removed per analyst request — YARA now lives inside Detection Content.
+// removed per analyst request - YARA now lives inside Detection Content.
 const SECTIONS = [
   { id: 'verdict',     label: 'AI Verdict' },
   { id: 'technical',   label: 'Technical Assessment' },
@@ -114,7 +114,7 @@ function SectionCard({
 }) {
   const theme = useTheme();
   const [open, setOpen] = useState(defaultOpen);
-  // Restructured as a single Paper that owns both the header and body —
+  // Restructured as a single Paper that owns both the header and body  - 
   // the header sits inside the bordered card surface (matching the base
   // <Card> aesthetic in ui.js) so the section reads as one object
   // instead of a floating chevron + separate body.
@@ -191,7 +191,7 @@ function SectionCard({
 // this" before the per-source detail. Sources are grouped by purpose
 // (Reputation / Identity / Infrastructure) so you scan top-down rather than
 // hunting through a flat list. Each source renders its actual fields in a
-// structured row layout — never a raw JSON dump.
+// structured row layout - never a raw JSON dump.
 function _defangHost(h) {
   return (h || '').replace(/\./g, '[.]');
 }
@@ -201,7 +201,7 @@ function _defangUrl(u) {
           .replace(/\./g, '[.]');
 }
 function _formatDate(iso) {
-  if (!iso) return '—';
+  if (!iso) return ' - ';
   const d = new Date(iso);
   if (isNaN(d)) return iso;
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
@@ -234,7 +234,7 @@ function ReportField({ label, value, mono = false, color }) {
 
 // One collapsible source card. Header is always visible (chevron + title +
 // optional count + status pill); body collapses. Default closed so the
-// analyst opens only the sources they want to investigate — verdict
+// analyst opens only the sources they want to investigate - verdict
 // drivers in the top panel already summarise the why.
 function CollapsibleSource({
   title, status, statusColor = '#848592', count,
@@ -373,7 +373,7 @@ function UrlReputationReport({ result }) {
   if (dnsRecords) signalCount++;
   if (bgp) signalCount++;
 
-  // Evidence-driven verdict — the previous "50 baseline" math meant a
+  // Evidence-driven verdict - the previous "50 baseline" math meant a
   // single clean driver (VirusTotal 0/56) scored 45/100 SUSPICIOUS, which
   // is wrong. Now the verdict follows what the drivers actually say: if
   // there is no malicious evidence, the URL is CLEAN (or UNKNOWN when no
@@ -484,7 +484,7 @@ function UrlReputationReport({ result }) {
           </Box>
         )}
 
-        {/* Headline factoids — left here as a safety net; in the new
+        {/* Headline factoids - left here as a safety net; in the new
             layout the URL-identity SectionCard above already shows the
             same fields, so factoids is currently kept empty. */}
         {factoids.length > 0 && (
@@ -666,7 +666,7 @@ function UrlReputationReport({ result }) {
         accent="#00b4d8" defaultOpen={true}
         summary={`${idCount} source${idCount === 1 ? '' : 's'}`}>
       <Stack spacing={1.25}>
-        {/* WHOIS — the big one. */}
+        {/* WHOIS - the big one. */}
         {(() => {
           const age = whois?.age_days;
           const ageColor = age == null ? '#848592'
@@ -904,13 +904,13 @@ function UrlFileAnalysisExpander({ result, onRefreshScan, autoOpen = false }) {
 // source file (extension in the source list, or printable-ASCII heuristic
 // with no PE/ELF/PK magic). Tells the analyst the scanner has switched
 // off PE-byte tradecraft (imphash, sections, imports) and is instead
-// pattern-matching on language-specific source idioms — RWX VirtualAlloc,
+// pattern-matching on language-specific source idioms - RWX VirtualAlloc,
 // PowerShell IEX cradles, ctypes loaders, etc.
 function SourceCodeBanner({ result }) {
   const theme = useTheme();
   if (result?.file_type !== 'source_code') return null;
   const banner = result.file_type_banner
-    || `${result.file_type_label || 'Source code'} detected — performing static `
+    || `${result.file_type_label || 'Source code'} detected - performing static `
        + `code analysis (string patterns, hardcoded IOCs, dangerous API combinations) `
        + `rather than PE / ELF byte analysis.`;
   const lang = (result.type?.source_language || 'Source Code');
@@ -1178,9 +1178,9 @@ function FileIdentity({ result }) {
   const rows = [
     ['Detected type',  t.detected_mime, t.detected_desc],
     ['Claimed type',   `.${t.claimed_ext} · ${t.claimed_mime}`,
-                       t.mismatch ? '⚠ mismatch — possible masquerading' : null],
-    ['Size',           result.size != null ? `${result.size.toLocaleString()} bytes (${(result.size/1024).toFixed(1)} KB)` : '—'],
-    ['Entropy',        `${e.overall ?? '—'} / 8 · ${e.band?.replace(/_/g, ' ') || '—'}`],
+                       t.mismatch ? '⚠ mismatch - possible masquerading' : null],
+    ['Size',           result.size != null ? `${result.size.toLocaleString()} bytes (${(result.size/1024).toFixed(1)} KB)` : ' - '],
+    ['Entropy',        `${e.overall ?? ' - '} / 8 · ${e.band?.replace(/_/g, ' ') || ' - '}`],
     ...(pe?.timestamp?.iso ? [['Compiled', pe.timestamp.iso,
       pe.timestamp.flags?.length ? `⚠ ${pe.timestamp.flags.join(', ')}` : null]] : []),
     ...(pe ? [['Digital signature', sig ? 'Authenticode present' : 'unsigned',
@@ -1220,7 +1220,7 @@ function FileIdentity({ result }) {
         </Box>
       </Box>
 
-      {/* Hashes — all in JetBrains Mono with copy buttons */}
+      {/* Hashes - all in JetBrains Mono with copy buttons */}
       <Box sx={{ mt: 2, pt: 1.5,
         borderTop: `1px solid ${muiAlpha('#ffffff', 0.06)}` }}>
         <Typography sx={{ fontSize: 11, color: 'text.tertiary', fontWeight: 600,
@@ -1261,7 +1261,7 @@ function ThreatIntelSection({ result }) {
     // reason string so the analyst sees WHY a source had nothing to
     // contribute, instead of a wall of literal "None" values.
     // Scan-history correlation is intentionally not surfaced: the
-    // backend explicitly skips it ("each scan stands alone" — see
+    // backend explicitly skips it ("each scan stands alone" - see
     // intel/file_correlation.py).
     const order = [
       ['VirusTotal',      ti.virustotal,
@@ -1294,7 +1294,7 @@ function ThreatIntelSection({ result }) {
     return order;
   }, [ti]);
 
-  // Top-level summary indicator — how many TI sources returned an actual hit.
+  // Top-level summary indicator - how many TI sources returned an actual hit.
   const hitCount = sources.reduce((n, [, d, fn]) => n + (fn(d).hit ? 1 : 0), 0);
   return (
     <SectionCard id="ti" label="Threat Intelligence" defaultPad={false}
@@ -1517,7 +1517,7 @@ function StringsSection({ result }) {
                     textTransform: 'uppercase', minWidth: 36 }}>{item.t}</Typography>
                   <Typography sx={{ ...monoSx, fontSize: 11, color: 'text.primary',
                     // Decoded payloads can be a multi-line hex dump for binary
-                    // content — preserve newlines so the dump stays readable.
+                    // content - preserve newlines so the dump stays readable.
                     ...(item.t === 'decoded'
                       ? { whiteSpace: 'pre-wrap', overflowX: 'auto' }
                       : { wordBreak: 'break-all' }) }}>{item.v}</Typography>
@@ -1875,7 +1875,7 @@ function Anomalies({ result }) {
 }
 
 
-// ─── 12. Detection Content — now also hosts YARA matches ─────────────────────
+// ─── 12. Detection Content - now also hosts YARA matches ─────────────────────
 function DetectionContent({ result }) {
   const d = result.detections || {};
   const blocks = [
@@ -1893,7 +1893,7 @@ function DetectionContent({ result }) {
     <SectionCard id="detect" label="Detection Content" defaultOpen={false}
       summary={`${totalCount} item${totalCount === 1 ? '' : 's'}`}>
 
-      {/* YARA matches first — they're concrete signals on this specific
+      {/* YARA matches first - they're concrete signals on this specific
           sample, while the Sigma/KQL/SPL rules below are generated
           detections to deploy elsewhere. */}
       {yaraMatches.length > 0 && (
@@ -2247,7 +2247,7 @@ function StickyHeader({ result, scanning }) {
         )}
         {scanning && (
           <Stack direction="row" alignItems="center" spacing={0.75}>
-            {/* Pulsing dot replaces the centered spinner — RECON no-spinner rule */}
+            {/* Pulsing dot replaces the centered spinner - RECON no-spinner rule */}
             <Box sx={{
               width: 8, height: 8, borderRadius: 99,
               backgroundColor: 'primary.main',
@@ -2446,7 +2446,7 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
 
   const onRefreshScan = (updated) => {
     if (sidebarDriven) {
-      // The parent owns state — we can't update directly, but the data we
+      // The parent owns state - we can't update directly, but the data we
       // received IS the new scan. Push it via local state as override.
       setLocalResult(updated);
     } else {
@@ -2498,7 +2498,7 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
           )}
 
           {result && (() => {
-            // URL scan branch — render the dedicated reputation report.
+            // URL scan branch - render the dedicated reputation report.
             // The downloaded payload's malware-analysis sections only render
             // when there's a real reason to look at them (YARA matched, AI
             // verdict is MALICIOUS/SUSPICIOUS, or threat-intel cross-refs
@@ -2514,7 +2514,7 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
               || ['MALICIOUS','SUSPICIOUS'].includes(result.verdict);
 
             if (isUrlScan) {
-              // Identity factoids — Domain registered (WHOIS, with VT
+              // Identity factoids - Domain registered (WHOIS, with VT
               // creation_date fallback when the registrar returns no
               // date), Registrar, Last Wayback snapshot. Lives at the
               // top in its own collapsible card so the analyst sees
@@ -2540,7 +2540,7 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
                               || _toIso(_vtUrl?.creation_date);
               const _regIso = _whois?.created || _vtCreated;
               // 3+ label hosts (e.g. dx8izrc8b627.cloudfront.net) almost
-              // never have their own WHOIS — the VT date reflects the
+              // never have their own WHOIS - the VT date reflects the
               // PARENT registration (cloudfront.net) and would mislead
               // the analyst if labelled "first seen" of the actual URL.
               // Compute the parent so we can show it in the label.
@@ -2565,7 +2565,7 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
                     ? `${_formatDate(_regIso)}  (${_regAgeDays}d ago)`
                     : _formatDate(_regIso),
                   // Newness accent only when this is the *actual* URL's
-                  // age — for parent-domain inferences, the colour would
+                  // age - for parent-domain inferences, the colour would
                   // be misleading.
                   accent: !_isSubOnCdn && _regAgeDays != null && _regAgeDays < 30
                     ? '#E6700F' : null,
@@ -2582,7 +2582,7 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
 
               return (
                 <Stack spacing={2}>
-                  {/* The 'Page not downloadable' banner was removed — it
+                  {/* The 'Page not downloadable' banner was removed - it
                       fired on every modern HTML page (Google, Udemy,
                       anything behind Cloudflare) and confused analysts
                       into thinking the scan failed. URLScan's screenshot
@@ -2637,7 +2637,7 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
                 <TechnicalAssessment result={result}/>
                 <ExecutionNarrative result={result}/>
                 {/* Anomalies are fused into Key Findings (anomaly-flagged
-                    rows) — no separate Anomalies card. */}
+                    rows) - no separate Anomalies card. */}
                 <KeyFindings result={result}/>
                 <FileIdentity result={result}/>
                 <ThreatIntelSection result={result}/>
@@ -2664,7 +2664,7 @@ export default function FileScannerView({ external, onScanFile, onScanHash, onSc
 }
 
 
-// Standalone drop zone — only used when the view is opened outside the
+// Standalone drop zone - only used when the view is opened outside the
 // sidebar-driven flow. In the production app this almost never runs.
 function StandaloneSubmission({ scanFile }) {
   const [dragOver, setDragOver] = useState(false);

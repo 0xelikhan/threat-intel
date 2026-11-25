@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-// Bundle Leaflet locally — loading it from a CDN is blocked by the app's
+// Bundle Leaflet locally - loading it from a CDN is blocked by the app's
 // Content Security Policy (script-src/style-src 'self'). Local import is
 // same-origin, synchronous, and removes the async-load timing issues.
 import L from 'leaflet';
@@ -8,7 +8,7 @@ import 'leaflet/dist/leaflet.css';
 const VERDICT_COLORS = { MALICIOUS: '#ff2d2d', SUSPICIOUS: '#ff8c00', CLEAN: '#51cf66', UNKNOWN: '#74c0fc' };
 
 // Approximate country centroids (ISO-3166 alpha-2 → [lat, lng]). Used as a
-// fallback when an IP has a country but no precise ipinfo "loc" — otherwise
+// fallback when an IP has a country but no precise ipinfo "loc" - otherwise
 // that IP silently drops off the map (common for the 2nd IP in an
 // impossible-travel pair when one ipinfo lookup returns no coordinates).
 const COUNTRY_CENTROIDS = {
@@ -80,7 +80,7 @@ export default function MapTab({ result }) {
       }).addTo(map);
       mapInstanceRef.current = map;
       setLeafletReady(true);
-      // Container is often zero-sized while the parent Collapse expands —
+      // Container is often zero-sized while the parent Collapse expands  - 
       // re-measure shortly after so tiles paint. Safe to call repeatedly.
       var sizeTimers = [60, 300, 700].map(ms => setTimeout(() => {
         try { map.invalidateSize(); } catch (_) {}
@@ -141,7 +141,7 @@ export default function MapTab({ result }) {
           <div style="font-size:14px;color:#e2e8f0;margin-bottom:8px;font-weight:bold">${ip}</div>
           <div style="display:inline-block;background:${color}22;border:1px solid ${color}66;color:${color};padding:2px 8px;border-radius:3px;font-size:10px;letter-spacing:1px;margin-bottom:8px">${verdict}</div>
           ${details.city ? `<div style="color:#718096">${details.city}, ${details.country}</div>` : `<div style="color:#718096">${details.country}</div>`}
-          ${details.approxLoc ? `<div style="color:#5a6678;font-size:10px;margin-top:2px">approx — country-level location</div>` : ''}
+          ${details.approxLoc ? `<div style="color:#5a6678;font-size:10px;margin-top:2px">approx - country-level location</div>` : ''}
           ${details.org ? `<div style="color:#718096;margin-top:4px">${details.org}</div>` : ''}
           ${details.abuseScore > 0 ? `<div style="margin-top:6px;color:#ffa94d">Abuse score: ${details.abuseScore}%</div>` : ''}
           ${details.vtMalicious > 0 ? `<div style="color:#ff6b6b">VT: ${details.vtMalicious} malicious engines</div>` : ''}
@@ -218,8 +218,8 @@ export default function MapTab({ result }) {
                 return (
                   <tr key={ip} style={{ borderBottom: '1px solid #0d1a30', background: i % 2 === 0 ? 'transparent' : '#060b1c' }}>
                     <td style={{ padding: '8px 10px', fontFamily: 'JetBrains Mono', color: '#00e5ff' }}>{ip}</td>
-                    <td style={{ padding: '8px 10px', color: '#e6edf3' }}>{d.country || '—'}</td>
-                    <td style={{ padding: '8px 10px', color: '#718096', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.org || '—'}</td>
+                    <td style={{ padding: '8px 10px', color: '#e6edf3' }}>{d.country || ' - '}</td>
+                    <td style={{ padding: '8px 10px', color: '#718096', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.org || ' - '}</td>
                     <td style={{ padding: '8px 10px' }}>
                       <span style={{ background: `${c}22`, border: `1px solid ${c}66`, color: c, padding: '2px 6px', borderRadius: '3px', fontSize: '10px' }}>{verdict}</span>
                     </td>

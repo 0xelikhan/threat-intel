@@ -2,14 +2,14 @@
 Paste-site / asset enrichment sources.
 
 Adds to the IOC enrichment pipeline:
-  * Criminal IP — IP threat scoring + asset detail
-  * URLScan screenshot retrieval — fetch the screenshot UUID for a previously
+  * Criminal IP - IP threat scoring + asset detail
+  * URLScan screenshot retrieval - fetch the screenshot UUID for a previously
     scanned URL so analysts can preview the page without visiting it
 
 Every function:
   * accepts an aiohttp ClientSession + the IOC value + a `keys` dict
   * returns a flat dict with a `source` key + optional `verdict` field
-  * NEVER raises — failures return {"error": ..., "source": ..., "error_type": ...}
+  * NEVER raises - failures return {"error": ..., "source": ..., "error_type": ...}
   * uses the shared _get / _post wrappers from agents.enrichment so circuit
     breaker + semaphore + per-source timeout apply uniformly
 """
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-# Imported lazily inside functions to avoid a circular import — these
+# Imported lazily inside functions to avoid a circular import - these
 # helpers live in agents.enrichment which imports nothing from this module.
 
 

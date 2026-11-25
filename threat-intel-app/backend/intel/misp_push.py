@@ -1,16 +1,16 @@
 """
-MISP push adapter — create an Event in an operator-configured MISP
+MISP push adapter - create an Event in an operator-configured MISP
 instance from a RECON investigation result.
 
 PyMISP is already in requirements.txt (for the read-side galaxy
 loaders). This module uses the same dependency to PUSH IOCs out as a
-new MISP event — closes the loop so RECON findings can flow into the
+new MISP event - closes the loop so RECON findings can flow into the
 operator's shared threat-intel platform.
 
 Operator configuration via env or settings:
-  MISP_URL          — https://misp.example.org
-  MISP_KEY          — PyMISP automation key
-  MISP_VERIFYCERT   — 1 / 0 (default 1)
+  MISP_URL          - https://misp.example.org
+  MISP_KEY          - PyMISP automation key
+  MISP_VERIFYCERT   - 1 / 0 (default 1)
 
 When unset, the push endpoint returns 503 with a clear "configure MISP
 in Settings" message.
@@ -26,7 +26,7 @@ _log = logging.getLogger("recon.intel.misp_push")
 
 
 # Map RECON IOC types → MISP attribute types. MISP uses very granular
-# naming (ip-src vs ip-dst, etc.) — we default to ip-dst (outbound) for
+# naming (ip-src vs ip-dst, etc.) - we default to ip-dst (outbound) for
 # IPs since RECON's reactive triage usually surfaces C2 / attacker IPs.
 _IOC_TYPE_TO_MISP = {
     "ips":     ("Network activity",  "ip-dst"),
@@ -153,7 +153,7 @@ def push_event(iocs: Dict[str, List[str]],
         actor = raw_actor
 
     event = MISPEvent()
-    event.info = (f"RECON {verdict} — {actor}" if actor
+    event.info = (f"RECON {verdict} - {actor}" if actor
                   else f"RECON {verdict} investigation")[:240]
     event.distribution     = distribution
     event.threat_level_id  = threat_level_id

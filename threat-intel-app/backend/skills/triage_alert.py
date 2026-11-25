@@ -1,5 +1,5 @@
 """
-TriageAlertSkill — wraps the existing run_triage agent.
+TriageAlertSkill - wraps the existing run_triage agent.
 
 Builds a synthetic state object so the agent's state-driven contract still
 holds, then surfaces the fields skills callers expect.

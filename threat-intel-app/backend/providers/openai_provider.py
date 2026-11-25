@@ -29,7 +29,7 @@ def _clean_sdk_err(e: BaseException) -> str:
     AuthenticationError → 'auth failed', etc."""
     msg = (getattr(e, "message", None) or "").strip()
     if msg:
-        # The SDK's .message is usually one sentence — trim hard.
+        # The SDK's .message is usually one sentence - trim hard.
         return msg[:200]
     # Fall back to a short class-name phrase rather than the raw repr.
     cls = type(e).__name__
@@ -46,7 +46,7 @@ class OpenAIProvider(LLMProvider):
         # when the config tuple (key / base_url / api_version) changes,
         # which lets a Settings-UI key rotation take effect on the next
         # call without a restart. The previous code constructed a fresh
-        # AsyncOpenAI every complete() — fine in tests, but in production
+        # AsyncOpenAI every complete() - fine in tests, but in production
         # an investigation that fires 3 parallel synthesis calls + a
         # tool-call loop spent real time on TLS handshakes that should
         # have been pooled.
@@ -109,7 +109,7 @@ class OpenAIProvider(LLMProvider):
         # The SDK is now constructed with max_retries=0 so the manual
         # rate-limit retry loop below is the ONLY retry layer. The
         # previous setup (SDK max_retries=1 + manual for attempt in
-        # (0,1)) compounded to up to 4 attempts on a transient 429 —
+        # (0,1)) compounded to up to 4 attempts on a transient 429  - 
         # each one billing tokens. The manual layer is the spec-faithful
         # one (deterministic 2s wait + one retry); the SDK's was opaque
         # and amplified, not parallel.
@@ -137,24 +137,24 @@ class OpenAIProvider(LLMProvider):
             except Exception as e:
                 last_err = e
                 msg = str(e).lower()
-                # 401 / 403 / invalid_api_key — no point retrying.
+                # 401 / 403 / invalid_api_key - no point retrying.
                 if any(s in msg for s in ("invalid_api_key", "incorrect api key",
                                           "invalid authentication", "401", "403",
                                           "unauthorized", "permission")):
                     return LLMResponse(
                         model=model, provider=self.name,
-                        error="LLM authentication failed — check your API key in /settings",
+                        error="LLM authentication failed - check your API key in /settings",
                     )
-                # Rate limit — wait then retry once.
+                # Rate limit - wait then retry once.
                 if attempt == 0 and any(s in msg for s in ("rate limit", "429", "too many requests")):
                     await _asyncio.sleep(2.0)
                     continue
-                # 5xx server error — retry once immediately.
+                # 5xx server error - retry once immediately.
                 if attempt == 0 and any(s in msg for s in ("500", "502", "503", "504",
                                                             "internal server", "bad gateway",
                                                             "service unavailable", "gateway timeout")):
                     continue
-                # Anything else — give up after this attempt.
+                # Anything else - give up after this attempt.
                 return LLMResponse(model=model, provider=self.name,
                                    error=_clean_sdk_err(e))
         else:

@@ -1,6 +1,6 @@
 """Regression tests for the email composer's additionalDetails parser.
 
-Anchors the fix in ce25966 — concatenated PIM / Entra ID exports put
+Anchors the fix in ce25966 - concatenated PIM / Entra ID exports put
 every additionalDetails field on a single line with no separator:
 
     additionalDetails :key : ipaddrvalue : 89.104.236.4
@@ -54,7 +54,7 @@ def test_concatenated_pim_extracts_action_type():
 
 
 def test_concatenated_pim_extracts_multiword_value():
-    """User-Agent contains spaces, parens, semicolons — must capture
+    """User-Agent contains spaces, parens, semicolons - must capture
     the whole string until end-of-line, not stop at the first space."""
     from intel.email_composer import _extract_additional_detail_value
     out = _extract_additional_detail_value(
@@ -65,7 +65,7 @@ def test_concatenated_pim_extracts_multiword_value():
 
 
 def test_concatenated_pim_extracts_punctuated_value():
-    """Justification has periods, apostrophes, commas — confirm the
+    """Justification has periods, apostrophes, commas - confirm the
     capture stops at end-of-line, not at the first period."""
     from intel.email_composer import _extract_additional_detail_value
     out = _extract_additional_detail_value(
@@ -76,7 +76,7 @@ def test_concatenated_pim_extracts_punctuated_value():
 
 
 def test_multiline_pim_still_works():
-    """The original multi-line shape must keep working — analysts pasting
+    """The original multi-line shape must keep working - analysts pasting
     out of PowerShell's pretty-printer get nicely formatted blocks."""
     log = """\
 additionalDetails :
@@ -104,7 +104,7 @@ def test_empty_input_returns_empty():
 
 
 # ─── targetResources (concatenated) ───────────────────────────────────
-# Real PIM "Add member to role" lines — 5 fields per resource, all
+# Real PIM "Add member to role" lines - 5 fields per resource, all
 # concatenated. The walker has to pick out the User-typed resource and
 # return its UPN / displayName.
 PIM_TARGET_RESOURCES_LINE = (

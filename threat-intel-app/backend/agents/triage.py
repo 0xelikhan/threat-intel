@@ -1,5 +1,5 @@
 """
-Triage Agent — reads API config at call time, not import time.
+Triage Agent - reads API config at call time, not import time.
 This allows keys entered in the Settings UI to take effect immediately.
 """
 
@@ -26,7 +26,7 @@ BENIGN_DOMAINS = {
     "icloud.com", "cloudflare.com", "fastly.net", "akamai.net",
 }
 
-# Loose IPv6 candidate matcher — handles full notation, leading ::, trailing ::,
+# Loose IPv6 candidate matcher - handles full notation, leading ::, trailing ::,
 # and embedded :: compression. Every candidate is validated through
 # ipaddress.ip_address() so false-positive substrings (hex strings, MAC
 # addresses, etc.) are rejected at the validation step.
@@ -45,7 +45,7 @@ _IPV6_CANDIDATE_RE = re.compile(
     r"|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}"
     r"|[0-9a-fA-F]{1,4}:(?:(?::[0-9a-fA-F]{1,4}){1,6})"
     r"|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}"     # leading :: with suffix
-    r"|(?:[0-9a-fA-F]{1,4}:){1,7}:"                       # trailing :: (NO suffix — LAST)
+    r"|(?:[0-9a-fA-F]{1,4}:){1,7}:"                       # trailing :: (NO suffix - LAST)
     r"|::"                                                  # bare ::
     r")\b"
 )
@@ -53,7 +53,7 @@ _IPV6_CANDIDATE_RE = re.compile(
 
 def _is_private_ip(ip: str) -> bool:
     """True for loopback / private / link-local / multicast / reserved
-    addresses in BOTH IPv4 and IPv6 — uses the stdlib `ipaddress`
+    addresses in BOTH IPv4 and IPv6 - uses the stdlib `ipaddress`
     module so we don't have to re-implement RFC1918 / RFC4193 / etc."""
     try:
         addr = ipaddress.ip_address(ip)
@@ -66,7 +66,7 @@ def _is_private_ip(ip: str) -> bool:
 def _valid_ip(ip: str) -> bool:
     """Accept any well-formed IPv4 or IPv6 address. Replaces the old
     IPv4-only _valid_octets which rejected every IPv6 input on the
-    `int(part) ValueError` branch — that bug caused impossible-travel
+    `int(part) ValueError` branch - that bug caused impossible-travel
     alerts (which carry IPv6 source IPs) to skip enrichment entirely."""
     try:
         ipaddress.ip_address(ip)
@@ -77,7 +77,7 @@ def _valid_ip(ip: str) -> bool:
 
 def _valid_ipv4_octets(ip: str) -> bool:
     """Explicit IPv4 octet validation: every octet must be 0-255. Belt-and-
-    braces gate on top of ipaddress.ip_address() — Microsoft Defender logs
+    braces gate on top of ipaddress.ip_address() - Microsoft Defender logs
     emit Security Intelligence Version strings like "AV: 1.451.195.0" that
     look IPv4-shaped but have octets > 255. They are not IPs and must never
     reach the IOC list."""
@@ -94,14 +94,14 @@ def _valid_ipv4_octets(ip: str) -> bool:
     return True
 
 
-# Backwards-compatible alias — `_valid_octets` was the old name and may be
+# Backwards-compatible alias - `_valid_octets` was the old name and may be
 # imported by tests. The new behaviour accepts IPv6 too.
 _valid_octets = _valid_ip
 
 
 # Reject `http(s)://<dotted-quad>...` URLs whose host has any octet > 255.
 # iocextract's refang of "1[.]453[.]161[.]0" produces "http://1.453.161.0"
-# — a syntactically-shaped URL whose host isn't a valid IP. Without this
+# - a syntactically-shaped URL whose host isn't a valid IP. Without this
 # gate the fabricated URL reaches enrichment, where VT/AbuseIPDB return
 # `bad request` and the bogus IOC pollutes the analyst report.
 _URL_DOTTED_QUAD_HOST_RE = re.compile(
@@ -120,7 +120,7 @@ def _url_host_is_invalid_quad(url: str) -> bool:
 # Microsoft Defender Event ID 1116/1117 emits Security Intelligence and
 # Engine version strings in the form "AV: 1.451.195.0", "AS: 1.451.195.0",
 # "NIS: 1.451.195.0", "AM: 1.1.24090.11". Their second octet routinely
-# exceeds 255, so they are NOT IP addresses — they are software version
+# exceeds 255, so they are NOT IP addresses - they are software version
 # numbers. iocextract still matches them as dotted-quad candidates, so we
 # scrub them out of the raw text before IOC extraction runs.
 _DEFENDER_VERSION_RE = re.compile(
@@ -130,7 +130,7 @@ _DEFENDER_VERSION_RE = re.compile(
     r"\d{1,5}(?:\.\d{1,5}){2,3}",
     re.IGNORECASE,
 )
-# Standalone "AV: 1.451.195.0" form (no "Version" word) — common in Defender XML.
+# Standalone "AV: 1.451.195.0" form (no "Version" word) - common in Defender XML.
 _DEFENDER_AV_KV_RE = re.compile(
     r"\b(?:AV|AS|NIS|AM)\s*:\s*\d{1,5}(?:\.\d{1,5}){2,3}\b",
 )
@@ -143,13 +143,13 @@ _DEFENDER_AV_KV_RE = re.compile(
 # are < 256, but in this context it's a version directory, not a host
 # address. Strip every 4-part numeric segment that is bracketed on both
 # sides by a path separator. We deliberately don't strip segments at the
-# end of a token (no trailing /) — `connect to 6.35.0.35` is still a
+# end of a token (no trailing /) - `connect to 6.35.0.35` is still a
 # legitimate IP candidate and should reach extraction.
 _PATH_VERSION_RE = re.compile(
     r"(?<=[\\\\/])\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?=[\\\\/])"
 )
 
-# X.509 Object Identifiers (OIDs) — dot-separated numbers, 5+ components,
+# X.509 Object Identifiers (OIDs) - dot-separated numbers, 5+ components,
 # often prefixed with "oid." in Windows EDR certificate fields:
 #   oid.1.3.6.1.4.1.311.60.2.1.1=road town
 #   oid.2.5.4.15=private organization
@@ -164,13 +164,13 @@ _OID_RE = re.compile(
     re.IGNORECASE,
 )
 # Short OIDs that LOOK like IPs (4 components) but live in certificate
-# context — the "oid." prefix gives them away. Catches "oid.2.5.4.15"
+# context - the "oid." prefix gives them away. Catches "oid.2.5.4.15"
 # and similar.
 _OID_PREFIXED_SHORT_RE = re.compile(
     r"\boid\.\d{1,5}(?:\.\d{1,5}){2,}\b",
     re.IGNORECASE,
 )
-# X.509 directory attribute OIDs (the 2.5.4.X branch — CN, OU, O, L, S, C,
+# X.509 directory attribute OIDs (the 2.5.4.X branch - CN, OU, O, L, S, C,
 # serialNumber, businessCategory, etc.). These appear as bare "2.5.4.15"
 # in the trailing part of certificate subject strings even when the
 # parser stripped the "oid." prefix. They are never real IPs in EDR
@@ -198,7 +198,7 @@ _SOFTWARE_VERSION_RE = re.compile(
 # Labeled IP fields with an obviously-not-an-IP value. A user's SIEM
 # auto-populates "Source IP: <first dotted-quad we found>", which for
 # Defender 1116 events ends up being the AV/AS/NIS Security Intelligence
-# Version (1.453.161.0 — octet > 255). The value lands in:
+# Version (1.453.161.0 - octet > 255). The value lands in:
 #   * the raw alert body the LLM reads, where the model dutifully repeats
 #     "the source IP for this event is 1.453.161.0"
 #   * iocextract's URL extractor, which refangs 1[.]453[.]161[.]0 to
@@ -318,7 +318,7 @@ _HASH_RES     = (
     re.compile(r"\b[a-fA-F0-9]{32}\b"),
 )
 
-# Domain extractor — TLD-bounded so we don't grab arbitrary tokens.
+# Domain extractor - TLD-bounded so we don't grab arbitrary tokens.
 # Hoisted to module scope from inside extract_iocs() so we don't pay
 # the compile cost on every triage call.
 _URL_STRIP_RE = re.compile(r"https?://[^\s\"'<>\]\),]+")
@@ -383,7 +383,7 @@ def extract_iocs(text: str) -> dict:
 
     # Tiny inputs (≤ 10 KB) get an extra iocextract pass for the rare
     # edge forms the regex misses. The library's quadratic behaviour
-    # only bites on large inputs — below the cap it adds ~10 ms for
+    # only bites on large inputs - below the cap it adds ~10 ms for
     # better coverage. ImportError still falls through cleanly.
     if len(norm) <= 10_000:
         try:
@@ -407,7 +407,7 @@ def extract_iocs(text: str) -> dict:
                     continue
                 if _url_host_is_invalid_quad(url):
                     # iocextract refangs defanged "1[.]453[.]161[.]0"
-                    # into "http://1.453.161.0" — drop these so SIEM
+                    # into "http://1.453.161.0" - drop these so SIEM
                     # mis-labelled version strings don't get shipped as
                     # URL IOCs to enrichment.
                     continue
@@ -417,7 +417,7 @@ def extract_iocs(text: str) -> dict:
             for e in iocextract.extract_emails(norm, refang=True):
                 e = e.lower().strip()
                 # iocextract's email extractor sometimes glues a
-                # preceding token onto the local-part — 'email from
+                # preceding token onto the local-part - 'email from
                 # ceo-support@x.com' comes back as 'fromceo-support@x.com'.
                 # Validate that the extracted address actually appears at
                 # a word boundary in the source before accepting it.
@@ -430,7 +430,7 @@ def extract_iocs(text: str) -> dict:
         except ImportError:
             pass
 
-    # IPv6 sweep — runs regardless of which path above ran. iocextract picks
+    # IPv6 sweep - runs regardless of which path above ran. iocextract picks
     # up most IPv6 forms but the regex catch-all here makes the impossible-
     # travel case (where v6 addresses sit in `FirstLoginIp : <addr>` lines)
     # bulletproof. Every candidate is validated through ipaddress.ip_address()
@@ -444,14 +444,14 @@ def extract_iocs(text: str) -> dict:
             continue
         iocs["ips"].add(normalised)
 
-    # IPv6 substring dedup — the trailing-:: branch of the regex (plus the
+    # IPv6 substring dedup - the trailing-:: branch of the regex (plus the
     # equivalent in iocextract) sometimes matches both "2606:4700::" and the
     # longer "2606:4700::1111" from the same source. They're both technically
     # valid IPv6, but the shorter is just a regex prefix of the longer.
     # Whichever raw substring is contained in another is dropped.
     v6_in_set = [s for s in iocs["ips"] if ":" in s]
     if len(v6_in_set) > 1:
-        # Reconstruct the raw textual forms we'd compare against — using the
+        # Reconstruct the raw textual forms we'd compare against - using the
         # source text, not the canonicalised forms (those have already been
         # normalised away from each other).
         for shorter in list(v6_in_set):
@@ -475,7 +475,7 @@ def extract_iocs(text: str) -> dict:
         if not any(d == b or d.endswith("." + b) for b in BENIGN_DOMAINS):
             iocs["domains"].add(d)
 
-    # Filename / executable extraction — common in EDR / OS log lines
+    # Filename / executable extraction - common in EDR / OS log lines
     for m in _EXE_RE.finditer(text or ""):
         name = m.group(1)
         # Filter out the obvious noise (windows.exe is not an IOC by itself etc.)
@@ -490,7 +490,7 @@ def extract_iocs(text: str) -> dict:
         if len(p) >= 8:
             iocs["paths"].add(p)
 
-    # CVE IDs — extracted from raw text via a strict regex, deduped,
+    # CVE IDs - extracted from raw text via a strict regex, deduped,
     # year-validated. Drives the CVE-enrichment pipeline (NVD + EPSS +
     # live CISA KEV check). Lives in its own bucket alongside ips/domains
     # so it routes through the same parallel fan-out + per-source
@@ -502,7 +502,7 @@ def extract_iocs(text: str) -> dict:
     except Exception:
         pass
 
-    # Cryptocurrency addresses — BTC / ETH / XMR / etc. Routes through
+    # Cryptocurrency addresses - BTC / ETH / XMR / etc. Routes through
     # enrich_crypto → ransomwhe.re + OFAC SDN. Critical for ransomware
     # note triage and BEC / sanctions attribution.
     try:
@@ -531,7 +531,7 @@ def extract_iocs(text: str) -> dict:
     except ImportError:
         pass  # phonenumbers optional; silently skip when not installed
     except Exception:
-        pass  # defensive — never let IOC extraction crash on phones
+        pass  # defensive - never let IOC extraction crash on phones
 
     return {k: list(v) for k, v in iocs.items()}
 
@@ -550,7 +550,7 @@ def score_iocs(iocs: dict) -> float:
 
 
 def derive_alert_type(iocs: dict, cross_refs: dict) -> str:
-    """Infer alert type from heuristic signals — no AI call needed."""
+    """Infer alert type from heuristic signals - no AI call needed."""
     if cross_refs.get("phishing_kits"):
         return "phishing"
     if cross_refs.get("kev"):
@@ -582,24 +582,24 @@ def derive_alert_type(iocs: dict, cross_refs: dict) -> str:
 
 def _is_high_confidence(heuristic_score: float, cross_refs: dict, iocs: dict) -> bool:
     """Return True when heuristic + offline-intel signals are strong enough that
-    the AI triage call adds nothing — skip it to save 2-5 seconds per run.
+    the AI triage call adds nothing - skip it to save 2-5 seconds per run.
 
     The AI investigation step (later, slower, more thorough) does the real reasoning.
     Triage is just a routing decision: should we proceed and what alert type?
-    Be aggressive about skipping — false negatives just mean we route to investigation
+    Be aggressive about skipping - false negatives just mean we route to investigation
     anyway, which still produces a real analysis.
     """
     # ANY offline intel hit → skip AI. These signals are already authoritative.
     if any(cross_refs.get(k) for k in
            ("kev", "rmm_abuse", "loldrivers", "lolbas", "phishing_kits", "suspicious_paths")):
         return True
-    # Heuristic score alone of 0.4+ is enough — IOC counts already tell us this is real.
+    # Heuristic score alone of 0.4+ is enough - IOC counts already tell us this is real.
     if heuristic_score >= 0.4:
         return True
     return False
 
 
-TRIAGE_PROMPT = """OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes (—), en-dashes (–), or curly quotes. Use hyphens (-), commas, or restructure the sentence. This applies to every string you emit, including JSON values.
+TRIAGE_PROMPT = """OUTPUT STYLE (hard rule): Write in plain ASCII. NEVER use em-dashes ( - ), en-dashes (-), or curly quotes. Use hyphens (-), commas, or restructure the sentence. This applies to every string you emit, including JSON values.
 
 You are a SOC triage analyst. Quickly assess this security alert.
 
@@ -644,7 +644,7 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
 
     raw = state["raw_input"]
 
-    # EML detection — if the input is a raw email, run dedicated phishing analysis
+    # EML detection - if the input is a raw email, run dedicated phishing analysis
     # and append the extracted URLs/IPs/hashes to the IOC list before triage continues.
     email_analysis = None
     try:
@@ -654,7 +654,7 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
     except Exception:
         email_analysis = None
 
-    # Microsoft Defender Event 1116/1117 detection — structured parse so
+    # Microsoft Defender Event 1116/1117 detection - structured parse so
     # downstream stages (investigation prompt, response summary, email
     # composer) treat the Path field as the infected artifact and the
     # Process Name field as the legitimate triggering process, not as the
@@ -666,7 +666,7 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
     except Exception:
         defender_parse = None
 
-    # Multi-log detection has been retired — the AI was producing
+    # Multi-log detection has been retired - the AI was producing
     # "log correlation" output for single alerts containing multiple
     # pieces of evidence (Robocopy + Code Integrity modification in one
     # Defender alert, etc.) which read as if the user had pasted two
@@ -687,7 +687,7 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
     # parrot back as "the source IP for this event is …".
     state["raw_input_clean"] = clean_for_analysis(raw)
 
-    # AI log translation (spec §4) — runs before IOC extraction and behavioral
+    # AI log translation (spec §4) - runs before IOC extraction and behavioral
     # analysis so they operate on structured fields rather than just raw text.
     # Fails open: if no API key or the call errors out, translation is None and
     # downstream stages fall back to raw input.
@@ -701,7 +701,7 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
         if log_translation:
             extracted = fields_as_text(log_translation)
             if extracted:
-                # Append normalized fields to the text we feed downstream — this
+                # Append normalized fields to the text we feed downstream - this
                 # ensures behavior_extractor + extract_iocs see both raw + parsed
                 raw = raw + "\n\n# AI-extracted fields\n" + extracted
                 # And keep raw_input_clean in sync so downstream LLM stages
@@ -731,7 +731,7 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
     #
     # This gate is load-bearing: when it fails, every benign IOC (public DNS
     # resolvers, microsoft.com / google.com / cloudflare endpoints, MISP-
-    # warninglisted CIDRs) goes to the paid TI fan-out — burning quota and
+    # warninglisted CIDRs) goes to the paid TI fan-out - burning quota and
     # latency on indicators the platform already knows are CLEAN. Log loudly
     # so a wedged filter shows up in operator logs instead of just looking
     # like an unexplained quota spike.
@@ -744,7 +744,7 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
         _log.warning("MISP warninglist filter failed; benign IOCs will reach "
                      "enrichment fan-out unfiltered: %s", _e)
 
-    # Behavioral / TTP extraction on the raw input (spec §1 — pre-enrichment).
+    # Behavioral / TTP extraction on the raw input (spec §1 - pre-enrichment).
     # Scans for PowerShell encoded cradles, LOLBin abuse, persistence, lateral
     # movement, credential access, and C2 patterns; maps each to MITRE.
     behavioral_indicators: dict = {}
@@ -806,10 +806,10 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
         pass
 
     heuristic_score = score_iocs(iocs)
-    # KEV hits boost score significantly — actively exploited CVE = real threat
+    # KEV hits boost score significantly - actively exploited CVE = real threat
     if cross_refs.get("kev"):
         heuristic_score = min(1.0, heuristic_score + 0.3)
-    # Behavioural red-flag boosts — patterns in the raw log text that
+    # Behavioural red-flag boosts - patterns in the raw log text that
     # deserve investigation regardless of IOC count. Prevents the AI
     # classifier from dropping obvious attacker behaviour as "noise".
     try:
@@ -823,7 +823,7 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
             (r"parent\s*(?:process)?\s*:\s*(?:outlook|winword|excel|powerpnt|chrome|msedge|firefox|acrord32)\.exe.*?(?:powershell|cmd|wscript|cscript|mshta)", 0.35),
             # LSASS access / dump
             (r"\blsass(?:\.exe)?\s*(?:memory\s+access|dump)", 0.40),
-            # Ransomware behaviour (allow .exe suffix — was slipping through)
+            # Ransomware behaviour (allow .exe suffix - was slipping through)
             (r"\bvssadmin(?:\.exe)?\s+delete\s+shadows\b", 0.50),
             (r"\bwmic(?:\.exe)?\s+shadowcopy\s+delete\b", 0.50),
             # Named threat actors / ransomware families
@@ -953,7 +953,7 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
     trace = state.get("agent_trace", [])
     ts = datetime.now(timezone.utc).isoformat()
 
-    # Even with zero traditional IOCs, proceed — many EDR / OS / audit logs describe
+    # Even with zero traditional IOCs, proceed - many EDR / OS / audit logs describe
     # threats through process names, paths, behaviors. Let the AI investigation reason
     # over the raw log content rather than dropping the alert.
     if total_iocs == 0:
@@ -965,11 +965,11 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
         else:
             heuristic_score = max(heuristic_score, 0.30)
 
-    ioc_summary = json.dumps({k: v[:5] for k, v in iocs.items() if v}, indent=2) or "(no traditional IOCs — proceed with log-content analysis)"
+    ioc_summary = json.dumps({k: v[:5] for k, v in iocs.items() if v}, indent=2) or "(no traditional IOCs - proceed with log-content analysis)"
 
     # Fast-path: if cross-refs + heuristics already give us a confident verdict,
     # skip the AI triage call entirely. The AI investigation step still does the
-    # deep reasoning later — triage is just a routing decision.
+    # deep reasoning later - triage is just a routing decision.
     ai_result = None
     skipped_for_speed = False
     if _is_high_confidence(heuristic_score, cross_refs, iocs):
@@ -977,7 +977,7 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
         ai_result = {
             "triage_score":   heuristic_score,
             "should_proceed": True,
-            "reasoning":      f"Fast-path: strong heuristic signals (score {heuristic_score:.2f}) — AI triage skipped.",
+            "reasoning":      f"Fast-path: strong heuristic signals (score {heuristic_score:.2f}) - AI triage skipped.",
             "alert_type":     derive_alert_type(iocs, cross_refs),
             "urgency":        "high" if heuristic_score >= 0.6 else "medium",
             "false_positive_indicators": [],
@@ -988,7 +988,7 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
     # cross-refs is a strong signal this is a policy-audit event, not a
     # threat. Skip the AI classifier (saves ~4-5s of TTFT). The downstream
     # investigation stage's benign short-circuit picks the alert up next
-    # and the response fast-path finishes it — total pipeline drops to
+    # and the response fast-path finishes it - total pipeline drops to
     # triage + enrichment + a few ms of synthesis.
     if ai_result is None:
         _t2_start = time.perf_counter()
@@ -1012,7 +1012,7 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
                     "should_proceed": True,   # investigation short-circuits it
                     "reasoning":      (
                         f"Benign fast-path: signed-vendor + tenant-permit "
-                        f"markers ({_tp_hits}) with zero positive cross-refs — "
+                        f"markers ({_tp_hits}) with zero positive cross-refs - "
                         f"AI triage skipped."
                     ),
                     "alert_type":     "benign_permit",
@@ -1025,7 +1025,7 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
                 }
         except Exception as _e:
             # If signal_priority patterns aren't importable, fall through
-            # to the AI path — don't fail the whole triage stage.
+            # to the AI path - don't fail the whole triage stage.
             pass
 
     # Defer-AI short-circuit: return early with heuristic-derived state
@@ -1055,7 +1055,7 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
             "multi_log":             multi_log,
             "log_count":             (multi_log or {}).get("log_count", 1),
             "triage_score":          heuristic_score,
-            # should_proceed conservatively True — the enrichment stage
+            # should_proceed conservatively True - the enrichment stage
             # gates itself on IOCs anyway; the final AI-merged score
             # will make the real drop decision after finalize.
             "should_proceed":        heuristic_score > 0.10,
@@ -1081,7 +1081,7 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
         try:
             from providers import get_provider
             provider = get_provider()
-            # Use the scrubbed snippet — Defender version strings + SIEM-
+            # Use the scrubbed snippet - Defender version strings + SIEM-
             # mislabelled "Source IP: 1.453.161.0" are wiped on state by
             # `raw_input_clean`. Without this the model parrots the invalid
             # quad back into the analyst narrative as "the source IP for
@@ -1118,7 +1118,7 @@ async def run_triage(state: dict, defer_ai: bool = False) -> dict:
         }
 
     # AI sometimes returns triage_score as a string ("0.8") or even a
-    # word ("high") instead of a number — coerce defensively rather than
+    # word ("high") instead of a number - coerce defensively rather than
     # crashing the whole triage pipeline with a TypeError.
     try:
         _ai_score = float(ai_result.get("triage_score", heuristic_score))
@@ -1163,7 +1163,7 @@ async def finalize_triage_ai(state: dict) -> dict:
     skipped, merges the result back into state, and updates the trace
     entry.
 
-    Designed to run concurrently with `run_enrichment` — the AI call
+    Designed to run concurrently with `run_enrichment` - the AI call
     doesn't touch enrichments and enrichment doesn't touch the fields
     finalize_triage_ai writes to, so the two overlap safely. Caller
     awaits both before starting investigation.

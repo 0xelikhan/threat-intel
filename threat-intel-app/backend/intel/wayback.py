@@ -1,8 +1,8 @@
-"""Wayback Machine CDX API — historical subdomain + URL mining.
+"""Wayback Machine CDX API - historical subdomain + URL mining.
 
 The Internet Archive's CDX index returns every URL archived under a
 host pattern. Querying `*.domain` surfaces every subdomain and path
-ever snapshotted — strong signal for shadow IT and abandoned infra.
+ever snapshotted - strong signal for shadow IT and abandoned infra.
 
   GET https://web.archive.org/cdx/search/cdx?url=*.{domain}
        &output=json&collapse=urlkey&fl=original,timestamp&limit=1000

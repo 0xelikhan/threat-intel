@@ -40,7 +40,7 @@ def _parse_auth_results(value: str) -> dict:
 
 def _valid_ipv4_octets(ip: str) -> bool:
     """Every IPv4 octet must be 0-255. Discard any v4-shaped match that
-    fails — Defender / vendor-version strings slip past the regex but are
+    fails - Defender / vendor-version strings slip past the regex but are
     not IP addresses."""
     parts = (ip or "").split(".")
     if len(parts) != 4:

@@ -1,5 +1,5 @@
 """
-MatchDetectionsSkill — fan out across every bundled detection corpus and
+MatchDetectionsSkill - fan out across every bundled detection corpus and
 return citations grouped by source.
 
 Wraps:

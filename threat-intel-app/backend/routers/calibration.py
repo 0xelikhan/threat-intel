@@ -1,5 +1,5 @@
 """
-Calibration routes — analyst-override recording + agreement-rate stats.
+Calibration routes - analyst-override recording + agreement-rate stats.
 
 Extracted from main.py as the first router-split proof-of-concept. The
 routes are self-contained (no shared globals, no cross-route helpers in

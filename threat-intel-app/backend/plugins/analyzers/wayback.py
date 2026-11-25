@@ -1,4 +1,4 @@
-"""Internet Archive Wayback CDX — historical subdomains + URLs per domain.
+"""Internet Archive Wayback CDX - historical subdomains + URLs per domain.
 
 Auto-generated from _legacy_registrations.py. Keeps the LegacyAnalyzer
 Adapter pattern (import on first call + from_legacy_dict wrap) but
@@ -13,7 +13,7 @@ from plugins import Analyzer, AnalysisResult, register
 
 class WaybackAnalyzer(Analyzer):
     name = "wayback"
-    description = ('Internet Archive Wayback CDX — historical subdomains + URLs per domain.')
+    description = ('Internet Archive Wayback CDX - historical subdomains + URLs per domain.')
     supported_ioc_types = ['domain']
     required_keys = []
     optional_keys = []

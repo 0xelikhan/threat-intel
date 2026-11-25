@@ -1,16 +1,16 @@
 """
 Round-10 outbound-adapter tests:
 
-  * intel.sarif_output          — round-9 serializer already tested; this
+  * intel.sarif_output          - round-9 serializer already tested; this
                                    suite covers the /api/export/sarif/{id}
                                    endpoint shape via the helper.
-  * intel.cacao_output          — same.
-  * intel.misp_push             — graceful not_configured + builder shape
-  * intel.thehive_push          — graceful not_configured + observable
+  * intel.cacao_output          - same.
+  * intel.misp_push             - graceful not_configured + builder shape
+  * intel.thehive_push          - graceful not_configured + observable
                                    flattening
-  * intel.stix_shifter_adapter  — built-in fallback translator
+  * intel.stix_shifter_adapter  - built-in fallback translator
 
-Offline only — no network in tests.
+Offline only - no network in tests.
 """
 
 from __future__ import annotations

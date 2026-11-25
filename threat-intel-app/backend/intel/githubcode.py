@@ -1,4 +1,4 @@
-"""GitHub code search — look for a domain string in public code,
+"""GitHub code search - look for a domain string in public code,
 surfacing leaked API tokens, config files, and shadow repos tied to
 the target.
 

@@ -31,7 +31,7 @@ _log = logging.getLogger("recon.intel.ransomwhere")
 _RW_JSON = (Path(__file__).parent.parent.parent
             / "vendor" / "ransomwhere" / "addresses.json")
 
-# Crypto-address regexes — keep tight to minimise false-positive
+# Crypto-address regexes - keep tight to minimise false-positive
 # extraction. Covers BTC P2PKH/P2SH, Bech32, ETH, XMR.
 ADDRESS_REGEXES = {
     "btc_legacy": re.compile(r"\b[13][a-km-zA-HJ-NP-Z1-9]{25,34}\b"),

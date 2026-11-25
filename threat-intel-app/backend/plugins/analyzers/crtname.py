@@ -1,4 +1,4 @@
-"""crt.name — alternative CT-log subdomain index. Fallback for crt.sh outages.
+"""crt.name - alternative CT-log subdomain index. Fallback for crt.sh outages.
 
 Auto-generated from _legacy_registrations.py. Keeps the LegacyAnalyzer
 Adapter pattern (import on first call + from_legacy_dict wrap) but
@@ -13,7 +13,7 @@ from plugins import Analyzer, AnalysisResult, register
 
 class CrtnameAnalyzer(Analyzer):
     name = "crtname"
-    description = ('crt.name — alternative CT-log subdomain index. Fallback for crt.sh outages.')
+    description = ('crt.name - alternative CT-log subdomain index. Fallback for crt.sh outages.')
     supported_ioc_types = ['domain']
     required_keys = []
     optional_keys = []

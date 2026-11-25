@@ -7,7 +7,7 @@ urlscan_submit, email_draft_save, email_send_test) was open to a DOS via
 a multi-GB POST that FastAPI would parse into memory before the
 handler's field-level checks could reject it.
 
-These tests use FastAPI's TestClient — no real network, no real LLM,
+These tests use FastAPI's TestClient - no real network, no real LLM,
 just an in-process exercise of the middleware chain.
 """
 
@@ -53,7 +53,7 @@ def test_normal_size_body_passes_through(client):
     handled normally (the response code depends on the endpoint's own
     validation, but the body itself must not be rejected by the cap)."""
     # /api/urlscan/submit accepts a dict body. With no URLSCAN_KEY set
-    # it'll return 400 — that's fine; we only want to confirm the body
+    # it'll return 400 - that's fine; we only want to confirm the body
     # was NOT rejected at the middleware layer for being too large.
     body = {"url": "https://example.com/" + "x" * 500}  # ~ 530 bytes
     r = client.post("/api/urlscan/submit", json=body)
@@ -80,7 +80,7 @@ def test_oversize_content_length_rejected_with_envelope(client):
     )
     assert r.status_code == 413, f"100 MB Content-Length was NOT rejected: {r.status_code} {r.text}"
     body = r.json()
-    # Envelope shape — the frontend reads .detail || .error.
+    # Envelope shape - the frontend reads .detail || .error.
     assert body.get("detail"), f"413 missing detail field: {body}"
     assert body.get("error"),  f"413 missing error field: {body}"
     assert body.get("status") == 413
@@ -95,7 +95,7 @@ def test_50mib_file_upload_envelope_passes_through(client):
     `len(data) > 50 MiB` check is the gate, not the middleware. This is
     the regression: a previous version of the cap matched 50 MiB exact
     and rejected every legitimate 50 MiB upload."""
-    # 50 MiB + ~500 bytes of multipart framing — well within the
+    # 50 MiB + ~500 bytes of multipart framing - well within the
     # middleware's 51 MiB envelope cap.
     SIMULATED_MULTIPART = 50 * 1024 * 1024 + 500
     r = client.post(

@@ -1,5 +1,5 @@
 """
-DomainPermutationsSkill — generate typo-squat / lookalike permutations for a
+DomainPermutationsSkill - generate typo-squat / lookalike permutations for a
 domain and surface which ones actually resolve.
 
 Adapted from elceef/dnstwist (Apache-2.0). dnstwist is already shipped as a
@@ -27,7 +27,7 @@ from .base import Skill
 _log = logging.getLogger("recon.skills.domain_permutations")
 
 
-# Common permutation types dnstwist emits — used to filter low-signal variants
+# Common permutation types dnstwist emits - used to filter low-signal variants
 # (we always include character swaps + homoglyphs; we drop "addition" / "vowel-
 # swap" only when the consumer asks for high-confidence mode).
 _HIGH_SIGNAL_FUZZERS = {
@@ -68,7 +68,7 @@ class DomainPermutationsSkill(Skill):
 
     @property
     def test_input(self) -> Dict[str, Any]:
-        # microsoft.com is a long-suffering brand for typosquatting — using
+        # microsoft.com is a long-suffering brand for typosquatting - using
         # it as the test input means we get realistic permutations without
         # leaning on a domain that might disappear between test runs.
         return {"domain": "microsoft.com", "max_results": 10,
