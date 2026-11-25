@@ -76,7 +76,7 @@ const theme = createTheme({
     text: {
       primary:   text_color,
       secondary: text_color,
-      tertiary:  '#848592',
+      tertiary:  '#9aa3b8',
       disabled:  '#75829A',
     },
     border: {
@@ -165,7 +165,7 @@ const theme = createTheme({
           fontWeight: 500,
           textTransform: 'uppercase',
           letterSpacing: '0.06em',
-          color: '#848592',
+          color: '#9aa3b8',
         },
       },
     },
@@ -349,7 +349,7 @@ const theme = createTheme({
     MuiListItemText: {
       styleOverrides: {
         primary:   { fontSize: 14, fontWeight: 500 },
-        secondary: { fontSize: 12, color: '#848592' },
+        secondary: { fontSize: 12, color: '#9aa3b8' },
       },
     },
     MuiMenuItem: {
@@ -384,7 +384,7 @@ const theme = createTheme({
     MuiTableCell: {
       styleOverrides: {
         root: { fontSize: 13, padding: '8px 12px' },
-        head: { borderBottom: `1px solid ${hexToRGB('#ffffff', 0.15)}`, color: '#848592',
+        head: { borderBottom: `1px solid ${hexToRGB('#ffffff', 0.15)}`, color: '#9aa3b8',
                 fontWeight: 500, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.04em' },
         body: { borderTop: `1px solid ${hexToRGB('#ffffff', 0.15)}`,
                 borderBottom: `1px solid ${hexToRGB('#ffffff', 0.15)}` },

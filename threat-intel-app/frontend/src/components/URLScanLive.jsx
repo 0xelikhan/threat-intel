@@ -184,7 +184,7 @@ export default function URLScanLive({ result, bare, urls: urlsProp }) {
                   sx={{ mb: 0.5 }} flexWrap="wrap">
                   <MuiTag label={`verdict: ${r.verdict}`} color={verdictColor}/>
                   {r.score != null && <MuiTag label={`score ${r.score}`} color="#E6700F"/>}
-                  {r.country && <MuiTag label={r.country} color="#848592"/>}
+                  {r.country && <MuiTag label={r.country} color="#9aa3b8"/>}
                 </Stack>
                 {r.page_title && (
                   <Typography sx={{ fontSize: 13, color: 'text.primary',
@@ -265,7 +265,7 @@ export default function URLScanLive({ result, bare, urls: urlsProp }) {
             </Box>
             {r.categories?.length > 0 && (
               <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ mt: 1 }}>
-                {r.categories.map(c => <MuiTag key={c} label={c} color="#848592"/>)}
+                {r.categories.map(c => <MuiTag key={c} label={c} color="#9aa3b8"/>)}
               </Stack>
             )}
           </MuiPaper>

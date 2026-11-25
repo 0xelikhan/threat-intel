@@ -121,7 +121,7 @@ const IOC_TYPE_LABEL = {
 export const TypeTag = ({ type }) => (
   <Tag
     label={IOC_TYPE_LABEL[type] || type}
-    color={IOC_TYPE_COLOR[type] || '#848592'}
+    color={IOC_TYPE_COLOR[type] || '#9aa3b8'}
   />
 );
 

@@ -65,18 +65,17 @@ a:hover { color: #00f2fe; text-decoration: underline; }
 .nc-text-warning   { color: #e1b823; }
 .nc-text-danger    { color: #ef4444; }
 
-/* Live-pulse dot - "online" indicator in matrix green */
+/* Live dot - "online" indicator in matrix green. Previously had a
+   2s nc-pulse scale/opacity animation; it was the only animated
+   element on the page after the clutter-reduction pass, and a steady
+   dot with the same glow carries the "live" semantic without the
+   motion. */
 .nc-live-dot {
   display: inline-block;
   width: 8px; height: 8px;
   border-radius: 50%;
   background: #00ff41;
   box-shadow: 0 0 8px rgba(0,255,65,0.6);
-  animation: nc-pulse 2s ease-in-out infinite;
-}
-@keyframes nc-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%      { opacity: 0.55; transform: scale(0.9); }
 }
 
 /* Card hover glow - subtle cyan rim for interactive cards */

@@ -95,7 +95,7 @@ const t = {
   // text  (matches OpenCTI text.primary / tertiary / disabled)
   fg:        '#F2F2F3',           // THEME_DARK_DEFAULT_TEXT
   fgMute:    '#AFB0B6',           // text.light
-  fgDim:     '#848592',           // text.tertiary
+  fgDim:     '#9aa3b8',           // text.tertiary
   fgGhost:   '#75829A',           // text.disabled
 
   // accent - primary cyan (matches OpenCTI primary.main)
@@ -533,9 +533,9 @@ function HoneypotActivity({ result, bare }) {
         const recentReports = abuse.totalReports;
         const lastReportedAt = abuse.lastReportedAt;
         const headerChips = [
-          country && { label: country, color: '#848592' },
-          asn && { label: asn, color: '#848592' },
-          usage && { label: usage, color: '#848592' },
+          country && { label: country, color: '#9aa3b8' },
+          asn && { label: asn, color: '#9aa3b8' },
+          usage && { label: usage, color: '#9aa3b8' },
           abuseScore != null && abuseScore > 0 && {
             label: `AbuseIPDB ${abuseScore}%`,
             color: abuseScore >= 75 ? '#EE3838'
@@ -1133,7 +1133,7 @@ function SuppressedIOCs({ result, bare }) {
   );
   if (bare) return body;
   return (
-    <Card title="Filtered as benign · MISP warninglists" accent="#848592"
+    <Card title="Filtered as benign · MISP warninglists" accent="#9aa3b8"
       badge={`${total} suppressed`} defaultOpen={false}>
       {body}
     </Card>
@@ -1515,7 +1515,7 @@ function _ocSources(result, ioc, type) {
   const d = bucket?.[ioc] || {};
   const out = [];
   const red = '#EE3838', orange = '#E6700F', yellow = '#E1B823',
-        green = '#16AD34', cyan = '#00b4d8', tert = '#848592';
+        green = '#16AD34', cyan = '#00b4d8', tert = '#9aa3b8';
 
   // VirusTotal - show ratio + popular family/name when available.
   if (d.virustotal && !d.virustotal.error) {
@@ -2788,41 +2788,37 @@ function _ocSources(result, ioc, type) {
     if (!blob || typeof blob !== 'object') continue;
     const err = blob.error;
     if (!err) continue;
-    // Skip sources that have nothing actionable to report. Three classes
-    // get hidden because the analyst can't do anything with them:
-    //   * not_configured  - operator hasn't added the key yet
-    //   * rate_limited    - free-tier daily / burst quota (Pulsedive 1/sec,
-    //                       who-dat WHOIS burst, etc.).
-    //                       Real verdicts come back from the OTHER sources;
-    //                       a "rate-limited" row is just noise.
-    //   * timed_out       - upstream slowness; production has per-host
-    //                       overrides, the smoke probe is the only thing
-    //                       that ever reads this for non-actionable hosts.
-    //   * circuit_open    - recent failures triggered the breaker; analyst
-    //                       can't fix it in this run, and the breaker
-    //                       half-opens on its own.
-    if (['not_configured', 'rate_limited', 'timed_out', 'circuit_open']
-        .includes(blob.error_type)) continue;
-    // Translate the remaining error_type values to readable phrasing
-    let status;
-    if (blob.error_type === 'auth_failed') {
-      // abuse.ch issues a unified Auth-Key that all three of its APIs
-      // share - when it expires/rotates, ThreatFox/MalwareBazaar/URLhaus
-      // all fail together. Point the analyst at the right rotation
-      // surface instead of the generic "edit config.json" hint.
-      const isAbuseCh = ['ThreatFox', 'MalwareBazaar', 'URLhaus', 'URLhaus payload', 'Feodo Tracker']
-        .includes(label);
-      status = isAbuseCh
-        ? `couldn't authenticate - rotate the abuse.ch Auth-Key at https://auth.abuse.ch and update ABUSECH_AUTH_KEY in Settings`
-        : `couldn't authenticate - verify the ${label} API key in Settings`;
-    } else if (blob.error_type === 'http_error') {
-      status = `source returned an HTTP error - ${String(err).slice(0, 100)}`;
-    } else if (typeof err === 'string' && err.toLowerCase() === 'no data') {
-      status = `no data returned for this indicator`;
-    } else {
-      status = `unavailable - ${String(err).slice(0, 100)}`;
-    }
-    out.push({ source: label, label: status, color: tert });
+    // Hide every "nothing useful to show" error class. Previously we
+    // surfaced auth_failed + http_error + "no data" as dim rows, which
+    // dominated the IOC detail view when the operator hadn't configured
+    // every key. That's noise, not signal. Analyst can inspect the raw
+    // enrichments dict via the API if they need the specific failure.
+    //
+    // Hidden error_types:
+    //   not_configured  - key unset
+    //   missing_key     - same, different vocabulary
+    //   auth_failed     - key present but rejected (bad/expired/rotated)
+    //   unavailable     - service not reachable / plugin uninstalled
+    //   rate_limited    - free-tier daily / burst quota exceeded
+    //   timed_out       - upstream slowness
+    //   circuit_open    - breaker tripped; auto-recovers
+    //   http_error      - upstream 4xx/5xx
+    //   "no data"       - source queried but had nothing to say
+    //
+    // Everything else (unknown error_type) still falls through to a
+    // generic dim row so rare / novel failures stay visible.
+    const HIDDEN = new Set([
+      'not_configured', 'missing_key', 'auth_failed', 'unavailable',
+      'rate_limited', 'timed_out', 'circuit_open', 'http_error',
+    ]);
+    if (HIDDEN.has(blob.error_type)) continue;
+    if (typeof err === 'string' && err.toLowerCase() === 'no data') continue;
+
+    out.push({
+      source: label,
+      label:  `unavailable - ${String(err).slice(0, 100)}`,
+      color:  tert,
+    });
   }
 
   return out;
@@ -2887,29 +2883,41 @@ function PerIndicatorList({ sorted, result }) {
             }}>
               {ioc.length > 58 ? ioc.slice(0, 55) + '…' : ioc}
             </Typography>
-            {d.contributing_factors?.[0] && (
+            {/* Previously surfaced d.contributing_factors[0] as a
+                reason-prose line under each IOC. The text was almost
+                always just a restatement of the sources already shown
+                when the row expanded, so it read as filler. Replaced
+                with the source count alone - still gives the "there's
+                more to see" cue without the restatement. */}
+            {expandable && !open && sources.length > 0 && (
               <Typography sx={{ fontSize: 11, color: 'text.tertiary' }}>
-                {d.contributing_factors[0]}
-                {expandable && !open && (
-                  <Box component="span" sx={{ color: 'primary.main', ml: 0.75, fontSize: 10 }}>
-                    · {sources.length} source{sources.length === 1 ? '' : 's'}
-                  </Box>
-                )}
+                <Box component="span" sx={{ color: 'primary.main', fontSize: 10 }}>
+                  {sources.length} source{sources.length === 1 ? '' : 's'}
+                </Box>
               </Typography>
             )}
           </Box>
-          <Verdict verdict={d.verdict} size="small"/>
-          {expandable && (
-            <Box sx={{
-              color: 'text.tertiary',
-              display: 'flex', alignItems: 'center',
-              transition: 'transform 0.18s ease, color 0.18s ease',
-              transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
-              ...(open && { color: 'primary.main' }),
-            }}>
-              <ChevronRight size={14}/>
-            </Box>
-          )}
+          {/* Fixed-width column so the verdict chip always lands at
+              the same horizontal position across rows - the eye can
+              scan down the column instead of tracking the chip across
+              rows of different IOC lengths. 100px fits the widest
+              chip label (MALICIOUS) + gutter. */}
+          <Box sx={{ minWidth: 100, display: 'flex',
+                      justifyContent: 'flex-end' }}>
+            <Verdict verdict={d.verdict} size="small"/>
+          </Box>
+          {/* Chevron column is always present (just invisible when the
+              row isn't expandable) - keeps the chip column fixed. */}
+          <Box sx={{
+            width: 14,
+            color: expandable ? 'text.tertiary' : 'transparent',
+            display: 'flex', alignItems: 'center',
+            transition: 'transform 0.18s ease, color 0.18s ease',
+            transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+            ...(open && { color: 'primary.main' }),
+          }}>
+            <ChevronRight size={14}/>
+          </Box>
         </Box>
 
         {open && (
@@ -4762,13 +4770,13 @@ function CrossRefs({ rs, bare }) {
             const epss = k.epss;
             const epssColor = epss?.tier === 'critical' ? '#EE3838'
               : epss?.tier === 'high' ? '#E6700F'
-              : epss?.tier === 'medium' ? '#E1B823' : '#848592';
+              : epss?.tier === 'medium' ? '#E1B823' : '#9aa3b8';
             return (
               <Box component="li" key={i} sx={{ py: 1, borderTop: borderTop(i), listStyle: 'none' }}>
                 <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" sx={{ mb: 0.5 }}>
                   <Box component="span" sx={{ ...monoSx, fontSize: 12, color: 'error.main', fontWeight: 600 }}>{k.cve}</Box>
-                  <MuiTag label={k.vendor} color="#848592"/>
-                  <MuiTag label={k.product} color="#848592"/>
+                  <MuiTag label={k.vendor} color="#9aa3b8"/>
+                  <MuiTag label={k.product} color="#9aa3b8"/>
                   {k.ransomware_use && <MuiTag label="ransomware" color="#EE3838"/>}
                   {epss && <MuiTag label={`EPSS ${epss.epss_percent}% · ${epss.tier}`} color={epssColor}/>}
                   {k.date_added && (
@@ -4798,7 +4806,7 @@ function CrossRefs({ rs, bare }) {
             <Box component="li" key={i} sx={{ py: 1, borderTop: borderTop(i), listStyle: 'none' }}>
               <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" sx={{ mb: 0.5 }}>
                 <Box component="span" sx={{ ...monoSx, fontSize: 12, color: 'warning.main', fontWeight: 600 }}>{l.name}</Box>
-                {l.categories?.slice(0, 4).map(c => <MuiTag key={c} label={c} color="#848592"/>)}
+                {l.categories?.slice(0, 4).map(c => <MuiTag key={c} label={c} color="#9aa3b8"/>)}
                 {l.url && (
                   <Box component="a" href={l.url} target="_blank" rel="noreferrer"
                     sx={{
@@ -4829,7 +4837,7 @@ function CrossRefs({ rs, bare }) {
             <Box component="li" key={i} sx={{ py: 1, borderTop: borderTop(i), listStyle: 'none' }}>
               <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" sx={{ mb: 0.5 }}>
                 <Box component="span" sx={{ ...monoSx, fontSize: 12, color: 'warning.main', fontWeight: 600 }}>{r.binary}</Box>
-                <MuiTag label={r.vendor} color="#848592"/>
+                <MuiTag label={r.vendor} color="#9aa3b8"/>
                 {r.groups?.slice(0, 4).map(g => <MuiTag key={g} label={g} color="#EE3838"/>)}
               </Stack>
               <Typography sx={{ fontSize: 11, color: 'text.tertiary', lineHeight: 1.55 }}>{r.description}</Typography>
@@ -4858,7 +4866,7 @@ function CrossRefs({ rs, bare }) {
               <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" sx={{ mb: 0.5 }}>
                 <Box component="span" sx={{ ...monoSx, fontSize: 12, color: 'error.main', fontWeight: 600 }}>{d.value}</Box>
                 <MuiTag label={d.category} color={d.category === 'malicious' ? '#EE3838' : '#E6700F'}/>
-                <MuiTag label={`match: ${d.match_type}`} color="#848592"/>
+                <MuiTag label={`match: ${d.match_type}`} color="#9aa3b8"/>
                 {d.mitre && <MuiTag label={d.mitre} color="#00b4d8"/>}
                 {d.ref && (
                   <Box component="a" href={d.ref} target="_blank" rel="noreferrer"
@@ -5238,7 +5246,7 @@ export function DetectionCitationsView({ result, bare = false }) {
               <Box sx={{ display: 'flex', alignItems: 'center',
                   gap: 1, flexWrap: 'wrap', mb: 0.25 }}>
                 <MuiTag label={_SOURCE_LABEL[r.source] || r.source}
-                    color={_SOURCE_COLOR[r.source] || '#848592'}
+                    color={_SOURCE_COLOR[r.source] || '#9aa3b8'}
                     sx={{ fontSize: 10 }}/>
                 <Typography sx={{ fontSize: 12, color: 'text.primary',
                     fontWeight: 500, flex: 1 }}>
@@ -5261,7 +5269,7 @@ export function DetectionCitationsView({ result, bare = false }) {
                 <Box sx={{ mt: 0.5, ml: 0.5, display: 'flex',
                     gap: 0.5, flexWrap: 'wrap' }}>
                   {(r.techniques || []).slice(0, 6).map((t, j) => (
-                    <MuiTag key={j} label={t} color="#848592"
+                    <MuiTag key={j} label={t} color="#9aa3b8"
                         sx={{ fontSize: 9,
                               fontFamily: '"JetBrains Mono", monospace' }}/>
                   ))}
@@ -5272,13 +5280,11 @@ export function DetectionCitationsView({ result, bare = false }) {
         </Box>
       )}
 
-      {totalHits === 0 && !searchData && !searching && (
-        <Typography sx={{ fontSize: 12, color: 'text.tertiary',
-            fontStyle: 'italic' }}>
-          No exact MITRE technique matches in the corpora. Search above by
-          natural language to look for related rules.
-        </Typography>
-      )}
+      {/* Previously rendered a "No exact MITRE technique matches..."
+          italic placeholder here when empty. The placeholder was more
+          visual weight than signal; the search bar above is enough of
+          a prompt on its own, and advanced analysts don't need to be
+          told what an empty result set means. */}
 
       {_DETECTION_SOURCES.map(s => {
         const hits = (dc || {})[s.key] || [];

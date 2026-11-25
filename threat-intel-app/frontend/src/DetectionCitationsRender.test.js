@@ -85,16 +85,17 @@ describe('DetectionCitationsView - React render', () => {
     expect(screen.getByText(/suspicious PowerShell/i)).toBeInTheDocument();
   });
 
-  test('empty dc shows the fallback "no matches" prompt', () => {
-    _renderDC({
+  test('empty dc renders the search bar, no explanatory copy', () => {
+    const { container } = _renderDC({
       result: { investigation_result: { detection_corpora: {} } },
       bare: true,
     });
-    // The component shows "No exact MITRE technique matches …" when
-    // every bucket is empty. Match the key phrase so phrasing can
-    // drift without the assertion breaking.
-    expect(
-      screen.getByText(/No exact MITRE technique matches/i)
-    ).toBeInTheDocument();
+    // Previously asserted on a "No exact MITRE technique matches..."
+    // placeholder - that copy was removed because the search bar is
+    // enough of a prompt on its own. Replacement assertion: the search
+    // bar is still reachable (an input exists) and the component did
+    // not render any hit rows (no bullet "*" items).
+    expect(container.querySelector('input')).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/No exact MITRE technique matches/);
   });
 });

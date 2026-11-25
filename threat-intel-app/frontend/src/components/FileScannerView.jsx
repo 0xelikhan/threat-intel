@@ -33,8 +33,8 @@ const verdictColor = (theme, v) => ({
   SUSPICIOUS:  theme.palette.severity?.high     || '#E6700F',
   LOW:         theme.palette.severity?.medium   || '#E1B823',
   CLEAN:       theme.palette.severity?.low      || '#16AD34',
-  UNKNOWN:     theme.palette.text?.tertiary     || '#848592',
-}[v] || theme.palette.text?.tertiary || '#848592');
+  UNKNOWN:     theme.palette.text?.tertiary     || '#9aa3b8',
+}[v] || theme.palette.text?.tertiary || '#9aa3b8');
 
 const ANALYSIS_STEPS = [
   'Receiving file',
@@ -237,7 +237,7 @@ function ReportField({ label, value, mono = false, color }) {
 // analyst opens only the sources they want to investigate - verdict
 // drivers in the top panel already summarise the why.
 function CollapsibleSource({
-  title, status, statusColor = '#848592', count,
+  title, status, statusColor = '#9aa3b8', count,
   defaultOpen = false, children,
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -395,7 +395,7 @@ function UrlReputationReport({ result }) {
         ? { label: 'WATCH',  color: '#E1B823' }
         : hasCleanSignal
           ? { label: 'CLEAN',   color: '#16AD34' }
-          : { label: 'UNKNOWN', color: '#848592' };
+          : { label: 'UNKNOWN', color: '#9aa3b8' };
   const topDrivers = [...drivers].sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight)).slice(0, 3);
 
   // Headline-row factoids previously lived here but they're now rendered
@@ -407,7 +407,7 @@ function UrlReputationReport({ result }) {
   // ── helpers for per-source status pills ─────────────────────────────────
   const sourceState = (data, malicious) => {
     if (!data || data.error || (typeof data === 'object' && Object.keys(data).length === 0))
-      return { status: data?.error ? 'error' : 'no data', color: '#848592' };
+      return { status: data?.error ? 'error' : 'no data', color: '#9aa3b8' };
     if (malicious === true)  return { status: 'malicious', color: '#EE3838' };
     if (malicious === false) return { status: 'clean',     color: '#16AD34' };
     return { status: 'ok', color: '#00b4d8' };
@@ -669,7 +669,7 @@ function UrlReputationReport({ result }) {
         {/* WHOIS - the big one. */}
         {(() => {
           const age = whois?.age_days;
-          const ageColor = age == null ? '#848592'
+          const ageColor = age == null ? '#9aa3b8'
             : age < 1   ? '#EE3838'
             : age < 30  ? '#E6700F'
             : age < 180 ? '#E1B823'
@@ -800,7 +800,7 @@ function UrlReputationReport({ result }) {
             {urlscan && (
               <CollapsibleSource title="URLScan.io"
                 status={urlscan.total ? `${urlscan.total} scans` : 'no scans'}
-                statusColor={urlscan.total ? '#00b4d8' : '#848592'}>
+                statusColor={urlscan.total ? '#00b4d8' : '#9aa3b8'}>
                 {urlscan.total ? (
                   <Box>
                     {urlscan.last_scan_date && (
@@ -866,7 +866,7 @@ function UrlFileAnalysisExpander({ result, onRefreshScan, autoOpen = false }) {
         <Typography sx={{ fontSize: 11, color: 'text.tertiary', ml: 'auto !important' }}>
           {result.verdict || 'analysis'} · click to {open ? 'collapse' : 'expand'}
         </Typography>
-        <ChevronRight size={14} color="#848592" style={{
+        <ChevronRight size={14} color="#9aa3b8" style={{
           transition: 'transform .15s',
           transform: open ? 'rotate(90deg)' : 'none',
         }}/>
@@ -1342,7 +1342,7 @@ function ThreatIntelSection({ result }) {
                 {hasData ? state.hit : state.empty}
               </Typography>
               {hasData && (
-                <ChevronRight size={14} color="#848592" style={{
+                <ChevronRight size={14} color="#9aa3b8" style={{
                   transition: 'transform .15s',
                   transform: open ? 'rotate(90deg)' : 'none',
                 }}/>
@@ -1491,7 +1491,7 @@ function StringsSection({ result }) {
       <MuiTextField size="small" fullWidth
         value={query} onChange={e => setQuery(e.target.value)}
         placeholder="Filter strings…"
-        InputProps={{ startAdornment: <Search size={13} style={{ marginRight: 6, color: '#848592' }}/> }}
+        InputProps={{ startAdornment: <Search size={13} style={{ marginRight: 6, color: '#9aa3b8' }}/> }}
         sx={{ mb: 1.5, '& .MuiInputBase-input': { fontSize: 12 } }}/>
       {Object.entries(groups).map(([title, items]) => {
         const filtered = q ? items.filter(i => (i.v || '').toLowerCase().includes(q)) : items;
@@ -1524,7 +1524,7 @@ function StringsSection({ result }) {
                   {item.verdict ? (
                     <MuiChip label={item.verdict} size="small" sx={{
                       height: 16, fontSize: 9,
-                      backgroundColor: muiAlpha(verdictColorMap[item.verdict] || '#848592', 0.18),
+                      backgroundColor: muiAlpha(verdictColorMap[item.verdict] || '#9aa3b8', 0.18),
                       color: verdictColorMap[item.verdict] || 'text.disabled',
                     }}/>
                   ) : <Box/>}
@@ -1578,7 +1578,7 @@ function YaraSection({ result }) {
               </Typography>
               {m.source && (
                 <MuiChip label={m.source} size="small" sx={{ height: 16, fontSize: 9,
-                  backgroundColor: muiAlpha('#848592', 0.18) }}/>
+                  backgroundColor: muiAlpha('#9aa3b8', 0.18) }}/>
               )}
               <Typography sx={{ fontSize: 11, color: 'text.tertiary', ml: 'auto !important' }}>
                 {m.author || ''}
@@ -2683,7 +2683,7 @@ function StandaloneSubmission({ scanFile }) {
       }}
       onClick={() => document.getElementById('fsv-standalone-input').click()}
     >
-      <FileSearch size={48} color={dragOver ? '#B286FF' : '#848592'}
+      <FileSearch size={48} color={dragOver ? '#B286FF' : '#9aa3b8'}
         style={{ marginBottom: 12 }}/>
       <Typography sx={{ fontSize: 14, color: 'text.primary', fontWeight: 500 }}>
         Drop a file to analyze

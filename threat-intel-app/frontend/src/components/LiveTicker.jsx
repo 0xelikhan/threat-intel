@@ -92,6 +92,14 @@ export default function LiveTicker() {
     return null;
   }
 
+  // Also hide when there's nothing to show. Previously we rendered an
+  // empty-state placeholder ("no recent activity - enrich an IOC to
+  // populate") in the ticker bar, which was visually heavy for zero
+  // signal. Return null until at least one IOC lands in the ring
+  // buffer; the ticker fades back in on the next poll after an
+  // analysis completes.
+  if (iocs.length === 0) return null;
+
   return (
     <Box sx={{
       position: 'relative',
