@@ -244,6 +244,13 @@ async def _get(session, url, **kw):
         return {"error": f"circuit open for {host}", "error_type": "circuit_open",
                 "skipped": True}
     transport_to, safety = _timeouts_for(host)
+    # Legacy intel modules (onyphe, securitytrails, netlas, triage, ...)
+    # pass a `timeout=` kwarg that aiohttp would collide with our
+    # transport_to below. Pop it rather than let the collision raise a
+    # TypeError inside _do and silently surface as an "unreachable" row.
+    # Our own _timeouts_for picks the right value per-host; callers'
+    # timeout hint is informational only.
+    kw.pop("timeout", None)
 
     async def _do():
         async with session.get(url, timeout=transport_to, **kw) as r:
@@ -301,6 +308,9 @@ async def _post(session, url, **kw):
         return {"error": f"circuit open for {host}", "error_type": "circuit_open",
                 "skipped": True}
     transport_to, safety = _timeouts_for(host)
+    # Mirror of the _get workaround: drop caller's `timeout=` kwarg so it
+    # doesn't collide with our transport_to inside aiohttp's signature.
+    kw.pop("timeout", None)
 
     async def _do():
         async with session.post(url, timeout=transport_to, **kw) as r:
@@ -1146,6 +1156,37 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
 
     abuse_data  = _p_abuse(results[0])
     ipinfo_data = _p_ipinfo(results[1])
+
+    # ip-api.com keyless fallback. IPInfo hits a 1000/day quota on the
+    # free tier and falls flat without a token at all - when ipinfo
+    # didn't return coordinates (missing loc) OR errored out, run the
+    # ip-api lookup so the Map tab still has markers. Also useful as
+    # a cross-check: divergent country between the two has caught
+    # bad GeoIP DBs before.
+    #
+    # Blob is computed here but STORED into `data` after `data` itself
+    # is built further down (line ~1214). Early store would hit an
+    # UnboundLocalError since `data` doesn't exist yet in this scope.
+    _ip_api_blob = None
+    _needs_fallback = (not ipinfo_data or ipinfo_data.get("error")
+                        or not ipinfo_data.get("loc"))
+    if _needs_fallback:
+        try:
+            from intel.ip_api import lookup as _ip_api_lookup
+            _ip_api_blob = await _ip_api_lookup(session, ip)
+        except Exception:
+            _ip_api_blob = None
+        if _ip_api_blob and _ip_api_blob.get("found"):
+            # Promote ip-api's loc/country/org into the ipinfo slot
+            # when ipinfo was blank - keeps the Map tab's existing
+            # getIPDetails() path working without a frontend change.
+            if not ipinfo_data or not ipinfo_data.get("loc"):
+                ipinfo_data = ipinfo_data or {}
+                for k in ("country", "city", "region", "loc", "org", "asn"):
+                    v = _ip_api_blob.get(k)
+                    if v and not ipinfo_data.get(k):
+                        ipinfo_data[k] = v
+
     # Onionoo authoritative Tor Exit lookup (offline, no key). Falls
     # back to the legacy _tor list-only check when the module is
     # unavailable so the shape stays stable for downstream readers.
@@ -1194,6 +1235,10 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     if feodo:
         data["feodo_tracker"] = feodo
 
+    # Landing spot for the ip-api fallback blob computed earlier.
+    if _ip_api_blob and _ip_api_blob.get("found"):
+        data["ip_api"] = _ip_api_blob
+
     # Crowdsec community blocklist (in-process cache, populated by the
     # crowdsec Ingestor every 15 min). Zero network cost per lookup -
     # just a dict hit. Only present when the ingestor has run AND the
@@ -1207,6 +1252,39 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     except Exception:
         # Ingestor module not importable (shouldn't happen in a healthy
         # deploy) - skip silently rather than fail the whole enrich_ip.
+        pass
+
+    # ThreatCluster public feed (30-day window, populated by the
+    # threatcluster ingestor hourly). Same shape as crowdsec - cache
+    # hit = dim row with vendor link, cache miss = silent.
+    try:
+        from plugins.ingestors.threatcluster import lookup as _tc_feed_lookup
+        tc_feed_hit = _tc_feed_lookup(ip)
+        if tc_feed_hit:
+            data["threatcluster_feed"] = tc_feed_hit
+    except Exception:
+        pass
+
+    # ThreatCluster per-IOC lookup (keyless REST, 7-day cluster window).
+    # Independent of the ingested feed - returns threat-actor / malware-
+    # family attribution tags when the IP is in an active cluster.
+    try:
+        from intel.threatcluster import lookup as _tc_lookup
+        tc_hit = await _tc_lookup(session, ip)
+        if tc_hit and tc_hit.get("found"):
+            data["threatcluster"] = tc_hit
+    except Exception:
+        pass
+
+    # BGPv6.com keyless ASN + RPKI + GeoIP lookup. Different source
+    # from Robtex (independent vendor) and adds the RPKI-invalid flag
+    # - a direct hijack indicator Robtex doesn't surface.
+    try:
+        from intel.bgpv6 import lookup as _bgpv6_lookup
+        bgp_hit = await _bgpv6_lookup(session, ip)
+        if bgp_hit and bgp_hit.get("found"):
+            data["bgpv6"] = bgp_hit
+    except Exception:
         pass
 
     # Shodan InternetDB - free, no-key IP service inventory. Returns

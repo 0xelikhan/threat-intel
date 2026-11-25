@@ -22,20 +22,36 @@ import types
 import pytest
 
 
-@pytest.fixture(autouse=True, scope="module")
+@pytest.fixture(autouse=True, scope="function")
 def _stub_agents():
-    if "agents.enrichment" in sys.modules:
+    """Always stub agents.enrichment._get / _post so every analyzer
+    short-circuits to a predictable 'unreachable' response, regardless
+    of test ordering.
+
+    Previously the fixture only installed the stub when agents.enrichment
+    hadn't been imported yet. In isolation this test ran first and the
+    stub worked; inside the full suite agents.enrichment was already
+    loaded by an earlier test and the real _get fired against the live
+    network - which flaked when any remote endpoint was slow / rate-
+    limited / offline. Monkey-patching the module-level functions avoids
+    the load-order dependency entirely and restores the originals on
+    teardown so the stub doesn't leak into other test files.
+    """
+    import agents.enrichment as _enr   # ensure the real module is loaded
+    original_get  = getattr(_enr, "_get",  None)
+    original_post = getattr(_enr, "_post", None)
+
+    async def _stub_get(*a, **k):
+        return {"error": "stub", "error_type": "unreachable"}
+    async def _stub_post(*a, **k):
+        return {"error": "stub", "error_type": "unreachable"}
+    _enr._get  = _stub_get
+    _enr._post = _stub_post
+    try:
         yield
-        return
-    pkg = types.ModuleType("agents")
-    enr = types.ModuleType("agents.enrichment")
-    async def _get(*a, **k): return {"error": "stub", "error_type": "unreachable"}
-    async def _post(*a, **k): return {"error": "stub", "error_type": "unreachable"}
-    enr._get = _get
-    enr._post = _post
-    sys.modules["agents"] = pkg
-    sys.modules["agents.enrichment"] = enr
-    yield
+    finally:
+        if original_get  is not None: _enr._get  = original_get
+        if original_post is not None: _enr._post = original_post
 
 
 # Representative IOC per type

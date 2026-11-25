@@ -50,6 +50,25 @@ const BUILDERS = {
   // in backend/plugins/ingestors/crowdsec.py; this link opens the
   // vendor's own CTI page for the IP.
   'Crowdsec':        { ip: v => `https://app.crowdsec.net/cti/${enc(v)}` },
+  // ip-api.com keyless geo fallback - the vendor's site shows a UI
+  // summary of the same JSON we already have, which is useful when
+  // the analyst wants to verify the data came from a real source.
+  'ip-api':          { ip: v => `https://ip-api.com/#${enc(v)}` },
+  // ThreatCluster - per-IOC search landing page (works for IPs,
+  // domains, URLs, hashes alike via the single `value` param).
+  'ThreatCluster':   {
+    ip:     v => `https://threatcluster.io/iocs?value=${enc(v)}`,
+    domain: v => `https://threatcluster.io/iocs?value=${enc(v)}`,
+    url:    v => `https://threatcluster.io/iocs?value=${enc(v)}`,
+    hash:   v => `https://threatcluster.io/iocs?value=${enc(v)}`,
+  },
+  'ThreatCluster feed': {
+    ip:     v => `https://threatcluster.io/iocs?value=${enc(v)}`,
+    domain: v => `https://threatcluster.io/iocs?value=${enc(v)}`,
+  },
+  // BGPv6.com IP detail page - prefix + ASN + RPKI status in a single
+  // view. Successor to the now-dead bgpview.io.
+  'BGPv6':           { ip: v => `https://bgpv6.com/ip/${enc(v)}` },
   'OTX': {
     ip:     v => `https://otx.alienvault.com/indicator/ip/${enc(v)}`,
     domain: v => `https://otx.alienvault.com/indicator/domain/${enc(v)}`,

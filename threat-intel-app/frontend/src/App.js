@@ -1789,6 +1789,77 @@ function _ocSources(result, ioc, type) {
                why: 'abuse.ch maintains a curated list of active botnet C2 servers (Emotet, Dridex, TrickBot, QakBot). A hit means active malicious infrastructure - block immediately.' });
   }
 
+  // ip-api.com keyless geolocation fallback. Only populated when
+  // IPInfo was missing or errored out - so the row explicitly says
+  // "fallback" to make it clear which source produced the location.
+  if (d.ip_api && d.ip_api.found) {
+    const i = d.ip_api;
+    const bits = [];
+    if (i.country) bits.push(i.country);
+    if (i.city)    bits.push(i.city);
+    if (i.org)     bits.push(i.org);
+    else if (i.asn) bits.push(i.asn);
+    out.push({
+      source: 'ip-api',
+      label:  bits.join(' . ') || 'no geo data',
+      color:  tert,
+      why:    'ip-api.com keyless geolocation (fallback when IPInfo is unset / rate-limited). Same shape as IPInfo so the Map tab works without any API key.',
+    });
+  }
+
+  // ThreatCluster per-IOC cluster lookup (keyless REST, 7-day window).
+  // Hits carry threat-actor / malware-family attribution tags.
+  if (d.threatcluster && d.threatcluster.found) {
+    const t = d.threatcluster;
+    const bits = [];
+    if (t.cluster_count) bits.push(`${t.cluster_count} cluster${t.cluster_count !== 1 ? 's' : ''}`);
+    if ((t.families || []).length) bits.push(t.families.join(', '));
+    else if ((t.actors || []).length) bits.push(t.actors.join(', '));
+    else if ((t.cluster_titles || []).length) bits.push(t.cluster_titles[0]);
+    if ((t.categories || []).length) bits.push(t.categories.slice(0, 2).join(', '));
+    out.push({
+      source: 'ThreatCluster',
+      label:  bits.join(' . '),
+      color:  t.cluster_count >= 3 ? red : orange,
+      why:    'ThreatCluster clustered threat reporting - groups related incidents by actor / family / campaign. Multiple clusters = sustained activity.',
+    });
+  }
+
+  // ThreatCluster public feed (ingestor cache). Dim row - the per-IOC
+  // lookup above is higher-signal; this just says "also on the 30-day
+  // feed" for corroboration.
+  if (d.threatcluster_feed && d.threatcluster_feed.found && !d.threatcluster?.found) {
+    out.push({
+      source: 'ThreatCluster feed',
+      label:  'on public 30-day blocklist',
+      color:  yellow,
+      why:    'Appears on ThreatCluster\'s public 30-day IOC blocklist. Lower-signal than the per-IOC cluster lookup but useful corroboration when the cluster window has rolled past.',
+    });
+  }
+
+  // BGPv6.com keyless BGP + RPKI lookup. Different signal set from
+  // Robtex - adds RPKI-validity which Robtex doesn't surface.
+  if (d.bgpv6 && d.bgpv6.found) {
+    const b = d.bgpv6;
+    const bits = [];
+    if (b.prefix) bits.push(b.prefix);
+    if (b.asn) bits.push(`AS${b.asn}${b.asn_name ? ' ' + b.asn_name : ''}`);
+    if (b.rpki_status && b.rpki_status !== 'unknown' && b.rpki_status !== 'notfound') {
+      bits.push(`RPKI ${b.rpki_status}`);
+    }
+    if (bits.length) {
+      const c = b.rpki_status === 'invalid' ? red : tert;
+      out.push({
+        source: 'BGPv6',
+        label:  bits.join(' . '),
+        color:  c,
+        why:    b.rpki_status === 'invalid'
+          ? 'RPKI-invalid prefix: the ASN announcing this prefix doesn\'t match the Route Origin Authorization. Hijack indicator - worth checking who legitimately owns the prefix.'
+          : 'Prefix + origin ASN + RPKI validity. BGPView successor (that service shut down Nov 2025). Independent of Robtex so useful cross-check for ASN attribution.',
+      });
+    }
+  }
+
   // Crowdsec community blocklist (populated by the crowdsec ingestor).
   // A hit means the IP has been reported by community sensors in the
   // last 24h. Reports are scenario-attributed (ssh-bf, http-probing,
@@ -2368,6 +2439,10 @@ function _ocSources(result, ioc, type) {
     censys: 'Censys',
     feodo_tracker: 'Feodo Tracker',
     crowdsec:      'Crowdsec',
+    ip_api:              'ip-api',
+    threatcluster:       'ThreatCluster',
+    threatcluster_feed:  'ThreatCluster feed',
+    bgpv6:               'BGPv6',
     misp_feeds: 'MISP Feeds',
     // Previously omitted from this map - when these sources errored
     // (timeout, auth fail, circuit-open) the failure was hidden from
