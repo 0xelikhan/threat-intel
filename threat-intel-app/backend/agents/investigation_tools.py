@@ -203,6 +203,35 @@ TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
+            "name": "cti_skill_search",
+            "description": (
+                "Search a vendored library of 77 analyst-methodology playbooks "
+                "(from the cti-skills repo) and return the top matches. Each "
+                "playbook is a structured workflow (ioc-enrichment, "
+                "campaign-tracking, threat-actor-profiling, phishing-social-"
+                "engineering, country-specific espionage, ransomware-ecosystem, "
+                "SAT techniques like devils-advocacy/key-assumptions-check, "
+                "intelligence-writing, source-provenance, tlp-guide, etc.). Use "
+                "when you need to CITE a methodology in your finding, or when "
+                "you want to know how to approach a specific CTI task (e.g. "
+                "'how do I profile this actor', 'what's the TLP guidance for "
+                "sharing this')."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string",
+                              "description": "Free-text query. 3+ chars per term. Examples: 'ransomware ecosystem', 'mitre attack technique', 'tlp handling'"},
+                    "limit": {"type": "integer", "default": 3,
+                              "description": "Max matches to return (1-10)"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "domain_heuristics",
             "description": (
                 "Run offline heuristics on a domain without any API calls: NRD age (if "
@@ -302,6 +331,7 @@ async def execute_tool(name: str, args: dict, config) -> dict:
         "check_lolbas":               _t_lolbas,
         "check_rmm_tool":             _t_rmm,
         "domain_heuristics":          _t_domain_heur,
+        "cti_skill_search":           _t_cti_skill_search,
     }
     fn = handlers.get(name)
     if not fn:
@@ -454,3 +484,21 @@ def _t_domain_heur(args, config):
     if not d:
         return {"error": "domain required"}
     return analyze_domain(d, args.get("whois_created"))
+
+
+def _t_cti_skill_search(args, config):
+    """Keyword-rank over the vendored cti-skills playbooks. Returns the
+    top matches with description + context snippet so the model can
+    cite the specific methodology by name in a follow-up turn without
+    having to request the full body (which can be 10-15 KB per skill).
+    The agent CAN still request the full body via /api/cti-skills/{name}
+    if the snippet isn't enough; it rarely needs to in practice."""
+    from skills.cti_skills import search_playbooks
+    q = args.get("query", "").strip()
+    if not q:
+        return {"error": "query required"}
+    limit = max(1, min(10, int(args.get("limit") or 3)))
+    matches = search_playbooks(q, limit=limit)
+    if not matches:
+        return {"matches": [], "note": "no playbooks matched; try broader terms"}
+    return {"matches": matches}

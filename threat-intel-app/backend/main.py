@@ -610,7 +610,7 @@ async def _catchall_exc_handler(request, exc: Exception):
 # decorator put the gate outermost, and request.session blew up with an
 # AssertionError because Session hadn't run yet.
 _PUBLIC_PREFIXES = ("/api/auth/", "/api/health", "/api/docs", "/api/openapi.json",
-                     "/api/plugins", "/api/recent-iocs")
+                     "/api/plugins", "/api/recent-iocs", "/api/cti-skills")
 
 
 class AuthGateMiddleware(BaseHTTPMiddleware):
@@ -889,6 +889,34 @@ async def get_plugin(name: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"plugin lookup failed: {e}")
+
+
+# ─── CTI SKILLS (vendored playbook library from 0xelikhan/cti-skills) ─────────
+@app.get("/api/cti-skills")
+async def list_cti_skills(q: Optional[str] = None, limit: int = 5):
+    """Analyst-methodology playbooks the investigation agent can cite.
+
+    - No `q`: returns the full catalog (slug + description + tags).
+    - With `q`: keyword-ranked search over description + body, returns
+      top-N matches with context snippets for each.
+
+    Content provenance: see backend/skills/cti/README.md + LICENSE.
+    """
+    from skills.cti_skills import list_playbooks, search_playbooks
+    if q:
+        return {"query": q, "matches": search_playbooks(q, limit=limit)}
+    pbs = list_playbooks()
+    return {"count": len(pbs), "playbooks": pbs}
+
+
+@app.get("/api/cti-skills/{name}")
+async def get_cti_skill(name: str):
+    """Return the full markdown body of a specific playbook."""
+    from skills.cti_skills import get_playbook
+    p = get_playbook(name)
+    if not p:
+        raise HTTPException(status_code=404, detail=f"playbook {name!r} not found")
+    return p
 
 
 @app.post("/api/files/analyze")
