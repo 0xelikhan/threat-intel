@@ -1123,8 +1123,14 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
         _get(session, "https://api.abuseipdb.com/api/v2/check",
              params={"ipAddress": ip, "maxAgeInDays": 90, "verbose": "true"},
              headers={"Key": keys.get("ABUSEIPDB_KEY", ""), "Accept": "application/json"}),
+        # IPInfo supports anonymous queries (1k/day, no coordinates past
+        # city granularity) — drop the token param entirely when it's
+        # missing so the request doesn't 401 on `?token=` (empty-string
+        # tokens read as "invalid auth" at the gateway and fail the whole
+        # geolocation pipeline, which is what makes the Map tab go dark).
         _get(session, f"https://ipinfo.io/{ip}/json",
-             params={"token": keys.get("IPINFO_TOKEN", "")}),
+             params=({"token": keys["IPINFO_TOKEN"]}
+                     if keys.get("IPINFO_TOKEN") else None)),
         _get(session, f"https://www.virustotal.com/api/v3/ip_addresses/{ip}",
              headers={"x-apikey": keys.get("VIRUSTOTAL_KEY", "")}),
         _get(session, f"https://otx.alienvault.com/api/v1/indicators/IPv4/{ip}/general",
@@ -1607,7 +1613,13 @@ async def enrich_domain(session, domain: str, keys: dict) -> dict:
              headers={"X-OTX-API-KEY": keys.get("OTX_KEY", "")}),
         _whois_coro,
         _get(session, "https://pulsedive.com/api/info.php",
-             params={"indicator": domain, "pretty": 1, "key": keys.get("PULSEDIVE_KEY", "")}),
+             # Same empty-param pitfall as ipinfo: Pulsedive 401s on
+             # `&key=` (empty value) but accepts anonymous queries
+             # against its public info endpoint — drop the key entirely
+             # when unset.
+             params={"indicator": domain, "pretty": 1,
+                      **({"key": keys["PULSEDIVE_KEY"]}
+                         if keys.get("PULSEDIVE_KEY") else {})}),
         # Wayback Machine — free, no key, indicates if the domain ever had snapshots
         _get(session, "https://archive.org/wayback/available",
              params={"url": domain}),
