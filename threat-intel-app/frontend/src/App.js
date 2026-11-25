@@ -1789,6 +1789,24 @@ function _ocSources(result, ioc, type) {
                why: 'abuse.ch maintains a curated list of active botnet C2 servers (Emotet, Dridex, TrickBot, QakBot). A hit means active malicious infrastructure - block immediately.' });
   }
 
+  // Crowdsec community blocklist (populated by the crowdsec ingestor).
+  // A hit means the IP has been reported by community sensors in the
+  // last 24h. Reports are scenario-attributed (ssh-bf, http-probing,
+  // credential-stuffing, etc.) when the paid CTI feed is configured.
+  if (d.crowdsec && d.crowdsec.found) {
+    const c = d.crowdsec;
+    const bits = [];
+    if ((c.scenarios || []).length) bits.push(c.scenarios.slice(0, 3).join(', '));
+    if (c.attack_count) bits.push(`${c.attack_count} reports`);
+    if (c.first_seen) bits.push(`first seen ${String(c.first_seen).slice(0, 10)}`);
+    out.push({
+      source: 'Crowdsec',
+      label:  bits.length ? bits.join(' . ') : 'on community blocklist',
+      color:  orange,
+      why:    'Crowdsec community sensors reported this IP for malicious behaviour in the last 24h. Scenario tags show WHAT it was reported for (ssh brute, http probing, credential stuffing, exploit attempts).',
+    });
+  }
+
   // Local offline feeds (firehol / ipsum / phishing.db). High-signal
   // when matched, so surface even though the source name is generic.
   if (d.local_feeds && d.local_feeds.hit) {
@@ -2349,6 +2367,7 @@ function _ocSources(result, ioc, type) {
     whois: 'WHOIS',                      ipinfo: 'IPInfo',
     censys: 'Censys',
     feodo_tracker: 'Feodo Tracker',
+    crowdsec:      'Crowdsec',
     misp_feeds: 'MISP Feeds',
     // Previously omitted from this map - when these sources errored
     // (timeout, auth fail, circuit-open) the failure was hidden from

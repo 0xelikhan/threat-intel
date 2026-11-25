@@ -1194,6 +1194,21 @@ async def enrich_ip(session, ip: str, keys: dict) -> dict:
     if feodo:
         data["feodo_tracker"] = feodo
 
+    # Crowdsec community blocklist (in-process cache, populated by the
+    # crowdsec Ingestor every 15 min). Zero network cost per lookup -
+    # just a dict hit. Only present when the ingestor has run AND the
+    # IP has been reported in the last 24h; otherwise the cache miss
+    # is silent and no `crowdsec` key appears in the result.
+    try:
+        from plugins.ingestors.crowdsec import lookup as _cs_lookup
+        cs_hit = _cs_lookup(ip)
+        if cs_hit:
+            data["crowdsec"] = cs_hit
+    except Exception:
+        # Ingestor module not importable (shouldn't happen in a healthy
+        # deploy) - skip silently rather than fail the whole enrich_ip.
+        pass
+
     # Shodan InternetDB - free, no-key IP service inventory. Returns
     # observed ports, CPEs, hostnames, tags, and CVEs. ON by default
     # (free + reasonably fast); operator can disable in Settings when

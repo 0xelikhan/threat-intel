@@ -46,6 +46,10 @@ const BUILDERS = {
   'Criminal IP':     { ip: v => `https://www.criminalip.io/asset/report/${enc(v)}` },
   'DShield · SANS ISC': { ip: v => `https://isc.sans.edu/ipinfo/${enc(v)}` },
   'Feodo Tracker':   { ip: v => `https://feodotracker.abuse.ch/browse/host/${enc(v)}/` },
+  // Crowdsec community blocklist. Populated by the crowdsec ingestor
+  // in backend/plugins/ingestors/crowdsec.py; this link opens the
+  // vendor's own CTI page for the IP.
+  'Crowdsec':        { ip: v => `https://app.crowdsec.net/cti/${enc(v)}` },
   'OTX': {
     ip:     v => `https://otx.alienvault.com/indicator/ip/${enc(v)}`,
     domain: v => `https://otx.alienvault.com/indicator/domain/${enc(v)}`,
